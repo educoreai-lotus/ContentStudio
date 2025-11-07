@@ -41,6 +41,7 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use('/api', authenticationMiddleware);
 
 // Request logging (only in development or if LOG_REQUESTS=true)
 if (process.env.NODE_ENV !== 'production' || process.env.LOG_REQUESTS === 'true') {
@@ -84,6 +85,7 @@ import jobsRouter from './src/presentation/routes/jobs.js';
 import exchangeRouter from './src/presentation/routes/exchange.js';
 import { errorHandler } from './src/presentation/middleware/errorHandler.js';
 import { requestLogger } from './src/presentation/middleware/requestLogger.js';
+import { authenticationMiddleware } from './src/presentation/middleware/authentication.js';
 import { logger } from './src/infrastructure/logging/Logger.js';
 
 app.use('/api/courses', coursesRouter);

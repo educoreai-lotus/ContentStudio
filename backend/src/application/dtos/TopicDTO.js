@@ -6,9 +6,18 @@ export class CreateTopicDTO {
     this.topic_name = data.topic_name;
     this.description = data.description || null;
     this.trainer_id = data.trainer_id;
-    this.course_id = data.course_id || null;
+    this.course_id = this.normalizeCourseId(data.course_id);
     this.template_id = data.template_id || null;
     this.skills = Array.isArray(data.skills) ? data.skills : [];
+  }
+
+  normalizeCourseId(courseId) {
+    if (courseId === undefined || courseId === null || courseId === '') {
+      return null;
+    }
+
+    const parsed = parseInt(courseId, 10);
+    return Number.isNaN(parsed) ? null : parsed;
   }
 }
 
@@ -16,10 +25,19 @@ export class UpdateTopicDTO {
   constructor(data) {
     if (data.topic_name !== undefined) this.topic_name = data.topic_name;
     if (data.description !== undefined) this.description = data.description;
-    if (data.course_id !== undefined) this.course_id = data.course_id;
+    if (data.course_id !== undefined) this.course_id = this.normalizeCourseId(data.course_id);
     if (data.template_id !== undefined) this.template_id = data.template_id;
     if (data.skills !== undefined) this.skills = Array.isArray(data.skills) ? data.skills : [];
     if (data.status !== undefined) this.status = data.status;
+  }
+
+  normalizeCourseId(courseId) {
+    if (courseId === undefined || courseId === null || courseId === '') {
+      return null;
+    }
+
+    const parsed = parseInt(courseId, 10);
+    return Number.isNaN(parsed) ? null : parsed;
   }
 }
 

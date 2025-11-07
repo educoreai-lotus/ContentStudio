@@ -5,6 +5,8 @@ import { useApp } from '../../context/AppContext.jsx';
 import { Badge } from '../../components/common/Badge.jsx';
 import { Input } from '../../components/common/Input.jsx';
 
+const DEFAULT_TRAINER_ID = 'trainer-maya-levi';
+
 export const CourseList = () => {
   const navigate = useNavigate();
   const { theme } = useApp();
@@ -12,7 +14,7 @@ export const CourseList = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [filters, setFilters] = useState({
-    trainer_id: 'trainer123', // TODO: Get from auth context
+    trainer_id: DEFAULT_TRAINER_ID,
     status: 'all',
     search: '',
   });
@@ -276,6 +278,7 @@ export const CourseList = () => {
                   background: theme === 'day-mode' ? 'var(--gradient-card)' : undefined,
                   boxShadow: 'var(--shadow-card)',
                 }}
+                onClick={() => navigate(`/courses/${course.course_id}`)}
                 onMouseEnter={e => {
                   e.currentTarget.style.transform = 'translateY(-4px)';
                   e.currentTarget.style.boxShadow = 'var(--shadow-hover)';
@@ -326,6 +329,10 @@ export const CourseList = () => {
                           ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
                           : 'bg-emerald-500 hover:bg-emerald-600 text-white'
                       }`}
+                      onClick={e => {
+                        e.stopPropagation();
+                        navigate(`/courses/${course.course_id}`);
+                      }}
                     >
                       View
                     </button>

@@ -17,6 +17,8 @@ const topicController = new TopicController(topicRepository, skillsEngineClient)
 
 router.post('/', topicController.create.bind(topicController));
 router.get('/', topicController.list.bind(topicController));
+router.get('/suggest-skills', topicController.suggestSkills.bind(topicController));
+router.post('/suggest-skills', topicController.suggestSkills.bind(topicController));
 router.get('/:id', topicController.getById.bind(topicController));
 router.put('/:id', topicController.update.bind(topicController));
 router.delete('/:id', topicController.delete.bind(topicController));

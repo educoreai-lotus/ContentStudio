@@ -5,6 +5,7 @@ import { UpdateTopicUseCase } from '../../application/use-cases/UpdateTopicUseCa
 import { DeleteTopicUseCase } from '../../application/use-cases/DeleteTopicUseCase.js';
 import { ValidateFormatRequirementsUseCase } from '../../application/use-cases/ValidateFormatRequirementsUseCase.js';
 import { CreateTopicDTO, UpdateTopicDTO, TopicResponseDTO } from '../../application/dtos/TopicDTO.js';
+import { logger } from '../../infrastructure/logging/Logger.js';
 
 export class TopicController {
   constructor(topicRepository, skillsEngineClient = null) {
@@ -17,11 +18,17 @@ export class TopicController {
     this.updateTopicUseCase = new UpdateTopicUseCase(topicRepository);
     this.deleteTopicUseCase = new DeleteTopicUseCase(topicRepository);
     this.validateFormatRequirementsUseCase = new ValidateFormatRequirementsUseCase(topicRepository);
+    this.skillsEngineClient = skillsEngineClient;
   }
 
   async create(req, res, next) {
     try {
-      const createDTO = new CreateTopicDTO(req.body);
+      const trainerId =
+        req.body.trainer_id || req.auth?.trainer?.trainer_id || req.auth?.trainer?.id;
+      const createDTO = new CreateTopicDTO({
+        ...req.body,
+        trainer_id: trainerId,
+      });
       const topic = await this.createTopicUseCase.execute(createDTO);
       const responseDTO = new TopicResponseDTO(topic);
 
@@ -33,7 +40,8 @@ export class TopicController {
 
   async list(req, res, next) {
     try {
-      const trainerId = req.query.trainer_id || req.user?.trainer_id;
+      const trainerId =
+        req.query.trainer_id || req.auth?.trainer?.trainer_id || req.auth?.trainer?.id;
       const filters = {
         status: req.query.status,
         course_id:
@@ -127,6 +135,58 @@ export class TopicController {
       const result = await this.validateFormatRequirementsUseCase.execute(topicId, contentItems);
 
       res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async suggestSkills(req, res, next) {
+    try {
+      const topicName = req.body.topic_name || req.query.topic_name;
+      if (!topicName || topicName.trim().length < 3) {
+        return res.status(400).json({
+          error: {
+            code: 'INVALID_TOPIC_NAME',
+            message: 'topic_name must be at least 3 characters',
+            timestamp: new Date().toISOString(),
+          },
+        });
+      }
+
+      const trainerId =
+        req.body.trainer_id || req.query.trainer_id || req.auth?.trainer?.trainer_id || req.auth?.trainer?.id;
+
+      let skills = [];
+      let source = 'mock';
+
+      if (this.skillsEngineClient) {
+        try {
+          const mapping = await this.skillsEngineClient.getSkillsMapping(trainerId, topicName);
+          if (mapping) {
+            const microSkills = mapping.micro_skills || [];
+            const nanoSkills = mapping.nano_skills || [];
+            skills = [...new Set([...microSkills, ...nanoSkills])];
+            source = mapping.fallback ? 'mock' : 'skills-engine';
+          }
+        } catch (error) {
+          logger.warn('Skills Engine suggestion failed, using fallback skills', {
+            error: error.message,
+            topicName,
+          });
+        }
+      }
+
+      if (skills.length === 0) {
+        skills = ['creative thinking', 'problem solving', 'collaboration'];
+        source = 'mock';
+      }
+
+      res.status(200).json({
+        skills,
+        source,
+        topic_name: topicName,
+        trainer_id: trainerId,
+      });
     } catch (error) {
       next(error);
     }

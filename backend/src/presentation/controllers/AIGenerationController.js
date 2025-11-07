@@ -20,11 +20,22 @@ export class AIGenerationController {
     });
   }
 
-  validateBody(body) {
-    const required = ['topic_id', 'lessonTopic', 'lessonDescription', 'language', 'skillsList'];
-    const missing = required.filter(field => body[field] === undefined || body[field] === null || body[field] === '');
-    if (missing.length > 0) {
-      throw new Error(`Missing required fields: ${missing.join(', ')}`);
+  validateBody(body, contentTypeOverride) {
+    if (!body.topic_id) {
+      throw new Error('Missing required fields: topic_id');
+    }
+
+    if (!body.content_type_id && !contentTypeOverride) {
+      throw new Error('Missing required fields: content_type_id');
+    }
+
+    const lessonFields = ['lessonTopic', 'lessonDescription', 'language', 'skillsList'];
+    const missingLessonFields = lessonFields.filter(
+      field => body[field] === undefined || body[field] === null || body[field] === ''
+    );
+
+    if (missingLessonFields.length > 0 && !body.prompt) {
+      throw new Error(`Missing required fields: ${missingLessonFields.join(', ')}`);
     }
   }
 
@@ -37,13 +48,22 @@ export class AIGenerationController {
           .map(skill => skill.trim())
           .filter(Boolean);
 
+    const fallbackTopic = body.prompt
+      ? body.prompt.split('\n').find(Boolean)?.slice(0, 80)
+      : undefined;
+    const lessonTopic = body.lessonTopic || fallbackTopic || 'Untitled Lesson';
+    const lessonDescription =
+      body.lessonDescription || 'Auto-generated description derived from prompt.';
+    const language = body.language || 'English';
+    const normalizedSkills = skillsList.length > 0 ? skillsList : ['General Learning'];
+
     return {
       topic_id: parseInt(body.topic_id),
       content_type_id: contentType || body.content_type_id,
-      lessonTopic: body.lessonTopic,
-      lessonDescription: body.lessonDescription,
-      language: body.language,
-      skillsList,
+      lessonTopic,
+      lessonDescription,
+      language,
+      skillsList: normalizedSkills,
       style: body.style,
       difficulty: body.difficulty,
       programming_language: body.programming_language,
@@ -56,7 +76,7 @@ export class AIGenerationController {
 
   async handleGeneration(req, res, next, contentTypeOverride) {
     try {
-      this.validateBody(req.body);
+      this.validateBody(req.body, contentTypeOverride);
       const generationRequest = this.buildGenerationRequest(req, contentTypeOverride);
 
       const content = await this.generateContentUseCase.execute(generationRequest);

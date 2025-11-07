@@ -12,7 +12,7 @@ export const TopicList = ({ courseId = null }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [filters, setFilters] = useState({
-    trainer_id: 'trainer123', // TODO: Get from auth context
+    trainer_id: 'trainer-maya-levi',
     status: 'all',
     course_id: courseId,
     search: '',
@@ -25,8 +25,12 @@ export const TopicList = ({ courseId = null }) => {
   });
 
   useEffect(() => {
+    setFilters(prev => ({ ...prev, course_id: courseId }));
+  }, [courseId]);
+
+  useEffect(() => {
     loadTopics();
-  }, [filters, pagination.page, courseId]);
+  }, [filters, pagination.page]);
 
   const loadTopics = async () => {
     try {

@@ -14,6 +14,14 @@ export const topicsService = {
     return response.data;
   },
 
+  async suggestSkills({ topic_name, trainer_id }) {
+    const response = await apiClient.post('/api/topics/suggest-skills', {
+      topic_name,
+      trainer_id,
+    });
+    return response.data;
+  },
+
   /**
    * Get all topics for a trainer
    * @param {Object} filters - Filter options

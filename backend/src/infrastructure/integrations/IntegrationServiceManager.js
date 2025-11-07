@@ -9,6 +9,7 @@ import {
   DirectoryClient,
   LearningAnalyticsClient,
   RAGClient,
+  AuthenticationClient,
 } from './index.js';
 
 export class IntegrationServiceManager {
@@ -19,6 +20,7 @@ export class IntegrationServiceManager {
     directoryConfig,
     learningAnalyticsConfig,
     ragConfig,
+    authenticationConfig,
   } = {}) {
     // Initialize gRPC clients (for future implementation)
     const grpcClient = null; // TODO: Initialize gRPC client when needed
@@ -55,6 +57,10 @@ export class IntegrationServiceManager {
     this.rag = new RAGClient({
       httpClient,
       serviceUrl: ragConfig?.serviceUrl,
+    });
+
+    this.authentication = new AuthenticationClient({
+      serviceUrl: authenticationConfig?.serviceUrl,
     });
   }
 
@@ -104,6 +110,14 @@ export class IntegrationServiceManager {
    */
   getRAG() {
     return this.rag;
+  }
+
+  /**
+   * Get Authentication client
+   * @returns {AuthenticationClient}
+   */
+  getAuthentication() {
+    return this.authentication;
   }
 }
 

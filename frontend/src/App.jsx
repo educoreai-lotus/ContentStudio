@@ -5,6 +5,7 @@ import Header from './components/Header.jsx';
 import HomePage from './pages/HomePage.jsx';
 import { CourseList } from './pages/Courses/CourseList.jsx';
 import { CourseForm } from './pages/Courses/CourseForm.jsx';
+import { CourseDetail } from './pages/Courses/CourseDetail.jsx';
 import { TopicList } from './pages/Topics/TopicList.jsx';
 import { TopicForm } from './pages/Topics/TopicForm.jsx';
 import { ManualContentForm } from './pages/Content/ManualContentForm.jsx';
@@ -30,6 +31,7 @@ function AppContent() {
               <Route path="/" element={<HomePage />} />
               <Route path="/courses" element={<CourseList />} />
               <Route path="/courses/new" element={<CourseForm />} />
+              <Route path="/courses/:id" element={<CourseDetail />} />
               <Route path="/courses/:id/edit" element={<CourseForm />} />
           <Route path="/topics" element={<TopicList />} />
           <Route path="/lessons" element={<TopicList />} />

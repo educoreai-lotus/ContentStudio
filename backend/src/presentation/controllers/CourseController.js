@@ -16,7 +16,12 @@ export class CourseController {
 
   async create(req, res, next) {
     try {
-      const createDTO = new CreateCourseDTO(req.body);
+      const trainerId =
+        req.body.trainer_id || req.auth?.trainer?.trainer_id || req.auth?.trainer?.id;
+      const createDTO = new CreateCourseDTO({
+        ...req.body,
+        trainer_id: trainerId,
+      });
       const course = await this.createCourseUseCase.execute(createDTO);
       const responseDTO = new CourseResponseDTO(course);
 
@@ -28,7 +33,8 @@ export class CourseController {
 
   async list(req, res, next) {
     try {
-      const trainerId = req.query.trainer_id || req.user?.trainer_id;
+      const trainerId =
+        req.query.trainer_id || req.auth?.trainer?.trainer_id || req.auth?.trainer?.id;
       const filters = {
         status: req.query.status,
         search: req.query.search,

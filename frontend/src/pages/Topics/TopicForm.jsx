@@ -1,11 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { topicsService } from '../../services/topics.js';
+import { coursesService } from '../../services/courses.js';
 import { useApp } from '../../context/AppContext.jsx';
+
+const DEFAULT_TRAINER_ID = 'trainer-maya-levi';
 
 export const TopicForm = () => {
   const navigate = useNavigate();
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
   const { theme } = useApp();
   const [formData, setFormData] = useState({
     topic_name: '',
@@ -14,15 +18,32 @@ export const TopicForm = () => {
     template_id: null,
     skills: [],
   });
+  const [courses, setCourses] = useState([]);
+  const [suggestedSkills, setSuggestedSkills] = useState([]);
+  const [skillsSource, setSkillsSource] = useState('');
+  const [skillsLoading, setSkillsLoading] = useState(false);
+  const [customSkill, setCustomSkill] = useState('');
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [isEditing] = useState(!!id);
 
   useEffect(() => {
+    loadCourses();
+
+    if (!isEditing) {
+      const courseIdParam = searchParams.get('courseId');
+      if (courseIdParam) {
+        const parsedId = parseInt(courseIdParam, 10);
+        if (!Number.isNaN(parsedId)) {
+          setFormData(prev => ({ ...prev, course_id: parsedId }));
+        }
+      }
+    }
+
     if (isEditing && id) {
       loadTopic();
     }
-  }, [id, isEditing]);
+  }, [id, isEditing, searchParams]);
 
   const loadTopic = async () => {
     try {
@@ -39,12 +60,92 @@ export const TopicForm = () => {
     }
   };
 
+  const loadCourses = async () => {
+    try {
+      const result = await coursesService.list(
+        { trainer_id: DEFAULT_TRAINER_ID, status: 'active' },
+        { page: 1, limit: 100 }
+      );
+      setCourses(result.courses || []);
+    } catch (error) {
+      // swallow errors, dropdown will fallback
+    }
+  };
+
+  useEffect(() => {
+    const topicName = formData.topic_name?.trim();
+    if (!topicName || topicName.length < 3) {
+      setSuggestedSkills([]);
+      setSkillsSource('');
+      return;
+    }
+
+    let cancelled = false;
+    const debounce = setTimeout(async () => {
+      try {
+        setSkillsLoading(true);
+        const result = await topicsService.suggestSkills({
+          topic_name: topicName,
+          trainer_id: DEFAULT_TRAINER_ID,
+        });
+        if (cancelled) return;
+        const skills = result.skills || [];
+        setSuggestedSkills(skills);
+        setSkillsSource(result.source || 'skills-engine');
+        if (!isEditing || formData.skills.length === 0) {
+          setFormData(prev => ({ ...prev, skills }));
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setSuggestedSkills([]);
+          setSkillsSource('');
+        }
+      } finally {
+        if (!cancelled) {
+          setSkillsLoading(false);
+        }
+      }
+    }, 400);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(debounce);
+    };
+  }, [formData.topic_name, isEditing]);
+
   const handleChange = e => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: null }));
     }
+  };
+
+  const handleSkillToggle = skill => {
+    setFormData(prev => {
+      const hasSkill = prev.skills.includes(skill);
+      const updatedSkills = hasSkill
+        ? prev.skills.filter(s => s !== skill)
+        : [...prev.skills, skill];
+      return { ...prev, skills: updatedSkills };
+    });
+  };
+
+  const handleAddCustomSkill = () => {
+    const trimmed = customSkill.trim();
+    if (!trimmed) return;
+    setFormData(prev => ({
+      ...prev,
+      skills: prev.skills.includes(trimmed) ? prev.skills : [...prev.skills, trimmed],
+    }));
+    setCustomSkill('');
+  };
+
+  const handleRemoveSkill = skill => {
+    setFormData(prev => ({
+      ...prev,
+      skills: prev.skills.filter(s => s !== skill),
+    }));
   };
 
   const validate = () => {
@@ -73,7 +174,7 @@ export const TopicForm = () => {
       setLoading(true);
       const topicData = {
         ...formData,
-        trainer_id: 'trainer123', // TODO: Get from auth context
+        trainer_id: DEFAULT_TRAINER_ID,
       };
 
       if (isEditing) {
@@ -82,7 +183,11 @@ export const TopicForm = () => {
         await topicsService.create(topicData);
       }
 
-      navigate('/topics');
+      if (topicData.course_id) {
+        navigate(`/courses/${topicData.course_id}`);
+      } else {
+        navigate('/topics');
+      }
     } catch (err) {
       setErrors({ submit: err.error?.message || 'Failed to save topic' });
     } finally {
@@ -239,9 +344,11 @@ export const TopicForm = () => {
                 }`}
               >
                 <option value="">None (Stand-alone Lesson)</option>
-                {/* TODO: Load courses from API */}
-                <option value="1">Course 1</option>
-                <option value="2">Course 2</option>
+                {courses.map(course => (
+                  <option key={course.course_id} value={course.course_id}>
+                    {course.course_name}
+                  </option>
+                ))}
               </select>
               <p
                 className={`mt-1 text-xs ${
@@ -250,6 +357,113 @@ export const TopicForm = () => {
               >
                 Select a course or leave as stand-alone lesson
               </p>
+            </div>
+
+            <div className="mb-6">
+              <label
+                className={`block text-sm font-medium mb-2 ${
+                  theme === 'day-mode' ? 'text-gray-700' : 'text-gray-300'
+                }`}
+              >
+                Suggested Skills
+              </label>
+              {skillsLoading ? (
+                <p className={theme === 'day-mode' ? 'text-gray-500' : 'text-gray-400'}>
+                  Loading skill suggestions...
+                </p>
+              ) : suggestedSkills.length > 0 ? (
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {suggestedSkills.map(skill => {
+                    const selected = formData.skills.includes(skill);
+                    return (
+                      <button
+                        type="button"
+                        key={skill}
+                        onClick={() => handleSkillToggle(skill)}
+                        className={`px-3 py-1 rounded-full text-sm font-medium border transition-all ${
+                          selected
+                            ? theme === 'day-mode'
+                              ? 'bg-emerald-100 border-emerald-500 text-emerald-700'
+                              : 'bg-emerald-600/30 border-emerald-400 text-emerald-200'
+                            : theme === 'day-mode'
+                            ? 'bg-white border-gray-300 text-gray-600 hover:border-emerald-400'
+                            : 'bg-gray-800 border-gray-600 text-gray-300 hover:border-emerald-400'
+                        }`}
+                      >
+                        {skill}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className={theme === 'day-mode' ? 'text-gray-500' : 'text-gray-400'}>
+                  Enter a lesson name to receive skill suggestions automatically.
+                </p>
+              )}
+              {skillsSource && suggestedSkills.length > 0 && (
+                <p className={`text-xs ${theme === 'day-mode' ? 'text-gray-500' : 'text-gray-400'}`}>
+                  Skills source: {skillsSource === 'mock' ? 'Mock (fallback)' : 'Skills Engine'}
+                </p>
+              )}
+              {formData.skills.length > 0 && (
+                <div className="mt-4">
+                  <h4
+                    className={`text-sm font-semibold mb-2 ${
+                      theme === 'day-mode' ? 'text-gray-700' : 'text-gray-300'
+                    }`}
+                  >
+                    Selected Skills
+                  </h4>
+                  <div className="flex flex-wrap gap-2">
+                    {formData.skills.map(skill => (
+                      <span
+                        key={skill}
+                        className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm ${
+                          theme === 'day-mode'
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : 'bg-emerald-600/20 text-emerald-200'
+                        }`}
+                      >
+                        {skill}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveSkill(skill)}
+                          className={`text-xs ${
+                            theme === 'day-mode' ? 'text-emerald-700' : 'text-emerald-200'
+                          }`}
+                        >
+                          <i className="fas fa-times"></i>
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="mt-4 flex gap-2">
+                <input
+                  type="text"
+                  value={customSkill}
+                  onChange={e => setCustomSkill(e.target.value)}
+                  placeholder="Add custom skill"
+                  className={`flex-1 px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors ${
+                    theme === 'day-mode'
+                      ? 'border-gray-300 bg-white text-gray-900'
+                      : 'border-gray-600 bg-gray-700 text-white'
+                  }`}
+                />
+                <button
+                  type="button"
+                  onClick={handleAddCustomSkill}
+                  className="px-3 py-2 rounded-lg text-sm font-medium"
+                  style={{
+                    background: 'var(--gradient-primary)',
+                    color: 'white',
+                    boxShadow: 'var(--shadow-glow)',
+                  }}
+                >
+                  Add
+                </button>
+              </div>
             </div>
 
             {errors.submit && (
@@ -281,7 +495,11 @@ export const TopicForm = () => {
             <div className="flex justify-end gap-3">
               <button
                 type="button"
-                onClick={() => navigate('/topics')}
+                onClick={() =>
+                  formData.course_id
+                    ? navigate(`/courses/${formData.course_id}`)
+                    : navigate('/topics')
+                }
                 className={`px-4 py-2 rounded-lg transition-colors font-medium ${
                   theme === 'day-mode'
                     ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
