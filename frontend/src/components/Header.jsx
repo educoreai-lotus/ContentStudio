@@ -1,13 +1,11 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useApp } from '../context/AppContext.jsx';
-import LanguageSelector from './LanguageSelector.jsx';
 
 const Header = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { theme, toggleTheme, handleNewLesson } = useApp();
-  const [selectedLanguage, setSelectedLanguage] = useState('en');
 
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
   const logoUrl = `${API_BASE_URL}/api/logo/${theme === 'day-mode' ? 'light' : 'dark'}`;
@@ -116,56 +114,6 @@ const Header = () => {
               <span>Lessons</span>
             </button>
             <button
-              onClick={() => navigate('/search')}
-              className={`transition-all duration-300 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${
-                location.pathname === '/search'
-                  ? theme === 'day-mode'
-                    ? 'text-emerald-600 bg-emerald-100'
-                    : 'text-emerald-400 bg-emerald-900/20'
-                  : theme === 'day-mode'
-                  ? 'text-gray-600 hover:text-emerald-600 hover:bg-emerald-50'
-                  : 'text-gray-300 hover:text-emerald-400 hover:bg-emerald-900/20'
-              }`}
-            >
-              <i
-                className={`fas fa-search w-4 h-4 flex-shrink-0 ${
-                  location.pathname === '/search'
-                    ? theme === 'day-mode'
-                      ? 'text-emerald-600'
-                      : 'text-emerald-400'
-                    : theme === 'day-mode'
-                    ? 'text-gray-600'
-                    : 'text-gray-300'
-                }`}
-              ></i>
-              <span>Search</span>
-            </button>
-            <button
-              onClick={() => navigate('/templates')}
-              className={`transition-all duration-300 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${
-                location.pathname.startsWith('/templates')
-                  ? theme === 'day-mode'
-                    ? 'text-emerald-600 bg-emerald-100'
-                    : 'text-emerald-400 bg-emerald-900/20'
-                  : theme === 'day-mode'
-                  ? 'text-gray-600 hover:text-emerald-600 hover:bg-emerald-50'
-                  : 'text-gray-300 hover:text-emerald-400 hover:bg-emerald-900/20'
-              }`}
-            >
-              <i
-                className={`fas fa-layer-group w-4 h-4 flex-shrink-0 ${
-                  location.pathname.startsWith('/templates')
-                    ? theme === 'day-mode'
-                      ? 'text-emerald-600'
-                      : 'text-emerald-400'
-                    : theme === 'day-mode'
-                    ? 'text-gray-600'
-                    : 'text-gray-300'
-                }`}
-              ></i>
-              <span>Templates</span>
-            </button>
-            <button
               onClick={() => navigate('/languages/stats')}
               className={`transition-all duration-300 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${
                 location.pathname.startsWith('/languages')
@@ -194,12 +142,7 @@ const Header = () => {
 
           {/* Language Selector */}
           <div className="hidden md:flex items-center">
-            <LanguageSelector
-              selectedLanguage={selectedLanguage}
-              onLanguageChange={setSelectedLanguage}
-              theme={theme}
-              showStats={false}
-            />
+            {/* Removed LanguageSelector */}
           </div>
 
           {/* Theme Toggle */}

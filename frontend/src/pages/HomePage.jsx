@@ -5,14 +5,13 @@ import { useApp } from '../context/AppContext.jsx';
 const HomePage = () => {
   const navigate = useNavigate();
   const { theme } = useApp();
+  const isDark = theme !== 'day-mode';
 
   return (
-    <div className={`min-h-screen ${theme === 'day-mode' ? 'bg-gray-50' : 'bg-gray-900'}`}>
+    <div className={`min-h-screen ${isDark ? 'bg-slate-950' : 'bg-gray-50'}`}>
       {/* Hero Section */}
       <section className={`hero py-20 ${
-        theme === 'day-mode' 
-          ? 'bg-gradient-to-br from-emerald-50 to-teal-50' 
-          : 'bg-gradient-to-br from-gray-800 to-gray-900'
+        isDark ? 'bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900' : 'bg-gradient-to-br from-emerald-50 to-teal-50'
       }`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="hero-content text-center">
@@ -27,26 +26,17 @@ const HomePage = () => {
             >
               Content Studio
             </h1>
-            <p
-              className="subtitle text-xl mb-8"
-              style={{ color: 'var(--text-secondary)' }}
-            >
+            <p className="subtitle text-xl mb-8" style={{ color: isDark ? 'rgba(226, 232, 240, 0.8)' : 'var(--text-secondary)' }}>
               Create, manage, and publish educational content with AI assistance
             </p>
-            <p
-              className="text-lg mb-8"
-              style={{ color: 'var(--text-muted)' }}
-            >
+            <p className="text-lg mb-8" style={{ color: isDark ? 'rgba(148, 163, 184, 0.85)' : 'var(--text-muted)' }}>
               Transform your teaching with intelligent content generation,
               interactive lessons, and automated workflows
             </p>
           </div>
 
           {/* Action Buttons */}
-          <div
-            className="hero-actions flex gap-6 justify-center flex-wrap"
-            style={{ marginTop: 'var(--spacing-xl)' }}
-          >
+          <div className="hero-actions flex gap-6 justify-center flex-wrap" style={{ marginTop: 'var(--spacing-xl)' }}>
             <button
               onClick={() => navigate('/courses')}
               className="btn btn-primary"
@@ -80,8 +70,8 @@ const HomePage = () => {
               onClick={() => navigate('/topics')}
               className="btn btn-secondary"
               style={{
-                background: 'transparent',
-                color: 'var(--text-primary)',
+                background: isDark ? 'rgba(15, 23, 42, 0.6)' : 'transparent',
+                color: isDark ? 'rgba(226, 232, 240, 0.9)' : 'var(--text-primary)',
                 border: '2px solid var(--primary-cyan)',
                 padding: 'var(--spacing-md) var(--spacing-xl)',
                 borderRadius: '12px',
@@ -99,8 +89,8 @@ const HomePage = () => {
                 e.target.style.boxShadow = 'var(--shadow-hover)';
               }}
               onMouseLeave={e => {
-                e.target.style.background = 'transparent';
-                e.target.style.color = 'var(--text-primary)';
+                e.target.style.background = isDark ? 'rgba(15, 23, 42, 0.6)' : 'transparent';
+                e.target.style.color = isDark ? 'rgba(226, 232, 240, 0.9)' : 'var(--text-primary)';
                 e.target.style.transform = 'translateY(0)';
                 e.target.style.boxShadow = 'none';
               }}
@@ -113,11 +103,7 @@ const HomePage = () => {
       </section>
 
       {/* Features Section */}
-      <section
-        className={`microservices-section py-20 ${
-          theme === 'day-mode' ? 'bg-gray-50' : 'bg-gray-900'
-        }`}
-      >
+      <section className={`microservices-section py-20 ${isDark ? 'bg-slate-950' : 'bg-gray-50'}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <h2
             className="section-title text-center text-4xl font-bold mb-12"
@@ -130,10 +116,7 @@ const HomePage = () => {
           >
             Content Studio Features
           </h2>
-          <div
-            className="microservices-grid grid grid-cols-1 md:grid-cols-3 gap-6"
-            style={{ marginTop: 'var(--spacing-2xl)' }}
-          >
+          <div className="microservices-grid grid grid-cols-1 md:grid-cols-3 gap-6" style={{ marginTop: 'var(--spacing-2xl)' }}>
             {[
               {
                 icon: 'fa-robot',
@@ -155,12 +138,12 @@ const HomePage = () => {
                 key={i}
                 className="microservice-card"
                 style={{
-                  background: 'var(--gradient-card)',
-                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  background: isDark ? 'rgba(15, 23, 42, 0.85)' : 'var(--gradient-card)',
+                  border: isDark ? '1px solid rgba(45, 212, 191, 0.25)' : '1px solid rgba(255, 255, 255, 0.1)',
                   borderRadius: '16px',
                   padding: 'var(--spacing-xl)',
                   textAlign: 'center',
-                  boxShadow: 'var(--shadow-card)',
+                  boxShadow: isDark ? '0 12px 40px rgba(6, 95, 70, 0.18)' : 'var(--shadow-card)',
                   transition: 'all 0.3s ease',
                   cursor: 'pointer',
                   position: 'relative',
@@ -169,16 +152,21 @@ const HomePage = () => {
                 }}
                 onMouseEnter={e => {
                   e.currentTarget.style.transform = 'translateY(-8px)';
-                  e.currentTarget.style.boxShadow = 'var(--shadow-hover)';
+                  e.currentTarget.style.boxShadow = isDark
+                    ? '0 18px 45px rgba(6, 95, 70, 0.28)'
+                    : 'var(--shadow-hover)';
                   e.currentTarget.style.borderColor = 'var(--primary-cyan)';
                 }}
                 onMouseLeave={e => {
                   e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = 'var(--shadow-card)';
-                  e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                  e.currentTarget.style.boxShadow = isDark
+                    ? '0 12px 40px rgba(6, 95, 70, 0.18)'
+                    : 'var(--shadow-card)';
+                  e.currentTarget.style.borderColor = isDark
+                    ? 'rgba(45, 212, 191, 0.25)'
+                    : 'rgba(255, 255, 255, 0.1)';
                 }}
               >
-                {/* Hover Effect Overlay */}
                 <div
                   style={{
                     position: 'absolute',
@@ -186,7 +174,7 @@ const HomePage = () => {
                     left: 0,
                     right: 0,
                     bottom: 0,
-                    background: 'var(--gradient-primary)',
+                    background: isDark ? 'linear-gradient(135deg, rgba(6, 95, 70, 0.55), rgba(15, 118, 110, 0.35))' : 'var(--gradient-primary)',
                     opacity: 0,
                     transition: 'opacity 0.3s ease',
                     borderRadius: '16px',
@@ -216,7 +204,7 @@ const HomePage = () => {
                   <h3
                     className="text-lg font-semibold mb-3"
                     style={{
-                      color: 'var(--text-primary)',
+                      color: isDark ? 'rgba(241, 245, 249, 0.95)' : 'var(--text-primary)',
                       fontSize: '1.2rem',
                       fontWeight: '700',
                       marginBottom: 'var(--spacing-md)',
@@ -228,7 +216,7 @@ const HomePage = () => {
                   <p
                     className="text-sm"
                     style={{
-                      color: 'var(--text-secondary)',
+                      color: isDark ? 'rgba(203, 213, 225, 0.85)' : 'var(--text-secondary)',
                       fontSize: '0.95rem',
                       lineHeight: '1.6',
                       fontWeight: '500',
