@@ -44,10 +44,11 @@ jobs:
         run: npm run build
 
       - name: Deploy to Railway (Backend)
-        uses: railway-app/railway-deploy@v1
+        uses: railwayapp/railway-action@v3
         with:
+          railway_token: ${{ secrets.RAILWAY_TOKEN }}
           service: content-studio-backend
-          token: ${{ secrets.RAILWAY_TOKEN }}
+          command: up
 
       - name: Deploy to Vercel (Frontend)
         uses: amondnet/vercel-action@v25
@@ -105,10 +106,11 @@ jobs:
         run: npm run build
 
       - name: Deploy to Railway (Backend)
-        uses: railway-app/railway-deploy@v1
+        uses: railwayapp/railway-action@v3
         with:
+          railway_token: ${{ secrets.RAILWAY_TOKEN }}
           service: content-studio-backend-prod
-          token: ${{ secrets.RAILWAY_TOKEN }}
+          command: up
 
       - name: Deploy to Vercel (Frontend)
         uses: amondnet/vercel-action@v25
