@@ -70,19 +70,59 @@ jobs:
                   f.write(f"{key}={value}\n")
           PY
 
+      - name: Resolve Supabase IPv4 Address
+        id: resolve-ipv4
+        run: |
+          set -e
+          echo "Resolving IPv4 for ${{ steps.parse-db.outputs.host }}..."
+          ipv4=$(dig +short A "${{ steps.parse-db.outputs.host }}" | head -n 1)
+          if [ -z "$ipv4" ]; then
+            echo "❌ ERROR: Unable to resolve IPv4 address for ${{ steps.parse-db.outputs.host }}"
+            exit 1
+          fi
+          echo "IPv4 address: $ipv4"
+          echo "ipv4=$ipv4" >> $GITHUB_OUTPUT
+
+      - name: Diagnose Supabase DNS resolution
+        run: |
+          set -e
+          echo "Resolving ${{ steps.parse-db.outputs.host }}..."
+          host "${{ steps.parse-db.outputs.host }}" || true
+          dig +short "${{ steps.parse-db.outputs.host }}" || true
+
       # ✅ Run all SQL files under database/migrations/
       - name: Run Custom Migrations from /database/migrations
         run: |
-          set -e
+          set -euo pipefail
           export PGSSLMODE=require
           echo "🚀 Running custom migrations from database/migrations..."
+          echo "Testing IPv4 connectivity to $PGHOST:$PGPORT..."
+          if ! PGPASSWORD="$PGPASSWORD" psql -4 -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -c '\conninfo' >/dev/null 2>&1; then
+            echo "❌ ERROR: Cannot reach $PGHOST via IPv4. Exiting."
+            exit 1
+          fi
+
           for file in database/migrations/*.sql; do
             echo "Executing $file..."
-            psql -f "$file"
+            attempts=0
+            until [ "$attempts" -ge 3 ]; do
+              if PGPASSWORD="$PGPASSWORD" psql -4 -v ON_ERROR_STOP=1 -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -f "$file"; then
+                echo "✅ Executed $file"
+                break
+              fi
+              attempts=$((attempts+1))
+              echo "Attempt $attempts failed, retrying in $((attempts*5)) seconds..."
+              sleep $((attempts*5))
+            done
+            if [ "$attempts" -ge 3 ]; then
+              echo "❌ ERROR: Failed to execute $file after $attempts attempts."
+              exit 2
+            fi
           done
+
           echo "✅ All migrations executed successfully."
         env:
-          PGHOST: ${{ steps.parse-db.outputs.host }}
+          PGHOST: ${{ steps.resolve-ipv4.outputs.ipv4 }}
           PGPORT: ${{ steps.parse-db.outputs.port }}
           PGUSER: ${{ steps.parse-db.outputs.user }}
           PGDATABASE: ${{ steps.parse-db.outputs.dbname }}
