@@ -47,18 +47,46 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y postgresql-client
 
+      - name: Parse database connection info
+        id: parse-db
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          python <<'PY'
+import os, urllib.parse
+url = os.environ['DATABASE_URL']
+parsed = urllib.parse.urlparse(url)
+password = urllib.parse.unquote(parsed.password or '')
+print(f"::add-mask::{password}")
+outputs = {
+    'host': parsed.hostname or '',
+    'port': parsed.port or 5432,
+    'user': parsed.username or '',
+    'dbname': (parsed.path or '').lstrip('/') or 'postgres',
+    'password': password,
+}
+with open(os.environ['GITHUB_OUTPUT'], 'w') as f:
+    for key, value in outputs.items():
+        f.write(f"{key}={value}\n")
+PY
+
       # ✅ Run all SQL files under database/migrations/
       - name: Run Custom Migrations from /database/migrations
         run: |
           set -e
+          export PGSSLMODE=require
           echo "🚀 Running custom migrations from database/migrations..."
           for file in database/migrations/*.sql; do
             echo "Executing $file..."
-            psql "$DATABASE_URL" -f "$file"
+            psql -f "$file"
           done
           echo "✅ All migrations executed successfully."
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          PGHOST: ${{ steps.parse-db.outputs.host }}
+          PGPORT: ${{ steps.parse-db.outputs.port }}
+          PGUSER: ${{ steps.parse-db.outputs.user }}
+          PGDATABASE: ${{ steps.parse-db.outputs.dbname }}
+          PGPASSWORD: ${{ steps.parse-db.outputs.password }}
 
       - name: Migration Summary
         run: echo "✅ Supabase custom migrations completed successfully!"
