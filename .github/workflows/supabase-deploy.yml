@@ -14,18 +14,18 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '18'
 
-      - name: Install Supabase CLI
+      # ✅ Safe installation path for Supabase CLI
+      - name: Install Supabase CLI (safe)
         run: |
-          mkdir -p $HOME/.local/bin
-          curl -fsSL https://cli.supabase.com/install.sh | sh -s -- -b $HOME/.local/bin
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          curl -fsSL https://cli.supabase.com/install.sh | sh -s -- -b $(pwd)
+          echo "$(pwd)" >> $GITHUB_PATH
 
       - name: Verify Supabase CLI installed
         run: |
@@ -55,4 +55,3 @@ jobs:
       - name: Notify on failure
         if: failure()
         run: echo "❌ Database migration failed! Please check the logs."
-
