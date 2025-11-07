@@ -42,19 +42,23 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
       # ✅ Run all SQL files under database/migrations/
       - name: Run Custom Migrations from /database/migrations
         run: |
+          set -e
           echo "🚀 Running custom migrations from database/migrations..."
           for file in database/migrations/*.sql; do
             echo "Executing $file..."
-            supabase db execute --file "$file"
+            psql "$DATABASE_URL" -f "$file"
           done
           echo "✅ All migrations executed successfully."
         env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
 
       - name: Migration Summary
         run: echo "✅ Supabase custom migrations completed successfully!"
