@@ -1,0 +1,153 @@
+name: Supabase Database Migration
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'database/**'
+      - '.github/workflows/supabase-deploy.yml'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - staging
+          - production
+
+env:
+  NODE_VERSION: '18'
+
+jobs:
+  deploy-migrations:
+    name: Deploy Database Migrations
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'production' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install Supabase CLI
+        run: |
+          npm install -g supabase@latest
+          supabase --version
+
+      - name: Check for migration files
+        id: check-migrations
+        run: |
+          if [ -d "database/migrations" ] && [ "$(ls -A database/migrations/*.sql 2>/dev/null)" ]; then
+            echo "migrations_exist=true" >> $GITHUB_OUTPUT
+            echo "Found migration files:"
+            ls -la database/migrations/*.sql
+          else
+            echo "migrations_exist=false" >> $GITHUB_OUTPUT
+            echo "No migration files found"
+          fi
+
+      - name: Initialize Supabase project structure
+        if: steps.check-migrations.outputs.migrations_exist == 'true'
+        run: |
+          # Initialize Supabase project if not exists
+          if [ ! -d "supabase" ]; then
+            supabase init
+          fi
+          
+          # Create migrations directory if it doesn't exist
+          mkdir -p supabase/migrations
+          
+          # Copy all migration files to Supabase migrations directory
+          echo "📋 Copying migration files..."
+          cp database/migrations/*.sql supabase/migrations/ 2>/dev/null || true
+          
+          # List copied migrations
+          echo "✅ Migrations ready:"
+          ls -la supabase/migrations/
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      - name: Link to Supabase Project
+        if: steps.check-migrations.outputs.migrations_exist == 'true'
+        run: |
+          supabase link --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      - name: Verify Supabase Connection
+        if: steps.check-migrations.outputs.migrations_exist == 'true'
+        run: |
+          supabase projects list
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      - name: Push database migrations
+        if: steps.check-migrations.outputs.migrations_exist == 'true'
+        run: |
+          echo "🚀 Pushing database migrations to Supabase..."
+          supabase db push
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      - name: Verify migrations applied
+        if: steps.check-migrations.outputs.migrations_exist == 'true'
+        run: |
+          echo "✅ Verifying migrations..."
+          supabase migration list
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      - name: Run migration script (Alternative method)
+        if: steps.check-migrations.outputs.migrations_exist == 'true' && failure()
+        run: |
+          echo "⚠️ Supabase CLI push failed, trying alternative method..."
+          echo "Using direct SQL execution via psql..."
+          
+          # Install PostgreSQL client
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+          
+          # Run main migration file
+          if [ -f "database/migrations/migration.sql" ]; then
+            PGPASSWORD="${{ secrets.SUPABASE_DB_PASSWORD }}" psql \
+              -h ${{ secrets.SUPABASE_DB_HOST }} \
+              -U ${{ secrets.SUPABASE_DB_USER }} \
+              -d ${{ secrets.SUPABASE_DB_NAME }} \
+              -p ${{ secrets.SUPABASE_DB_PORT || '5432' }} \
+              -f database/migrations/migration.sql
+          fi
+        env:
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_DB_HOST: ${{ secrets.SUPABASE_DB_HOST }}
+          SUPABASE_DB_USER: ${{ secrets.SUPABASE_DB_USER }}
+          SUPABASE_DB_NAME: ${{ secrets.SUPABASE_DB_NAME }}
+
+      - name: Migration Summary
+        if: always()
+        run: |
+          echo "## 📊 Migration Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch**: ${{ github.ref }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Triggered by**: ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.check-migrations.outputs.migrations_exist }}" == "true" ]; then
+            echo "✅ Migration files found and processed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ No migration files found" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "❌ Database migration failed!"
+          echo "Please check the logs and verify your Supabase credentials."
+          exit 1
+
