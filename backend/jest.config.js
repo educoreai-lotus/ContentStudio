@@ -1,17 +1,24 @@
-module.exports = {
+export default {
   testEnvironment: 'node',
+  transform: {},
+  moduleFileExtensions: ['js'],
   testMatch: ['**/tests/**/*.test.js'],
-  collectCoverage: true,
-  coverageDirectory: 'coverage',
-  coverageReporters: ['text', 'lcov', 'html'],
+  globals: {
+    'jest': true,
+  },
+  collectCoverageFrom: [
+    'src/**/*.js',
+    '!src/**/*.test.js',
+    '!src/server.js',
+  ],
   coverageThreshold: {
     global: {
-      branches: 60,
-      functions: 60,
-      lines: 60,
-      statements: 60
-    }
+      branches: 80,
+      functions: 80,
+      lines: 80,
+      statements: 80,
+    },
   },
-  setupFilesAfterEnv: ['<rootDir>/tests/setup.js'],
-  verbose: true
+  verbose: true,
 };
+

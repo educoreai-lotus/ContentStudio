@@ -39,12 +39,6 @@ jobs:
           cd backend && npm ci
           cd ../frontend && npm ci
 
-      - name: Build backend
-        working-directory: ./backend
-        run: |
-          npm run build
-          npm run db:generate
-
       - name: Build frontend
         working-directory: ./frontend
         run: npm run build
@@ -63,12 +57,12 @@ jobs:
           vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
           working-directory: ./frontend
 
-      - name: Run database migrations
+      - name: Database Migrations
         run: |
-          cd backend
-          npx prisma migrate deploy
-        env:
-          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+          echo "⚠️ Database migrations must be run manually on Supabase"
+          echo "Go to Supabase Dashboard → SQL Editor"
+          echo "Run: database/migrations/migration.sql"
+          echo "Additional migrations may be needed based on your database state"
 
       - name: Run health checks
         run: |
@@ -106,12 +100,6 @@ jobs:
           cd backend && npm ci
           cd ../frontend && npm ci
 
-      - name: Build backend
-        working-directory: ./backend
-        run: |
-          npm run build
-          npm run db:generate
-
       - name: Build frontend
         working-directory: ./frontend
         run: npm run build
@@ -130,12 +118,12 @@ jobs:
           vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID_PROD }}
           working-directory: ./frontend
 
-      - name: Run database migrations
+      - name: Database Migrations
         run: |
-          cd backend
-          npx prisma migrate deploy
-        env:
-          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+          echo "⚠️ Database migrations must be run manually on Supabase"
+          echo "Go to Supabase Dashboard → SQL Editor"
+          echo "Run: database/migrations/migration.sql"
+          echo "⚠️ PRODUCTION: Verify migrations before running!"
 
       - name: Run health checks
         run: |

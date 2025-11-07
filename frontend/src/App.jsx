@@ -1,74 +1,55 @@
-import React from 'react'
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
-import './App.css'
-import { AppProvider, useApp } from './context/AppContext'
-import Header from './components/Header'
-import LoadingSpinner from './components/LoadingSpinner'
-import BackgroundAnimation from './components/BackgroundAnimation'
-import ModalsManager from './components/ModalsManager'
-import HomePage from './pages/HomePage'
-import CoursesPage from './pages/CoursesPage'
-import LessonsPage from './pages/LessonsPage'
-import CourseDetailPage from './pages/CourseDetailPage'
-import TemplateBasedLessonView from './components/TemplateBasedLessonView'
-import TemplateSelector from './components/TemplateSelector'
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { AppProvider, useApp } from './context/AppContext.jsx';
+import Header from './components/Header.jsx';
+import HomePage from './pages/HomePage.jsx';
+import { CourseList } from './pages/Courses/CourseList.jsx';
+import { CourseForm } from './pages/Courses/CourseForm.jsx';
+import { TopicList } from './pages/Topics/TopicList.jsx';
+import { TopicForm } from './pages/Topics/TopicForm.jsx';
+import { ManualContentForm } from './pages/Content/ManualContentForm.jsx';
+import { AIContentForm } from './pages/Content/AIContentForm.jsx';
+import { SearchResults } from './pages/Search/SearchResults.jsx';
+import { TemplateList } from './pages/Templates/TemplateList.jsx';
+import { TemplateForm } from './pages/Templates/TemplateForm.jsx';
+import LessonView from './pages/Lessons/LessonView.jsx';
+import LessonViewWithLanguage from './pages/Lessons/LessonViewWithLanguage.jsx';
+import TopicContentManager from './pages/Topics/TopicContentManager.jsx';
+import LanguageStatsPage from './pages/Multilingual/LanguageStatsPage.jsx';
+
 function AppContent() {
-  const { loading, error, theme } = useApp()
-
-  // Clear old localStorage on first load
-  React.useEffect(() => {
-    const hasCleared = localStorage.getItem('localStorage_cleared_v1');
-    if (!hasCleared) {
-      // Clear all old content_ keys
-      const keys = Object.keys(localStorage);
-      keys.forEach(key => {
-        if (key.startsWith('content_')) {
-          localStorage.removeItem(key);
-        }
-      });
-      localStorage.setItem('localStorage_cleared_v1', 'true');
-      console.log('✅ Cleared old localStorage data');
-    }
-  }, []);
-
-  // Render loading state
-  if (loading) {
-    return <LoadingSpinner />
-  }
-
+  const { theme } = useApp();
+  
   return (
     <Router>
-      <div className={`min-h-screen text-gray-800 transition-colors duration-300 ${theme === 'day-mode' ? 'bg-gray-50' : 'bg-slate-900 text-white'}`}>
-        <BackgroundAnimation />
-        
-        <Header />
-
-        <main className="pt-24">
-          <div className="max-w-7xl mx-auto px-6 py-8">
-            {/* Error Display */}
-            {error && (
-              <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6">
-                <div className="text-red-600 text-sm font-medium">
-                  {error}
-                </div>
-              </div>
-            )}
-
+      <div className={`min-h-screen ${theme === 'day-mode' ? 'bg-gray-50' : 'bg-gray-900'}`}>
+          <Header />
+          <div className="pt-20">
+            {/* Routes */}
             <Routes>
               <Route path="/" element={<HomePage />} />
-              <Route path="/courses" element={<CoursesPage />} />
-              <Route path="/courses/:courseId" element={<CourseDetailPage />} />
-              <Route path="/lessons" element={<LessonsPage />} />
-              <Route path="/template-selector" element={<TemplateSelector />} />
-              <Route path="/lesson-content/:lessonId?" element={<TemplateBasedLessonView />} />
+              <Route path="/courses" element={<CourseList />} />
+              <Route path="/courses/new" element={<CourseForm />} />
+              <Route path="/courses/:id/edit" element={<CourseForm />} />
+          <Route path="/topics" element={<TopicList />} />
+          <Route path="/lessons" element={<TopicList />} />
+          <Route path="/topics/new" element={<TopicForm />} />
+          <Route path="/topics/:id/edit" element={<TopicForm />} />
+          <Route path="/topics/:topicId/content/new" element={<ManualContentForm />} />
+          <Route path="/topics/:topicId/content/ai-generate" element={<AIContentForm />} />
+          <Route path="/topics/:topicId/content" element={<TopicContentManager />} />
+          <Route path="/lessons/:topicId/view" element={<LessonView />} />
+          <Route path="/lessons/:topicId/language" element={<LessonViewWithLanguage />} />
+          <Route path="/languages/stats" element={<LanguageStatsPage />} />
+          <Route path="/search" element={<SearchResults />} />
+          <Route path="/templates" element={<TemplateList />} />
+          <Route path="/templates/new" element={<TemplateForm />} />
+          <Route path="/templates/:id/edit" element={<TemplateForm />} />
             </Routes>
           </div>
-        </main>
-
-        <ModalsManager />
-      </div>
-    </Router>
-  )
+        </div>
+      </Router>
+    );
 }
 
 function App() {
@@ -76,7 +57,7 @@ function App() {
     <AppProvider>
       <AppContent />
     </AppProvider>
-  )
+  );
 }
 
-export default App
+export default App;

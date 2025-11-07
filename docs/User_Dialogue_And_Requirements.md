@@ -1,368 +1,713 @@
-# User Dialogue & Requirements Analysis - Content Studio
+# Phase 2: User Dialogue & Requirements Analysis
 
-## Phase 2: User Dialogue & Requirements Analysis
+**Status:** ✅ COMPLETE  
+**Created:** 2025-01-04  
+**Last Updated:** 2025-01-04
 
-### Overview
-This document captures the comprehensive user dialogue and requirements analysis for Content Studio, focusing on the trainer content creation workflow.
+---
 
-### Multi-Role Dialogue Results
+## Overview
 
-#### **Guide**: Directed the analysis to focus on trainer content creation workflow
-#### **Clarifier**: Identified key user types and their specific needs
-#### **Simplifier**: Broke down complex requirements into clear, actionable items
-#### **Validator**: Ensured accuracy and completeness of requirements
-#### **Moderator**: Maintained focus on core user journey and avoided scope creep
-#### **Logger**: Captured all decisions and maintained audit trail
+This document captures all requirements, user stories, and analysis gathered during the clarification dialogue phase. Most information was collected during Phase 1, and this document consolidates and organizes it according to Phase 2 structure.
 
-## User Personas
+---
 
-### **Primary Persona: Sarah - The Corporate Trainer**
+## 2.1 Project Idea Analysis
 
-**Background:**
-- **Role**: Senior Corporate Trainer at TechCorp
-- **Experience**: 8 years in corporate training
-- **Technical Level**: Intermediate
-- **Content Creation**: PowerPoint, Word, basic video tools
+### Business Problem Identification
 
-**Goals:**
-- Create engaging, interactive training content quickly
-- Convert existing materials into multiple formats
-- Ensure content accessibility and inclusivity
-- Track content performance and learner engagement
+**Problem Statement:**
+Trainers in educational organizations struggle to create content in a convenient, organized, reliable, and multi-format way. Existing solutions lack:
+- Flexible content creation methods (video-to-lesson, AI-assisted, manual)
+- Multi-format content generation (text, code, presentation, audio, mind map, avatar video)
+- Integrated quality checks and validation
+- Seamless integration with learning management systems
+
+**Target Audience:**
+- **Primary Users:** Trainers creating courses, lessons, and content
+- **User Profile:**
+  - Educational content creators
+  - Trainers working within organizations
+  - Need to create structured, multi-format educational content
+  - Require AI assistance for content generation
+  - Need quality validation and originality checks
+
+**Current Solutions Analysis:**
+- Existing LMS platforms lack flexible content creation workflows
+- No unified platform for video-to-lesson transformation
+- Limited AI-assisted content generation capabilities
+- Fragmented tools requiring multiple platforms for different content formats
+
+**Why Current Solutions Are Inadequate:**
+- No single platform handles all content creation methods
+- Lack of integrated AI for content generation and quality checks
+- No seamless video-to-lesson transformation
+- Limited multi-format support in unified interface
+
+### Solution Vision Definition
+
+**Ideal Solution Architecture:**
+Content Studio provides a unified AI-powered content creation environment that:
+- Supports multiple creation methods (video-to-lesson, AI-assisted, manual)
+- Generates content in 6 different formats (text, code, presentation, audio, mind map, avatar video)
+- Integrates seamlessly with other Educore AI microservices
+- Provides quality validation and originality checks
+- Maintains complete version history and audit trails
+
+**Key Differentiators:**
+1. **Flexible Content Generation:** Each format can be created independently with different generation methods
+2. **AI Integration:** Multiple AI providers (OpenAI, Gemini) for different content types
+3. **Video-to-Lesson Pipeline:** Automated transformation from video to structured multi-format lessons
+4. **Quality Assurance:** Built-in quality checks and plagiarism detection
+5. **Microservice Integration:** Seamless integration with Course Builder, Skills Engine, DevLab, and other Educore services
+
+**Unique Value Proposition:**
+Content Studio is the only content creation platform that combines:
+- Multiple AI providers for optimal format generation
+- Flexible generation methods per content item
+- Complete integration with learning ecosystem
+- Quality validation and originality checks
+- Full version control and audit trails
+
+**Measurable Success Criteria:**
+- **Content Creation Speed:** Reduce time to create lesson from hours to minutes
+- **Quality Metrics:** 95%+ content passes quality checks
+- **User Adoption:** 80%+ trainer satisfaction rate
+- **Performance:** Page load under 2 seconds, API response under 500ms
+- **Reliability:** 99.9% uptime
+
+**Key Performance Indicators (KPIs):**
+- Number of lessons created per trainer per month
+- Average time to create complete lesson
+- Quality check pass rate
+- Content format generation success rate
+- User engagement and feature usage
+- System performance metrics
+
+---
+
+## 2.2 Users / Features / Stories Analysis
+
+### User Persona Development
+
+**Primary User Persona: Trainer**
+
+**Profile:**
+- **Role:** Educational content creator
+- **Organization:** Part of educational institution or training company
+- **Technical Proficiency:** Intermediate to advanced
+- **Goals:**
+  - Create engaging, multi-format educational content efficiently
+  - Transform existing video content into structured lessons
+  - Generate content using AI assistance
+  - Maintain quality and originality of content
+  - Organize content into courses and lessons
 
 **Pain Points:**
-- Time-consuming content creation (3-4 days per module)
-- Format limitations for multi-format content
-- Quality consistency across content types
-- Technical barriers for advanced content creation
+- Time-consuming content creation process
+- Need to use multiple tools for different content formats
+- Difficulty in maintaining content quality and consistency
+- Lack of integrated quality validation
+- Manual content organization and management
 
-**Content Creation Preferences:**
-- Guided, step-by-step processes
-- AI assistance with user control
-- Templates and pre-built structures
-- Clear feedback on content quality
+**Frustrations:**
+- Inconsistent content quality
+- Slow content generation workflows
+- Limited AI assistance capabilities
+- Fragmented tools and platforms
+- Difficulty tracking content versions and changes
 
-### **Secondary Persona: Dr. Michael - The Academic Educator**
+**Technical Proficiency Levels:**
+- **Basic:** Can use simple forms and interfaces
+- **Intermediate:** Comfortable with content creation tools
+- **Advanced:** Can customize templates and use advanced features
 
-**Background:**
-- **Role**: University Professor and Course Designer
-- **Experience**: 15 years in higher education
-- **Technical Level**: Advanced
-- **Content Creation**: Multiple platforms, LMS, video editing
+**User Goals:**
+1. Create courses with multiple lessons efficiently
+2. Transform video content into structured lessons automatically
+3. Generate content using AI with minimal manual input
+4. Upload and manage content manually when needed
+5. Ensure content quality and originality
+6. Organize content with templates and structures
+7. Track content versions and history
+8. Search and filter content effectively
 
-**Goals:**
-- Create comprehensive, research-based educational content
-- Integrate multimedia elements effectively
-- Ensure academic rigor and citation standards
-- Collaborate with other educators
+### Feature Identification
 
-**Pain Points:**
-- Content complexity for academic standards
-- Integration challenges with university systems
-- Quality assurance and plagiarism checking
-- Limited collaboration tools
+**Core Features for MVP (11 features organized into 4 functional areas):**
 
-**Content Creation Preferences:**
-- Advanced AI capabilities with academic focus
-- Integration with academic databases
-- Detailed analytics and performance metrics
-- Collaboration features for team projects
+**A. Content Creation & Generation (4 features):**
+1. **A1. Video-to-Lesson Transformation**
+   - Transform uploaded videos into structured lessons
+   - Generate all 5 mandatory formats automatically
+   - AI-powered transcription and summarization
 
-### **Tertiary Persona: Lisa - The Freelance Content Creator**
+2. **A2. AI-Assisted Content Creation**
+   - Generate content from trainer input (topic, key ideas)
+   - Use prompt templates for consistent generation
+   - Generate specific formats on demand
 
-**Background:**
-- **Role**: Independent Educational Content Creator
-- **Experience**: 5 years in freelance content creation
-- **Technical Level**: Beginner to Intermediate
-- **Content Creation**: Various tools, lacks consistency
+3. **A3. Manual Content Creation**
+   - Upload or write content manually
+   - Automatic quality checks for manual uploads
+   - Support for text, code, presentations, audio
 
-**Goals:**
-- Create high-quality content efficiently
-- Build portfolio of diverse content types
-- Establish credibility in education market
-- Scale content production
+4. **A4. Format-Specific Generators**
+   - A4.1 Text Generation (GPT-4o-mini)
+   - A4.2 Code Example Generator (DevLab integration)
+   - A4.3 Presentation Builder (Google Slides API)
+   - A4.4 Audio Creation (TTS models)
+   - A4.5 Mind Map Generator (Gemini API + React Flow)
 
-**Pain Points:**
-- Tool fragmentation across platforms
-- Quality inconsistency
-- Time management challenges
-- Meeting diverse client requirements
+**B. Content Management (4 features):**
+1. **B1. Course Management**
+   - Create, edit, delete (soft-delete) courses
+   - Course structure management
+   - Integration with Course Builder
 
-**Content Creation Preferences:**
-- Simple, intuitive interfaces
-- Comprehensive templates and examples
-- AI assistance for content enhancement
-- Flexible output formats
+2. **B2. Lesson/Topic Management**
+   - Create, edit, delete (soft-delete) lessons
+   - Support stand-alone lessons (not tied to courses)
+   - Usage tracking for Course Builder
 
-## Core Features
+3. **B3. Template Management**
+   - Structural templates (format order)
+   - Prompt templates (AI generation patterns)
+   - Reusable across lessons/courses
 
-### **MVP Features**
+4. **B4. Content Versioning & History**
+   - Full version control
+   - Rollback capability
+   - Complete audit trail
 
-#### **1. Content Creation Methods**
-- Manual Upload: Upload existing content files
-- AI-Assisted Creation: AI enhances and structures content
-- Video-to-Transcript: Convert video to structured lessons
-- Fully AI-Generated: Create content from prompts
+**C. Quality & Validation (2 features):**
+1. **C1. Quality & Originality Checks**
+   - AI-based validation (clarity, difficulty, structure, plagiarism)
+   - Automatic checks for manual uploads
+   - Trainer feedback system
 
-#### **2. Multi-Format Output**
-- Text Content: Structured lesson text with formatting
-- Presentations: PowerPoint-style presentations
-- Mind Maps: Visual concept mapping
-- Audio: Text-to-speech audio versions
-- Video: Avatar-based video presentations
-- Interactive: Interactive exercises and quizzes
+2. **C2. Content Search & Filtering**
+   - Search by title, skill, status, format type
+   - Filter by status, generation method, format type
+   - Pagination support
 
-#### **3. Content Management**
-- Course Organization: Structure content into courses and lessons
-- Version Control: Track changes and maintain history
-- Content Library: Organize and search existing content
-- Template System: Reusable content templates
+**D. Integration & Communication (2 features):**
+1. **D1. Microservice Integration Layer**
+   - gRPC: Course Builder, Skills Engine, Directory, DevLab
+   - REST: RAG, Learning Analytics
 
-#### **4. AI Integration**
-- Content Enhancement: Improve clarity and structure
-- Quality Checking: Plagiarism and quality validation
-- Multi-language Support: Translate content
-- Mind Map Generation: Automatic concept mapping
+2. **D2. Notification System**
+   - In-app notifications (UI banner/bell icon)
+   - Email notifications
+   - Real-time updates for generation completion
 
-#### **5. User Experience**
-- Dashboard: Overview of courses and content
-- Content Editor: Rich text editor for content creation
-- Preview System: Preview content in different formats
-- Progress Tracking: Monitor content creation progress
+**Nice-to-Have Features (Post-MVP):**
+- Multi-language support (10 languages, 95% accuracy)
+- Advanced analytics dashboards
+- Avatar video generation (Heygen integration)
+- Collaboration & shared editing
+- Bulk operations
 
-### **Nice-to-Have Features**
+**Future Feature Roadmap:**
+- Multi-trainer collaboration
+- Advanced content analytics
+- Integration with additional AI providers
+- Enhanced multimedia support
+- Mobile app for content creation
 
-#### **1. Advanced AI Capabilities**
-- Personalized Content: AI adapts content to audiences
-- Content Recommendations: Suggest improvements
-- Automated Quality Scoring: AI-powered quality assessment
+**Feature Dependencies:**
+- Content Creation depends on Template Management
+- Format Generators depend on Content Management
+- Quality Checks depend on Content Creation
+- Versioning supports all Content Management features
+- Integration Layer required for all features
 
-#### **2. Collaboration Features**
-- Team Content Creation: Multiple users working on content
-- Review and Approval: Content review workflows
-- Comment System: Collaborative feedback
+**Feature Priorities:**
+1. **Critical:** A1 (Video-to-Lesson), A2 (AI-Assisted), B1 (Course Management), B2 (Lesson Management)
+2. **High:** A4 (Format Generators), B3 (Templates), C1 (Quality Checks)
+3. **Medium:** B4 (Versioning), C2 (Search), D1 (Integration), D2 (Notifications)
 
-#### **3. Analytics and Reporting**
-- Content Performance: Track content performance
-- Usage Analytics: Understand content usage
-- Quality Metrics: Monitor content quality over time
+### User Story Creation
 
-## User Stories
+**Epic 1: Content Creation**
 
-### **Epic 1: Course Management**
-
-#### **User Story 1.1: Create New Course**
+**User Story 1.1: Video-to-Lesson Transformation**
 - **As a** trainer
-- **I want to** create a new course with basic information
-- **So that** I can start organizing my educational content
-- **Acceptance Criteria:**
-  - [ ] I can enter course title and description
-  - [ ] I can set course status (draft, active, archived)
-  - [ ] I can add course metadata (tags, categories)
-  - [ ] I can save the course and return to it later
+- **I want to** upload a video file and automatically generate a complete lesson with all formats
+- **So that** I can quickly transform existing video content into structured educational material
 
-#### **User Story 1.2: Manage Course Content**
+**Acceptance Criteria:**
+- Trainer can upload video files (MP4, MOV, AVI, WebM, max 500MB)
+- System transcribes video using Whisper API
+- System generates all 5 mandatory formats (text, code, presentation, audio, mind map)
+- Progress indicator shows status for each format generation
+- Success message displayed when complete
+- All generated content saved to database
+
+**Definition of Done:**
+- Video upload functionality working
+- Transcription pipeline functional
+- All 5 formats generated successfully
+- Error handling for failed generations
+- UI shows progress and completion status
+
+**User Story 1.2: AI-Assisted Content Creation**
 - **As a** trainer
-- **I want to** add and organize lessons within my course
-- **So that** I can create a structured learning experience
-- **Acceptance Criteria:**
-  - [ ] I can add new lessons to my course
-  - [ ] I can reorder lessons within the course
-  - [ ] I can edit lesson titles and descriptions
-  - [ ] I can delete lessons I no longer need
+- **I want to** provide a topic and key ideas to generate content using AI
+- **So that** I can quickly create content without manual writing
 
-### **Epic 2: Content Creation**
+**Acceptance Criteria:**
+- Trainer can input topic (3-200 characters) and key ideas (10-2000 characters)
+- Trainer can select which formats to generate
+- System uses prompt templates for consistent generation
+- Generated content displayed in preview mode
+- Trainer can save or regenerate content
+- Content saved with generation_method = 'ai_assisted'
 
-#### **User Story 2.1: Manual Content Upload**
+**Definition of Done:**
+- Input form validates requirements
+- AI generation working for all format types
+- Preview functionality functional
+- Save/regenerate options available
+- Error handling for generation failures
+
+**User Story 1.3: Manual Content Creation**
 - **As a** trainer
-- **I want to** upload existing content files
-- **So that** I can enhance them with AI assistance
-- **Acceptance Criteria:**
-  - [ ] I can upload text, PDF, and document files
-  - [ ] I can upload video and audio files
-  - [ ] The system validates file types and sizes
-  - [ ] I can add metadata to uploaded content
+- **I want to** upload or write content manually
+- **So that** I have full control over content creation
 
-#### **User Story 2.2: AI-Assisted Content Creation**
+**Acceptance Criteria:**
+- Trainer can upload files (text, code, presentations, audio)
+- Trainer can write content using rich text editor
+- Code editor with syntax highlighting available
+- Automatic quality check runs after save
+- Quality check results displayed with colored badges
+- Content saved with generation_method = 'manual'
+
+**Definition of Done:**
+- File upload working with validation
+- Text editor functional with formatting
+- Code editor with syntax highlighting
+- Quality check integration working
+- Results display functional
+
+**Epic 2: Content Management**
+
+**User Story 2.1: Course Management**
 - **As a** trainer
-- **I want to** use AI to enhance my content
-- **So that** I can improve quality and structure
-- **Acceptance Criteria:**
-  - [ ] I can select content for AI enhancement
-  - [ ] I can choose enhancement options (clarity, structure, examples)
-  - [ ] I can review AI suggestions before applying
-  - [ ] I can accept or reject AI recommendations
+- **I want to** create, edit, and manage courses
+- **So that** I can organize my lessons into structured courses
 
-#### **User Story 2.3: Video-to-Transcript Conversion**
+**Acceptance Criteria:**
+- Trainer can create course with name, description, skills, language
+- Trainer can edit existing courses
+- Trainer can delete courses (soft-delete)
+- Course list displays all courses with status badges
+- Filter by status (active, archived, deleted)
+- Integration with Course Builder microservice
+
+**Definition of Done:**
+- CRUD operations functional
+- Status management working
+- List/filter views functional
+- Integration with Course Builder working
+- Soft delete implemented
+
+**User Story 2.2: Lesson/Topic Management**
 - **As a** trainer
-- **I want to** convert video content to structured lessons
-- **So that** I can create text-based content from video
-- **Acceptance Criteria:**
-  - [ ] I can upload video files or provide YouTube links
-  - [ ] The system generates accurate transcripts
-  - [ ] I can edit and improve the transcript
-  - [ ] I can convert transcripts to lesson content
+- **I want to** create lessons that can belong to courses or be stand-alone
+- **So that** I can organize content flexibly
 
-### **Epic 3: Multi-Format Output**
+**Acceptance Criteria:**
+- Trainer can create lesson with topic name, description
+- Trainer can associate lesson with course or leave stand-alone
+- Trainer must add at least 5 mandatory formats
+- Visual indicator shows format completion progress
+- Usage count tracked and returned to Course Builder
+- Stand-alone lessons can be added to courses later
 
-#### **User Story 3.1: Generate Text Content**
+**Definition of Done:**
+- Lesson creation functional
+- Course association optional
+- Format requirement validation working
+- Progress indicator functional
+- Usage tracking implemented
+
+**User Story 2.3: Template Management**
 - **As a** trainer
-- **I want to** create well-structured text content
-- **So that** learners can read and study the material
-- **Acceptance Criteria:**
-  - [ ] I can generate formatted text content
-  - [ ] The content includes headings, bullet points, and examples
-  - [ ] I can edit and customize the generated text
-  - [ ] The content maintains educational structure
+- **I want to** create and reuse templates for content structure
+- **So that** I can maintain consistency across lessons
 
-#### **User Story 3.2: Create Presentations**
+**Acceptance Criteria:**
+- Trainer can create structural templates (format order)
+- Trainer can create prompt templates (AI generation patterns)
+- Templates can be reused across multiple lessons/courses
+- Template list displays all templates with type badges
+- "Use Template" button applies template to lesson
+
+**Definition of Done:**
+- Template creation functional
+- Both template types supported
+- Reusability working
+- Template application functional
+
+**Epic 3: Quality & Validation**
+
+**User Story 3.1: Quality & Originality Checks**
 - **As a** trainer
-- **I want to** generate presentation slides
-- **So that** I can deliver content in presentation format
-- **Acceptance Criteria:**
-  - [ ] I can generate PowerPoint-style presentations
-  - [ ] Slides include appropriate visuals and text
-  - [ ] I can customize slide layouts and content
-  - [ ] I can export presentations in standard formats
+- **I want to** receive automatic quality checks for my content
+- **So that** I can ensure content meets quality standards
 
-#### **User Story 3.3: Generate Mind Maps**
+**Acceptance Criteria:**
+- Automatic quality check runs for manual uploads
+- Quality score displayed (0-100%)
+- Individual scores shown (Clarity, Complexity, Structure, Originality)
+- Color coding: Green (80-100%), Yellow (60-79%), Red (0-59%)
+- Plagiarism check shows similarity percentage
+- Sources listed if available
+
+**Definition of Done:**
+- Quality check integration working
+- Score calculation accurate
+- Display functional with color coding
+- Plagiarism detection working
+- Results stored in database
+
+**User Story 3.2: Content Search & Filtering**
 - **As a** trainer
-- **I want to** create visual mind maps
-- **So that** learners can understand concept relationships
-- **Acceptance Criteria:**
-  - [ ] I can generate interactive mind maps
-  - [ ] Concepts are properly connected and organized
-  - [ ] I can edit and customize the mind map
-  - [ ] I can export mind maps in various formats
+- **I want to** search and filter my content
+- **So that** I can quickly find specific lessons or content items
 
-### **Epic 4: Content Quality and Management**
+**Acceptance Criteria:**
+- Search bar searches across title, description, skills
+- Results update as user types (debounced 300ms)
+- Filter by status, generation method, format type
+- Active filters displayed as chips/tags
+- Pagination: 10, 25, 50 results per page
+- "No results found" message clear
 
-#### **User Story 4.1: Quality Checking**
+**Definition of Done:**
+- Search functionality working
+- Filtering functional
+- Pagination working
+- UI responsive and clear
+
+**Epic 4: Integration & Communication**
+
+**User Story 4.1: Microservice Integration**
+- **As a** system
+- **I need to** integrate with other Educore AI microservices
+- **So that** Content Studio works seamlessly within the ecosystem
+
+**Acceptance Criteria:**
+- gRPC integration with Course Builder, Skills Engine, Directory, DevLab
+- REST integration with RAG and Learning Analytics
+- Loading states shown during API calls
+- Error handling with retry mechanism
+- Timeout: 30 seconds maximum
+
+**Definition of Done:**
+- All integrations functional
+- Error handling working
+- Loading states implemented
+- Timeout handling working
+
+**User Story 4.2: Notification System**
 - **As a** trainer
-- **I want to** check content quality and originality
-- **So that** I can ensure high standards
-- **Acceptance Criteria:**
-  - [ ] I can run plagiarism checks on content
-  - [ ] I can get quality scores and recommendations
-  - [ ] I can see clarity and difficulty assessments
-  - [ ] I can address quality issues before publishing
+- **I want to** receive notifications about content generation status
+- **So that** I know when operations complete
 
-#### **User Story 4.2: Version Control**
-- **As a** trainer
-- **I want to** track content changes and versions
-- **So that** I can manage content evolution
-- **Acceptance Criteria:**
-  - [ ] I can see content change history
-  - [ ] I can revert to previous versions
-  - [ ] I can compare different versions
-  - [ ] I can create content branches for experimentation
+**Acceptance Criteria:**
+- Notification bell icon shows unread count badge
+- Dropdown lists recent notifications
+- Each notification clickable
+- "Mark as read" functional
+- "Clear all" button clears all notifications
+- Email notifications sent for important events
 
-## Requirements Analysis
+**Definition of Done:**
+- In-app notifications working
+- Email notifications functional
+- Notification management working
+- UI clear and functional
 
-### **Functional Requirements**
+---
 
-#### **1. User Authentication and Authorization**
-- **REQ-001**: Users must authenticate with valid credentials
-- **REQ-002**: Users must have appropriate permissions for content creation
-- **REQ-003**: System must validate user skills before allowing content upload
-- **REQ-004**: Users must be able to manage their profile and preferences
+## 2.3 Feature Prioritization & MVP Definition
 
-#### **2. Content Creation**
-- **REQ-005**: System must support manual content upload
-- **REQ-006**: System must provide AI-assisted content enhancement
-- **REQ-007**: System must convert video content to transcripts
-- **REQ-008**: System must generate content from prompts and requirements
-- **REQ-009**: System must validate file types and sizes
-- **REQ-010**: System must provide content templates
+### MVP Scope Definition
 
-#### **3. Multi-Format Output**
-- **REQ-011**: System must generate text content with proper formatting
-- **REQ-012**: System must create presentation slides
-- **REQ-013**: System must generate interactive mind maps
-- **REQ-014**: System must produce audio versions of content
-- **REQ-015**: System must create avatar-based videos
-- **REQ-016**: System must generate interactive exercises
+**Minimum Viable Product Features:**
 
-#### **4. Content Management**
-- **REQ-017**: System must organize content into courses and lessons
-- **REQ-018**: System must provide content search and filtering
-- **REQ-019**: System must maintain content version history
-- **REQ-020**: System must support content collaboration
-- **REQ-021**: System must provide content templates and examples
+**Core Content Creation (Must Have):**
+1. Video-to-Lesson Transformation (A1)
+2. AI-Assisted Content Creation (A2)
+3. Manual Content Creation (A3)
+4. Format-Specific Generators (A4) - 5 formats (text, code, presentation, audio, mind map)
 
-#### **5. AI Integration**
-- **REQ-022**: System must enhance content clarity and structure
-- **REQ-023**: System must check content originality
-- **REQ-024**: System must provide quality scores and recommendations
-- **REQ-025**: System must support multi-language content generation
-- **REQ-026**: System must generate mind maps automatically
+**Content Management (Must Have):**
+5. Course Management (B1)
+6. Lesson/Topic Management (B2)
+7. Template Management (B3)
+8. Content Versioning & History (B4)
 
-### **Non-Functional Requirements**
+**Quality & Validation (Must Have):**
+9. Quality & Originality Checks (C1)
+10. Content Search & Filtering (C2)
 
-#### **1. Performance**
-- **REQ-027**: System must respond to API calls within 2 seconds
-- **REQ-028**: System must support 1000+ concurrent users
-- **REQ-029**: System must process video content within 5 minutes
-- **REQ-030**: System must handle files up to 50MB
+**Integration & Communication (Must Have):**
+11. Microservice Integration Layer (D1)
+12. Notification System (D2)
 
-#### **2. Security**
-- **REQ-031**: System must encrypt data at rest and in transit
-- **REQ-032**: System must implement role-based access control
-- **REQ-033**: System must validate all user inputs
-- **REQ-034**: System must maintain audit logs
+**Success Metrics for MVP:**
+- 80%+ of trainers can create a complete lesson within 10 minutes
+- 95%+ of generated content passes quality checks
+- 99%+ API uptime
+- Page load time under 2 seconds
+- API response time under 500ms
 
-#### **3. Usability**
-- **REQ-035**: System must provide intuitive user interface
-- **REQ-036**: System must support responsive design
-- **REQ-037**: System must provide clear error messages
-- **REQ-038**: System must offer user guidance and help
+**MVP Timeline:**
+- Phase 1: Initial Setup (Complete)
+- Phase 2: Requirements Analysis (Current)
+- Phase 3: Feature Planning
+- Phase 4: Design & Architecture
+- Phase 5: UI/UX Design
+- Phase 6: Implementation
+- Phase 7: Testing & Verification
+- Phase 8: Code Review & Deployment
+- Phase 9: Final Artifacts
 
-#### **4. Reliability**
-- **REQ-039**: System must maintain 99.5% uptime
-- **REQ-040**: System must provide data backup and recovery
-- **REQ-041**: System must handle system failures gracefully
-- **REQ-042**: System must provide monitoring and alerting
+**Post-MVP Roadmap:**
+- Multi-language support (Phase 2)
+- Advanced analytics dashboards
+- Avatar video generation (Heygen)
+- Collaboration & shared editing
+- Bulk operations
+
+### Feature Prioritization
+
+**Value vs. Effort Matrix:**
+
+**High Value, Low Effort (Quick Wins):**
+- Content Search & Filtering (C2)
+- Template Management (B3)
+- Notification System (D2)
+
+**High Value, High Effort (Strategic):**
+- Video-to-Lesson Transformation (A1)
+- Format-Specific Generators (A4)
+- Microservice Integration Layer (D1)
+
+**Low Value, Low Effort (Fill-ins):**
+- Content Versioning & History (B4) - Important for audit but lower user value
+
+**Low Value, High Effort (Post-MVP):**
+- Avatar Video Generation (Post-MVP)
+- Multi-language Support (Post-MVP)
+
+**Risk Assessment:**
+
+**High Risk Features:**
+- Video-to-Lesson Transformation: Complex async processing pipeline
+- AI Integration: Multiple API dependencies, rate limits, costs
+- Microservice Integration: Network dependencies, error handling
+
+**Medium Risk Features:**
+- Format Generators: External API dependencies
+- Quality Checks: AI accuracy, false positives
+
+**Low Risk Features:**
+- Content Management: Standard CRUD operations
+- Search & Filtering: Standard database queries
+- Templates: Simple data structures
+
+**Dependencies and Prerequisites:**
+
+**Critical Path:**
+1. Database Schema → Content Management → Content Creation → Format Generators
+2. Microservice Integration → All features that need external services
+3. Authentication → All features (via Directory service)
+
+**Feature Sequencing:**
+1. **Phase 4:** System Design, API Design, Database Integration
+2. **Phase 5:** UI/UX Design for all features
+3. **Phase 6:** Implementation in order:
+   - Content Management (B1, B2, B3, B4)
+   - Content Creation (A2, A3, A4)
+   - Video-to-Lesson (A1) - Most complex
+   - Quality & Validation (C1, C2)
+   - Integration & Communication (D1, D2)
+
+**Resource Allocation:**
+
+**Development Team:**
+- Backend: 2 developers (API, integration, AI)
+- Frontend: 2 developers (UI, UX, React)
+- DevOps: 1 developer (deployment, infrastructure)
+- QA: 1 tester (testing, validation)
+
+**Timeline Estimates:**
+- Content Management: 2 weeks
+- Content Creation (Basic): 3 weeks
+- Video-to-Lesson: 4 weeks
+- Format Generators: 3 weeks
+- Quality & Validation: 2 weeks
+- Integration: 2 weeks
+- Testing & Deployment: 2 weeks
+- **Total MVP: ~18 weeks (4.5 months)**
+
+---
+
+## 2.4 Data / Privacy / Regulations Analysis
+
+### Data Requirements
+
+**Data Types and Sources:**
+
+**User Data:**
+- Trainer information (from Directory service)
+- Trainer ID, name, organization
+- Permissions and access rights
+
+**Content Data:**
+- Courses, lessons (topics), content items
+- Text, code, presentations, audio, mind maps
+- Templates and generation metadata
+- Version history and audit trails
+
+**Analytics Data:**
+- Usage statistics
+- Content generation metrics
+- Quality check results
+- Performance metrics
+
+**Data Volume and Velocity:**
+- Expected courses per trainer: 10-50
+- Expected lessons per course: 5-20
+- Expected content items per lesson: 5-6 (formats)
+- Video uploads: 100MB-500MB per video
+- Content generation: Async, queue-based processing
+
+**Data Quality Requirements:**
+- All content must pass quality checks
+- Data validation at API level
+- Referential integrity in database
+- Soft delete preserves data integrity
+
+**Data Integration Needs:**
+- Directory service: Trainer information
+- Skills Engine: Skills mapping
+- Course Builder: Course structure
+- DevLab: Exercise generation
+- Learning Analytics: Usage statistics
+- RAG: Content indexing
+
+### Privacy and Compliance
+
+**Privacy Requirements:**
+
+**GDPR Compliance:**
+- Right to access: Users can view all their data
+- Right to deletion: Soft delete (data preserved for audit)
+- Data portability: Export functionality (future)
+- Consent management: Through Directory service
+
+**CCPA Compliance:**
+- Right to know: Users can see what data is collected
+- Right to delete: Soft delete implemented
+- Data sharing: Only with authorized microservices
+
+**Data Retention Policies:**
+- **Active Content:** Indefinitely (while status = 'active')
+- **Archived Content:** 7 years
+- **Deleted Content:** Never physically deleted, preserved for audit
+- **Version History:** Complete history preserved in content_history table
+
+**User Consent Mechanisms:**
+- Authentication via JWT (handled by Authentication microservice)
+- Permissions validated via Directory service
+- Content Studio does not manage user consent directly
+
+**Compliance Documentation:**
+- Data processing documentation in ROADMAP.json
+- Privacy policy reference (handled by Directory service)
+- Audit trail in content_history table
+
+### Security Requirements
+
+**Authentication and Authorization:**
+- **Authentication:** JWT token validation via Authentication microservice
+- **Authorization:** Trainer permissions validated via Directory microservice
+- **No Local User Management:** Content Studio does not store user credentials
+- **Role-Based Access:** Single trainer ownership per course/lesson
+
+**Data Encryption:**
+- **At Rest:** Database encryption (Supabase handles)
+- **In Transit:** HTTPS/TLS for all API calls
+- **Sensitive Data:** API keys stored in environment variables
+- **Content Data:** Stored in encrypted database
+
+**Security Monitoring and Logging:**
+- All API calls logged with trainer ID
+- Error logging for security issues
+- Failed authentication attempts logged
+- Content access logged for audit
+
+**Incident Response Procedures:**
+- Security incidents reported to Directory service
+- Data breach notification procedures (via Directory service)
+- Rollback procedures for compromised content
+- Audit trail for security investigations
+
+**API Security:**
+- Rate limiting on API endpoints
+- Input validation and sanitization
+- SQL injection prevention (parameterized queries)
+- XSS prevention (React built-in protections)
+- CORS configuration for frontend
+
+**External API Security:**
+- API keys stored in environment variables
+- Secure API communication (HTTPS)
+- Error handling without exposing sensitive data
+- Retry logic with exponential backoff
+
+---
 
 ## Validation Gates
+
+### Phase 2 Completion Checklist
 
 - [x] All user personas are defined and validated
 - [x] All user stories have clear acceptance criteria
 - [x] MVP scope is agreed upon by all stakeholders
 - [x] Privacy and compliance requirements are documented
 - [x] Success metrics are defined and measurable
-
-## Success Metrics
-
-### **User Experience Metrics**
-- Content creation time reduction by 60%
-- User satisfaction score > 4.5/5
-- User adoption rate > 80% within 6 months
-- Content quality improvement by 40%
-
-### **Technical Metrics**
-- System uptime > 99.5%
-- API response time < 2 seconds
-- Support for 1000+ concurrent users
-- Content processing time < 5 minutes
-
-### **Business Metrics**
-- Content production increase by 200%
-- User engagement increase by 150%
-- Cost reduction in content creation by 50%
-- Revenue growth from content services by 100%
-
-## Output
-
-**Requirements.json** (updated with detailed user inputs)
-- User personas and workflows
-- Feature requirements and priorities
-- User stories with acceptance criteria
-- Success metrics and KPIs
-- Technical and non-functional requirements
+- [x] Feature prioritization is complete
+- [x] Dependencies are mapped and validated
+- [x] Resource requirements are estimated
 
 ---
 
-**Status**: Phase 2 COMPLETED ✅
-**Next Phase**: Phase 3 - Feature Planning
-**Focus**: MVP prioritization and feature breakdown
-**Estimated Completion**: 2024-01-30T00:00:00Z
+## Summary
+
+**Phase 2 Status:** ✅ COMPLETE
+
+**Key Deliverables:**
+- User personas defined (Trainers)
+- 11 MVP features identified and documented
+- User stories created with acceptance criteria
+- MVP scope defined with success metrics
+- Feature prioritization completed
+- Data, privacy, and security requirements documented
+
+**Next Steps:**
+- Proceed to Phase 3: Feature Planning
+- Create detailed task decomposition
+- Define comprehensive roadmap
+
+---
+
+**Document Version:** 1.0  
+**Last Updated:** 2025-01-04
+

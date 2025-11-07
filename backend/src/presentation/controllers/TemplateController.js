@@ -1,0 +1,136 @@
+import { CreateTemplateUseCase } from '../../application/use-cases/CreateTemplateUseCase.js';
+import { GetTemplatesUseCase } from '../../application/use-cases/GetTemplatesUseCase.js';
+import { GetTemplateUseCase } from '../../application/use-cases/GetTemplateUseCase.js';
+import { UpdateTemplateUseCase } from '../../application/use-cases/UpdateTemplateUseCase.js';
+import { DeleteTemplateUseCase } from '../../application/use-cases/DeleteTemplateUseCase.js';
+import { TemplateDTO } from '../../application/dtos/TemplateDTO.js';
+
+/**
+ * Template Controller
+ */
+export class TemplateController {
+  constructor({ templateRepository }) {
+    this.createTemplateUseCase = new CreateTemplateUseCase({ templateRepository });
+    this.getTemplatesUseCase = new GetTemplatesUseCase({ templateRepository });
+    this.getTemplateUseCase = new GetTemplateUseCase({ templateRepository });
+    this.updateTemplateUseCase = new UpdateTemplateUseCase({ templateRepository });
+    this.deleteTemplateUseCase = new DeleteTemplateUseCase({ templateRepository });
+  }
+
+  async create(req, res, next) {
+    try {
+      const templateData = {
+        template_name: req.body.template_name,
+        format_order: req.body.format_order,
+        description: req.body.description,
+        notes: req.body.notes,
+        created_by: req.body.created_by || 'trainer123', // TODO: Get from auth
+      };
+
+      const template = await this.createTemplateUseCase.execute(templateData);
+
+      res.status(201).json({
+        success: true,
+        data: TemplateDTO.toTemplateResponse(template),
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async list(req, res, next) {
+    try {
+      const filters = {
+        created_by: req.query.created_by,
+        template_name: req.query.search,
+      };
+
+      // Remove undefined filters
+      Object.keys(filters).forEach(key => {
+        if (filters[key] === undefined) {
+          delete filters[key];
+        }
+      });
+
+      const templates = await this.getTemplatesUseCase.execute(filters);
+
+      res.json({
+        success: true,
+        data: TemplateDTO.toTemplateListResponse(templates),
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async getById(req, res, next) {
+    try {
+      const templateId = parseInt(req.params.id);
+      const template = await this.getTemplateUseCase.execute(templateId);
+
+      if (!template) {
+        return res.status(404).json({
+          success: false,
+          error: 'Template not found',
+        });
+      }
+
+      res.json({
+        success: true,
+        data: TemplateDTO.toTemplateResponse(template),
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async update(req, res, next) {
+    try {
+      const templateId = parseInt(req.params.id);
+      const updates = {
+        template_name: req.body.template_name,
+        format_order: req.body.format_order,
+        description: req.body.description,
+        notes: req.body.notes,
+      };
+
+      // Remove undefined fields
+      Object.keys(updates).forEach(key => {
+        if (updates[key] === undefined) {
+          delete updates[key];
+        }
+      });
+
+      const template = await this.updateTemplateUseCase.execute(templateId, updates);
+
+      if (!template) {
+        return res.status(404).json({
+          success: false,
+          error: 'Template not found',
+        });
+      }
+
+      res.json({
+        success: true,
+        data: TemplateDTO.toTemplateResponse(template),
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async remove(req, res, next) {
+    try {
+      const templateId = parseInt(req.params.id);
+      await this.deleteTemplateUseCase.execute(templateId);
+
+      res.json({
+        success: true,
+        message: 'Template deleted successfully',
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+}
+

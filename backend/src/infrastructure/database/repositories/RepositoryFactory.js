@@ -1,0 +1,70 @@
+import { db } from '../DatabaseConnection.js';
+import { CourseRepository } from './CourseRepository.js';
+import { PostgreSQLCourseRepository } from './PostgreSQLCourseRepository.js';
+import { TopicRepository } from './TopicRepository.js';
+import { PostgreSQLTopicRepository } from './PostgreSQLTopicRepository.js';
+import { ContentRepository } from './ContentRepository.js';
+import { PostgreSQLContentRepository } from './PostgreSQLContentRepository.js';
+import { TemplateRepository } from './TemplateRepository.js';
+import { PostgreSQLTemplateRepository } from './PostgreSQLTemplateRepository.js';
+import { ContentVersionRepository } from './ContentVersionRepository.js';
+import { PostgreSQLContentVersionRepository } from './PostgreSQLContentVersionRepository.js';
+import { QualityCheckRepository } from './QualityCheckRepository.js';
+import { PostgreSQLQualityCheckRepository } from './PostgreSQLQualityCheckRepository.js';
+
+/**
+ * Repository Factory
+ * Returns PostgreSQL repositories if database is connected, otherwise in-memory repositories
+ */
+export class RepositoryFactory {
+  static getCourseRepository() {
+    if (db.isConnected()) {
+      return new PostgreSQLCourseRepository();
+    }
+    return new CourseRepository(null);
+  }
+
+  static getTopicRepository() {
+    if (db.isConnected()) {
+      return new PostgreSQLTopicRepository();
+    }
+    return new TopicRepository(null);
+  }
+
+  static getContentRepository() {
+    if (db.isConnected()) {
+      return new PostgreSQLContentRepository();
+    }
+    return new ContentRepository();
+  }
+
+  static getTemplateRepository() {
+    if (db.isConnected()) {
+      return new PostgreSQLTemplateRepository();
+    }
+    return new TemplateRepository();
+  }
+
+  static getContentVersionRepository() {
+    if (db.isConnected()) {
+      return new PostgreSQLContentVersionRepository();
+    }
+    return new ContentVersionRepository();
+  }
+
+  static getQualityCheckRepository() {
+    if (db.isConnected()) {
+      return new PostgreSQLQualityCheckRepository();
+    }
+    return new QualityCheckRepository();
+  }
+
+  /**
+   * Test database connection
+   * @returns {Promise<boolean>} True if connected
+   */
+  static async testConnection() {
+    return await db.testConnection();
+  }
+}
+

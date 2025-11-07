@@ -1,0 +1,245 @@
+import request from 'supertest';
+import express from 'express';
+import cors from 'cors';
+
+// Create test app similar to courses.test.js
+const app = express();
+app.use(cors());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Import routes
+import contentRouter from '../../../src/presentation/routes/content.js';
+import { errorHandler } from '../../../src/presentation/middleware/errorHandler.js';
+
+app.use('/api/content', contentRouter);
+app.use(errorHandler);
+
+describe('Content API Integration Tests', () => {
+  describe('POST /api/content', () => {
+    it('should create content with valid data', async () => {
+      const contentData = {
+        topic_id: 1,
+        content_type_id: 'text',
+        content_data: { text: 'Sample lesson text' },
+      };
+
+      const response = await request(app)
+        .post('/api/content')
+        .send(contentData)
+        .expect(201);
+
+      expect(response.body.success).toBe(true);
+      expect(response.body.data).toHaveProperty('content_id');
+      expect(response.body.data.topic_id).toBe(1);
+      expect(response.body.data.content_type_id).toBe('text');
+      expect(response.body.data.generation_method_id).toBe('manual');
+    });
+
+    it('should return 400 if topic_id is missing', async () => {
+      const contentData = {
+        content_type_id: 'text',
+        content_data: { text: 'Sample' },
+      };
+
+      const response = await request(app)
+        .post('/api/content')
+        .send(contentData)
+        .expect(400);
+
+      expect(response.body.error).toBeDefined();
+    });
+
+    it('should return 400 if content_type_id is missing', async () => {
+      const contentData = {
+        topic_id: 1,
+        content_data: { text: 'Sample' },
+      };
+
+      const response = await request(app)
+        .post('/api/content')
+        .send(contentData)
+        .expect(400);
+
+      expect(response.body.error).toBeDefined();
+    });
+
+    it('should create code content', async () => {
+      const contentData = {
+        topic_id: 1,
+        content_type_id: 'code',
+        content_data: {
+          code: 'console.log("Hello World");',
+          language: 'javascript',
+        },
+      };
+
+      const response = await request(app)
+        .post('/api/content')
+        .send(contentData)
+        .expect(201);
+
+      expect(response.body.data.content_type_id).toBe('code');
+      expect(response.body.data.content_data.language).toBe('javascript');
+    });
+  });
+
+  describe('GET /api/content/:id', () => {
+    it('should return content by ID', async () => {
+      // First create content
+      const createResponse = await request(app)
+        .post('/api/content')
+        .send({
+          topic_id: 1,
+          content_type_id: 'text',
+          content_data: { text: 'Test content' },
+        });
+
+      const contentId = createResponse.body.data.content_id;
+
+      // Then get it
+      const response = await request(app)
+        .get(`/api/content/${contentId}`)
+        .expect(200);
+
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.content_id).toBe(contentId);
+    });
+
+    it('should return 404 if content not found', async () => {
+      const response = await request(app)
+        .get('/api/content/99999')
+        .expect(404);
+
+      expect(response.body.error.code).toBe('CONTENT_NOT_FOUND');
+    });
+  });
+
+  describe('GET /api/content', () => {
+    it('should return list of content for topic', async () => {
+      // Create content first
+      await request(app)
+        .post('/api/content')
+        .send({
+          topic_id: 2,
+          content_type_id: 'text',
+          content_data: { text: 'Content 1' },
+        });
+
+      await request(app)
+        .post('/api/content')
+        .send({
+          topic_id: 2,
+          content_type_id: 'code',
+          content_data: { code: 'code1' },
+        });
+
+      const response = await request(app)
+        .get('/api/content?topic_id=2')
+        .expect(200);
+
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.contents).toBeInstanceOf(Array);
+      expect(response.body.data.contents.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('should return 400 if topic_id is missing', async () => {
+      const response = await request(app)
+        .get('/api/content')
+        .expect(400);
+
+      expect(response.body.error.code).toBe('INVALID_REQUEST');
+    });
+
+    it('should filter by content_type_id', async () => {
+      // Create mixed content
+      await request(app)
+        .post('/api/content')
+        .send({
+          topic_id: 3,
+          content_type_id: 'text',
+          content_data: { text: 'Text content' },
+        });
+
+      await request(app)
+        .post('/api/content')
+        .send({
+          topic_id: 3,
+          content_type_id: 'code',
+          content_data: { code: 'Code content' },
+        });
+
+      const response = await request(app)
+        .get('/api/content?topic_id=3&content_type_id=text')
+        .expect(200);
+
+      expect(response.body.data.contents.every(c => c.content_type_id === 'text')).toBe(true);
+    });
+  });
+
+  describe('PUT /api/content/:id', () => {
+    it('should update content', async () => {
+      const createResponse = await request(app)
+        .post('/api/content')
+        .send({
+          topic_id: 1,
+          content_type_id: 'text',
+          content_data: { text: 'Original text' },
+        });
+
+      const contentId = createResponse.body.data.content_id;
+
+      const updateResponse = await request(app)
+        .put(`/api/content/${contentId}`)
+        .send({
+          content_data: { text: 'Updated text' },
+        })
+        .expect(200);
+
+      expect(updateResponse.body.data.content_data.text).toBe('Updated text');
+    });
+
+    it('should return 404 if content not found', async () => {
+      const response = await request(app)
+        .put('/api/content/99999')
+        .send({ content_data: { text: 'Updated' } })
+        .expect(404);
+
+      expect(response.body.error.code).toBe('CONTENT_NOT_FOUND');
+    });
+  });
+
+  describe('DELETE /api/content/:id', () => {
+    it('should soft delete content', async () => {
+      const createResponse = await request(app)
+        .post('/api/content')
+        .send({
+          topic_id: 1,
+          content_type_id: 'text',
+          content_data: { text: 'To be deleted' },
+        });
+
+      const contentId = createResponse.body.data.content_id;
+
+      await request(app)
+        .delete(`/api/content/${contentId}`)
+        .expect(204);
+
+      // Verify it's soft deleted (still exists but marked as deleted)
+      const getResponse = await request(app)
+        .get(`/api/content/${contentId}`)
+        .expect(200);
+
+      expect(getResponse.body.data.quality_check_status).toBe('deleted');
+    });
+
+    it('should return 404 if content not found', async () => {
+      const response = await request(app)
+        .delete('/api/content/99999')
+        .expect(404);
+
+      expect(response.body.error.code).toBe('CONTENT_NOT_FOUND');
+    });
+  });
+});
+

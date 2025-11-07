@@ -1,296 +1,882 @@
 {
-  "version": "1.0.0",
-  "project": "Content Studio",
-  "createdAt": "2024-01-23T16:00:00Z",
-  "updatedAt": "2024-01-24T00:30:00Z",
-  "status": "completed",
-  
-  "phases": [
-    {
-      "id": "phase1",
+  "project": {
+    "name": "Content Studio",
+    "microservice": "Content Studio Microservice #4",
+    "ecosystem": "Educore AI - AI-powered Learning Management Platform",
+    "version": "1.0.0-MVP",
+    "created_at": "2025-01-04",
+    "last_updated": "2025-01-04",
+    "current_phase": "Phase 6 In Progress - B1 Complete, Moving to B2",
+    "accuracy_requirements_file": "Custom_Requirements.md"
+  },
+  "phases": {
+    "phase_1": {
       "name": "Initial Development Setup",
-      "status": "completed",
-      "description": "Project initialization, architecture preparation, environment setup",
-      "completedAt": "2024-01-23T17:00:00Z",
-      "tasks": [
-        {
-          "id": "setup-monorepo",
-          "name": "Create monorepo directory structure",
-          "status": "completed",
-          "description": "Set up frontend, backend, database, shared directories",
-          "dependencies": [],
-          "acceptanceCriteria": "All directories created with proper structure",
-          "completedAt": "2024-01-23T16:30:00Z"
+      "status": "✅ Complete",
+      "features": [
+        "Project Initialization",
+        "Feature Breakdown Definition",
+        "Environment Setup",
+        "Database Schema Design",
+        "Architecture Preparation"
+      ],
+      "deliverables": [
+        "Initial_Development_Setup.md",
+        "database/migrations/migration.sql",
+        "ROADMAP.json",
+        "Custom_Requirements.md"
+      ],
+      "accuracy_requirements": {
+        "database_schema": {
+          "reference": "Custom_Requirements.md - General Accuracy Requirements",
+          "requirements": [
+            "All primary keys use SERIAL (auto-incrementing integers)",
+            "Foreign IDs from Directory service are VARCHAR(50)",
+            "Soft delete implementation (never physical delete)",
+            "Analytics counts stored in columns (not calculated)",
+            "GIN indexes on TEXT[] arrays and JSONB fields",
+            "B-tree indexes on status, timestamps, foreign keys"
+          ]
         },
-        {
-          "id": "setup-frontend",
-          "name": "Setup Next.js frontend with React JSX",
-          "status": "completed", 
-          "description": "Configure Next.js 14 with React 18, JavaScript/JSX, Tailwind CSS",
-          "dependencies": ["setup-monorepo"],
-          "acceptanceCriteria": "Frontend runs on localhost:3000 with basic page",
-          "completedAt": "2024-01-23T16:45:00Z"
-        },
-        {
-          "id": "setup-backend",
-          "name": "Setup Node.js backend with Express",
-          "status": "completed",
-          "description": "Configure Express server with API routes and middleware",
-          "dependencies": ["setup-monorepo"],
-          "acceptanceCriteria": "Backend runs on localhost:3001 with health check endpoint",
-          "completedAt": "2024-01-23T16:50:00Z"
-        },
-        {
-          "id": "setup-database",
-          "name": "Setup PostgreSQL database with Prisma",
-          "status": "completed",
-          "description": "Configure Prisma schema and database connection",
-          "dependencies": ["setup-backend"],
-          "acceptanceCriteria": "Database schema created and connected successfully",
-          "completedAt": "2024-01-23T16:55:00Z"
-        },
-        {
-          "id": "setup-shared",
-          "name": "Create shared utilities and constants",
-          "status": "completed",
-          "description": "Create shared utilities, constants, and helper functions",
-          "dependencies": ["setup-monorepo"],
-          "acceptanceCriteria": "Shared utilities available for frontend and backend",
-          "completedAt": "2024-01-23T17:00:00Z"
+        "environment_setup": {
+          "reference": "Custom_Requirements.md - General Accuracy Requirements",
+          "requirements": [
+            "JavaScript ONLY (.js/.jsx extensions, NO TypeScript)",
+            "Tailwind CSS ONLY (NO CSS files)",
+            "Babel/SWC compilation must pass with no errors",
+            "ESLint and Prettier configured for JS/JSX"
+          ]
         }
-      ]
+      }
     },
-    {
-      "id": "phase2",
+    "phase_2": {
       "name": "User Dialogue & Requirements Analysis",
-      "status": "completed",
-      "description": "Project idea analysis, user personas, feature identification",
-      "completedAt": "2024-01-23T18:00:00Z",
-      "tasks": [
-        {
-          "id": "analyze-user-personas",
-          "name": "Define user personas and workflows",
-          "status": "completed",
-          "description": "Create detailed user personas for trainers and content creators",
-          "dependencies": ["phase1"],
-          "acceptanceCriteria": "User personas documented with clear workflows",
-          "completedAt": "2024-01-23T17:30:00Z"
-        },
-        {
-          "id": "identify-features",
-          "name": "Identify core features and requirements",
-          "status": "completed",
-          "description": "Define MVP features and user stories",
-          "dependencies": ["analyze-user-personas"],
-          "acceptanceCriteria": "Feature list with user stories and acceptance criteria",
-          "completedAt": "2024-01-23T18:00:00Z"
+      "status": "✅ Complete",
+      "features": [
+        "Project Idea Analysis",
+        "Users / Features / Stories Analysis",
+        "Feature Prioritization & MVP Definition",
+        "Data / Privacy / Regulations Analysis"
+      ],
+      "deliverables": [
+        "User_Dialogue_And_Requirements.md"
+      ],
+      "completed_date": "2025-01-04",
+      "accuracy_requirements": {
+        "user_stories": {
+          "reference": "Custom_Requirements.md - Feature-Specific Accuracy Requirements",
+          "requirements": [
+            "All user stories must have clear acceptance criteria",
+            "User personas must be defined and validated",
+            "MVP scope must be agreed upon by all stakeholders"
+          ]
         }
-      ]
+      }
     },
-    {
-      "id": "phase3",
+    "phase_3": {
       "name": "Feature Planning",
-      "status": "completed",
-      "description": "MVP prioritization, feature breakdown, outcome definition",
-      "completedAt": "2024-01-23T19:40:00Z",
-      "tasks": [
-        {
-          "id": "prioritize-mvp",
-          "name": "Prioritize MVP features",
-          "status": "completed",
-          "description": "Rank features by value and effort",
-          "dependencies": ["identify-features"],
-          "acceptanceCriteria": "Prioritized feature list with MVP scope defined",
-          "completedAt": "2024-01-23T19:00:00Z"
-        },
-        {
-          "id": "breakdown-features",
-          "name": "Break down features into tasks",
-          "status": "completed",
-          "description": "Decompose features into implementable tasks",
-          "dependencies": ["prioritize-mvp"],
-          "acceptanceCriteria": "Detailed task breakdown with dependencies",
-          "completedAt": "2024-01-23T19:40:00Z"
+      "status": "✅ Complete",
+      "features": [
+        "MVP Prioritization",
+        "Feature Task Decomposition",
+        "Outcome Definition",
+        "Comprehensive Roadmap Generation"
+      ],
+      "deliverables": [
+        "Feature_Planning.md"
+      ],
+      "completed_date": "2025-01-04",
+      "accuracy_requirements": {
+        "feature_planning": {
+          "reference": "Custom_Requirements.md - Feature-Specific Accuracy Requirements",
+          "requirements": [
+            "All features must have clear success metrics",
+            "Risk assessment required for each feature",
+            "Dependencies must be mapped and validated",
+            "Resource requirements must be estimated"
+          ]
         }
-      ]
+      }
     },
-    {
-      "id": "phase4",
+    "phase_4": {
       "name": "Design & Architecture",
-      "status": "completed",
-      "description": "System design, security foundation, AI components, reliability",
-      "startedAt": "2024-01-23T19:40:00Z",
-      "completedAt": "2024-01-23T20:30:00Z",
-      "tasks": [
-        {
-          "id": "design-system-architecture",
-          "name": "Design system architecture",
-          "status": "completed",
-          "description": "Create system architecture diagrams and API design",
-          "dependencies": ["breakdown-features"],
-          "acceptanceCriteria": "Architecture diagrams and API specifications",
-          "completedAt": "2024-01-23T20:00:00Z"
+      "status": "✅ Complete",
+      "features": [
+        "System Design",
+        "Security Foundation",
+        "AI Component Definition",
+        "Reliability / Errors / Security",
+        "Per-Feature API and AI Clarification"
+      ],
+      "deliverables": [
+        "Design_And_Architecture.md"
+      ],
+      "completed_date": "2025-01-04",
+      "accuracy_requirements": {
+        "A1. Video-to-Lesson Transformation": {
+          "reference": "Custom_Requirements.md - A1. Video-to-Lesson Transformation",
+          "requirements": [
+            "Video upload: Accept MP4, MOV, AVI, WebM (max 500MB)",
+            "Upload progress indicator must show percentage",
+            "Transcription status: 'Transcribing video...' with estimated time",
+            "Format generation progress: 'Generating [format]... (1/5)'",
+            "All 5 mandatory formats must be generated successfully",
+            "Success message: 'Lesson created successfully! All formats generated.'"
+          ]
         },
-        {
-          "id": "design-security",
-          "name": "Design security architecture",
-          "status": "completed",
-          "description": "Define authentication, authorization, and data protection",
-          "dependencies": ["design-system-architecture"],
-          "acceptanceCriteria": "Security architecture and implementation plan",
-          "completedAt": "2024-01-23T20:15:00Z"
+        "A2. AI-Assisted Content Creation": {
+          "reference": "Custom_Requirements.md - A2. AI-Assisted Content Creation",
+          "requirements": [
+            "Topic input: Required, 3-200 characters",
+            "Key ideas: Required, 10-2000 characters",
+            "Format selection: Checkboxes (at least 1 must be selected)",
+            "Generation process: Show 'Generating content...' with spinner",
+            "Estimated time: 'This may take 30-60 seconds'",
+            "Output: Generated content displayed in preview mode",
+            "'Save' button must be prominent (primary button style)"
+          ]
         },
-        {
-          "id": "design-ai-components",
-          "name": "Design AI components and integration",
-          "status": "completed",
-          "description": "Define AI model integration, safety measures, and monitoring",
-          "dependencies": ["design-system-architecture"],
-          "acceptanceCriteria": "AI architecture and safety implementation plan",
-          "completedAt": "2024-01-23T20:20:00Z"
+        "A3. Manual Content Creation": {
+          "reference": "Custom_Requirements.md - A3. Manual Content Creation",
+          "requirements": [
+            "Text editor: Rich text editor with formatting options",
+            "Code editor: Syntax highlighting for supported languages",
+            "File upload: Drag-and-drop interface with file type validation",
+            "Quality check: Automatic after content save",
+            "Quality check results: Colored badges (Green/Yellow/Red)",
+            "Detailed feedback must be visible below content"
+          ]
         },
-        {
-          "id": "design-reliability",
-          "name": "Design reliability and error handling",
-          "status": "completed",
-          "description": "Define fault tolerance, monitoring, and disaster recovery",
-          "dependencies": ["design-security", "design-ai-components"],
-          "acceptanceCriteria": "Reliability architecture and monitoring plan",
-          "completedAt": "2024-01-23T20:30:00Z"
+        "A4. Format-Specific Generators": {
+          "reference": "Custom_Requirements.md - A4. Format-Specific Generators",
+          "requirements": [
+            "A4.1 Text: Style selection dropdown, minimum 200 words, auto-save",
+            "A4.2 Code: Language detection (95%+ accuracy), syntax highlighting, copy button",
+            "A4.3 Presentation: Minimum 5 slides, 'Open in Google Slides' button",
+            "A4.4 Audio: Clear audio, playback controls, duration display, download button",
+            "A4.5 Mind Map: Interactive (zoom, pan, drag), nodes editable, export PNG/SVG"
+          ]
+        },
+        "B1. Course Management": {
+          "reference": "Custom_Requirements.md - B1. Course Management",
+          "requirements": [
+            "Course name: Required, 3-255 characters",
+            "Description: Optional, maximum 2000 characters",
+            "Skills input: Multi-select dropdown or tags input",
+            "Course list: Card grid or table view with status badges",
+            "Soft delete: Confirmation modal, deleted courses hidden by default",
+            "Success message: 'Course updated successfully'"
+          ]
+        },
+        "B2. Lesson/Topic Management": {
+          "reference": "Custom_Requirements.md - B2. Lesson/Topic Management",
+          "requirements": [
+            "Topic name: Required, 3-255 characters",
+            "Course association: Dropdown with 'None (Stand-alone)' option",
+            "Format requirements: Visual indicator '5/5 formats required'",
+            "Progress bar showing format completion",
+            "Missing formats highlighted in red",
+            "Stand-alone indicator badge: 'Stand-alone Lesson'",
+            "Usage count visible: 'Used: 5 times'"
+          ]
+        },
+        "B3. Template Management": {
+          "reference": "Custom_Requirements.md - B3. Template Management",
+          "requirements": [
+            "Template name: Required, 3-255 characters",
+            "Template type: Radio buttons (Structural, Prompt, Mixed)",
+            "Format order: Drag-and-drop interface for structural templates",
+            "Prompt template: Textarea with placeholder support",
+            "Template list: Display with type badges, 'Use Template' button"
+          ]
+        },
+        "B4. Content Versioning & History": {
+          "reference": "Custom_Requirements.md - B4. Content Versioning & History",
+          "requirements": [
+            "Version number visible: 'Version 3'",
+            "'View History' button shows version timeline",
+            "Each version shows: timestamp, editor, change description",
+            "'Restore Version' button with confirmation modal",
+            "Current version clearly marked"
+          ]
+        },
+        "C1. Quality & Originality Checks": {
+          "reference": "Custom_Requirements.md - C1. Quality & Originality Checks",
+          "requirements": [
+            "Quality score: Progress bar showing percentage (0-100%)",
+            "Individual scores: Clarity, Complexity, Structure, Originality",
+            "Color coding: Green (80-100%), Yellow (60-79%), Red (0-59%)",
+            "Detailed feedback expandable",
+            "Plagiarism check: Similarity percentage displayed",
+            "Sources listed if available"
+          ]
+        },
+        "C2. Content Search & Filtering": {
+          "reference": "Custom_Requirements.md - C2. Content Search & Filtering",
+          "requirements": [
+            "Search bar visible at top of page",
+            "Search across: title, description, skills",
+            "Results update as user types (debounced, 300ms delay)",
+            "'No results found' message clear",
+            "Filter sidebar/dropdown accessible",
+            "Active filters displayed as chips/tags",
+            "Pagination: 10, 25, 50 results per page"
+          ]
+        },
+        "D1. Microservice Integration": {
+          "reference": "Custom_Requirements.md - D1. Microservice Integration",
+          "requirements": [
+            "Loading states shown during API calls",
+            "Error handling: 'Failed to connect to [service]. Please try again.'",
+            "Retry mechanism: 'Retry' button after failure",
+            "Timeout: 30 seconds maximum",
+            "'Syncing...' indicator during sync operations"
+          ]
+        },
+        "D2. Notification System": {
+          "reference": "Custom_Requirements.md - D2. Notification System",
+          "requirements": [
+            "Notification bell icon with unread count badge",
+            "Dropdown lists recent notifications",
+            "Each notification clickable",
+            "'Mark as read' functional",
+            "'Clear all' button clears all notifications"
+          ]
         }
-      ]
+      }
     },
-    {
-      "id": "phase5",
+    "phase_5": {
+      "name": "UI/UX Design",
+      "status": "✅ Complete",
+      "features": [
+        "Design System Foundation",
+        "Information Architecture",
+        "Wireframe & Prototype Design",
+        "Accessibility & Responsive Design",
+        "Performance Optimization"
+      ],
+      "deliverables": [
+        "UI_UX_Design.md"
+      ],
+      "completed_date": "2025-01-04",
+      "accuracy_requirements": {
+        "design_system": {
+          "reference": "Custom_Requirements.md - Style and Consistency Requirements",
+          "requirements": [
+            "Color Palette: Primary Blue (#3B82F6), Success Green (#10B981), Warning Yellow (#F59E0B), Error Red (#EF4444)",
+            "Typography: Headings Bold 24px-32px, Body Regular 16px, Small text 14px",
+            "Spacing: Consistent using Tailwind scale (4px, 8px, 16px, 24px, 32px)",
+            "Buttons: Primary bg-blue-600, Secondary bg-gray-200, Danger bg-red-600",
+            "Cards: Consistent padding p-6, border border-gray-200, shadow-sm",
+            "Responsive: Mobile (sm) 640px, Tablet (md) 768px, Desktop (lg) 1024px, Large Desktop (xl) 1280px",
+            "Animations: Hover effects transition-all duration-200, Loading spinners animate-spin"
+          ]
+        },
+        "ui_components": {
+          "reference": "Custom_Requirements.md - Component Consistency Rules",
+          "requirements": [
+            "Form components: All inputs have labels, error messages below inputs, required fields marked with *",
+            "Submit buttons disabled until form valid",
+            "Loading states: Spinner animate-spin, skeleton loaders for content areas",
+            "Accessibility: WCAG 2.1 AA compliance required"
+          ]
+        }
+      }
+    },
+    "phase_6": {
       "name": "Implementation",
-      "status": "completed",
-      "description": "TDD execution, AI integration, commit discipline, code implementation",
-      "startedAt": "2024-01-23T20:30:00Z",
-      "completedAt": "2024-01-23T21:30:00Z",
-      "tasks": [
-        {
-          "id": "implement-tdd",
-          "name": "Implement Test-Driven Development",
-          "status": "completed",
-          "description": "Write tests first, then implement features",
-          "dependencies": ["design-security"],
-          "acceptanceCriteria": "All features implemented with comprehensive tests",
-          "completedAt": "2024-01-23T21:00:00Z"
+      "status": "🚧 In Progress",
+      "features": [
+        "TDD Execution",
+        "AI Integration Logic",
+        "Commit Discipline",
+        "Code Implementation & Feature Locking"
+      ],
+      "deliverables": [
+        "Implementation.md"
+      ],
+      "started_date": "2025-01-04",
+      "accuracy_requirements": {
+        "code_quality": {
+          "reference": "Custom_Requirements.md - General Accuracy Requirements",
+          "requirements": [
+            "JavaScript ONLY (.js/.jsx extensions, NO TypeScript)",
+            "Tailwind CSS ONLY (NO CSS files)",
+            "Minimum 80% test coverage",
+            "ESLint and Prettier must pass",
+            "Babel/SWC compilation must pass with no errors"
+          ]
         },
-        {
-          "id": "integrate-ai",
-          "name": "Integrate AI capabilities",
-          "status": "completed",
-          "description": "Implement AI-powered content generation and processing",
-          "dependencies": ["implement-tdd"],
-          "acceptanceCriteria": "AI features working with mock data initially",
-          "completedAt": "2024-01-23T21:30:00Z"
+        "all_features": {
+          "reference": "Custom_Requirements.md - Feature-Specific Accuracy Requirements",
+          "note": "All features from Phase 4 must be implemented according to their specific accuracy requirements"
         }
-      ]
+      }
     },
-    {
-      "id": "phase6",
+    "phase_7": {
       "name": "Testing & Verification",
-      "status": "completed",
-      "description": "Automated testing, manual validation, adversarial testing",
-      "startedAt": "2024-01-23T21:30:00Z",
-      "completedAt": "2024-01-23T22:30:00Z",
-      "tasks": [
-        {
-          "id": "automated-testing",
-          "name": "Implement automated testing",
-          "status": "completed",
-          "description": "Unit, integration, and end-to-end tests",
-          "dependencies": ["integrate-ai"],
-          "acceptanceCriteria": "All tests passing with >80% coverage",
-          "completedAt": "2024-01-23T22:00:00Z"
-        },
-        {
-          "id": "manual-testing",
-          "name": "Manual testing and validation",
-          "status": "completed",
-          "description": "User acceptance testing and edge case validation",
-          "dependencies": ["automated-testing"],
-          "acceptanceCriteria": "All user workflows tested and validated",
-          "completedAt": "2024-01-23T22:30:00Z"
+      "status": "⏳ Pending",
+      "features": [
+        "Automated Testing",
+        "Manual Edge Case Validation",
+        "Adversarial Testing"
+      ],
+      "deliverables": [
+        "Testing_And_Verification.md"
+      ],
+      "accuracy_requirements": {
+        "testing": {
+          "reference": "Custom_Requirements.md - General Accuracy Requirements",
+          "requirements": [
+            "Unit test coverage: Minimum 80%",
+            "Integration tests for all API endpoints",
+            "End-to-end tests for critical user flows",
+            "Performance tests: Page load under 2 seconds, API response under 500ms",
+            "Security tests: SQL injection prevention, input validation"
+          ]
         }
-      ]
+      }
     },
-    {
-      "id": "phase7",
+    "phase_8": {
       "name": "Code Review & Deployment",
-      "status": "completed",
-      "description": "Peer review, pre-deployment verification, release execution",
-      "startedAt": "2024-01-23T22:30:00Z",
-      "completedAt": "2024-01-23T23:30:00Z",
-      "tasks": [
-        {
-          "id": "code-review",
-          "name": "Code review and quality assurance",
-          "status": "completed",
-          "description": "Peer review and code quality validation",
-          "dependencies": ["manual-testing"],
-          "acceptanceCriteria": "All code reviewed and approved",
-          "completedAt": "2024-01-23T23:00:00Z"
-        },
-        {
-          "id": "deploy-production",
-          "name": "Deploy to production",
-          "status": "completed",
-          "description": "Deploy to production with monitoring",
-          "dependencies": ["code-review"],
-          "acceptanceCriteria": "System deployed and running in production",
-          "completedAt": "2024-01-23T23:30:00Z"
+      "status": "⏳ Pending",
+      "features": [
+        "Peer Review",
+        "Pre-Deployment Verification",
+        "Release Execution",
+        "Final Consistency Validation"
+      ],
+      "deliverables": [
+        "Code_Review_And_Deployment.md"
+      ],
+      "accuracy_requirements": {
+        "deployment": {
+          "reference": "Custom_Requirements.md - General Accuracy Requirements",
+          "requirements": [
+            "All code reviews approved",
+            "All tests pass in staging",
+            "Production deployment successful",
+            "System monitoring active",
+            "Rollback procedures tested"
+          ]
         }
-      ]
+      }
     },
-    {
-      "id": "phase8",
+    "phase_9": {
       "name": "Final Artifacts",
-      "status": "completed",
-      "description": "Documentation creation, validation, quality assurance",
-      "startedAt": "2024-01-23T23:30:00Z",
-      "completedAt": "2024-01-24T00:30:00Z",
-      "tasks": [
-        {
-          "id": "create-documentation",
-          "name": "Create comprehensive documentation",
-          "status": "completed",
-          "description": "User guides, API documentation, and technical docs",
-          "dependencies": ["deploy-production"],
-          "acceptanceCriteria": "Complete documentation package",
-          "completedAt": "2024-01-24T00:00:00Z"
-        },
-        {
-          "id": "final-validation",
-          "name": "Final validation and quality assurance",
-          "status": "completed",
-          "description": "Final system validation and quality checks",
-          "dependencies": ["create-documentation"],
-          "acceptanceCriteria": "All quality gates passed and system validated",
-          "completedAt": "2024-01-24T00:30:00Z"
+      "status": "⏳ Pending",
+      "features": [
+        "Artifact Generation",
+        "Validation and Quality Assurance"
+      ],
+      "deliverables": [
+        "Final_Artifacts.md"
+      ],
+      "accuracy_requirements": {
+        "final_validation": {
+          "reference": "Custom_Requirements.md - Validation Protocol",
+          "requirements": [
+            "All artifacts validated via self-dialogue",
+            "Consistency with roadmap status verified",
+            "Complete audit trail verification",
+            "All requirements traceability confirmed",
+            "Documentation completeness validated"
+          ]
         }
+      }
+    }
+  },
+  "architecture": {
+    "overview": "Content Studio is an AI-based content creation environment for creating, storing, and managing lesson content in multiple formats",
+    "database": {
+      "type": "PostgreSQL",
+      "provider": "Supabase",
+      "migration_file": "database/migrations/migration.sql",
+      "tables": [
+        "trainer_courses",
+        "topics",
+        "templates",
+        "content",
+        "content_history",
+        "generation_methods",
+        "content_types"
       ]
-    }
-  ],
-  
-  "currentPhase": "completed",
-  "nextMilestone": "All phases completed - Project ready for production",
-  "estimatedCompletion": "2024-01-24T00:30:00Z",
-  "risks": [
-    {
-      "id": "risk1",
-      "description": "AI integration complexity",
-      "impact": "High",
-      "probability": "Medium",
-      "mitigation": "Start with mock AI services, gradually integrate real AI"
     },
-    {
-      "id": "risk2", 
-      "description": "Database performance with large content",
-      "impact": "Medium",
-      "probability": "Low",
-      "mitigation": "Implement proper indexing and caching strategies"
+    "backend": {
+      "framework": "Node.js",
+      "runtime": "Node.js",
+      "language": "JavaScript",
+      "deployment": "Railway",
+      "api_style": "REST + gRPC"
+    },
+    "frontend": {
+      "framework": "React",
+      "build_tool": "Vite",
+      "language": "JavaScript (JSX)",
+      "styling": "Tailwind CSS ONLY",
+      "deployment": "Vercel"
+    },
+    "external_apis": {
+      "openai": {
+        "services": ["GPT-4o-mini", "Whisper"],
+        "usage": ["Text generation", "Video transcription", "Quality checks", "Audio generation"]
+      },
+      "gemini": {
+        "services": ["Gemini API"],
+        "usage": ["Mind map generation"]
+      },
+      "heygen": {
+        "services": ["Avatar video generation"],
+        "usage": ["Avatar video creation (10-15 sec)"],
+        "status": "Post-MVP"
+      },
+      "google_slides": {
+        "services": ["Google Slides API"],
+        "usage": ["Presentation generation"]
+      },
+      "supabase": {
+        "services": ["Storage", "Database"],
+        "usage": ["Media file storage", "Content data"]
+      }
     }
-  ]
+  },
+  "features": {
+    "mvp": {
+      "A. Content Creation & Generation": {
+        "A1. Video-to-Lesson Transformation": {
+          "description": "Transform uploaded video files into structured lessons with multiple formats",
+          "input": "Video file (uploaded by trainer)",
+          "process": [
+            "Transcribe with Whisper (OpenAI Speech API)",
+            "Summarize and structure lesson text with GPT-4o-mini",
+            "Generate 6 lesson formats automatically with AI"
+          ],
+          "output": "Complete lesson with all mandatory formats",
+          "formats_generated": [
+            "Avatar video (via Heygen API)",
+            "Text (GPT-4o-mini)",
+            "Code example (GPT-4o-mini)",
+            "Presentation (GPT-4o-mini → Google Slides API)",
+            "Audio (Whisper output)",
+            "Mind map (GPT-4o-mini → Mermaid syntax → Kroki.io/Gamma)"
+          ],
+          "integration": {
+            "apis": ["OpenAI Whisper", "OpenAI GPT-4o-mini", "Google Slides API", "Gemini API"],
+            "storage": "Supabase Storage"
+          },
+          "database_tables": ["topics", "content", "content_history"],
+          "phase": "phase_4",
+          "accuracy_requirements_section": "A1. Video-to-Lesson Transformation"
+        },
+        "A2. AI-Assisted Content Creation": {
+          "description": "Generate content using AI based on trainer request",
+          "input": "Trainer request (topic, key ideas)",
+          "process": [
+            "Merge trainer request + predefined prompt template",
+            "Send to GPT-4o-mini or external generation API",
+            "Generate only the requested format(s)"
+          ],
+          "output": "Generated content items with generation_method = 'ai_assisted'",
+          "integration": {
+            "apis": ["OpenAI GPT-4o-mini", "Gemini API"],
+            "templates": "Prompt templates from templates table"
+          },
+          "database_tables": ["content", "templates"],
+          "phase": "phase_4",
+          "accuracy_requirements_section": "A2. AI-Assisted Content Creation"
+        },
+        "A3. Manual Content Creation": {
+          "description": "Trainer uploads or writes content manually",
+          "input": "Trainer uploads or writes content manually",
+          "process": [
+            "Trainer provides text, slides, or code manually",
+            "Run AI quality & originality check using GPT-4o-mini"
+          ],
+          "output": "Content items with generation_method = 'manual' + quality analysis",
+          "integration": {
+            "apis": ["OpenAI GPT-4o-mini (for quality checks)"]
+          },
+          "database_tables": ["content"],
+          "phase": "phase_4",
+          "accuracy_requirements_section": "A3. Manual Content Creation"
+        },
+        "A4. Format-Specific Generators": {
+          "A4.1 Text Generation": {
+            "description": "Generate lesson text, summaries, explanations, scenarios",
+            "ai_model": "GPT-4o-mini",
+            "features": [
+              "Multiple style modes (formal, conversational, educational)",
+              "Manual writing support",
+              "AI enhancement (clarity, grammar, difficulty level)"
+            ],
+            "database_tables": ["content", "content_history"],
+            "phase": "phase_4",
+            "accuracy_requirements_section": "A4. Format-Specific Generators - A4.1 Text Generation"
+          },
+          "A4.2 Code Example Generator": {
+            "description": "Create code snippets, examples, and exercises",
+            "sources": ["AI generation", "GitHub import", "Manual entry"],
+            "features": [
+              "Automatic language detection",
+              "Syntax highlighting",
+              "DevLab integration for validation and interactivity"
+            ],
+            "integration": {
+              "external": "DevLab microservice (gRPC)"
+            },
+            "database_tables": ["content"],
+            "phase": "phase_4",
+            "accuracy_requirements_section": "A4. Format-Specific Generators - A4.2 Code Example Generator"
+          },
+          "A4.3 Presentation Builder": {
+            "description": "Generate presentations using AI or Google Slides API",
+            "methods": [
+              "OpenAI text-to-slides",
+              "Google Slides API",
+              "Manual upload"
+            ],
+            "features": [
+              "Predefined or AI-generated templates",
+              "Brand styles application",
+              "Storage in Supabase or Cloud Storage"
+            ],
+            "integration": {
+              "apis": ["OpenAI GPT-4o-mini", "Google Slides API"],
+              "storage": "Supabase Storage"
+            },
+            "database_tables": ["content", "templates"],
+            "phase": "phase_4",
+            "accuracy_requirements_section": "A4. Format-Specific Generators - A4.3 Presentation Builder"
+          },
+          "A4.4 Audio Creation": {
+            "description": "Generate audio narrations from lesson text",
+            "methods": [
+              "TTS models (OpenAI / Whisper)",
+              "Manual upload of recordings"
+            ],
+            "features": [
+              "Multilingual audio generation",
+              "Subtitles support",
+              "Metadata storage (duration, speaker, language, format)"
+            ],
+            "integration": {
+              "apis": ["OpenAI Whisper", "OpenAI TTS"]
+            },
+            "database_tables": ["content"],
+            "phase": "phase_4",
+            "accuracy_requirements_section": "A4. Format-Specific Generators - A4.4 Audio Creation"
+          },
+          "A4.5 Mind Map Generator": {
+            "description": "Generate interactive concept maps based on lesson content",
+            "process": [
+              "Extract concepts from lesson text or AI outline (Gemini API)",
+              "Convert Gemini output into Mermaid-compatible JSON structure",
+              "Render in React (React Flow)",
+              "Export to image or Mermaid format"
+            ],
+            "features": [
+              "Manual editing support",
+              "AI re-generation",
+              "Trainer adjustments in editor",
+              "Localization support (map labels in selected language)"
+            ],
+            "integration": {
+              "apis": ["Gemini API"],
+              "frontend": "React Flow"
+            },
+            "database_tables": ["content", "content_history"],
+            "storage": {
+              "mind_map_json": "JSONB in content table",
+              "gemini_response": "Raw response stored in content table"
+            },
+            "phase": "phase_4",
+            "accuracy_requirements_section": "A4. Format-Specific Generators - A4.5 Mind Map Generator"
+          }
+        }
+      },
+      "B. Content Management": {
+        "B1. Course Management": {
+          "description": "Create, edit, and manage courses",
+          "operations": [
+            "Create course",
+            "Edit course",
+            "Delete course (soft-delete)",
+            "Course structure management"
+          ],
+          "status_values": ["active", "archived", "deleted"],
+          "integration": {
+            "external": "Course Builder microservice (gRPC)"
+          },
+          "database_tables": ["trainer_courses", "topics"],
+          "phase": "phase_4",
+          "accuracy_requirements_section": "B1. Course Management"
+        },
+        "B2. Lesson/Topic Management": {
+          "description": "Create, edit, and manage lessons (topics)",
+          "operations": [
+            "Create lesson",
+            "Edit lesson",
+            "Delete lesson (soft-delete)",
+            "Support stand-alone lessons (not tied to courses)",
+            "Optional lesson-to-course association"
+          ],
+          "constraints": [
+            "Each topic must include at least 5 mandatory formats (text, code, presentation, audio, mind_map)"
+          ],
+          "usage_tracking": "usage_count field - returned to Course Builder when adapted to learner",
+          "database_tables": ["topics", "content"],
+          "phase": "phase_4",
+          "accuracy_requirements_section": "B2. Lesson/Topic Management"
+        },
+        "B3. Template Management": {
+          "description": "Create, edit, and reuse templates",
+          "template_types": {
+            "structural": {
+              "description": "Define format order and presentation structure",
+              "example": "video → text → slides → code",
+              "storage": "format_order JSONB field"
+            },
+            "prompt": {
+              "description": "Reusable AI prompt patterns for consistent generation",
+              "storage": "prompt_template TEXT field"
+            }
+          },
+          "creation_methods": [
+            "Manual creation",
+            "AI-assisted creation"
+          ],
+          "reusability": "Reusable across multiple lessons or courses",
+          "database_tables": ["templates"],
+          "phase": "phase_4",
+          "accuracy_requirements_section": "B3. Template Management"
+        },
+        "B4. Content Versioning & History": {
+          "description": "Full version control for content items",
+          "features": [
+            "Version control with timestamps, editors, actions",
+            "Rollback capability",
+            "Comparison between versions",
+            "Approval workflows for collaborative editing",
+            "Soft-delete implementation (never physical delete)"
+          ],
+          "status_tracking": ["active", "archived", "deleted"],
+          "database_tables": ["content", "content_history"],
+          "phase": "phase_4",
+          "accuracy_requirements_section": "B4. Content Versioning & History"
+        }
+      },
+      "C. Quality & Validation": {
+        "C1. Quality & Originality Checks": {
+          "description": "AI-based validation of content quality",
+          "check_types": [
+            "Clarity",
+            "Difficulty level",
+            "Logical structure",
+            "Plagiarism"
+          ],
+          "process": [
+            "Automatic checks for manual uploads",
+            "Trainer receives feedback or flags for low-quality content"
+          ],
+          "integration": {
+            "apis": ["OpenAI GPT-4o-mini"]
+          },
+          "storage": {
+            "quality_check_data": "JSONB field in content table",
+            "quality_check_status": "VARCHAR field in content table"
+          },
+          "database_tables": ["content"],
+          "phase": "phase_4",
+          "accuracy_requirements_section": "C1. Quality & Originality Checks"
+        },
+        "C2. Content Search & Filtering": {
+          "description": "Search and filter lessons and content",
+          "search_fields": [
+            "Title",
+            "Skill",
+            "Status",
+            "Format type"
+          ],
+          "filter_options": {
+            "status": ["draft", "published", "archived", "deleted"],
+            "generation_method": ["AI-assisted", "manual", "video-to-lesson"],
+            "format_type": ["text", "code", "presentation", "audio", "mind_map", "avatar_video"]
+          },
+          "features": [
+            "Pagination support",
+            "Partial text matches"
+          ],
+          "database_tables": ["topics", "content", "trainer_courses"],
+          "phase": "phase_4",
+          "accuracy_requirements_section": "C2. Content Search & Filtering"
+        }
+      },
+      "D. Integration & Communication": {
+        "D1. Microservice Integration Layer": {
+          "description": "Integration with other Educore AI microservices",
+          "grpc_services": {
+            "Course Builder": {
+              "scenarios": [
+                "Trainer-customized course (Content Studio → Course Builder)",
+                "Learner-customized course (Course Builder → Content Studio)"
+              ],
+              "fields_sent": ["course_id", "course_name", "trainer_id", "topic_id", "topic_name", "skills", "content_type", "content_data", "devlab_exercises"]
+            },
+            "Skills Engine": {
+              "flow": "Content Studio sends trainer_id + topic_name → Skills Engine returns micro_skills, nano_skills, difficulty, validation"
+            },
+            "Directory": {
+              "flow": "Directory → Content Studio (verified trainer info) → Content Studio → Directory (course/lesson updates)"
+            },
+            "DevLab": {
+              "modes": [
+                "AI Mode: Auto-generate exercises",
+                "Manual Mode: Trainer creates questions, validates per question"
+              ]
+            }
+          },
+          "rest_services": {
+            "RAG (Contextual Assistant)": {
+              "flow": "Content Studio sends approved content → RAG returns contextual answers"
+            },
+            "Learning Analytics": {
+              "flow": "Content Studio sends usage statistics → Learning Analytics returns insights and recommendations"
+            }
+          },
+          "phase": "phase_4",
+          "accuracy_requirements_section": "D1. Microservice Integration"
+        },
+        "D2. Notification System": {
+          "description": "Real-time notifications for trainers",
+          "notification_types": [
+            "AI content generation completion",
+            "Translations ready",
+            "Quality or plagiarism checks finished",
+            "Errors during content creation or validation"
+          ],
+          "channels": [
+            "In-app (UI banner or bell icon)",
+            "Email"
+          ],
+          "implementation": "Application layer (not database table)",
+          "future_integration": "Directory or Authentication microservice for centralized notifications",
+          "phase": "phase_4",
+          "accuracy_requirements_section": "D2. Notification System"
+        }
+      }
+    },
+    "post_mvp": {
+      "Multi-Language Support": {
+        "description": "AI translation for all content formats",
+        "languages": "10 major languages with 95% accuracy",
+        "features": [
+          "Database-level language tracking per content item",
+          "Trainer can choose which languages to generate",
+          "Translations for text, slides, and audio captions"
+        ],
+        "status": "Phase 2"
+      },
+      "Advanced Analytics Dashboards": {
+        "description": "Detailed reports and data visualization",
+        "features": [
+          "Integration with Management Reporting",
+          "Data visualization for trainers/managers"
+        ],
+        "status": "Phase 2"
+      },
+      "Multimedia in Supabase Storage": {
+        "description": "Enhanced storage management",
+        "status": "Phase 2"
+      },
+      "Avatar Video Generation": {
+        "description": "Short avatar video generation (10-15 sec)",
+        "integration": "Heygen API",
+        "status": "Phase 2"
+      },
+      "Collaboration & Shared Editing": {
+        "description": "Multi-trainer access for co-editing",
+        "features": [
+          "RBAC-controlled shared permissions"
+        ],
+        "status": "Phase 2"
+      }
+    }
+  },
+  "database_schema": {
+    "enums": {
+      "content_status": ["active", "archived", "deleted"],
+      "TemplateType": ["ready_template", "ai_generated", "manual", "mixed_ai_manual"],
+      "ContentType": ["avatar_video", "text", "code", "presentation", "audio", "mind_map"],
+      "GenerationMethod": ["ai_assisted", "manual", "video_to_lesson"]
+    },
+    "tables": {
+      "trainer_courses": {
+        "primary_key": "course_id",
+        "key_fields": ["trainer_id", "course_name", "status", "skills", "language", "company_logo"]
+      },
+      "topics": {
+        "primary_key": "topic_id",
+        "key_fields": ["course_id", "topic_name", "trainer_id", "template_id", "generation_methods_id", "usage_count", "skills"],
+        "nullable": ["course_id"]
+      },
+      "templates": {
+        "primary_key": "template_id",
+        "key_fields": ["template_name", "template_type", "created_by", "format_order"]
+      },
+      "content": {
+        "primary_key": "content_id",
+        "key_fields": ["topic_id", "content_type_id", "content_data", "generation_method_id", "quality_check_data", "quality_check_status"]
+      },
+      "content_history": {
+        "primary_key": "history_id",
+        "key_fields": ["content_id", "topic_id", "version_number", "content_data", "generation_method_id"]
+      },
+      "generation_methods": {
+        "primary_key": "method_name",
+        "lookup_table": true
+      },
+      "content_types": {
+        "primary_key": "type_name",
+        "lookup_table": true
+      }
+    }
+  },
+  "algorithms": {
+    "critical": [
+      {
+        "name": "GIN Index",
+        "use_case": "Array/JSONB searches",
+        "implementation": "PostgreSQL GIN indexes on TEXT[] and JSONB columns",
+        "status": "Implemented in migration.sql"
+      }
+    ],
+    "essential": [
+      {
+        "name": "B-Tree Index",
+        "use_case": "Filtering, sorting, relationships",
+        "implementation": "PostgreSQL default B-tree indexes",
+        "status": "Implemented in migration.sql"
+      }
+    ],
+    "high_priority": [
+      {
+        "name": "Queue Data Structure",
+        "use_case": "Async content generation",
+        "implementation": "Redis Queue with BullMQ/Bull",
+        "status": "To be implemented"
+      },
+      {
+        "name": "Denormalized Count Storage",
+        "use_case": "Analytics queries",
+        "implementation": "Trigger-based or application-level count maintenance",
+        "status": "To be implemented"
+      }
+    ]
+  },
+  "api_endpoints": {
+    "to_be_designed": "API endpoints will be designed in Phase 4 (Design & Architecture)"
+  },
+  "ai_prompts": {
+    "to_be_designed": "AI prompts will be designed in Phase 4 (Design & Architecture)"
+  }
 }

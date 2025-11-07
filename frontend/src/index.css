@@ -1,147 +1,39 @@
-/* Global Styles */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-
+/* Tailwind CSS directives only - no custom CSS allowed */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* CSS Variables for gradients and theme */
 :root {
-  /* Basic Color Palette */
-  --primary-blue: #065f46;
-  --primary-purple: #047857;
+  --gradient-primary: linear-gradient(135deg, #065f46, #047857);
+  --gradient-secondary: linear-gradient(135deg, #0f766e, #047857);
+  --gradient-accent: linear-gradient(135deg, #d97706, #f59e0b);
+  --gradient-card: linear-gradient(145deg, #ffffff, #f0fdfa);
+  --shadow-glow: 0 0 30px rgba(6, 95, 70, 0.3);
+  --shadow-card: 0 10px 40px rgba(0, 0, 0, 0.1);
+  --shadow-hover: 0 20px 60px rgba(6, 95, 70, 0.2);
   --primary-cyan: #0f766e;
-  --accent-gold: #d97706;
-  --accent-green: #047857;
-  --accent-orange: #f59e0b;
-  
-  /* Background Colors */
-  --bg-primary: #f8fafc;
-  --bg-secondary: #e2e8f0;
-  --bg-tertiary: #cbd5e1;
-  --bg-card: #ffffff;
-  
-  /* Text Colors */
   --text-primary: #1e293b;
   --text-secondary: #475569;
   --text-muted: #64748b;
-  --text-accent: #334155;
-  
-  /* Gradients */
-  --gradient-primary: linear-gradient(135deg, #065f46, #047857);
-  --gradient-secondary: linear-gradient(135deg, #0f766e, #047857);
-  --gradient-accent: linear-gradient(135deg, #d97706, #f59e0b);
-  --gradient-card: linear-gradient(145deg, #ffffff, #f0fdfa);
-  
-  /* Shadows */
-  --shadow-glow: 0 0 30px rgba(6, 95, 70, 0.3);
-  --shadow-card: 0 10px 40px rgba(0, 0, 0, 0.1);
-  --shadow-hover: 0 20px 60px rgba(6, 95, 70, 0.2);
-  
-  /* Spacing */
+  --bg-primary: #f8fafc;
   --spacing-xs: 0.5rem;
-  --spacing-sm: 1rem;
-  --spacing-md: 1.5rem;
-  --spacing-lg: 2rem;
-  --spacing-xl: 3rem;
-  --spacing-2xl: 4rem;
+  --spacing-sm: 0.75rem;
+  --spacing-md: 1rem;
+  --spacing-lg: 1.5rem;
+  --spacing-xl: 2rem;
+  --spacing-2xl: 3rem;
 }
 
-/* Night Mode Theme */
-.night-mode {
-  --bg-primary: #0f172a;
-  --bg-secondary: #1e293b;
-  --bg-tertiary: #334155;
-  --bg-card: #1e293b;
-  --text-primary: #f8fafc;
-  --text-secondary: #cbd5e1;
-  --text-muted: #94a3b8;
-  --text-accent: #e2e8f0;
-  
-  --gradient-primary: linear-gradient(135deg, #0d9488, #059669);
-  --gradient-secondary: linear-gradient(135deg, #14b8a6, #10b981);
-  --gradient-accent: linear-gradient(135deg, #d97706, #f59e0b);
-  --gradient-card: linear-gradient(145deg, #1e293b, #334155);
-  
-  --shadow-glow: 0 0 30px rgba(13, 148, 136, 0.4);
-  --shadow-card: 0 10px 40px rgba(0, 0, 0, 0.6);
-  --shadow-hover: 0 20px 60px rgba(13, 148, 136, 0.3);
+/* Dark mode variables */
+[data-theme="dark-mode"] {
+  --gradient-card: linear-gradient(145deg, #1f2937, #111827);
+  --shadow-glow: 0 0 30px rgba(16, 185, 129, 0.2);
+  --shadow-card: 0 10px 40px rgba(0, 0, 0, 0.3);
+  --shadow-hover: 0 20px 60px rgba(16, 185, 129, 0.15);
+  --text-primary: #f9fafb;
+  --text-secondary: #d1d5db;
+  --text-muted: #9ca3af;
+  --bg-primary: #111827;
 }
 
-/* Day Mode Theme */
-.day-mode {
-  --bg-primary: #f8fafc;
-  --bg-secondary: #e2e8f0;
-  --bg-tertiary: #cbd5e1;
-  --bg-card: #ffffff;
-  --text-primary: #1e293b;
-  --text-secondary: #475569;
-  --text-muted: #64748b;
-  --text-accent: #334155;
-  
-  --gradient-primary: linear-gradient(135deg, #065f46, #047857);
-  --gradient-secondary: linear-gradient(135deg, #0f766e, #047857);
-  --gradient-accent: linear-gradient(135deg, #d97706, #f59e0b);
-  --gradient-card: linear-gradient(145deg, #ffffff, #f0fdfa);
-  
-  --shadow-glow: 0 0 30px rgba(6, 95, 70, 0.3);
-  --shadow-card: 0 10px 40px rgba(0, 0, 0, 0.1);
-  --shadow-hover: 0 20px 60px rgba(6, 95, 70, 0.2);
-}
-
-/* Basic Transitions */
-* {
-  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
-}
-
-/* Header Override */
-header {
-  height: 6rem !important;
-  min-height: 6rem !important;
-  background: white !important;
-}
-
-.night-mode header {
-  background: #0f172a !important;
-}
-
-body {
-  font-family: 'Inter', sans-serif;
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  line-height: 1.6;
-  overflow-x: hidden;
-}
-
-
-
-/* Basic Animations */
-@keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(30px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.animate-fade-in-up {
-  animation: fadeInUp 0.8s ease-out forwards;
-  opacity: 0;
-}
-
-/* Focus Indicators */
-.btn:focus {
-  outline: 2px solid var(--primary-cyan);
-  outline-offset: 2px;
-}
-
-/* Reduced Motion */
-@media (prefers-reduced-motion: reduce) {
-  * {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
-}

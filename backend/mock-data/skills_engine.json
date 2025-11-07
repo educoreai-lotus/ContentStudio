@@ -1,7 +1,0 @@
-{
-    "trainer_id": "TRN-5012",
-    "course_name": "JavaScript Basics",
-    "verification": true,
-    "micro_skills": ["Functions and Events", "DOM Manipulation"],
-    "nano_skills": ["Arrow Functions", "Handle Click Events"]
-  }
