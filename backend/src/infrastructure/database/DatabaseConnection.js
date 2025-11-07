@@ -1,4 +1,6 @@
 import pg from 'pg';
+import dns from 'dns/promises';
+import net from 'net';
 const { Pool } = pg;
 
 /**
@@ -16,26 +18,49 @@ export class DatabaseConnection {
     if (!connectionString) {
       console.warn('DATABASE_URL not set, using in-memory repositories');
       this.pool = null;
+      this.ready = Promise.resolve();
       DatabaseConnection.instance = this;
       return this;
     }
 
-    // Create connection pool
-    this.pool = new Pool({
-      connectionString,
-      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-      max: 20, // Maximum number of clients in the pool
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 2000,
-    });
-
-    // Handle pool errors
-    this.pool.on('error', (err) => {
-      console.error('Unexpected error on idle client', err);
-      process.exit(-1);
-    });
-
+    this.pool = null;
+    this.ready = this.initializePool(connectionString);
     DatabaseConnection.instance = this;
+  }
+
+  async initializePool(connectionString) {
+    try {
+      const url = new URL(connectionString);
+      const config = {
+        host: url.hostname,
+        port: Number(url.port) || 5432,
+        user: decodeURIComponent(url.username || ''),
+        password: decodeURIComponent(url.password || ''),
+        database: (url.pathname || '').replace(/^\//, '') || undefined,
+        ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+        max: 20,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 5000,
+      };
+
+      if (!net.isIP(config.host)) {
+        try {
+          const { address } = await dns.lookup(config.host, { family: 4 });
+          config.host = address;
+        } catch (error) {
+          console.warn(`Failed to resolve IPv4 for database host ${config.host}. Falling back to hostname.`, error.message);
+        }
+      }
+
+      this.pool = new Pool(config);
+      this.pool.on('error', err => {
+        console.error('Unexpected error on idle client', err);
+        process.exit(-1);
+      });
+    } catch (error) {
+      console.error('Failed to initialize database pool:', error);
+      throw error;
+    }
   }
 
   /**
@@ -59,6 +84,7 @@ export class DatabaseConnection {
    * @returns {Promise<boolean>} True if connection successful
    */
   async testConnection() {
+    await this.ready;
     if (!this.pool) {
       return false;
     }
@@ -79,6 +105,7 @@ export class DatabaseConnection {
    * @returns {Promise<Object>} Query result
    */
   async query(text, params) {
+    await this.ready;
     if (!this.pool) {
       throw new Error('Database not configured. Set DATABASE_URL environment variable.');
     }
@@ -105,6 +132,7 @@ export class DatabaseConnection {
    * @returns {Promise<void>}
    */
   async close() {
+    await this.ready;
     if (this.pool) {
       await this.pool.end();
       this.pool = null;
