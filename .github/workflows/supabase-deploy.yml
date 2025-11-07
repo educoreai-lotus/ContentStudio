@@ -21,7 +21,7 @@ jobs:
         with:
           node-version: '18'
 
-      # ✅ Use the official Supabase CLI Action instead of manual install
+      # ✅ Use the official Supabase CLI installer
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v1
         with:
@@ -42,15 +42,22 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
-      - name: Push Database Migrations
-        run: supabase db push
+      # ✅ Run all SQL files under database/migrations/
+      - name: Run Custom Migrations from /database/migrations
+        run: |
+          echo "🚀 Running custom migrations from database/migrations..."
+          for file in database/migrations/*.sql; do
+            echo "Executing $file..."
+            supabase db execute --file "$file"
+          done
+          echo "✅ All migrations executed successfully."
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
 
       - name: Migration Summary
-        run: echo "✅ Supabase migration completed successfully!"
+        run: echo "✅ Supabase custom migrations completed successfully!"
 
       - name: Notify on failure
         if: failure()
