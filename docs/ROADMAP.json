@@ -5,7 +5,7 @@
     "ecosystem": "Educore AI - AI-powered Learning Management Platform",
     "version": "1.0.0-MVP",
     "created_at": "2025-01-04",
-    "last_updated": "2025-01-04",
+    "last_updated": "2025-11-07",
     "current_phase": "Phase 6 In Progress - B1 Complete, Moving to B2",
     "accuracy_requirements_file": "Custom_Requirements.md"
   },
@@ -741,6 +741,20 @@
             },
             "Learning Analytics": {
               "flow": "Content Studio sends usage statistics → Learning Analytics returns insights and recommendations"
+            },
+            "Universal Exchange Endpoint": {
+              "path": "/api/exchange",
+              "method": "POST",
+              "request_example": {
+                "serviceName": "CourseBuilder",
+                "payload": "{\"lessonTopic\": \"\", \"lessonDescription\": \"\", \"skills\": []}"
+              },
+              "response_example": {
+                "lessonTopic": "Introduction to AI Prompting",
+                "lessonDescription": "This lesson covers the basics of AI prompt design...",
+                "skills": ["Prompt Engineering", "Creative Writing"]
+              },
+              "purpose": "Standard request/response contract for microservice data exchange. Content Studio fills requested fields and uses the same schema when consuming other services."
             }
           },
           "phase": "phase_4",
@@ -877,6 +891,46 @@
     "to_be_designed": "API endpoints will be designed in Phase 4 (Design & Architecture)"
   },
   "ai_prompts": {
-    "to_be_designed": "AI prompts will be designed in Phase 4 (Design & Architecture)"
+    "global_variables": ["lessonTopic", "lessonDescription", "language", "skillsList"],
+    "description": "Finalized simplified prompt set shared across Text, Code, Presentation, Audio, Mind Map, and Avatar Video generators.",
+    "implemented_in": "backend/src/application/use-cases/GenerateContentUseCase.js",
+    "prompts": {
+      "text": {
+        "model": "gpt-4o-mini",
+        "output": "text",
+        "endpoint": "/api/ai/text",
+        "prompt": "You are an expert educational content creator in EduCore Content Studio.\n🎯 Objective: Generate a full, structured lesson text for {lessonTopic}.\n\nLesson Context:\n- Topic: {lessonTopic}\n- Description: {lessonDescription}\n- Language: {language}\n- Skills Focus: {skillsList}\n\nGuidelines:\n- Write in {language}, structured as introduction → explanation → examples → short summary.\n- Ensure clarity and logical flow aligned with the listed skills.\n- Avoid any JSON or markup.\nOutput only pure text."
+      },
+      "code": {
+        "model": "gpt-4o-mini",
+        "output": "code + explanation",
+        "endpoint": "/api/ai/code",
+        "prompt": "You are a senior coding mentor in EduCore Content Studio.\n🎯 Objective: Generate a complete, working code example related to {lessonTopic}.\n\nLesson Context:\n- Topic: {lessonTopic}\n- Description: {lessonDescription}\n- Skills: {skillsList}\n- Language: {language}\n\nGuidelines:\n- Generate a code block in the most relevant programming language.\n- Add inline comments explaining each section.\n- Include one brief exercise or question for learners.\n- Output: code + short natural explanation, no JSON."
+      },
+      "presentation": {
+        "model": "gpt-4o",
+        "output": "slide text",
+        "endpoint": "/api/ai/presentation",
+        "prompt": "You are an AI educational designer for EduCore Content Studio.\n🎯 Objective: Generate presentation slide text based on {lessonTopic}.\n\nLesson Context:\n- Topic: {lessonTopic}\n- Description: {lessonDescription}\n- Skills: {skillsList}\n- Language: {language}\n\nGuidelines:\n- Create content for 8–10 slides.\n- Each slide: title + 2–3 short bullet points.\n- Keep tone educational and professional.\n- Output plain slide text only (no JSON)."
+      },
+      "audio": {
+        "model": "gpt-4o-mini-tts",
+        "output": "tts_script",
+        "endpoint": "/api/ai/audio",
+        "prompt": "You are a professional voice narration assistant for EduCore Content Studio.\n🎯 Objective: Create an engaging spoken narration script for {lessonTopic}.\n\nLesson Context:\n- Topic: {lessonTopic}\n- Description: {lessonDescription}\n- Skills: {skillsList}\n- Language: {language}\n\nGuidelines:\n- Use a natural spoken tone.\n- Length: around 1–2 minutes.\n- Output: clean narration text to convert with TTS (no JSON)."
+      },
+      "mind_map": {
+        "model": "gemini-1.5-flash",
+        "output": "image_or_mermaid",
+        "endpoint": "/api/ai/mind-map",
+        "prompt": "You are an AI mind map generator for EduCore Content Studio.\n🎯 Objective: Create a visual mind map that represents the structure of {lessonTopic}.\n\nLesson Context:\n- Topic: {lessonTopic}\n- Description: {lessonDescription}\n- Skills: {skillsList}\n- Language: {language}\n\nGuidelines:\n- Identify 5–8 main nodes based on the description and skills.\n- Show relationships clearly between ideas.\n- Prefer generating a mind map image (visual output).\n- If image rendering fails, output Mermaid syntax:\nmindmap\n  root(({lessonTopic}))\n    A({subtopic1})\n      A1({detail1})\n      A2({detail2})\n    B({subtopic2})"
+      },
+      "avatar_video": {
+        "model": "heygen-api",
+        "output": "mp4",
+        "endpoint": "/api/ai/avatar-video",
+        "prompt": "You are a virtual presenter in EduCore Content Studio.\n🎯 Objective: Create a short 15-second video introduction about {lessonTopic}.\n\nLesson Context:\n- Topic: {lessonTopic}\n- Description: {lessonDescription}\n- Skills: {skillsList}\n- Language: {language}\n\nGuidelines:\n- Use engaging, spoken tone in {language}.\n- Limit to ~100 words (≈15 seconds).\n- End with a motivational or inspiring sentence.\n- Output: text narration script (for Heygen API video generation)."
+      }
+    }
   }
 }

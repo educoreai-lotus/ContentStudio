@@ -41,5 +41,29 @@ router.post('/generate', (req, res, next) =>
   aiGenerationController.generate(req, res, next)
 );
 
+router.post('/generate/text', (req, res, next) =>
+  aiGenerationController.generateText(req, res, next)
+);
+
+router.post('/generate/code', (req, res, next) =>
+  aiGenerationController.generateCode(req, res, next)
+);
+
+router.post('/generate/presentation', (req, res, next) =>
+  aiGenerationController.generatePresentation(req, res, next)
+);
+
+router.post('/generate/audio', (req, res, next) =>
+  aiGenerationController.generateAudio(req, res, next)
+);
+
+router.post('/generate/mind-map', (req, res, next) =>
+  aiGenerationController.generateMindMap(req, res, next)
+);
+
+router.post('/generate/avatar-video', (req, res, next) =>
+  aiGenerationController.generateAvatarVideo(req, res, next)
+);
+
 export default router;
 

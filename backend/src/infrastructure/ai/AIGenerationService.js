@@ -29,6 +29,8 @@ export class AIGenerationService extends IAIGenerationService {
         return this.generateAudio(prompt, config);
       case 'presentation':
         return this.generatePresentation(prompt, config);
+      case 'avatar_video':
+        return this.generateAvatarScript(prompt, config);
       default:
         throw new Error(`Unsupported content type for AI generation: ${content_type}`);
     }
@@ -235,6 +237,25 @@ Format as JSON with this structure:
         style,
         generated_at: new Date().toISOString(),
       },
+    };
+  }
+
+  async generateAvatarScript(prompt, config = {}) {
+    if (!this.openaiClient) {
+      throw new Error('OpenAI client not configured');
+    }
+
+    const systemPrompt = 'You are a virtual presenter creating short, engaging video introductions.';
+    const script = await this.openaiClient.generateText(prompt, {
+      systemPrompt,
+      temperature: config.temperature || 0.9,
+      max_tokens: config.max_tokens || 400,
+    });
+
+    return {
+      script,
+      language: config.language || 'English',
+      estimated_duration_seconds: config.duration_seconds || 15,
     };
   }
 }

@@ -81,6 +81,7 @@ import videoToLessonRouter from './src/presentation/routes/video-to-lesson.js';
 import multilingualRouter from './src/presentation/routes/multilingual.js';
 import multilingualStatsRouter from './src/presentation/routes/multilingual-stats.js';
 import jobsRouter from './src/presentation/routes/jobs.js';
+import exchangeRouter from './src/presentation/routes/exchange.js';
 import { errorHandler } from './src/presentation/middleware/errorHandler.js';
 import { requestLogger } from './src/presentation/middleware/requestLogger.js';
 import { logger } from './src/infrastructure/logging/Logger.js';
@@ -98,6 +99,7 @@ app.use('/api/video-to-lesson', videoToLessonRouter);
 app.use('/api/content/multilingual', multilingualRouter);
 app.use('/api/content/multilingual', multilingualStatsRouter);
 app.use('/api/jobs', jobsRouter);
+app.use('/api/exchange', exchangeRouter);
 
 // Error handling middleware (must be after routes)
 app.use(errorHandler);

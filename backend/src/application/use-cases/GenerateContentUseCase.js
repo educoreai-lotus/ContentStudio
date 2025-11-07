@@ -1,5 +1,99 @@
 import { Content } from '../../domain/entities/Content.js';
 
+const PROMPT_BUILDERS = {
+  text: ({ lessonTopic, lessonDescription, language, skillsList }) => `You are an expert educational content creator in EduCore Content Studio.
+🎯 Objective: Generate a full, structured lesson text for ${lessonTopic}.
+
+Lesson Context:
+- Topic: ${lessonTopic}
+- Description: ${lessonDescription}
+- Language: ${language}
+- Skills Focus: ${skillsList}
+
+Guidelines:
+- Write in ${language}, structured as introduction → explanation → examples → short summary.
+- Ensure clarity and logical flow aligned with the listed skills.
+- Avoid any JSON or markup.
+Output only pure text.`,
+  code: ({ lessonTopic, lessonDescription, language, skillsList }) => `You are a senior coding mentor in EduCore Content Studio.
+🎯 Objective: Generate a complete, working code example related to ${lessonTopic}.
+
+Lesson Context:
+- Topic: ${lessonTopic}
+- Description: ${lessonDescription}
+- Skills: ${skillsList}
+- Language: ${language}
+
+Guidelines:
+- Generate a code block in the most relevant programming language.
+- Add inline comments explaining each section.
+- Include one brief exercise or question for learners.
+- Output: code + short natural explanation, no JSON.`,
+  presentation: ({ lessonTopic, lessonDescription, language, skillsList }) => `You are an AI educational designer for EduCore Content Studio.
+🎯 Objective: Generate presentation slide text based on ${lessonTopic}.
+
+Lesson Context:
+- Topic: ${lessonTopic}
+- Description: ${lessonDescription}
+- Skills: ${skillsList}
+- Language: ${language}
+
+Guidelines:
+- Create content for 8–10 slides.
+- Each slide: title + 2–3 short bullet points.
+- Keep tone educational and professional.
+- Output plain slide text only (no JSON).` ,
+  audio: ({ lessonTopic, lessonDescription, language, skillsList }) => `You are a professional voice narration assistant for EduCore Content Studio.
+🎯 Objective: Create an engaging spoken narration script for ${lessonTopic}.
+
+Lesson Context:
+- Topic: ${lessonTopic}
+- Description: ${lessonDescription}
+- Skills: ${skillsList}
+- Language: ${language}
+
+Guidelines:
+- Use a natural spoken tone.
+- Length: around 1–2 minutes.
+- Output: clean narration text to convert with TTS (no JSON).` ,
+  mind_map: ({ lessonTopic, lessonDescription, language, skillsList }) => `You are an AI mind map generator for EduCore Content Studio.
+🎯 Objective: Create a visual mind map that represents the structure of ${lessonTopic}.
+
+Lesson Context:
+- Topic: ${lessonTopic}
+- Description: ${lessonDescription}
+- Skills: ${skillsList}
+- Language: ${language}
+
+Guidelines:
+- Identify 5–8 main nodes based on the description and skills.
+- Show relationships clearly between ideas.
+- Prefer generating a mind map image (visual output).
+- If image rendering fails, output Mermaid syntax:
+mindmap
+  root((${lessonTopic}))
+    A({subtopic1})
+      A1({detail1})
+      A2({detail2})
+    B({subtopic2})` ,
+  avatar_video: ({ lessonTopic, lessonDescription, language, skillsList }) => `You are a virtual presenter in EduCore Content Studio.
+🎯 Objective: Create a short 15-second video introduction about ${lessonTopic}.
+
+Lesson Context:
+- Topic: ${lessonTopic}
+- Description: ${lessonDescription}
+- Skills: ${skillsList}
+- Language: ${language}
+
+Guidelines:
+- Use engaging, spoken tone in ${language}.
+- Limit to ~100 words (≈15 seconds).
+- End with a motivational or inspiring sentence.
+- Output: text narration script (for Heygen API video generation).`
+};
+
+const SUPPORTED_TYPES = ['text', 'code', 'presentation', 'audio', 'mind_map', 'avatar_video'];
+
 /**
  * Generate Content Use Case
  * Handles AI-assisted content generation
@@ -17,6 +111,35 @@ export class GenerateContentUseCase {
     this.qualityCheckService = qualityCheckService;
   }
 
+  buildPromptVariables({ lessonTopic, lessonDescription, language, skillsList }) {
+    if (!lessonTopic || !lessonDescription || !language || !skillsList) {
+      throw new Error('lessonTopic, lessonDescription, language, and skillsList are required');
+    }
+
+    const skillsAsArray = Array.isArray(skillsList)
+      ? skillsList
+      : String(skillsList)
+          .split(',')
+          .map(skill => skill.trim())
+          .filter(Boolean);
+
+    return {
+      lessonTopic: lessonTopic.trim(),
+      lessonDescription: lessonDescription.trim(),
+      language: language.trim(),
+      skillsList: skillsAsArray.join(', '),
+      skillsListArray: skillsAsArray,
+    };
+  }
+
+  buildPrompt(contentType, variables) {
+    const builder = PROMPT_BUILDERS[contentType];
+    if (!builder) {
+      throw new Error(`Prompt builder not defined for content type: ${contentType}`);
+    }
+    return builder(variables);
+  }
+
   async execute(generationRequest) {
     // Validate input
     if (!generationRequest.topic_id) {
@@ -27,44 +150,117 @@ export class GenerateContentUseCase {
       throw new Error('content_type_id is required');
     }
 
-    if (!generationRequest.prompt && !generationRequest.template_id) {
-      throw new Error('Either prompt or template_id is required');
+    if (!SUPPORTED_TYPES.includes(generationRequest.content_type_id)) {
+      throw new Error(
+        `AI generation not yet supported for type: ${generationRequest.content_type_id}`
+      );
     }
 
-    // Get or build prompt
+    const promptVariables = this.buildPromptVariables(generationRequest);
+
+    // Build prompt (template_id still supported if provided)
     let prompt = generationRequest.prompt;
     if (generationRequest.template_id) {
       const template = await this.promptTemplateService.getTemplate(
         generationRequest.template_id
       );
-      prompt = template.render(generationRequest.template_variables || {});
+      prompt = template.render({
+        ...promptVariables,
+        ...(generationRequest.template_variables || {}),
+      });
     }
+
+    if (!prompt) {
+      prompt = this.buildPrompt(generationRequest.content_type_id, promptVariables);
+    }
+
+    const metadata = {
+      lessonTopic: promptVariables.lessonTopic,
+      lessonDescription: promptVariables.lessonDescription,
+      language: promptVariables.language,
+      skillsList: promptVariables.skillsListArray,
+    };
 
     // Generate content based on type
     let contentData = {};
     try {
       switch (generationRequest.content_type_id) {
-        case 'text':
+        case 'text': {
+          const text = await this.aiGenerationService.generateText(prompt, {
+            style: generationRequest.style || 'educational',
+            difficulty: generationRequest.difficulty || 'intermediate',
+            language: promptVariables.language,
+          });
           contentData = {
-            text: await this.aiGenerationService.generateText(prompt, {
-              style: generationRequest.style || 'educational',
-              difficulty: generationRequest.difficulty || 'intermediate',
-            }),
+            text,
+            metadata,
           };
           break;
+        }
 
-        case 'code':
+        case 'code': {
+          const language =
+            generationRequest.programming_language || generationRequest.language || 'javascript';
+          const codeResult = await this.aiGenerationService.generateCode(prompt, language, {
+            include_comments: generationRequest.include_comments !== false,
+          });
           contentData = {
-            code: await this.aiGenerationService.generateCode(
-              prompt,
-              generationRequest.language || 'javascript',
-              {
-                include_comments: generationRequest.include_comments !== false,
-              }
-            ),
-            language: generationRequest.language || 'javascript',
+            ...codeResult,
+            metadata: {
+              ...metadata,
+              programming_language: language,
+            },
           };
           break;
+        }
+
+        case 'presentation': {
+          const presentation = await this.aiGenerationService.generatePresentation(prompt, {
+            slide_count: generationRequest.slide_count || 10,
+            style: generationRequest.style || 'educational',
+          });
+          contentData = {
+            ...presentation,
+            metadata,
+          };
+          break;
+        }
+
+        case 'audio': {
+          const audio = await this.aiGenerationService.generateAudio(prompt, {
+            voice: generationRequest.voice || 'alloy',
+            model: generationRequest.tts_model || 'tts-1',
+            format: generationRequest.audio_format || 'mp3',
+            language: promptVariables.language,
+          });
+          contentData = {
+            ...audio,
+            metadata,
+          };
+          break;
+        }
+
+        case 'mind_map': {
+          const mindMap = await this.aiGenerationService.generateMindMap(prompt, {
+            language: promptVariables.language,
+          });
+          contentData = {
+            ...mindMap,
+            metadata,
+          };
+          break;
+        }
+
+        case 'avatar_video': {
+          const avatarScript = await this.aiGenerationService.generateAvatarScript(prompt, {
+            language: promptVariables.language,
+          });
+          contentData = {
+            ...avatarScript,
+            metadata,
+          };
+          break;
+        }
 
         default:
           throw new Error(

@@ -20,23 +20,44 @@ export class AIGenerationController {
     });
   }
 
-  /**
-   * Generate content using AI
-   * POST /api/content/ai-generate
-   */
-  async generate(req, res, next) {
+  validateBody(body) {
+    const required = ['topic_id', 'lessonTopic', 'lessonDescription', 'language', 'skillsList'];
+    const missing = required.filter(field => body[field] === undefined || body[field] === null || body[field] === '');
+    if (missing.length > 0) {
+      throw new Error(`Missing required fields: ${missing.join(', ')}`);
+    }
+  }
+
+  buildGenerationRequest(req, contentType) {
+    const body = req.body;
+    const skillsList = Array.isArray(body.skillsList)
+      ? body.skillsList
+      : String(body.skillsList || '')
+          .split(',')
+          .map(skill => skill.trim())
+          .filter(Boolean);
+
+    return {
+      topic_id: parseInt(body.topic_id),
+      content_type_id: contentType || body.content_type_id,
+      lessonTopic: body.lessonTopic,
+      lessonDescription: body.lessonDescription,
+      language: body.language,
+      skillsList,
+      style: body.style,
+      difficulty: body.difficulty,
+      programming_language: body.programming_language,
+      voice: body.voice,
+      slide_count: body.slide_count,
+      audio_format: body.audio_format,
+      tts_model: body.tts_model,
+    };
+  }
+
+  async handleGeneration(req, res, next, contentTypeOverride) {
     try {
-      const generationRequest = {
-        topic_id: parseInt(req.body.topic_id),
-        content_type_id: req.body.content_type_id,
-        prompt: req.body.prompt,
-        template_id: req.body.template_id ? parseInt(req.body.template_id) : undefined,
-        template_variables: req.body.template_variables || {},
-        language: req.body.language,
-        style: req.body.style,
-        difficulty: req.body.difficulty,
-        include_comments: req.body.include_comments,
-      };
+      this.validateBody(req.body);
+      const generationRequest = this.buildGenerationRequest(req, contentTypeOverride);
 
       const content = await this.generateContentUseCase.execute(generationRequest);
 
@@ -48,6 +69,34 @@ export class AIGenerationController {
     } catch (error) {
       next(error);
     }
+  }
+
+  async generate(req, res, next) {
+    return this.handleGeneration(req, res, next);
+  }
+
+  async generateText(req, res, next) {
+    return this.handleGeneration(req, res, next, 'text');
+  }
+
+  async generateCode(req, res, next) {
+    return this.handleGeneration(req, res, next, 'code');
+  }
+
+  async generatePresentation(req, res, next) {
+    return this.handleGeneration(req, res, next, 'presentation');
+  }
+
+  async generateAudio(req, res, next) {
+    return this.handleGeneration(req, res, next, 'audio');
+  }
+
+  async generateMindMap(req, res, next) {
+    return this.handleGeneration(req, res, next, 'mind_map');
+  }
+
+  async generateAvatarVideo(req, res, next) {
+    return this.handleGeneration(req, res, next, 'avatar_video');
   }
 }
 
