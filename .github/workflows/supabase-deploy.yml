@@ -23,7 +23,9 @@ jobs:
 
       - name: Install Supabase CLI
         run: |
-          curl -fsSL https://cli.supabase.com/install.sh | sh -s -- -b /usr/local/bin
+          curl -fsSL https://cli.supabase.com/install.sh | sh
+          echo "${HOME}/.supabase/bin" >> $GITHUB_PATH
+          supabase --version
 
       - name: Link to Supabase Project
         run: supabase link --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
