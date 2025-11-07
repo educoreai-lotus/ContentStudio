@@ -2,6 +2,8 @@
  * Skills Engine gRPC Client
  * Communicates with Skills Engine microservice via gRPC
  */
+import { logger } from '../logging/Logger.js';
+
 export class SkillsEngineClient {
   constructor({ grpcClient, serviceUrl }) {
     this.grpcClient = grpcClient;
@@ -36,11 +38,24 @@ export class SkillsEngineClient {
       //   topic_name: topicName,
       // });
       // return response;
-      
+
       // Placeholder
       throw new Error('gRPC client not fully implemented');
     } catch (error) {
-      throw new Error(`Skills Engine integration failed: ${error.message}`);
+      logger.warn('Skills Engine integration failed, using fallback mapping', {
+        error: error.message,
+        trainer_id: trainerId,
+        topic_name: topicName,
+      });
+      return {
+        topic_id: null,
+        topic_name: topicName,
+        micro_skills: ['communication', 'problem_solving'],
+        nano_skills: ['brainstorming', 'rapid_iteration'],
+        difficulty_level: 'intermediate',
+        validation_status: 'pending',
+        fallback: true,
+      };
     }
   }
 

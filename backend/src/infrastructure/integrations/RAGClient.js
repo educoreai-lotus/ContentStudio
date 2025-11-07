@@ -2,6 +2,8 @@
  * RAG (Contextual Assistant) REST Client
  * Communicates with RAG microservice via REST API
  */
+import { logger } from '../logging/Logger.js';
+
 export class RAGClient {
   constructor({ httpClient, serviceUrl }) {
     this.httpClient = httpClient;
@@ -60,7 +62,17 @@ export class RAGClient {
 
       return response.data;
     } catch (error) {
-      throw new Error(`RAG indexing failed: ${error.message}`);
+      logger.warn('RAG indexing failed, using fallback acknowledgement', {
+        error: error.message,
+        lesson_id,
+        topic_id,
+      });
+      return {
+        success: false,
+        indexed: false,
+        content_id: contentData?.content_id || null,
+        fallback: true,
+      };
     }
   }
 
@@ -84,7 +96,15 @@ export class RAGClient {
 
       return response.data;
     } catch (error) {
-      throw new Error(`RAG update failed: ${error.message}`);
+      logger.warn('RAG update failed, using fallback acknowledgement', {
+        error: error.message,
+        content_id: contentId,
+      });
+      return {
+        success: false,
+        updated: false,
+        fallback: true,
+      };
     }
   }
 }

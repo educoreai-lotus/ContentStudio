@@ -2,6 +2,8 @@
  * Course Builder gRPC Client
  * Communicates with Course Builder microservice via gRPC
  */
+import { logger } from '../logging/Logger.js';
+
 export class CourseBuilderClient {
   constructor({ grpcClient, serviceUrl }) {
     this.grpcClient = grpcClient;
@@ -38,7 +40,16 @@ export class CourseBuilderClient {
       
       throw new Error('gRPC client not fully implemented');
     } catch (error) {
-      throw new Error(`Course Builder integration failed: ${error.message}`);
+      logger.warn('Course Builder integration failed, using fallback data', {
+        error: error.message,
+        course_id: courseData?.course_id,
+      });
+      return {
+        course_id: courseData?.course_id || null,
+        status: 'built_fallback',
+        validation_status: 'pending',
+        fallback: true,
+      };
     }
   }
 

@@ -2,6 +2,8 @@
  * Learning Analytics REST Client
  * Communicates with Learning Analytics microservice via REST API
  */
+import { logger } from '../logging/Logger.js';
+
 export class LearningAnalyticsClient {
   constructor({ httpClient, serviceUrl }) {
     this.httpClient = httpClient; // Axios or fetch
@@ -53,7 +55,14 @@ export class LearningAnalyticsClient {
 
       return response.data;
     } catch (error) {
-      throw new Error(`Learning Analytics integration failed: ${error.message}`);
+      logger.warn('Learning Analytics metrics send failed, using fallback ack', {
+        error: error.message,
+      });
+      return {
+        success: false,
+        received_at: new Date().toISOString(),
+        fallback: true,
+      };
     }
   }
 
@@ -76,7 +85,13 @@ export class LearningAnalyticsClient {
 
       return response.data;
     } catch (error) {
-      throw new Error(`Learning Analytics content metrics failed: ${error.message}`);
+      logger.warn('Learning Analytics content metrics failed, using fallback ack', {
+        error: error.message,
+      });
+      return {
+        success: false,
+        fallback: true,
+      };
     }
   }
 }

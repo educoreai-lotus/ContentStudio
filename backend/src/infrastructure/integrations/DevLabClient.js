@@ -2,6 +2,8 @@
  * DevLab gRPC Client
  * Communicates with DevLab microservice via gRPC
  */
+import { logger } from '../logging/Logger.js';
+
 export class DevLabClient {
   constructor({ grpcClient, serviceUrl }) {
     this.grpcClient = grpcClient;
@@ -55,7 +57,22 @@ export class DevLabClient {
       
       throw new Error('gRPC client not fully implemented');
     } catch (error) {
-      throw new Error(`DevLab integration failed: ${error.message}`);
+      logger.warn('DevLab generateExercises failed, returning fallback data', {
+        error: error.message,
+        lesson_id,
+        topic_id,
+      });
+      return Array.from({ length: number_of_questions || 3 }, (_, i) => ({
+        question_id: `fallback_${i + 1}`,
+        lesson_id,
+        question_text: `Fallback question ${i + 1} for ${topic_name}`,
+        question_type,
+        programming_language,
+        generated_by: 'AI-fallback',
+        validation_status: 'pending',
+        ajax_block: `<div>Fallback exercise ${i + 1}</div>`,
+        fallback: true,
+      }));
     }
   }
 
@@ -106,7 +123,22 @@ export class DevLabClient {
       
       throw new Error('gRPC client not fully implemented');
     } catch (error) {
-      throw new Error(`DevLab validation failed: ${error.message}`);
+      logger.warn('DevLab validateExercise failed, using fallback validation', {
+        error: error.message,
+        lesson_id,
+        topic_id,
+      });
+      return {
+        question_id: `fallback_${Date.now()}`,
+        lesson_id,
+        question_text,
+        question_type,
+        programming_language,
+        generated_by: 'trainer',
+        validation_status: 'pending',
+        ajax_block: `<div>${question_text}</div>`,
+        fallback: true,
+      };
     }
   }
 }

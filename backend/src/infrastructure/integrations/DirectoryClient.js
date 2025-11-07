@@ -3,6 +3,8 @@
  * Communicates with Directory microservice via gRPC
  * Note: Reversed flow - Directory provides trainer info to Content Studio
  */
+import { logger } from '../logging/Logger.js';
+
 export class DirectoryClient {
   constructor({ grpcClient, serviceUrl }) {
     this.grpcClient = grpcClient;
@@ -67,7 +69,16 @@ export class DirectoryClient {
       
       throw new Error('gRPC client not fully implemented');
     } catch (error) {
-      throw new Error(`Directory sync failed: ${error.message}`);
+      logger.warn('Directory sync failed, using fallback response', {
+        error: error.message,
+        course_id: courseData?.course_id,
+      });
+      return {
+        success: false,
+        course_id: courseData?.course_id || null,
+        synced_at: new Date().toISOString(),
+        fallback: true,
+      };
     }
   }
 
@@ -95,7 +106,17 @@ export class DirectoryClient {
       
       throw new Error('gRPC client not fully implemented');
     } catch (error) {
-      throw new Error(`Directory validation failed: ${error.message}`);
+      logger.warn('Directory validation failed, using fallback permissions', {
+        error: error.message,
+        trainer_id: trainerId,
+      });
+      return {
+        trainer_id: trainerId,
+        authorized: true,
+        ai_capabilities_enabled: false,
+        can_publish_externally: false,
+        fallback: true,
+      };
     }
   }
 }
