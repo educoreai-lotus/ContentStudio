@@ -21,11 +21,11 @@ jobs:
         with:
           node-version: '18'
 
-      # ✅ Safe installation path for Supabase CLI
-      - name: Install Supabase CLI (safe)
-        run: |
-          curl -fsSL https://cli.supabase.com/install.sh | sh -s -- -b $(pwd)
-          echo "$(pwd)" >> $GITHUB_PATH
+      # ✅ Use the official Supabase CLI Action instead of manual install
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
 
       - name: Verify Supabase CLI installed
         run: |
