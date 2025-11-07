@@ -53,22 +53,22 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           python <<'PY'
-import os, urllib.parse
-url = os.environ['DATABASE_URL']
-parsed = urllib.parse.urlparse(url)
-password = urllib.parse.unquote(parsed.password or '')
-print(f"::add-mask::{password}")
-outputs = {
-    'host': parsed.hostname or '',
-    'port': parsed.port or 5432,
-    'user': parsed.username or '',
-    'dbname': (parsed.path or '').lstrip('/') or 'postgres',
-    'password': password,
-}
-with open(os.environ['GITHUB_OUTPUT'], 'w') as f:
-    for key, value in outputs.items():
-        f.write(f"{key}={value}\n")
-PY
+          import os, urllib.parse
+          url = os.environ['DATABASE_URL']
+          parsed = urllib.parse.urlparse(url)
+          password = urllib.parse.unquote(parsed.password or '')
+          print(f"::add-mask::{password}")
+          outputs = {
+              'host': parsed.hostname or '',
+              'port': parsed.port or 5432,
+              'user': parsed.username or '',
+              'dbname': (parsed.path or '').lstrip('/') or 'postgres',
+              'password': password,
+          }
+          with open(os.environ['GITHUB_OUTPUT'], 'w') as f:
+              for key, value in outputs.items():
+                  f.write(f"{key}={value}\n")
+          PY
 
       # ✅ Run all SQL files under database/migrations/
       - name: Run Custom Migrations from /database/migrations
