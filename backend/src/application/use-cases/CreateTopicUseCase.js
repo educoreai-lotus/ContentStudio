@@ -36,7 +36,7 @@ export class CreateTopicUseCase {
     const topic = new Topic({
       ...topicData,
       skills,
-      status: 'draft',
+      status: topicData.status || 'active', // Default to 'active' - ENUM doesn't support 'draft'
     });
 
     // Persist topic

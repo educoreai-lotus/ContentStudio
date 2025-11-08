@@ -7,7 +7,7 @@ export class Topic {
     course_id = null,
     template_id = null,
     skills = [],
-    status = 'draft',
+    status = 'active', // Changed from 'draft' - ENUM doesn't support 'draft'
     has_text = false,
     has_code = false,
     has_presentation = false,
