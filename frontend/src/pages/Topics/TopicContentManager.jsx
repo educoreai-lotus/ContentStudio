@@ -4,11 +4,11 @@ import { contentService } from '../../services/content.js';
 import { useApp } from '../../context/AppContext';
 
 const CONTENT_TYPES = [
-  { id: 'text', name: 'Text Content', icon: 'fa-file-alt', color: 'blue' },
-  { id: 'code', name: 'Code Example', icon: 'fa-code', color: 'green' },
-  { id: 'presentation', name: 'Presentation', icon: 'fa-presentation', color: 'purple' },
-  { id: 'audio', name: 'Audio Narration', icon: 'fa-microphone', color: 'red' },
-  { id: 'mind_map', name: 'Mind Map', icon: 'fa-project-diagram', color: 'yellow' },
+  { id: 'text', name: 'Text Content', icon: 'fa-file-alt', color: 'blue', dbId: 1 },
+  { id: 'code', name: 'Code Example', icon: 'fa-code', color: 'green', dbId: 2 },
+  { id: 'presentation', name: 'Presentation', icon: 'fa-presentation', color: 'purple', dbId: 3 },
+  { id: 'audio', name: 'Audio Narration', icon: 'fa-microphone', color: 'red', dbId: 4 },
+  { id: 'mind_map', name: 'Mind Map', icon: 'fa-project-diagram', color: 'yellow', dbId: 5 },
 ];
 
 /**
@@ -53,8 +53,8 @@ export default function TopicContentManager() {
     }
   };
 
-  const getContentByType = (typeId) => {
-    return existingContent.find(c => c.content_type_id === typeId);
+  const getContentByType = (type) => {
+    return existingContent.find(c => c.content_type_id === type.dbId);
   };
 
   const getColorClasses = (color, hasContent) => {
@@ -178,7 +178,7 @@ export default function TopicContentManager() {
         {/* Content Types Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {CONTENT_TYPES.map(type => {
-            const content = getContentByType(type.id);
+            const content = getContentByType(type);
             const hasContent = !!content;
 
             return (

@@ -38,7 +38,7 @@ export const contentService = {
     };
 
     const response = await apiClient.get('/api/content', { params });
-    return response.data.data;
+    return response.data.contents || [];
   },
 
   /**
