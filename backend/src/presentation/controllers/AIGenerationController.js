@@ -29,14 +29,7 @@ export class AIGenerationController {
       throw new Error('Missing required fields: content_type_id');
     }
 
-    const lessonFields = ['lessonTopic', 'lessonDescription', 'language', 'skillsList'];
-    const missingLessonFields = lessonFields.filter(
-      field => body[field] === undefined || body[field] === null || body[field] === ''
-    );
-
-    if (missingLessonFields.length > 0 && !body.prompt) {
-      throw new Error(`Missing required fields: ${missingLessonFields.join(', ')}`);
-    }
+    // Lesson fields will be fetched from topic if missing, so we don't validate them here
   }
 
   buildGenerationRequest(req, contentType) {
@@ -77,6 +70,21 @@ export class AIGenerationController {
   async handleGeneration(req, res, next, contentTypeOverride) {
     try {
       this.validateBody(req.body, contentTypeOverride);
+      
+      // If lesson fields are missing, fetch them from the topic
+      if (!req.body.lessonTopic || !req.body.lessonDescription || !req.body.skillsList) {
+        const { RepositoryFactory } = await import('../../infrastructure/database/repositories/RepositoryFactory.js');
+        const topicRepository = await RepositoryFactory.getTopicRepository();
+        const topic = await topicRepository.findById(parseInt(req.body.topic_id));
+        
+        if (topic) {
+          req.body.lessonTopic = req.body.lessonTopic || topic.topic_name;
+          req.body.lessonDescription = req.body.lessonDescription || topic.description;
+          req.body.skillsList = req.body.skillsList || topic.skills || [];
+          req.body.language = req.body.language || topic.language || 'English';
+        }
+      }
+      
       const generationRequest = this.buildGenerationRequest(req, contentTypeOverride);
 
       const content = await this.generateContentUseCase.execute(generationRequest);
