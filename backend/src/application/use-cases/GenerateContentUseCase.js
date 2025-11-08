@@ -92,7 +92,8 @@ Guidelines:
 - Output: text narration script (for Heygen API video generation).`
 };
 
-const SUPPORTED_TYPES = ['text', 'code', 'presentation', 'audio', 'mind_map', 'avatar_video'];
+// Supported content type IDs (integers from database)
+const SUPPORTED_TYPES = [1, 2, 3, 4, 5, 6]; // text, code, presentation, audio, mind_map, avatar_video
 
 /**
  * Generate Content Use Case
@@ -132,10 +133,25 @@ export class GenerateContentUseCase {
     };
   }
 
-  buildPrompt(contentType, variables) {
-    const builder = PROMPT_BUILDERS[contentType];
+  buildPrompt(contentTypeId, variables) {
+    // Map content_type_id (integer) to prompt builder key (string)
+    const typeMap = {
+      1: 'text',
+      2: 'code',
+      3: 'presentation',
+      4: 'audio',
+      5: 'mind_map',
+      6: 'avatar_video',
+    };
+    
+    const typeKey = typeMap[contentTypeId];
+    if (!typeKey) {
+      throw new Error(`Unknown content type ID: ${contentTypeId}`);
+    }
+    
+    const builder = PROMPT_BUILDERS[typeKey];
     if (!builder) {
-      throw new Error(`Prompt builder not defined for content type: ${contentType}`);
+      throw new Error(`Prompt builder not defined for content type: ${typeKey}`);
     }
     return builder(variables);
   }
@@ -185,7 +201,7 @@ export class GenerateContentUseCase {
     let contentData = {};
     try {
       switch (generationRequest.content_type_id) {
-        case 'text': {
+        case 1: { // text
           const text = await this.aiGenerationService.generateText(prompt, {
             language: promptVariables.language,
           });
@@ -196,7 +212,7 @@ export class GenerateContentUseCase {
           break;
         }
 
-        case 'code': {
+        case 2: { // code
           const language =
             generationRequest.programming_language || generationRequest.language || 'javascript';
           const codeResult = await this.aiGenerationService.generateCode(prompt, language, {
@@ -212,7 +228,7 @@ export class GenerateContentUseCase {
           break;
         }
 
-        case 'presentation': {
+        case 3: { // presentation
           const presentation = await this.aiGenerationService.generatePresentation(prompt, {
             slide_count: generationRequest.slide_count || 10,
           });
@@ -223,7 +239,7 @@ export class GenerateContentUseCase {
           break;
         }
 
-        case 'audio': {
+        case 4: { // audio
           const audio = await this.aiGenerationService.generateAudio(prompt, {
             voice: generationRequest.voice || 'alloy',
             model: generationRequest.tts_model || 'tts-1',
@@ -237,7 +253,7 @@ export class GenerateContentUseCase {
           break;
         }
 
-        case 'mind_map': {
+        case 5: { // mind_map
           const mindMap = await this.aiGenerationService.generateMindMap(prompt, {
             language: promptVariables.language,
           });
@@ -248,7 +264,7 @@ export class GenerateContentUseCase {
           break;
         }
 
-        case 'avatar_video': {
+        case 6: { // avatar_video
           const avatarScript = await this.aiGenerationService.generateAvatarScript(prompt, {
             language: promptVariables.language,
           });
