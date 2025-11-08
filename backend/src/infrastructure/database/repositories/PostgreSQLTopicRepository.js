@@ -19,8 +19,8 @@ export class PostgreSQLTopicRepository extends ITopicRepository {
     const query = `
       INSERT INTO topics (
         topic_name, trainer_id, description, course_id, template_id,
-        skills, language, status, format_flags
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        skills, language, status
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       RETURNING *
     `;
 
@@ -33,7 +33,6 @@ export class PostgreSQLTopicRepository extends ITopicRepository {
       topic.skills || [],
       topic.language || 'en',
       topic.status || 'draft',
-      topic.format_flags || {},
     ];
 
     const result = await this.db.query(query, values);
