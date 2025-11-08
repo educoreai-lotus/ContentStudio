@@ -1,11 +1,13 @@
-export class GetTopicsUseCase {
+import { BaseUseCase } from './BaseUseCase.js';
+
+export class GetTopicsUseCase extends BaseUseCase {
   constructor(topicRepository) {
+    super();
     this.topicRepository = topicRepository;
   }
 
   async execute(trainerId, filters = {}, pagination = {}) {
-    // Fallback to mock trainer if no trainer ID provided
-    const effectiveTrainerId = trainerId || 'trainer-maya-levi';
+    const effectiveTrainerId = this.resolveTrainerId(trainerId);
 
     const result = await this.topicRepository.findByTrainer(effectiveTrainerId, filters, pagination);
 
