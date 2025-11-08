@@ -35,14 +35,29 @@ export class DatabaseConnection {
 
       // ✅ ALWAYS force IPv4 resolution if host is a domain (not a literal IP)
       if (!net.isIP(resolvedHost)) {
-        try {
-          const { address } = await dns.lookup(resolvedHost, { family: 4 });
-          if (address) {
-            console.log(`✅ Resolved ${resolvedHost} to IPv4: ${address}`);
-            resolvedHost = address;
+        let resolved = false;
+        // Try multiple times with different DNS servers
+        const dnsAttempts = [
+          { family: 4 },
+          { family: 4, hints: dns.ADDRCONFIG },
+        ];
+        
+        for (const options of dnsAttempts) {
+          try {
+            const { address } = await dns.lookup(resolvedHost, options);
+            if (address && net.isIPv4(address)) {
+              console.log(`✅ Resolved ${resolvedHost} to IPv4: ${address}`);
+              resolvedHost = address;
+              resolved = true;
+              break;
+            }
+          } catch (error) {
+            console.warn(`⚠️ DNS lookup attempt failed for ${resolvedHost}:`, error.message);
           }
-        } catch (error) {
-          console.warn(`⚠️ Failed to resolve IPv4 for ${resolvedHost}:`, error.message);
+        }
+        
+        if (!resolved) {
+          console.warn(`⚠️ Could not resolve IPv4 for ${resolvedHost}, using hostname (may cause IPv6 issues)`);
         }
       }
 
@@ -59,8 +74,9 @@ export class DatabaseConnection {
       };
 
       // Development-only override (for local testing)
+      // NOTE: PGHOSTADDR is IGNORED in production to prevent IPv6 issues
       if (process.env.NODE_ENV === 'development') {
-        const forcedHost = process.env.DATABASE_IPV4_HOST || process.env.PGHOSTADDR;
+        const forcedHost = process.env.DATABASE_IPV4_HOST;
         if (forcedHost) {
           config.host = forcedHost;
           if (process.env.DATABASE_IPV4_PORT) {
@@ -70,13 +86,20 @@ export class DatabaseConnection {
         }
       }
 
+      console.log(`🔌 Connecting to database at ${config.host}:${config.port}`);
+
       this.pool = new Pool(config);
       this.pool.on('error', err => {
         console.error('Unexpected error on idle client', err);
         process.exit(-1);
       });
+
+      // Test the connection immediately
+      const client = await this.pool.connect();
+      client.release();
+      console.log('✅ Database connection pool initialized successfully');
     } catch (error) {
-      console.error('Failed to initialize database pool:', error);
+      console.error('❌ Failed to initialize database pool:', error);
       throw error;
     }
   }
