@@ -41,6 +41,13 @@ export class JobScheduler {
     });
     const contentRepository = await RepositoryFactory.getContentRepository();
     const topicRepository = await RepositoryFactory.getTopicRepository();
+    const databaseReady = await RepositoryFactory.testConnection();
+
+    if (!databaseReady) {
+      console.warn('Database not reachable. Skipping background job startup.');
+      this.isRunning = false;
+      return;
+    }
 
     // Initialize orchestrator
     const orchestrator = new LanguageEvaluationOrchestrator({

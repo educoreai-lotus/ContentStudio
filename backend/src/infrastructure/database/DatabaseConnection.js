@@ -43,7 +43,11 @@ export class DatabaseConnection {
         connectionTimeoutMillis: 5000,
       };
 
-      if (!net.isIP(config.host)) {
+      const forcedHost = process.env.DATABASE_IPV4_HOST || process.env.PGHOSTADDR;
+      if (forcedHost) {
+        config.host = forcedHost;
+        console.log(`Using forced database host from env: ${forcedHost}`);
+      } else if (!net.isIP(config.host)) {
         try {
           const { address } = await dns.lookup(config.host, { family: 4 });
           if (address) {
