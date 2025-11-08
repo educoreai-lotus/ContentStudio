@@ -32,7 +32,7 @@ export class PostgreSQLTopicRepository extends ITopicRepository {
       topic.template_id || null,
       topic.skills || [],
       topic.language || 'en',
-      topic.status || 'draft',
+      topic.status || 'active', // Changed from 'draft' - ENUM doesn't support draft
     ];
 
     const result = await this.db.query(query, values);
