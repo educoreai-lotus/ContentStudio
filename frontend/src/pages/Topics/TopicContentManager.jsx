@@ -1,144 +1,272 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import TemplateSelector from '../../components/TemplateSelector';
+import { contentService } from '../../services/content.js';
 import { useApp } from '../../context/AppContext';
+
+const CONTENT_TYPES = [
+  { id: 'text', name: 'Text Content', icon: 'fa-file-alt', color: 'blue' },
+  { id: 'code', name: 'Code Example', icon: 'fa-code', color: 'green' },
+  { id: 'presentation', name: 'Presentation', icon: 'fa-presentation', color: 'purple' },
+  { id: 'audio', name: 'Audio Narration', icon: 'fa-microphone', color: 'red' },
+  { id: 'mind_map', name: 'Mind Map', icon: 'fa-project-diagram', color: 'yellow' },
+];
 
 /**
  * Topic Content Manager
- * Manages content creation and template application for a lesson
- * After content is created, shows template selector
+ * Displays existing content and allows creation/editing/deletion
  */
 export default function TopicContentManager() {
   const { topicId } = useParams();
   const navigate = useNavigate();
   const { theme } = useApp();
-  const [showTemplateSelector, setShowTemplateSelector] = useState(false);
-  const [contentCreated, setContentCreated] = useState(false);
+  
+  const [existingContent, setExistingContent] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  const handleContentCreated = () => {
-    setContentCreated(true);
-    setShowTemplateSelector(true);
+  useEffect(() => {
+    fetchContent();
+  }, [topicId]);
+
+  const fetchContent = async () => {
+    try {
+      setLoading(true);
+      const content = await contentService.listByTopic(parseInt(topicId));
+      setExistingContent(content || []);
+    } catch (err) {
+      setError(err.message || 'Failed to load content');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleTemplateApplied = (result) => {
-    console.log('Template applied:', result);
-    setShowTemplateSelector(false);
-    // Navigate to lesson view
-    navigate(`/lessons/${topicId}/view`);
+  const handleDelete = async (contentId) => {
+    if (!window.confirm('Are you sure you want to delete this content?')) {
+      return;
+    }
+
+    try {
+      await contentService.delete(contentId);
+      await fetchContent(); // Refresh list
+    } catch (err) {
+      alert('Failed to delete content: ' + err.message);
+    }
+  };
+
+  const getContentByType = (typeId) => {
+    return existingContent.find(c => c.content_type_id === typeId);
+  };
+
+  const getColorClasses = (color, hasContent) => {
+    if (!hasContent) {
+      return theme === 'day-mode'
+        ? 'bg-gray-100 border-gray-300 text-gray-400'
+        : 'bg-gray-800 border-gray-600 text-gray-500';
+    }
+
+    const colors = {
+      blue: theme === 'day-mode'
+        ? 'bg-blue-50 border-blue-300 text-blue-700'
+        : 'bg-blue-900/20 border-blue-500/30 text-blue-300',
+      green: theme === 'day-mode'
+        ? 'bg-green-50 border-green-300 text-green-700'
+        : 'bg-green-900/20 border-green-500/30 text-green-300',
+      purple: theme === 'day-mode'
+        ? 'bg-purple-50 border-purple-300 text-purple-700'
+        : 'bg-purple-900/20 border-purple-500/30 text-purple-300',
+      red: theme === 'day-mode'
+        ? 'bg-red-50 border-red-300 text-red-700'
+        : 'bg-red-900/20 border-red-500/30 text-red-300',
+      yellow: theme === 'day-mode'
+        ? 'bg-yellow-50 border-yellow-300 text-yellow-700'
+        : 'bg-yellow-900/20 border-yellow-500/30 text-yellow-300',
+    };
+
+    return colors[color] || colors.blue;
   };
 
   return (
-    <div className={`min-h-screen ${theme === 'day-mode' ? 'bg-gray-50' : 'bg-gray-900'}`}>
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        <h1
-          className="text-3xl font-bold mb-6"
-          style={{
-            background: 'var(--gradient-primary)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            backgroundClip: 'text',
-          }}
-        >
-          Manage Lesson Content
-        </h1>
+    <div className={`min-h-screen p-8 ${theme === 'day-mode' ? 'bg-gray-50' : 'bg-slate-900'}`}>
+      <div className="max-w-6xl mx-auto">
+        <div className="mb-8">
+          <button
+            onClick={() => navigate(-1)}
+            className={`mb-4 px-4 py-2 rounded-lg ${
+              theme === 'day-mode'
+                ? 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+                : 'bg-gray-700 hover:bg-gray-600 text-gray-200'
+            }`}
+          >
+            <i className="fas fa-arrow-left mr-2"></i>
+            Back to Course
+          </button>
 
-        {/* Content Creation Section */}
-        <div className={`p-6 rounded-lg mb-6 ${
-          theme === 'day-mode'
-            ? 'bg-white border border-gray-200'
-            : 'bg-gray-800 border border-gray-700'
-        }`}>
-          <h2 className={`text-xl font-semibold mb-4 ${
-            theme === 'day-mode' ? 'text-gray-900' : 'text-white'
-          }`}>
-            Create Content
-          </h2>
-          <p className={`mb-4 ${theme === 'day-mode' ? 'text-gray-600' : 'text-gray-400'}`}>
-            Add content items to your lesson (text, code, presentation, audio, mind map)
+          <h1
+            className="text-3xl md:text-4xl font-bold mb-2"
+            style={{
+              background: 'var(--gradient-primary)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+            }}
+          >
+            Manage Lesson Content
+          </h1>
+          <p className={`text-lg ${theme === 'day-mode' ? 'text-gray-600' : 'text-gray-400'}`}>
+            Create and manage all content formats for this lesson
           </p>
-          <div className="flex gap-3">
-            <button
-              onClick={() => navigate(`/content/manual/${topicId}`)}
-              className={`px-4 py-2 rounded-lg ${
-                theme === 'day-mode'
-                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                  : 'bg-emerald-500 hover:bg-emerald-600 text-white'
-              }`}
-            >
-              <i className="fas fa-edit mr-2"></i>
-              Manual Content
-            </button>
-            <button
-              onClick={() => navigate(`/topics/${topicId}/content/ai-generate`)}
-              className={`px-4 py-2 rounded-lg ${
-                theme === 'day-mode'
-                  ? 'bg-blue-600 hover:bg-blue-700 text-white'
-                  : 'bg-blue-500 hover:bg-blue-600 text-white'
-              }`}
-            >
-              <i className="fas fa-robot mr-2"></i>
-              AI Content
-            </button>
-          </div>
         </div>
 
-        {/* Template Application Section */}
-        {contentCreated && (
-          <div className={`p-6 rounded-lg ${
-            theme === 'day-mode'
-              ? 'bg-white border border-gray-200'
-              : 'bg-gray-800 border border-gray-700'
-          }`}>
-            <h2 className={`text-xl font-semibold mb-4 ${
-              theme === 'day-mode' ? 'text-gray-900' : 'text-white'
-            }`}>
-              Apply Template
-            </h2>
-            <p className={`mb-4 ${theme === 'day-mode' ? 'text-gray-600' : 'text-gray-400'}`}>
-              Select a template to organize your lesson content
-            </p>
-            <button
-              onClick={() => setShowTemplateSelector(true)}
-              className={`px-4 py-2 rounded-lg ${
-                theme === 'day-mode'
-                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                  : 'bg-emerald-500 hover:bg-emerald-600 text-white'
-              }`}
-            >
-              <i className="fas fa-layer-group mr-2"></i>
-              Select Template
-            </button>
+        {error && (
+          <div
+            className={`mb-6 p-4 rounded-lg border ${
+              theme === 'day-mode'
+                ? 'bg-red-50 border-red-200 text-red-800'
+                : 'bg-red-900/20 border-red-500/30 text-red-300'
+            }`}
+          >
+            {error}
           </div>
         )}
 
-        {/* View Lesson Button */}
-        <div className="mt-6">
-          <button
-            onClick={() => navigate(`/lessons/${topicId}/view`)}
-            className={`px-6 py-3 rounded-lg ${
-              theme === 'day-mode'
-                ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                : 'bg-emerald-500 hover:bg-emerald-600 text-white'
+        {/* Content Progress */}
+        <div
+          className={`mb-8 p-6 rounded-2xl shadow-lg ${
+            theme === 'day-mode'
+              ? 'bg-white border border-gray-200'
+              : 'bg-gray-800 border border-gray-700'
+          }`}
+        >
+          <div className="flex items-center justify-between mb-4">
+            <h2
+              className={`text-xl font-semibold ${
+                theme === 'day-mode' ? 'text-gray-900' : 'text-white'
+              }`}
+            >
+              Content Progress
+            </h2>
+            <span
+              className={`text-2xl font-bold ${
+                existingContent.length === 5
+                  ? 'text-emerald-600'
+                  : theme === 'day-mode'
+                  ? 'text-gray-700'
+                  : 'text-gray-300'
+              }`}
+            >
+              {existingContent.length}/5
+            </span>
+          </div>
+          <div
+            className={`w-full rounded-full h-3 ${
+              theme === 'day-mode' ? 'bg-gray-200' : 'bg-gray-700'
             }`}
           >
-            <i className="fas fa-eye mr-2"></i>
-            View Lesson
-          </button>
+            <div
+              className={`h-3 rounded-full transition-all ${
+                existingContent.length === 5
+                  ? 'bg-emerald-600'
+                  : existingContent.length >= 3
+                  ? 'bg-yellow-500'
+                  : 'bg-red-500'
+              }`}
+              style={{ width: `${(existingContent.length / 5) * 100}%` }}
+            />
+          </div>
         </div>
-      </div>
 
-      {/* Template Selector Modal */}
-      {showTemplateSelector && (
-        <TemplateSelector
-          lessonId={topicId}
-          onTemplateApplied={handleTemplateApplied}
-          onClose={() => setShowTemplateSelector(false)}
-          theme={theme}
-        />
-      )}
+        {/* Content Types Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {CONTENT_TYPES.map(type => {
+            const content = getContentByType(type.id);
+            const hasContent = !!content;
+
+            return (
+              <div
+                key={type.id}
+                className={`p-6 rounded-2xl shadow-lg border-2 transition-all ${getColorClasses(
+                  type.color,
+                  hasContent
+                )}`}
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center">
+                    <i className={`fas ${type.icon} text-2xl mr-3`}></i>
+                    <h3 className="text-lg font-semibold">{type.name}</h3>
+                  </div>
+                  {hasContent && (
+                    <span className="px-2 py-1 bg-emerald-600 text-white text-xs rounded-full">
+                      Created
+                    </span>
+                  )}
+                </div>
+
+                {hasContent ? (
+                  <div className="space-y-3">
+                    <p className={`text-sm ${theme === 'day-mode' ? 'text-gray-600' : 'text-gray-400'}`}>
+                      Created: {new Date(content.created_at).toLocaleDateString()}
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => navigate(`/topics/${topicId}/content/preview`, {
+                          state: { content }
+                        })}
+                        className="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm"
+                      >
+                        <i className="fas fa-eye mr-1"></i>
+                        View
+                      </button>
+                      <button
+                        onClick={() => navigate(`/topics/${topicId}/content/ai-generate`, {
+                          state: { contentType: type.id, existingContent: content }
+                        })}
+                        className="flex-1 px-3 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg text-sm"
+                      >
+                        <i className="fas fa-sync mr-1"></i>
+                        Regenerate
+                      </button>
+                      <button
+                        onClick={() => handleDelete(content.content_id)}
+                        className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm"
+                      >
+                        <i className="fas fa-trash"></i>
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <p className={`text-sm ${theme === 'day-mode' ? 'text-gray-500' : 'text-gray-500'}`}>
+                      Not created yet
+                    </p>
+                    <button
+                      onClick={() => navigate(`/topics/${topicId}/content/ai-generate`, {
+                        state: { contentType: type.id }
+                      })}
+                      className="w-full px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm"
+                    >
+                      <i className="fas fa-plus mr-1"></i>
+                      Create with AI
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* View Lesson Button */}
+        {existingContent.length > 0 && (
+          <div className="mt-8 text-center">
+            <button
+              onClick={() => navigate(`/lessons/${topicId}/view`)}
+              className="px-8 py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-lg font-semibold shadow-lg"
+            >
+              <i className="fas fa-eye mr-2"></i>
+              View Complete Lesson
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
-
-
-
