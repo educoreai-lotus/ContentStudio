@@ -187,8 +187,6 @@ export class GenerateContentUseCase {
       switch (generationRequest.content_type_id) {
         case 'text': {
           const text = await this.aiGenerationService.generateText(prompt, {
-            style: generationRequest.style || 'educational',
-            difficulty: generationRequest.difficulty || 'intermediate',
             language: promptVariables.language,
           });
           contentData = {
@@ -217,7 +215,6 @@ export class GenerateContentUseCase {
         case 'presentation': {
           const presentation = await this.aiGenerationService.generatePresentation(prompt, {
             slide_count: generationRequest.slide_count || 10,
-            style: generationRequest.style || 'educational',
           });
           contentData = {
             ...presentation,

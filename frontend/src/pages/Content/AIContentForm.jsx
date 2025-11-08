@@ -14,8 +14,6 @@ export const AIContentForm = () => {
     template_id: null,
     template_variables: {},
     language: 'javascript',
-    style: 'educational',
-    difficulty: 'intermediate',
   });
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
@@ -60,8 +58,6 @@ export const AIContentForm = () => {
         template_id: formData.template_id || undefined,
         template_variables: formData.template_variables,
         language: formData.content_type_id === 'code' ? formData.language : undefined,
-        style: formData.style,
-        difficulty: formData.difficulty,
       });
 
       setGenerationProgress('Content generated successfully!');
@@ -212,55 +208,6 @@ export const AIContentForm = () => {
               {errors.prompt && (
                 <p className="mt-1 text-sm text-red-600">{errors.prompt}</p>
               )}
-            </div>
-
-            <div className="grid grid-cols-2 gap-4 mb-6">
-              <div>
-                <label
-                  className={`block text-sm font-medium mb-2 ${
-                    theme === 'day-mode' ? 'text-gray-700' : 'text-gray-300'
-                  }`}
-                >
-                  Style
-                </label>
-                <select
-                  name="style"
-                  value={formData.style}
-                  onChange={handleChange}
-                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors ${
-                    theme === 'day-mode'
-                      ? 'border-gray-300 bg-white text-gray-900'
-                      : 'border-gray-600 bg-gray-700 text-white'
-                  }`}
-                >
-                  <option value="educational">Educational</option>
-                  <option value="conversational">Conversational</option>
-                  <option value="formal">Formal</option>
-                </select>
-              </div>
-              <div>
-                <label
-                  className={`block text-sm font-medium mb-2 ${
-                    theme === 'day-mode' ? 'text-gray-700' : 'text-gray-300'
-                  }`}
-                >
-                  Difficulty
-                </label>
-                <select
-                  name="difficulty"
-                  value={formData.difficulty}
-                  onChange={handleChange}
-                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors ${
-                    theme === 'day-mode'
-                      ? 'border-gray-300 bg-white text-gray-900'
-                      : 'border-gray-600 bg-gray-700 text-white'
-                  }`}
-                >
-                  <option value="beginner">Beginner</option>
-                  <option value="intermediate">Intermediate</option>
-                  <option value="advanced">Advanced</option>
-                </select>
-              </div>
             </div>
 
             {generationProgress && (
