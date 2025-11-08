@@ -183,8 +183,46 @@ export class PostgreSQLContentRepository extends IContentRepository {
       throw new Error('Database not connected. Using in-memory repository.');
     }
 
-    // Soft delete
-    return await this.update(contentId, { status: 'deleted' });
+    try {
+      // First, get the content to check if we need to delete files from storage
+      const getQuery = 'SELECT * FROM content WHERE content_id = $1';
+      const getResult = await this.db.query(getQuery, [contentId]);
+
+      if (getResult.rows.length === 0) {
+        throw new Error(`Content with id ${contentId} not found`);
+      }
+
+      const content = getResult.rows[0];
+
+      // If it's a presentation with a file in storage, delete it
+      if (content.content_type_id === 3 && content.content_data?.storagePath) {
+        try {
+          const { createClient } = await import('@supabase/supabase-js');
+          const supabase = createClient(
+            process.env.SUPABASE_URL,
+            process.env.SUPABASE_SERVICE_ROLE_KEY
+          );
+
+          await supabase.storage
+            .from('media')
+            .remove([content.content_data.storagePath]);
+          
+          console.log(`Deleted file from storage: ${content.content_data.storagePath}`);
+        } catch (storageError) {
+          console.error('Failed to delete file from storage:', storageError);
+          // Continue with DB deletion even if storage deletion fails
+        }
+      }
+
+      // Hard delete from database
+      const deleteQuery = 'DELETE FROM content WHERE content_id = $1 RETURNING *';
+      const result = await this.db.query(deleteQuery, [contentId]);
+
+      return true;
+    } catch (error) {
+      console.error('Database query error:', error);
+      throw error;
+    }
   }
 
   /**
