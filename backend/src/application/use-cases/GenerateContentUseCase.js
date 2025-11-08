@@ -268,7 +268,7 @@ export class GenerateContentUseCase {
       throw new Error(`AI generation failed: ${error.message}`);
     }
 
-    // Create content entity
+    // Create content entity (but don't save yet - trainer needs to approve)
     const content = new Content({
       topic_id: generationRequest.topic_id,
       content_type_id: generationRequest.content_type_id,
@@ -276,19 +276,8 @@ export class GenerateContentUseCase {
       generation_method_id: 'ai_assisted',
     });
 
-    // Save content
-    const createdContent = await this.contentRepository.create(content);
-
-    // Trigger quality check automatically
-    if (createdContent.needsQualityCheck() && this.qualityCheckService) {
-      try {
-        await this.qualityCheckService.triggerQualityCheck(createdContent.content_id);
-      } catch (error) {
-        console.error('Failed to trigger quality check:', error);
-      }
-    }
-
-    return createdContent;
+    // Return the generated content for preview (not saved to DB yet)
+    return content;
   }
 }
 

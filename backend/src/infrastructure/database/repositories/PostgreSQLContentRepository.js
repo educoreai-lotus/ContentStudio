@@ -11,10 +11,43 @@ export class PostgreSQLContentRepository extends IContentRepository {
     this.db = db;
   }
 
+  /**
+   * Get type_id from type_name
+   */
+  async getContentTypeId(typeName) {
+    const query = 'SELECT type_id FROM content_types WHERE type_name = $1';
+    const result = await this.db.query(query, [typeName]);
+    if (result.rows.length === 0) {
+      throw new Error(`Content type not found: ${typeName}`);
+    }
+    return result.rows[0].type_id;
+  }
+
+  /**
+   * Get method_id from method_name
+   */
+  async getGenerationMethodId(methodName) {
+    const query = 'SELECT method_id FROM generation_methods WHERE method_name = $1';
+    const result = await this.db.query(query, [methodName]);
+    if (result.rows.length === 0) {
+      throw new Error(`Generation method not found: ${methodName}`);
+    }
+    return result.rows[0].method_id;
+  }
+
   async create(content) {
     if (!this.db.isConnected()) {
       throw new Error('Database not connected. Using in-memory repository.');
     }
+
+    // Convert type_name and method_name to IDs
+    const contentTypeId = typeof content.content_type_id === 'string'
+      ? await this.getContentTypeId(content.content_type_id)
+      : content.content_type_id;
+
+    const generationMethodId = typeof content.generation_method_id === 'string'
+      ? await this.getGenerationMethodId(content.generation_method_id || 'manual')
+      : content.generation_method_id;
 
     const query = `
       INSERT INTO content (
@@ -27,8 +60,8 @@ export class PostgreSQLContentRepository extends IContentRepository {
 
     const values = [
       content.topic_id,
-      content.content_type_id,
-      content.generation_method_id || 'manual',
+      contentTypeId,
+      generationMethodId,
       JSON.stringify(content.content_data),
       content.quality_check_status || 'pending',
       content.quality_check_data ? JSON.stringify(content.quality_check_data) : null,

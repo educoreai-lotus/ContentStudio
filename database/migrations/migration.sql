@@ -130,6 +130,7 @@ CREATE TABLE generation_methods (
 INSERT INTO generation_methods (method_name, display_name) VALUES
 ('manual', 'Manual Creation'),
 ('ai_assisted', 'AI-Assisted'),
+('manual_edited', 'AI-Generated & Manually Edited'),
 ('video_to_lesson', 'Video to Lesson');
 
 -- ============================================

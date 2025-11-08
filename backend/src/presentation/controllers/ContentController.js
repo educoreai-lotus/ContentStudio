@@ -49,6 +49,57 @@ export class ContentController {
   }
 
   /**
+   * Approve and save AI-generated content
+   * POST /api/content/approve
+   */
+  async approve(req, res, next) {
+    try {
+      const {
+        topic_id,
+        content_type_id,
+        content_data,
+        was_edited,
+        original_content_data,
+      } = req.body;
+
+      console.log('[Content Approve] Approving content:', {
+        topic_id,
+        content_type_id,
+        was_edited,
+      });
+
+      // Determine generation method based on whether content was edited
+      let generation_method_id = 'ai_assisted';
+      if (was_edited) {
+        generation_method_id = 'manual_edited';
+        console.log('[Content Approve] Content was edited by trainer, will trigger quality check');
+      }
+
+      const contentData = {
+        topic_id: parseInt(topic_id),
+        content_type_id,
+        content_data,
+        generation_method_id,
+      };
+
+      const content = await this.createContentUseCase.execute(contentData);
+      
+      console.log('[Content Approve] Content saved successfully:', content.content_id);
+
+      res.status(201).json({
+        success: true,
+        data: ContentDTO.toContentResponse(content),
+        message: was_edited
+          ? 'Content saved and quality check triggered'
+          : 'Content saved successfully',
+      });
+    } catch (error) {
+      console.error('[Content Approve] Error:', error.message);
+      next(error);
+    }
+  }
+
+  /**
    * Get content by ID
    * GET /api/content/:id
    */

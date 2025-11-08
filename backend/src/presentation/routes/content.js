@@ -27,6 +27,7 @@ const contentController = new ContentController({
 
 // Routes
 router.post('/', (req, res, next) => contentController.create(req, res, next));
+router.post('/approve', (req, res, next) => contentController.approve(req, res, next));
 router.get('/', (req, res, next) => contentController.list(req, res, next));
 router.get('/:id', (req, res, next) => contentController.getById(req, res, next));
 router.put('/:id', (req, res, next) => contentController.update(req, res, next));
