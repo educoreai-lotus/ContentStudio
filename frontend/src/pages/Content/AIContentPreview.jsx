@@ -264,6 +264,61 @@ export const AIContentPreview = () => {
             </div>
           )}
 
+          {/* Presentation */}
+          {content.content_type_id === 3 && (
+            <div className="space-y-4">
+              <div
+                className={`p-6 rounded-lg border-2 border-dashed ${
+                  theme === 'day-mode'
+                    ? 'bg-purple-50 border-purple-300'
+                    : 'bg-purple-900/20 border-purple-500/30'
+                }`}
+              >
+                <div className="flex items-center justify-center mb-4">
+                  <i className="fas fa-file-powerpoint text-6xl text-purple-600"></i>
+                </div>
+                <div className="text-center space-y-2">
+                  <h3
+                    className={`text-lg font-semibold ${
+                      theme === 'day-mode' ? 'text-gray-900' : 'text-white'
+                    }`}
+                  >
+                    {content.content_data?.fileName || 'Presentation File'}
+                  </h3>
+                  {content.content_data?.fileSize && (
+                    <p
+                      className={`text-sm ${
+                        theme === 'day-mode' ? 'text-gray-600' : 'text-gray-400'
+                      }`}
+                    >
+                      Size: {(content.content_data.fileSize / 1024 / 1024).toFixed(2)} MB
+                    </p>
+                  )}
+                  {content.content_data?.fileUrl && (
+                    <div className="mt-4 space-y-2">
+                      <a
+                        href={content.content_data.fileUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-block px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                      >
+                        <i className="fas fa-external-link-alt mr-2"></i>
+                        Open Presentation
+                      </a>
+                      <p
+                        className={`text-xs ${
+                          theme === 'day-mode' ? 'text-gray-500' : 'text-gray-500'
+                        }`}
+                      >
+                        Opens in a new tab
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Metadata */}
           {content.content_data?.metadata && (
             <div
