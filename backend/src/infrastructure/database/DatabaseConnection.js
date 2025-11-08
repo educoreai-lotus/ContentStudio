@@ -31,8 +31,23 @@ export class DatabaseConnection {
   async initializePool(connectionString) {
     try {
       const url = new URL(connectionString);
+      let resolvedHost = url.hostname;
+
+      // ✅ ALWAYS force IPv4 resolution if host is a domain (not a literal IP)
+      if (!net.isIP(resolvedHost)) {
+        try {
+          const { address } = await dns.lookup(resolvedHost, { family: 4 });
+          if (address) {
+            console.log(`✅ Resolved ${resolvedHost} to IPv4: ${address}`);
+            resolvedHost = address;
+          }
+        } catch (error) {
+          console.warn(`⚠️ Failed to resolve IPv4 for ${resolvedHost}:`, error.message);
+        }
+      }
+
       const config = {
-        host: url.hostname,
+        host: resolvedHost,
         port: Number(url.port) || 5432,
         user: decodeURIComponent(url.username || ''),
         password: decodeURIComponent(url.password || ''),
@@ -43,6 +58,7 @@ export class DatabaseConnection {
         connectionTimeoutMillis: 10000,
       };
 
+      // Development-only override (for local testing)
       if (process.env.NODE_ENV === 'development') {
         const forcedHost = process.env.DATABASE_IPV4_HOST || process.env.PGHOSTADDR;
         if (forcedHost) {
@@ -50,20 +66,7 @@ export class DatabaseConnection {
           if (process.env.DATABASE_IPV4_PORT) {
             config.port = Number(process.env.DATABASE_IPV4_PORT);
           }
-          console.log(`(DEV MODE) Using forced database host: ${forcedHost}`);
-        } else if (!net.isIP(config.host)) {
-          try {
-            const { address } = await dns.lookup(config.host, { family: 4 });
-            if (address) {
-              console.log(`Forced IPv4 for database host: ${address}`);
-              config.host = address;
-            }
-          } catch (error) {
-            console.warn(
-              `Failed to resolve IPv4 for database host ${config.host}. Falling back to hostname.`,
-              error.message
-            );
-          }
+          console.log(`🔧 (DEV MODE) Using forced database host: ${forcedHost}`);
         }
       }
 
