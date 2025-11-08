@@ -75,7 +75,7 @@ export const CourseForm = () => {
       setLoading(true);
       const courseData = {
         ...formData,
-        trainer_id: 'trainer-maya-levi', // Using mock trainer ID
+        // trainer_id will be set by backend from req.auth
       };
 
       if (isEditing) {
