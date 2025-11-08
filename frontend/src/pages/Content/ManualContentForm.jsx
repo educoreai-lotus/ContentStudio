@@ -87,41 +87,25 @@ export const ManualContentForm = () => {
           return;
         }
         
-        // Upload to Supabase Storage
-        const { createClient } = await import('@supabase/supabase-js');
-        const supabase = createClient(
-          import.meta.env.VITE_SUPABASE_URL,
-          import.meta.env.VITE_SUPABASE_ANON_KEY
-        );
+        // Upload to backend (which will upload to Supabase Storage)
+        const uploadFormData = new FormData();
+        uploadFormData.append('file', formData.presentationFile);
 
-        const fileExt = formData.presentationFile.name.split('.').pop();
-        const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-        const filePath = `presentations/${fileName}`;
+        const uploadResponse = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'}/api/upload/presentation`, {
+          method: 'POST',
+          body: uploadFormData,
+        });
 
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('media')
-          .upload(filePath, formData.presentationFile, {
-            contentType: formData.presentationFile.type,
-            upsert: false,
-          });
-
-        if (uploadError) {
-          setError('Failed to upload presentation: ' + uploadError.message);
+        if (!uploadResponse.ok) {
+          const errorData = await uploadResponse.json();
+          setError('Failed to upload presentation: ' + (errorData.error?.message || 'Unknown error'));
           return;
         }
 
-        // Get public URL
-        const { data: urlData } = supabase.storage
-          .from('media')
-          .getPublicUrl(filePath);
+        const uploadResult = await uploadResponse.json();
 
         content_data = {
-          fileName: formData.presentationFile.name,
-          fileSize: formData.presentationFile.size,
-          fileType: formData.presentationFile.type,
-          fileUrl: urlData.publicUrl,
-          storagePath: filePath,
-          uploadedAt: new Date().toISOString(),
+          ...uploadResult.data,
           metadata: {
             lessonTopic: 'Manual Entry',
             language: 'en',
