@@ -211,7 +211,7 @@ export default function TopicContentManager() {
                     </p>
                     <div className="flex gap-2">
                       <button
-                        onClick={() => navigate(`/topics/${topicId}/content/preview`, {
+                        onClick={() => navigate(`/topics/${topicId}/content/view`, {
                           state: { content }
                         })}
                         className="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm"

@@ -11,6 +11,7 @@ import { TopicForm } from './pages/Topics/TopicForm.jsx';
 import { ManualContentForm } from './pages/Content/ManualContentForm.jsx';
 import { AIContentForm } from './pages/Content/AIContentForm.jsx';
 import { AIContentPreview } from './pages/Content/AIContentPreview.jsx';
+import { ContentViewer } from './pages/Content/ContentViewer.jsx';
 import { SearchResults } from './pages/Search/SearchResults.jsx';
 import { TemplateList } from './pages/Templates/TemplateList.jsx';
 import { TemplateForm } from './pages/Templates/TemplateForm.jsx';
@@ -42,6 +43,7 @@ function AppContent() {
           <Route path="/topics/:topicId/content/manual-create" element={<ManualContentForm />} />
           <Route path="/topics/:topicId/content/ai-generate" element={<AIContentForm />} />
           <Route path="/topics/:topicId/content/preview" element={<AIContentPreview />} />
+          <Route path="/topics/:topicId/content/view" element={<ContentViewer />} />
           <Route path="/topics/:topicId/content" element={<TopicContentManager />} />
           <Route path="/lessons/:topicId/view" element={<LessonView />} />
           <Route path="/lessons/:topicId/language" element={<LessonViewWithLanguage />} />
