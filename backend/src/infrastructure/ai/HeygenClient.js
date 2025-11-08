@@ -182,15 +182,22 @@ export class HeygenClient {
     }
 
     try {
+      // Use a valid Heygen avatar ID or test mode
+      // Popular Heygen avatar IDs: 
+      // - 'Kristin_public_3_20240108' (female)
+      // - 'Tyler-incasualsuit-20220721' (male)
+      // - 'josh_lite3_20230714' (male)
+      const defaultAvatarId = 'Kristin_public_3_20240108';
+      
       const response = await this.client.post('/video/generate', {
-        test: false,
+        test: true, // Set to true for faster testing (adds watermark)
         caption: false,
         title: 'EduCore Lesson',
         video_inputs: [
           {
             character: {
               type: 'avatar',
-              avatar_id: avatarId || 'default',
+              avatar_id: avatarId || defaultAvatarId,
               avatar_style: 'normal',
             },
             voice: {
