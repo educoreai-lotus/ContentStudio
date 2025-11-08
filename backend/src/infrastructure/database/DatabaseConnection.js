@@ -37,7 +37,7 @@ export class DatabaseConnection {
         user: decodeURIComponent(url.username || ''),
         password: decodeURIComponent(url.password || ''),
         database: (url.pathname || '').replace(/^\//, '') || undefined,
-        ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+        ssl: { rejectUnauthorized: false },
         max: 20,
         idleTimeoutMillis: 30000,
         connectionTimeoutMillis: 5000,
@@ -46,6 +46,9 @@ export class DatabaseConnection {
       const forcedHost = process.env.DATABASE_IPV4_HOST || process.env.PGHOSTADDR;
       if (forcedHost) {
         config.host = forcedHost;
+        if (process.env.DATABASE_IPV4_PORT) {
+          config.port = Number(process.env.DATABASE_IPV4_PORT);
+        }
         console.log(`Using forced database host from env: ${forcedHost}`);
       } else if (!net.isIP(config.host)) {
         try {
