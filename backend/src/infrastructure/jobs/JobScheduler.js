@@ -39,8 +39,8 @@ export class JobScheduler {
       supabaseUrl: process.env.SUPABASE_URL,
       supabaseKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
     });
-    const contentRepository = RepositoryFactory.getContentRepository();
-    const topicRepository = RepositoryFactory.getTopicRepository();
+    const contentRepository = await RepositoryFactory.getContentRepository();
+    const topicRepository = await RepositoryFactory.getTopicRepository();
 
     // Initialize orchestrator
     const orchestrator = new LanguageEvaluationOrchestrator({
@@ -183,8 +183,8 @@ export class JobScheduler {
         supabaseUrl: process.env.SUPABASE_URL,
         supabaseKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
       });
-      const contentRepository = RepositoryFactory.getContentRepository();
-      const topicRepository = RepositoryFactory.getTopicRepository();
+      const contentRepository = await RepositoryFactory.getContentRepository();
+      const topicRepository = await RepositoryFactory.getTopicRepository();
 
       const orchestrator = new LanguageEvaluationOrchestrator({
         languageStatsRepository,

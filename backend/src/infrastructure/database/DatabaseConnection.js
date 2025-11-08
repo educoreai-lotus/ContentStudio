@@ -45,21 +45,16 @@ export class DatabaseConnection {
 
       if (!net.isIP(config.host)) {
         try {
-          const addresses = await dns.lookup(config.host, { all: true });
-          const ipv4 = addresses.find(addr => addr.family === 4);
-          const ipv6 = addresses.find(addr => addr.family === 6);
-
-          if (ipv4) {
-            console.log(`Resolved database host to IPv4: ${ipv4.address}`);
-            config.host = ipv4.address;
-          } else if (ipv6) {
-            console.log(`Resolved database host to IPv6: ${ipv6.address}`);
-            config.host = ipv6.address;
-          } else {
-            console.warn(`DNS lookup for ${config.host} returned no usable addresses. Falling back to hostname.`);
+          const { address } = await dns.lookup(config.host, { family: 4 });
+          if (address) {
+            console.log(`Resolved database host to IPv4: ${address}`);
+            config.host = address;
           }
         } catch (error) {
-          console.warn(`Failed to resolve IP for database host ${config.host}. Falling back to hostname.`, error.message);
+          console.warn(
+            `Failed to resolve IPv4 for database host ${config.host}. Falling back to hostname.`,
+            error.message
+          );
         }
       }
 
