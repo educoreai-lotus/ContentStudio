@@ -154,12 +154,12 @@ export const AIContentPreview = () => {
                 theme === 'day-mode' ? 'text-gray-900' : 'text-white'
               }`}
             >
-              {content.content_type_id === 'text' && 'Text Content'}
-              {content.content_type_id === 'code' && 'Code Example'}
-              {content.content_type_id === 'presentation' && 'Presentation'}
-              {content.content_type_id === 'audio' && 'Audio Narration'}
-              {content.content_type_id === 'mind_map' && 'Mind Map'}
-              {content.content_type_id === 'avatar_video' && 'Avatar Video'}
+              {content.content_type_id === 1 && 'Text Content'}
+              {content.content_type_id === 2 && 'Code Example'}
+              {content.content_type_id === 3 && 'Presentation'}
+              {content.content_type_id === 4 && 'Audio Narration'}
+              {content.content_type_id === 5 && 'Mind Map'}
+              {content.content_type_id === 6 && 'Avatar Video'}
             </h2>
             <button
               onClick={() => setIsEditing(!isEditing)}
@@ -174,7 +174,7 @@ export const AIContentPreview = () => {
           </div>
 
           {/* Content Preview/Edit */}
-          {content.content_type_id === 'text' && (
+          {content.content_type_id === 1 && (
             <div className="space-y-4">
               {isEditing ? (
                 <textarea
@@ -205,7 +205,7 @@ export const AIContentPreview = () => {
             </div>
           )}
 
-          {content.content_type_id === 'code' && (
+          {content.content_type_id === 2 && (
             <div className="space-y-4">
               {isEditing ? (
                 <>

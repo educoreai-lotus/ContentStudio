@@ -9,6 +9,7 @@ const CONTENT_TYPES = [
   { id: 'presentation', name: 'Presentation', icon: 'fa-presentation', color: 'purple', dbId: 3 },
   { id: 'audio', name: 'Audio Narration', icon: 'fa-microphone', color: 'red', dbId: 4 },
   { id: 'mind_map', name: 'Mind Map', icon: 'fa-project-diagram', color: 'yellow', dbId: 5 },
+  { id: 'avatar_video', name: 'Avatar Video', icon: 'fa-video', color: 'indigo', dbId: 6 },
 ];
 
 /**
@@ -80,6 +81,9 @@ export default function TopicContentManager() {
       yellow: theme === 'day-mode'
         ? 'bg-yellow-50 border-yellow-300 text-yellow-700'
         : 'bg-yellow-900/20 border-yellow-500/30 text-yellow-300',
+      indigo: theme === 'day-mode'
+        ? 'bg-indigo-50 border-indigo-300 text-indigo-700'
+        : 'bg-indigo-900/20 border-indigo-500/30 text-indigo-300',
     };
 
     return colors[color] || colors.blue;
@@ -154,7 +158,7 @@ export default function TopicContentManager() {
                   : 'text-gray-300'
               }`}
             >
-              {existingContent.length}/5
+              {existingContent.length}/6
             </span>
           </div>
           <div
@@ -164,13 +168,13 @@ export default function TopicContentManager() {
           >
             <div
               className={`h-3 rounded-full transition-all ${
-                existingContent.length === 5
+                existingContent.length === 6
                   ? 'bg-emerald-600'
                   : existingContent.length >= 3
                   ? 'bg-yellow-500'
                   : 'bg-red-500'
               }`}
-              style={{ width: `${(existingContent.length / 5) * 100}%` }}
+              style={{ width: `${(existingContent.length / 6) * 100}%` }}
             />
           </div>
         </div>
@@ -238,15 +242,26 @@ export default function TopicContentManager() {
                     <p className={`text-sm ${theme === 'day-mode' ? 'text-gray-500' : 'text-gray-500'}`}>
                       Not created yet
                     </p>
-                    <button
-                      onClick={() => navigate(`/topics/${topicId}/content/ai-generate`, {
-                        state: { contentType: type.id }
-                      })}
-                      className="w-full px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm"
-                    >
-                      <i className="fas fa-plus mr-1"></i>
-                      Create with AI
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => navigate(`/topics/${topicId}/content/ai-generate`, {
+                          state: { contentType: type.id }
+                        })}
+                        className="flex-1 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm"
+                      >
+                        <i className="fas fa-robot mr-1"></i>
+                        AI
+                      </button>
+                      <button
+                        onClick={() => navigate(`/topics/${topicId}/content/manual-create`, {
+                          state: { contentType: type.id }
+                        })}
+                        className="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm"
+                      >
+                        <i className="fas fa-edit mr-1"></i>
+                        Manual
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
