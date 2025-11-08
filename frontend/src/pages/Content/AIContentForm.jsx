@@ -1,15 +1,29 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { aiGenerationService } from '../../services/ai-generation.js';
 import { useApp } from '../../context/AppContext.jsx';
 
 export const AIContentForm = () => {
   const navigate = useNavigate();
   const { topicId } = useParams();
+  const { state } = useLocation();
   const { theme } = useApp();
+  
+  // Map contentType from state to content_type_id
+  const getContentTypeId = (type) => {
+    const mapping = {
+      'text': 1,
+      'code': 2,
+      'presentation': 3,
+      'mind_map': 5,
+      'avatar_video': 6,
+    };
+    return mapping[type] || 1;
+  };
+
   const [formData, setFormData] = useState({
     topic_id: topicId ? parseInt(topicId) : null,
-    content_type_id: 'text',
+    content_type_id: state?.contentType ? getContentTypeId(state.contentType) : 1,
     prompt: '',
     template_id: null,
     template_variables: {},
@@ -117,39 +131,55 @@ export const AIContentForm = () => {
           }}
         >
           <form onSubmit={handleSubmit}>
-            <div className="mb-6">
-              <label
-                className={`block text-sm font-medium mb-2 ${
-                  theme === 'day-mode' ? 'text-gray-700' : 'text-gray-300'
-                }`}
-              >
-                Content Type *
-              </label>
-              <select
-                name="content_type_id"
-                value={formData.content_type_id}
-                onChange={handleChange}
-                className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors ${
-                  theme === 'day-mode'
-                    ? 'border-gray-300 bg-white text-gray-900'
-                    : 'border-gray-600 bg-gray-700 text-white'
-                }`}
-              >
-                <option value="text">Text</option>
-                <option value="code">Code</option>
-                <option value="presentation" disabled>
-                  Presentation (Coming Soon)
-                </option>
-                <option value="audio" disabled>
-                  Audio (Coming Soon)
-                </option>
-                <option value="mind_map" disabled>
-                  Mind Map (Coming Soon)
-                </option>
-              </select>
-            </div>
+            {/* Show content type selector only if not pre-selected */}
+            {!state?.contentType && (
+              <div className="mb-6">
+                <label
+                  className={`block text-sm font-medium mb-2 ${
+                    theme === 'day-mode' ? 'text-gray-700' : 'text-gray-300'
+                  }`}
+                >
+                  Content Type *
+                </label>
+                <select
+                  name="content_type_id"
+                  value={formData.content_type_id}
+                  onChange={handleChange}
+                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors ${
+                    theme === 'day-mode'
+                      ? 'border-gray-300 bg-white text-gray-900'
+                      : 'border-gray-600 bg-gray-700 text-white'
+                  }`}
+                >
+                  <option value={1}>Text</option>
+                  <option value={2}>Code</option>
+                  <option value={3}>Presentation</option>
+                  <option value={5}>Mind Map</option>
+                  <option value={6}>Avatar Video</option>
+                </select>
+              </div>
+            )}
+            
+            {/* Show selected content type if pre-selected */}
+            {state?.contentType && (
+              <div className="mb-6">
+                <label
+                  className={`block text-sm font-medium mb-2 ${
+                    theme === 'day-mode' ? 'text-gray-700' : 'text-gray-300'
+                  }`}
+                >
+                  Content Type
+                </label>
+                <div className={`px-4 py-3 rounded-lg ${
+                  theme === 'day-mode' ? 'bg-emerald-50 text-emerald-700' : 'bg-emerald-900/30 text-emerald-300'
+                }`}>
+                  <i className="fas fa-check-circle mr-2"></i>
+                  <strong className="capitalize">{state.contentType.replace('_', ' ')}</strong>
+                </div>
+              </div>
+            )}
 
-            {formData.content_type_id === 'code' && (
+            {formData.content_type_id === 2 && (
               <div className="mb-6">
                 <label
                   className={`block text-sm font-medium mb-2 ${

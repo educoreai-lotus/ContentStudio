@@ -28,6 +28,21 @@ export default function TopicContentManager() {
     fetchContent();
   }, [topicId]);
 
+  // Refresh content when returning to this page
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        fetchContent();
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [topicId]);
+
   const fetchContent = async () => {
     try {
       setLoading(true);

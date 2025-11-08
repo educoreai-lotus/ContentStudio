@@ -45,7 +45,7 @@ router.post('/presentation', upload.single('file'), async (req, res, next) => {
       });
     }
 
-    // Create Supabase client
+    // Create Supabase client (using the correct env var names from Railway)
     const supabase = createClient(
       process.env.SUPABASE_URL,
       process.env.SUPABASE_SERVICE_ROLE_KEY

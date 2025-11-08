@@ -197,7 +197,7 @@ export class PostgreSQLContentRepository extends IContentRepository {
       // If it's a presentation with a file in storage, delete it
       if (content.content_type_id === 3 && content.content_data?.storagePath) {
         try {
-          // Only attempt storage deletion if Supabase is configured
+          // Only attempt storage deletion if Supabase is configured (using correct env var names)
           if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
             const { createClient } = await import('@supabase/supabase-js');
             const supabase = createClient(
