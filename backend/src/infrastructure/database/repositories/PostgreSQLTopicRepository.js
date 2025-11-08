@@ -106,6 +106,60 @@ export class PostgreSQLTopicRepository extends ITopicRepository {
     return result.rows.map(row => this.mapRowToTopic(row));
   }
 
+  async findByTrainer(trainerId, filters = {}, pagination = {}) {
+    if (!this.db.isConnected()) {
+      throw new Error('Database not connected. Using in-memory repository.');
+    }
+
+    let query = 'SELECT * FROM topics WHERE trainer_id = $1 AND status != $2';
+    const params = [trainerId, 'deleted'];
+    let paramIndex = 3;
+
+    // Apply status filter
+    if (filters.status && filters.status !== 'all') {
+      query += ` AND status = $${paramIndex}`;
+      params.push(filters.status);
+      paramIndex++;
+    }
+
+    // Apply course_id filter
+    if (filters.course_id !== undefined && filters.course_id !== 'null') {
+      if (filters.course_id === null) {
+        query += ` AND course_id IS NULL`;
+      } else {
+        query += ` AND course_id = $${paramIndex}`;
+        params.push(parseInt(filters.course_id));
+        paramIndex++;
+      }
+    }
+
+    // Apply search filter
+    if (filters.search) {
+      query += ` AND (topic_name ILIKE $${paramIndex} OR description ILIKE $${paramIndex})`;
+      params.push(`%${filters.search}%`);
+      paramIndex++;
+    }
+
+    // Count total for pagination
+    const countQuery = query.replace('SELECT *', 'SELECT COUNT(*)');
+    const countResult = await this.db.query(countQuery, params);
+    const total = parseInt(countResult.rows[0].count);
+
+    // Apply pagination
+    const limit = pagination.limit || 10;
+    const offset = ((pagination.page || 1) - 1) * limit;
+
+    query += ` ORDER BY created_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    params.push(limit, offset);
+
+    const result = await this.db.query(query, params);
+
+    return {
+      topics: result.rows.map(row => this.mapRowToTopic(row)),
+      total
+    };
+  }
+
   async update(topicId, updates) {
     if (!this.db.isConnected()) {
       throw new Error('Database not connected. Using in-memory repository.');

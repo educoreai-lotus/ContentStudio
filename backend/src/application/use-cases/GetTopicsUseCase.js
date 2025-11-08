@@ -4,11 +4,10 @@ export class GetTopicsUseCase {
   }
 
   async execute(trainerId, filters = {}, pagination = {}) {
-    if (!trainerId) {
-      throw new Error('Trainer ID is required');
-    }
+    // Fallback to mock trainer if no trainer ID provided
+    const effectiveTrainerId = trainerId || 'trainer-maya-levi';
 
-    const result = await this.topicRepository.findByTrainer(trainerId, filters, pagination);
+    const result = await this.topicRepository.findByTrainer(effectiveTrainerId, filters, pagination);
 
     return {
       topics: result.topics,
