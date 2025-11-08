@@ -14,7 +14,7 @@ export class HeygenClient {
     }
 
     this.apiKey = apiKey;
-    this.baseURL = 'https://api.heygen.com/v2';
+    this.baseURL = 'https://api.heygen.com';
     this.client = axios.create({
       baseURL: this.baseURL,
       headers: {
@@ -42,7 +42,7 @@ export class HeygenClient {
       const defaultVoiceId = '1bd001e7e50f421d891986aad5158bc8'; // Heygen female voice
       
       // Step 1: Create video generation request
-      const response = await this.client.post('/video/generate', {
+      const response = await this.client.post('/v2/video/generate', {
         test: true, // Test mode for faster generation
         caption: false,
         title: config.title || 'EduCore Lesson',
@@ -101,8 +101,8 @@ export class HeygenClient {
     
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       try {
-        // Heygen API v2 endpoint
-        const response = await this.client.get(`/video_status.get?video_id=${videoId}`);
+        // Heygen API v1 endpoint for status
+        const response = await this.client.get(`/v1/video_status.get?video_id=${videoId}`);
         const status = response.data.data.status;
 
         console.log(`[HeygenClient] Poll attempt ${attempt + 1}: status = ${status}`);
@@ -194,7 +194,7 @@ export class HeygenClient {
       const defaultAvatarId = 'Kristin_public_3_20240108';
       const defaultVoiceId = '1bd001e7e50f421d891986aad5158bc8';
       
-      const response = await this.client.post('/video/generate', {
+      const response = await this.client.post('/v2/video/generate', {
         test: true, // Set to true for faster testing (adds watermark)
         caption: false,
         title: 'EduCore Lesson',
