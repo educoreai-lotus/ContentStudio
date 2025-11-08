@@ -87,12 +87,40 @@ export const ManualContentForm = () => {
           return;
         }
         
-        // For now, we'll store file metadata
-        // In production, you'd upload to Supabase Storage first
+        // Upload to Supabase Storage
+        const { createClient } = await import('@supabase/supabase-js');
+        const supabase = createClient(
+          import.meta.env.VITE_SUPABASE_URL,
+          import.meta.env.VITE_SUPABASE_ANON_KEY
+        );
+
+        const fileExt = formData.presentationFile.name.split('.').pop();
+        const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+        const filePath = `presentations/${fileName}`;
+
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('media')
+          .upload(filePath, formData.presentationFile, {
+            contentType: formData.presentationFile.type,
+            upsert: false,
+          });
+
+        if (uploadError) {
+          setError('Failed to upload presentation: ' + uploadError.message);
+          return;
+        }
+
+        // Get public URL
+        const { data: urlData } = supabase.storage
+          .from('media')
+          .getPublicUrl(filePath);
+
         content_data = {
           fileName: formData.presentationFile.name,
           fileSize: formData.presentationFile.size,
           fileType: formData.presentationFile.type,
+          fileUrl: urlData.publicUrl,
+          storagePath: filePath,
           uploadedAt: new Date().toISOString(),
           metadata: {
             lessonTopic: 'Manual Entry',

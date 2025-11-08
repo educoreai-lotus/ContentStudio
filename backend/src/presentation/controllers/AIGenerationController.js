@@ -102,11 +102,21 @@ export class AIGenerationController {
       });
 
       const content = await this.generateContentUseCase.execute(generationRequest);
-      console.log('[AI Generation] Content generated successfully:', content.content_id);
+      console.log('[AI Generation] Content generated successfully:', {
+        hasContentData: !!content.content_data,
+        contentType: content.content_type_id,
+        topicId: content.topic_id,
+      });
+
+      const responseData = ContentDTO.toContentResponse(content);
+      console.log('[AI Generation] Response data prepared:', {
+        hasContentData: !!responseData.content_data,
+        contentDataKeys: responseData.content_data ? Object.keys(responseData.content_data) : [],
+      });
 
       res.status(201).json({
         success: true,
-        data: ContentDTO.toContentResponse(content),
+        data: responseData,
         message: 'Content generated successfully',
       });
     } catch (error) {
