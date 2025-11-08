@@ -66,7 +66,7 @@ export const AIContentForm = () => {
 
       setGenerationProgress('Content generated successfully!');
       setTimeout(() => {
-        navigate(`/topics/${formData.topic_id}`);
+        navigate(`/topics/${formData.topic_id}/content`);
       }, 1500);
     } catch (err) {
       setErrors({ submit: err.error?.message || 'Failed to generate content' });
