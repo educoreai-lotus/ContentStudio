@@ -97,14 +97,24 @@ export class PostgreSQLContentRepository extends IContentRepository {
     let paramIndex = 2;
 
     if (filters.content_type_id) {
+      // Convert type_name to type_id if it's a string
+      const contentTypeId = typeof filters.content_type_id === 'string'
+        ? await this.getContentTypeId(filters.content_type_id)
+        : filters.content_type_id;
+      
       query += ` AND content_type_id = $${paramIndex}`;
-      params.push(filters.content_type_id);
+      params.push(contentTypeId);
       paramIndex++;
     }
 
     if (filters.generation_method_id) {
+      // Convert method_name to method_id if it's a string
+      const generationMethodId = typeof filters.generation_method_id === 'string'
+        ? await this.getGenerationMethodId(filters.generation_method_id)
+        : filters.generation_method_id;
+      
       query += ` AND generation_method_id = $${paramIndex}`;
-      params.push(filters.generation_method_id);
+      params.push(generationMethodId);
       paramIndex++;
     }
 
