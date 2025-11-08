@@ -55,11 +55,14 @@ export class DatabaseConnection {
           try {
             const { address } = await dns.lookup(config.host, { family: 4 });
             if (address) {
-              console.log(`(DEV MODE) Resolved database host to IPv4: ${address}`);
+              console.log(`Forced IPv4 for database host: ${address}`);
               config.host = address;
             }
-          } catch {
-            console.warn(`(DEV MODE) Failed to resolve IPv4 for ${config.host}`);
+          } catch (error) {
+            console.warn(
+              `Failed to resolve IPv4 for database host ${config.host}. Falling back to hostname.`,
+              error.message
+            );
           }
         }
       }
