@@ -60,9 +60,14 @@ export const AIContentForm = () => {
         language: formData.content_type_id === 'code' ? formData.language : undefined,
       });
 
-      setGenerationProgress('Content generated successfully!');
+      console.log('AI Generated content:', content);
+
+      setGenerationProgress('Content generated successfully! Redirecting to preview...');
       setTimeout(() => {
-        navigate(`/topics/${formData.topic_id}/content`);
+        // Navigate to preview page with the generated content
+        navigate(`/topics/${formData.topic_id}/content/preview`, {
+          state: { content },
+        });
       }, 1500);
     } catch (err) {
       setErrors({ submit: err.error?.message || 'Failed to generate content' });

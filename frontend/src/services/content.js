@@ -60,6 +60,16 @@ export const contentService = {
   async delete(contentId) {
     await apiClient.delete(`/api/content/${contentId}`);
   },
+
+  /**
+   * Approve and save AI-generated content
+   * @param {Object} approvalData - Approval data
+   * @returns {Promise<Object>} Saved content
+   */
+  async approve(approvalData) {
+    const response = await apiClient.post('/api/content/approve', approvalData);
+    return response.data.data;
+  },
 };
 
 
