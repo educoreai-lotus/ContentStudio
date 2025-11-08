@@ -151,16 +151,16 @@ export class PostgreSQLTopicRepository extends ITopicRepository {
       query += ` HAVING ${havingConditions.join(' AND ')}`;
     }
 
-    // Count total for pagination
-    const countQuery = query.replace('SELECT *', 'SELECT COUNT(*)');
+    // Count total for pagination (wrap in subquery because of GROUP BY)
+    const countQuery = `SELECT COUNT(*) FROM (${query}) as subquery`;
     const countResult = await this.db.query(countQuery, params);
-    const total = parseInt(countResult.rows[0].count);
+    const total = parseInt(countResult.rows[0]?.count || 0);
 
     // Apply pagination
     const limit = pagination.limit || 10;
     const offset = ((pagination.page || 1) - 1) * limit;
 
-    query += ` ORDER BY created_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    query += ` ORDER BY t.created_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
     params.push(limit, offset);
 
     const result = await this.db.query(query, params);
