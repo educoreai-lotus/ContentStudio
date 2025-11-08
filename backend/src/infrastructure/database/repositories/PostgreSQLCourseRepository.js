@@ -70,7 +70,7 @@ export class PostgreSQLCourseRepository extends ICourseRepository {
       paramIndex++;
     }
 
-    if (filters.status) {
+    if (filters.status && filters.status !== 'all') {
       query += ` AND status = $${paramIndex}`;
       params.push(filters.status);
       paramIndex++;
@@ -85,6 +85,49 @@ export class PostgreSQLCourseRepository extends ICourseRepository {
 
     const result = await this.db.query(query, params);
     return result.rows.map(row => this.mapRowToCourse(row));
+  }
+
+  async findByTrainer(trainerId, filters = {}, pagination = {}) {
+    if (!this.db.isConnected()) {
+      throw new Error('Database not connected. Using in-memory repository.');
+    }
+
+    let query = 'SELECT * FROM trainer_courses WHERE trainer_id = $1 AND status != $2';
+    const params = [trainerId, 'deleted'];
+    let paramIndex = 3;
+
+    // Apply status filter
+    if (filters.status && filters.status !== 'all') {
+      query += ` AND status = $${paramIndex}`;
+      params.push(filters.status);
+      paramIndex++;
+    }
+
+    // Apply search filter
+    if (filters.search) {
+      query += ` AND (course_name ILIKE $${paramIndex} OR description ILIKE $${paramIndex})`;
+      params.push(`%${filters.search}%`);
+      paramIndex++;
+    }
+
+    // Count total for pagination
+    const countQuery = query.replace('SELECT *', 'SELECT COUNT(*)');
+    const countResult = await this.db.query(countQuery, params);
+    const total = parseInt(countResult.rows[0].count);
+
+    // Apply pagination
+    const limit = pagination.limit || 10;
+    const offset = ((pagination.page || 1) - 1) * limit;
+
+    query += ` ORDER BY created_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    params.push(limit, offset);
+
+    const result = await this.db.query(query, params);
+
+    return {
+      courses: result.rows.map(row => this.mapRowToCourse(row)),
+      total
+    };
   }
 
   async update(courseId, updates) {
