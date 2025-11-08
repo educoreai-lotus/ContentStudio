@@ -17,16 +17,8 @@ export class UpdateCourseUseCase {
       return null;
     }
 
-    // Update course with new data
-    const updatedCourse = new Course({
-      ...existingCourse.toJSON(),
-      ...updateData,
-      course_id: courseId,
-      updated_at: new Date().toISOString(),
-    });
-
-    // Persist update
-    const savedCourse = await this.courseRepository.update(updatedCourse);
+    // Persist update with only changed fields
+    const savedCourse = await this.courseRepository.update(courseId, updateData);
 
     return savedCourse;
   }
