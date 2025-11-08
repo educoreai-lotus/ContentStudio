@@ -39,6 +39,7 @@ function AppContent() {
           <Route path="/topics/new" element={<TopicForm />} />
           <Route path="/topics/:id/edit" element={<TopicForm />} />
           <Route path="/topics/:topicId/content/new" element={<ManualContentForm />} />
+          <Route path="/topics/:topicId/content/manual-create" element={<ManualContentForm />} />
           <Route path="/topics/:topicId/content/ai-generate" element={<AIContentForm />} />
           <Route path="/topics/:topicId/content/preview" element={<AIContentPreview />} />
           <Route path="/topics/:topicId/content" element={<TopicContentManager />} />
