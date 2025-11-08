@@ -39,28 +39,34 @@ export class DatabaseConnection {
       // ✅ ALWAYS force IPv4 resolution if host is a domain (not a literal IP)
       if (!net.isIP(resolvedHost)) {
         let resolved = false;
-        // Try multiple times with different DNS servers
-        const dnsAttempts = [
-          { family: 4 },
-          { family: 4, hints: dns.ADDRCONFIG },
-        ];
         
-        for (const options of dnsAttempts) {
+        // Try using DNS resolve (more reliable than lookup in some environments)
+        try {
+          const addresses = await dns.resolve4(resolvedHost);
+          if (addresses && addresses.length > 0) {
+            console.log(`✅ Resolved ${resolvedHost} to IPv4: ${addresses[0]}`);
+            resolvedHost = addresses[0];
+            resolved = true;
+          }
+        } catch (error) {
+          console.warn(`⚠️ DNS resolve4 failed for ${resolvedHost}:`, error.message);
+          
+          // Fallback to lookup
           try {
-            const { address } = await dns.lookup(resolvedHost, options);
+            const { address } = await dns.lookup(resolvedHost, { family: 4 });
             if (address && net.isIPv4(address)) {
-              console.log(`✅ Resolved ${resolvedHost} to IPv4: ${address}`);
+              console.log(`✅ Resolved ${resolvedHost} to IPv4 via lookup: ${address}`);
               resolvedHost = address;
               resolved = true;
-              break;
             }
-          } catch (error) {
-            console.warn(`⚠️ DNS lookup attempt failed for ${resolvedHost}:`, error.message);
+          } catch (lookupError) {
+            console.warn(`⚠️ DNS lookup also failed for ${resolvedHost}:`, lookupError.message);
           }
         }
         
         if (!resolved) {
-          console.warn(`⚠️ Could not resolve IPv4 for ${resolvedHost}, using hostname (may cause IPv6 issues)`);
+          console.error(`❌ Could not resolve ${resolvedHost} to IPv4 - connection will likely fail`);
+          // Still try with hostname as last resort
         }
       }
 
