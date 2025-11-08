@@ -69,25 +69,40 @@ export class AIGenerationController {
 
   async handleGeneration(req, res, next, contentTypeOverride) {
     try {
+      console.log('[AI Generation] Starting generation:', {
+        topic_id: req.body.topic_id,
+        content_type: contentTypeOverride || req.body.content_type_id,
+      });
+      
       this.validateBody(req.body, contentTypeOverride);
       
       // If lesson fields are missing, fetch them from the topic
       if (!req.body.lessonTopic || !req.body.lessonDescription || !req.body.skillsList) {
+        console.log('[AI Generation] Fetching topic data for topic_id:', req.body.topic_id);
         const { RepositoryFactory } = await import('../../infrastructure/database/repositories/RepositoryFactory.js');
         const topicRepository = await RepositoryFactory.getTopicRepository();
         const topic = await topicRepository.findById(parseInt(req.body.topic_id));
         
         if (topic) {
+          console.log('[AI Generation] Topic found:', topic.topic_name);
           req.body.lessonTopic = req.body.lessonTopic || topic.topic_name;
           req.body.lessonDescription = req.body.lessonDescription || topic.description;
           req.body.skillsList = req.body.skillsList || topic.skills || [];
           req.body.language = req.body.language || topic.language || 'English';
+        } else {
+          console.warn('[AI Generation] Topic not found for id:', req.body.topic_id);
         }
       }
       
       const generationRequest = this.buildGenerationRequest(req, contentTypeOverride);
+      console.log('[AI Generation] Generation request built:', {
+        topic_id: generationRequest.topic_id,
+        content_type_id: generationRequest.content_type_id,
+        lessonTopic: generationRequest.lessonTopic,
+      });
 
       const content = await this.generateContentUseCase.execute(generationRequest);
+      console.log('[AI Generation] Content generated successfully:', content.content_id);
 
       res.status(201).json({
         success: true,
@@ -95,6 +110,7 @@ export class AIGenerationController {
         message: 'Content generated successfully',
       });
     } catch (error) {
+      console.error('[AI Generation] Error:', error.message, error.stack);
       next(error);
     }
   }
