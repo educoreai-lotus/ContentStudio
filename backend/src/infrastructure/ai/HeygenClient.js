@@ -72,6 +72,8 @@ export class HeygenClient {
       });
 
       const videoId = response.data.data.video_id;
+      console.log(`[HeygenClient] Video created successfully! Video ID: ${videoId}`);
+      console.log(`[HeygenClient] Full response:`, JSON.stringify(response.data, null, 2));
 
       // Step 2: Poll for video completion
       const videoUrl = await this.pollVideoStatus(videoId);
@@ -95,13 +97,20 @@ export class HeygenClient {
    * @returns {Promise<string>} Video URL
    */
   async pollVideoStatus(videoId, maxAttempts = 30, interval = 2000) {
+    console.log(`[HeygenClient] Starting to poll for video ${videoId}`);
+    
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       try {
-        const response = await this.client.get(`/video/status/${videoId}`);
+        // Heygen API v2 endpoint
+        const response = await this.client.get(`/video_status.get?video_id=${videoId}`);
         const status = response.data.data.status;
 
+        console.log(`[HeygenClient] Poll attempt ${attempt + 1}: status = ${status}`);
+
         if (status === 'completed') {
-          return response.data.data.video_url;
+          const videoUrl = response.data.data.video_url;
+          console.log(`[HeygenClient] Video completed! URL: ${videoUrl}`);
+          return videoUrl;
         } else if (status === 'failed') {
           throw new Error('Video generation failed');
         }
@@ -109,10 +118,12 @@ export class HeygenClient {
         // Wait before next poll
         await new Promise(resolve => setTimeout(resolve, interval));
       } catch (error) {
-        console.error(`[HeygenClient] Poll attempt ${attempt + 1} failed:`, error.message);
+        console.error(`[HeygenClient] Poll attempt ${attempt + 1} failed:`, error.response?.data || error.message);
         if (attempt === maxAttempts - 1) {
           throw error;
         }
+        // Wait before retry
+        await new Promise(resolve => setTimeout(resolve, interval));
       }
     }
 
