@@ -24,7 +24,10 @@ export class DatabaseConnection {
     }
 
     this.pool = null;
-    this.ready = this.initializePool(connectionString);
+    this.ready = this.initializePool(connectionString).catch(err => {
+      console.error('⚠️ Database initialization failed, server will run without database:', err.message);
+      this.pool = null;
+    });
     DatabaseConnection.instance = this;
   }
 
@@ -90,8 +93,8 @@ export class DatabaseConnection {
 
       this.pool = new Pool(config);
       this.pool.on('error', err => {
-        console.error('Unexpected error on idle client', err);
-        process.exit(-1);
+        console.error('⚠️ Unexpected database error on idle client:', err.message);
+        // Don't exit - just log the error
       });
 
       // Test the connection immediately
@@ -99,8 +102,10 @@ export class DatabaseConnection {
       client.release();
       console.log('✅ Database connection pool initialized successfully');
     } catch (error) {
-      console.error('❌ Failed to initialize database pool:', error);
-      throw error;
+      console.error('❌ Failed to initialize database pool:', error.message);
+      this.pool = null;
+      // Don't throw - let the server start without database
+      console.warn('⚠️ Server will continue without database connection');
     }
   }
 
