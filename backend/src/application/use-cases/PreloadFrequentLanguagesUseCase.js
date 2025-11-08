@@ -54,7 +54,10 @@ export class PreloadFrequentLanguagesUseCase {
       console.log(`Preloading ${frequentLanguages.length} frequent languages`);
 
       // Get all topics/lessons
-      const topics = await this.topicRepository.findAll({}, { page: 1, limit: maxLessons });
+      const topics = await this.topicRepository.findAll(
+        { language: 'en' },
+        { page: 1, limit: maxLessons }
+      );
 
       const results = {
         success: true,

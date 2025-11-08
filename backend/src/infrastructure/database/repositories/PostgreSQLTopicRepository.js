@@ -89,6 +89,12 @@ export class PostgreSQLTopicRepository extends ITopicRepository {
       }
     }
 
+    if (filters.language) {
+      query += ` AND language = $${paramIndex}`;
+      params.push(filters.language);
+      paramIndex++;
+    }
+
     // Apply pagination
     const limit = pagination.limit || 10;
     const offset = (pagination.page - 1) * limit || 0;

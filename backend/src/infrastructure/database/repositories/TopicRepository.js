@@ -63,6 +63,10 @@ export class TopicRepository extends ITopicRepository {
       filtered = filtered.filter((t) => t.status === filters.status);
     }
 
+    if (filters.language) {
+      filtered = filtered.filter((t) => t.language === filters.language);
+    }
+
     // Apply pagination
     const page = pagination.page || 1;
     const limit = pagination.limit || 100;
