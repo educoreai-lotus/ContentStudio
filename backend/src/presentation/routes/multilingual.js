@@ -33,6 +33,9 @@ const translationService = new AITranslationService({
 const aiGenerationService = new AIGenerationService({
   openaiApiKey,
   geminiApiKey,
+  heygenApiKey: process.env.HEYGEN_API_KEY,
+  supabaseUrl: process.env.SUPABASE_URL,
+  supabaseServiceKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
 });
 
 const getLessonByLanguageUseCase = new GetLessonByLanguageUseCase({

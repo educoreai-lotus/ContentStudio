@@ -2,17 +2,23 @@ import { AIGenerationService as IAIGenerationService } from '../../domain/servic
 import { OpenAIClient } from '../external-apis/openai/OpenAIClient.js';
 import { TTSClient } from '../external-apis/openai/TTSClient.js';
 import { GeminiClient } from '../external-apis/gemini/GeminiClient.js';
+import { HeygenClient } from './HeygenClient.js';
+import { SupabaseStorageClient } from '../storage/SupabaseStorageClient.js';
 
 /**
  * AI Generation Service Implementation
  * Uses OpenAI and Gemini APIs for content generation
  */
 export class AIGenerationService extends IAIGenerationService {
-  constructor({ openaiApiKey, geminiApiKey }) {
+  constructor({ openaiApiKey, geminiApiKey, heygenApiKey, supabaseUrl, supabaseServiceKey }) {
     super();
     this.openaiClient = openaiApiKey ? new OpenAIClient({ apiKey: openaiApiKey }) : null;
     this.ttsClient = openaiApiKey ? new TTSClient({ apiKey: openaiApiKey }) : null;
     this.geminiClient = geminiApiKey ? new GeminiClient({ apiKey: geminiApiKey }) : null;
+    this.heygenClient = heygenApiKey ? new HeygenClient({ apiKey: heygenApiKey }) : null;
+    this.storageClient = (supabaseUrl && supabaseServiceKey) 
+      ? new SupabaseStorageClient({ supabaseUrl, supabaseServiceKey })
+      : null;
   }
 
   async generate(options) {
@@ -245,6 +251,15 @@ Format as JSON with this structure:
       throw new Error('OpenAI client not configured');
     }
 
+    if (!this.heygenClient) {
+      throw new Error('Heygen client not configured - cannot generate avatar video');
+    }
+
+    if (!this.storageClient) {
+      throw new Error('Storage client not configured - cannot save avatar video');
+    }
+
+    // Step 1: Generate script using OpenAI
     const systemPrompt = 'You are a virtual presenter creating short, engaging video introductions.';
     const script = await this.openaiClient.generateText(prompt, {
       systemPrompt,
@@ -252,10 +267,45 @@ Format as JSON with this structure:
       max_tokens: config.max_tokens || 400,
     });
 
+    console.log('[Avatar Video] Script generated:', script.substring(0, 100) + '...');
+
+    // Step 2: Create video using Heygen API
+    const videoResult = await this.heygenClient.createVideo({
+      script,
+      language: config.language || 'en',
+      avatarId: config.avatarId || 'default',
+      voiceId: config.voiceId || 'default',
+    });
+
+    console.log('[Avatar Video] Video created, ID:', videoResult.videoId);
+
+    // Step 3: Wait for video to be ready and get download URL
+    const videoUrl = await this.heygenClient.waitForVideo(videoResult.videoId);
+
+    console.log('[Avatar Video] Video ready, URL:', videoUrl);
+
+    // Step 4: Download video and upload to Supabase Storage
+    const videoBuffer = await this.heygenClient.downloadVideo(videoUrl);
+    const timestamp = Date.now();
+    const storagePath = `avatar-videos/${timestamp}-${videoResult.videoId}.mp4`;
+    
+    const uploadResult = await this.storageClient.uploadFile({
+      bucket: 'media',
+      path: storagePath,
+      file: videoBuffer,
+      contentType: 'video/mp4',
+    });
+
+    console.log('[Avatar Video] Uploaded to storage:', uploadResult.publicUrl);
+
     return {
       script,
-      language: config.language || 'English',
-      estimated_duration_seconds: config.duration_seconds || 15,
+      videoUrl: uploadResult.publicUrl,
+      storagePath,
+      heygenVideoId: videoResult.videoId,
+      language: config.language || 'en',
+      duration_seconds: 15,
+      fileSize: videoBuffer.length,
     };
   }
 }
