@@ -40,28 +40,27 @@ export class DatabaseConnection {
         ssl: { rejectUnauthorized: false },
         max: 20,
         idleTimeoutMillis: 30000,
-        connectionTimeoutMillis: 5000,
+        connectionTimeoutMillis: 10000,
       };
 
-      const forcedHost = process.env.DATABASE_IPV4_HOST || process.env.PGHOSTADDR;
-      if (forcedHost) {
-        config.host = forcedHost;
-        if (process.env.DATABASE_IPV4_PORT) {
-          config.port = Number(process.env.DATABASE_IPV4_PORT);
-        }
-        console.log(`Using forced database host from env: ${forcedHost}`);
-      } else if (!net.isIP(config.host)) {
-        try {
-          const { address } = await dns.lookup(config.host, { family: 4 });
-          if (address) {
-            console.log(`Resolved database host to IPv4: ${address}`);
-            config.host = address;
+      if (process.env.NODE_ENV === 'development') {
+        const forcedHost = process.env.DATABASE_IPV4_HOST || process.env.PGHOSTADDR;
+        if (forcedHost) {
+          config.host = forcedHost;
+          if (process.env.DATABASE_IPV4_PORT) {
+            config.port = Number(process.env.DATABASE_IPV4_PORT);
           }
-        } catch (error) {
-          console.warn(
-            `Failed to resolve IPv4 for database host ${config.host}. Falling back to hostname.`,
-            error.message
-          );
+          console.log(`(DEV MODE) Using forced database host: ${forcedHost}`);
+        } else if (!net.isIP(config.host)) {
+          try {
+            const { address } = await dns.lookup(config.host, { family: 4 });
+            if (address) {
+              console.log(`(DEV MODE) Resolved database host to IPv4: ${address}`);
+              config.host = address;
+            }
+          } catch {
+            console.warn(`(DEV MODE) Failed to resolve IPv4 for ${config.host}`);
+          }
         }
       }
 
