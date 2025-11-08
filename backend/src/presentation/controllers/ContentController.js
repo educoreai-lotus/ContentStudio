@@ -147,7 +147,7 @@ export class ContentController {
         });
       }
 
-      const contents = await this.contentRepository.findByTopicId(topicId, filters);
+      const contents = await this.contentRepository.findAllByTopicId(topicId, filters);
 
       res.json({
         success: true,
