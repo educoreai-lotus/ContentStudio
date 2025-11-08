@@ -37,22 +37,25 @@ export class HeygenClient {
     }
 
     try {
+      // Use valid Heygen avatar ID
+      const defaultAvatarId = 'Kristin_public_3_20240108';
+      
       // Step 1: Create video generation request
       const response = await this.client.post('/video/generate', {
-        test: config.test || false, // Set to true for testing (faster, watermarked)
-        caption: config.caption || false,
+        test: true, // Test mode for faster generation
+        caption: false,
         title: config.title || 'EduCore Lesson',
         video_inputs: [
           {
             character: {
               type: 'avatar',
-              avatar_id: config.avatarId || 'default', // Use Heygen avatar ID
+              avatar_id: config.avatarId || defaultAvatarId,
               avatar_style: config.avatarStyle || 'normal',
             },
             voice: {
               type: 'text',
               input_text: script,
-              voice_id: config.voiceId || 'en-US-JennyNeural', // Microsoft Azure voice
+              voice_id: config.voiceId || 'en-US-JennyNeural',
               speed: config.speed || 1.0,
             },
             background: {
@@ -72,19 +75,12 @@ export class HeygenClient {
       // Step 2: Poll for video completion
       const videoUrl = await this.pollVideoStatus(videoId);
 
-      // Step 3: Download and upload to Supabase Storage
-      const storagePath = await this.uploadToStorage(videoUrl, config.fileName || `avatar_${Date.now()}.mp4`);
-
+      // Step 3: Return Heygen URL directly (no Supabase upload for now)
       return {
-        videoUrl: storagePath,
+        videoUrl: videoUrl,
         videoId,
         duration: config.duration || 15,
         script,
-        metadata: {
-          avatarId: config.avatarId,
-          voiceId: config.voiceId,
-          generatedAt: new Date().toISOString(),
-        },
       };
     } catch (error) {
       console.error('[HeygenClient] Video generation error:', error.response?.data || error.message);

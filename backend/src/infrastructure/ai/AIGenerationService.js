@@ -255,10 +255,6 @@ Format as JSON with this structure:
       throw new Error('Heygen client not configured - cannot generate avatar video');
     }
 
-    if (!this.storageClient) {
-      throw new Error('Storage client not configured - cannot save avatar video');
-    }
-
     // Step 1: Generate script using OpenAI
     const systemPrompt = 'You are a virtual presenter creating short, engaging video introductions.';
     const script = await this.openaiClient.generateText(prompt, {
@@ -269,43 +265,21 @@ Format as JSON with this structure:
 
     console.log('[Avatar Video] Script generated:', script.substring(0, 100) + '...');
 
-    // Step 2: Create video using Heygen API
-    const videoResult = await this.heygenClient.createVideo({
-      script,
+    // Step 2: Generate video using Heygen - simple call
+    const videoResult = await this.heygenClient.generateVideo(script, {
       language: config.language || 'en',
-      avatarId: config.avatarId || 'default',
-      voiceId: config.voiceId || 'default',
+      avatarId: config.avatarId,
+      voiceId: config.voiceId,
     });
 
-    console.log('[Avatar Video] Video created, ID:', videoResult.videoId);
-
-    // Step 3: Wait for video to be ready and get download URL
-    const videoUrl = await this.heygenClient.waitForVideo(videoResult.videoId);
-
-    console.log('[Avatar Video] Video ready, URL:', videoUrl);
-
-    // Step 4: Download video and upload to Supabase Storage
-    const videoBuffer = await this.heygenClient.downloadVideo(videoUrl);
-    const timestamp = Date.now();
-    const storagePath = `avatar-videos/${timestamp}-${videoResult.videoId}.mp4`;
-    
-    const uploadResult = await this.storageClient.uploadFile({
-      bucket: 'media',
-      path: storagePath,
-      file: videoBuffer,
-      contentType: 'video/mp4',
-    });
-
-    console.log('[Avatar Video] Uploaded to storage:', uploadResult.publicUrl);
+    console.log('[Avatar Video] Video generated:', videoResult.videoUrl);
 
     return {
       script,
-      videoUrl: uploadResult.publicUrl,
-      storagePath,
-      heygenVideoId: videoResult.videoId,
+      videoUrl: videoResult.videoUrl,
+      videoId: videoResult.videoId,
       language: config.language || 'en',
-      duration_seconds: 15,
-      fileSize: videoBuffer.length,
+      duration_seconds: videoResult.duration || 15,
     };
   }
 }
