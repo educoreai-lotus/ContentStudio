@@ -69,7 +69,7 @@ export default function TopicContentManager() {
               Manual Content
             </button>
             <button
-              onClick={() => navigate(`/content/ai/${topicId}`)}
+              onClick={() => navigate(`/topics/${topicId}/content/ai-generate`)}
               className={`px-4 py-2 rounded-lg ${
                 theme === 'day-mode'
                   ? 'bg-blue-600 hover:bg-blue-700 text-white'
