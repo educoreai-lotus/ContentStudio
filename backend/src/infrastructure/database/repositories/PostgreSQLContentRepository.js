@@ -52,9 +52,8 @@ export class PostgreSQLContentRepository extends IContentRepository {
     const query = `
       INSERT INTO content (
         topic_id, content_type_id, generation_method_id,
-        content_data, quality_check_status, quality_check_data,
-        status
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+        content_data, quality_check_status, quality_check_data
+      ) VALUES ($1, $2, $3, $4, $5, $6)
       RETURNING *
     `;
 
@@ -65,7 +64,6 @@ export class PostgreSQLContentRepository extends IContentRepository {
       JSON.stringify(content.content_data),
       content.quality_check_status || 'pending',
       content.quality_check_data ? JSON.stringify(content.quality_check_data) : null,
-      content.status || 'active',
     ];
 
     const result = await this.db.query(query, values);
@@ -79,8 +77,8 @@ export class PostgreSQLContentRepository extends IContentRepository {
       throw new Error('Database not connected. Using in-memory repository.');
     }
 
-    const query = 'SELECT * FROM content WHERE content_id = $1 AND status != $2';
-    const result = await this.db.query(query, [contentId, 'deleted']);
+    const query = 'SELECT * FROM content WHERE content_id = $1';
+    const result = await this.db.query(query, [contentId]);
 
     if (result.rows.length === 0) {
       return null;
@@ -94,9 +92,9 @@ export class PostgreSQLContentRepository extends IContentRepository {
       throw new Error('Database not connected. Using in-memory repository.');
     }
 
-    let query = 'SELECT * FROM content WHERE topic_id = $1 AND status != $2';
-    const params = [topicId, 'deleted'];
-    let paramIndex = 3;
+    let query = 'SELECT * FROM content WHERE topic_id = $1';
+    const params = [topicId];
+    let paramIndex = 2;
 
     if (filters.content_type_id) {
       query += ` AND content_type_id = $${paramIndex}`;
