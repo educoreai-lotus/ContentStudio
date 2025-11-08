@@ -197,17 +197,22 @@ export class PostgreSQLContentRepository extends IContentRepository {
       // If it's a presentation with a file in storage, delete it
       if (content.content_type_id === 3 && content.content_data?.storagePath) {
         try {
-          const { createClient } = await import('@supabase/supabase-js');
-          const supabase = createClient(
-            process.env.SUPABASE_URL,
-            process.env.SUPABASE_SERVICE_ROLE_KEY
-          );
+          // Only attempt storage deletion if Supabase is configured
+          if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+            const { createClient } = await import('@supabase/supabase-js');
+            const supabase = createClient(
+              process.env.SUPABASE_URL,
+              process.env.SUPABASE_SERVICE_ROLE_KEY
+            );
 
-          await supabase.storage
-            .from('media')
-            .remove([content.content_data.storagePath]);
-          
-          console.log(`Deleted file from storage: ${content.content_data.storagePath}`);
+            await supabase.storage
+              .from('media')
+              .remove([content.content_data.storagePath]);
+            
+            console.log(`Deleted file from storage: ${content.content_data.storagePath}`);
+          } else {
+            console.warn('Supabase not configured, skipping file deletion from storage');
+          }
         } catch (storageError) {
           console.error('Failed to delete file from storage:', storageError);
           // Continue with DB deletion even if storage deletion fails
