@@ -68,50 +68,6 @@ app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Detect and log Railway's outbound IP on startup
-(async () => {
-  try {
-    const https = await import('https');
-    https.get('https://api.ipify.org?format=json', (response) => {
-      let data = '';
-      response.on('data', (chunk) => { data += chunk; });
-      response.on('end', () => {
-        const ip = JSON.parse(data).ip;
-        console.log('🌐 ========================================');
-        console.log('🌐 RAILWAY OUTBOUND IPv4:', ip);
-        console.log('🌐 Add this IP to Supabase Network Restrictions!');
-        console.log('🌐 ========================================');
-      });
-    }).on('error', (err) => {
-      console.error('Failed to detect outbound IP:', err.message);
-    });
-  } catch (error) {
-    console.error('Failed to detect outbound IP:', error.message);
-  }
-})();
-
-// Temporary endpoint to get Railway's outbound IP
-app.get('/my-ip', async (req, res) => {
-  try {
-    const https = await import('https');
-    https.get('https://api.ipify.org?format=json', (response) => {
-      let data = '';
-      response.on('data', (chunk) => { data += chunk; });
-      response.on('end', () => {
-        res.json({ 
-          outboundIP: JSON.parse(data).ip,
-          requestIP: req.ip,
-          forwardedFor: req.headers['x-forwarded-for']
-        });
-      });
-    }).on('error', (err) => {
-      res.status(500).json({ error: err.message });
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
 // Routes
 import coursesRouter from './src/presentation/routes/courses.js';
 import topicsRouter from './src/presentation/routes/topics.js';
