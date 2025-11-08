@@ -37,8 +37,9 @@ export class HeygenClient {
     }
 
     try {
-      // Use valid Heygen avatar ID
+      // Use valid Heygen avatar ID and voice ID
       const defaultAvatarId = 'Kristin_public_3_20240108';
+      const defaultVoiceId = '1bd001e7e50f421d891986aad5158bc8'; // Heygen female voice
       
       // Step 1: Create video generation request
       const response = await this.client.post('/video/generate', {
@@ -55,7 +56,7 @@ export class HeygenClient {
             voice: {
               type: 'text',
               input_text: script,
-              voice_id: config.voiceId || 'en-US-JennyNeural',
+              voice_id: config.voiceId || defaultVoiceId,
               speed: config.speed || 1.0,
             },
             background: {
@@ -178,12 +179,9 @@ export class HeygenClient {
     }
 
     try {
-      // Use a valid Heygen avatar ID or test mode
-      // Popular Heygen avatar IDs: 
-      // - 'Kristin_public_3_20240108' (female)
-      // - 'Tyler-incasualsuit-20220721' (male)
-      // - 'josh_lite3_20230714' (male)
+      // Use valid Heygen IDs
       const defaultAvatarId = 'Kristin_public_3_20240108';
+      const defaultVoiceId = '1bd001e7e50f421d891986aad5158bc8';
       
       const response = await this.client.post('/video/generate', {
         test: true, // Set to true for faster testing (adds watermark)
@@ -199,7 +197,7 @@ export class HeygenClient {
             voice: {
               type: 'text',
               input_text: script,
-              voice_id: voiceId || 'en-US-JennyNeural',
+              voice_id: voiceId || defaultVoiceId,
               speed: 1.0,
             },
             background: {
