@@ -110,33 +110,45 @@ export class PostgreSQLTopicRepository extends ITopicRepository {
       throw new Error('Database not connected. Using in-memory repository.');
     }
 
-    let query = 'SELECT * FROM topics WHERE trainer_id = $1 AND status != $2';
+    let query = `
+      SELECT t.*, 
+             COUNT(DISTINCT c.content_type_id) as content_count
+      FROM topics t
+      LEFT JOIN content c ON t.topic_id = c.topic_id
+      WHERE t.trainer_id = $1 AND t.status != $2
+      GROUP BY t.topic_id
+    `;
     const params = [trainerId, 'deleted'];
     let paramIndex = 3;
 
-    // Apply status filter
+    // Build HAVING conditions (after GROUP BY)
+    let havingConditions = [];
+    
     if (filters.status && filters.status !== 'all') {
-      query += ` AND status = $${paramIndex}`;
+      havingConditions.push(`t.status = $${paramIndex}`);
       params.push(filters.status);
       paramIndex++;
     }
 
-    // Apply course_id filter
     if (filters.course_id !== undefined && filters.course_id !== 'null') {
       if (filters.course_id === null) {
-        query += ` AND course_id IS NULL`;
+        havingConditions.push(`t.course_id IS NULL`);
       } else {
-        query += ` AND course_id = $${paramIndex}`;
+        havingConditions.push(`t.course_id = $${paramIndex}`);
         params.push(parseInt(filters.course_id));
         paramIndex++;
       }
     }
 
-    // Apply search filter
     if (filters.search) {
-      query += ` AND (topic_name ILIKE $${paramIndex} OR description ILIKE $${paramIndex})`;
+      havingConditions.push(`(t.topic_name ILIKE $${paramIndex} OR t.description ILIKE $${paramIndex})`);
       params.push(`%${filters.search}%`);
       paramIndex++;
+    }
+
+    // Add HAVING conditions to query
+    if (havingConditions.length > 0) {
+      query += ` HAVING ${havingConditions.join(' AND ')}`;
     }
 
     // Count total for pagination

@@ -76,7 +76,10 @@ export const CourseDetail = () => {
   };
 
   const getFormatProgress = topic => {
-    const completed = topic.total_content_formats || 0;
+    // Count unique content types that have been created for this topic
+    // This should be fetched from the backend, but for now we'll use a placeholder
+    // TODO: Fetch actual content count from /api/content?topic_id=X
+    const completed = topic.content_count || 0;
     const required = 5;
     const percentage = Math.min((completed / required) * 100, 100);
     return { completed, required, percentage };
