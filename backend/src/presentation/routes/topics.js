@@ -6,7 +6,7 @@ import { IntegrationServiceManager } from '../../infrastructure/integrations/Int
 const router = express.Router();
 
 // Initialize repository (PostgreSQL if connected, otherwise in-memory)
-const topicRepository = RepositoryFactory.getTopicRepository();
+const topicRepository = await RepositoryFactory.getTopicRepository();
 
 // Initialize integration services
 const integrationManager = new IntegrationServiceManager();

@@ -5,7 +5,7 @@ import { RepositoryFactory } from '../../infrastructure/database/repositories/Re
 const router = express.Router();
 
 // Initialize repository (PostgreSQL if connected, otherwise in-memory)
-const courseRepository = RepositoryFactory.getCourseRepository();
+const courseRepository = await RepositoryFactory.getCourseRepository();
 const courseController = new CourseController(courseRepository);
 
 router.post('/', courseController.create.bind(courseController));

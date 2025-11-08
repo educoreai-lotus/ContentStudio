@@ -17,42 +17,48 @@ import { PostgreSQLQualityCheckRepository } from './PostgreSQLQualityCheckReposi
  * Returns PostgreSQL repositories if database is connected, otherwise in-memory repositories
  */
 export class RepositoryFactory {
-  static getCourseRepository() {
+  static async getCourseRepository() {
+    await db.ready;
     if (db.isConnected()) {
       return new PostgreSQLCourseRepository();
     }
     return new CourseRepository(null);
   }
 
-  static getTopicRepository() {
+  static async getTopicRepository() {
+    await db.ready;
     if (db.isConnected()) {
       return new PostgreSQLTopicRepository();
     }
     return new TopicRepository(null);
   }
 
-  static getContentRepository() {
+  static async getContentRepository() {
+    await db.ready;
     if (db.isConnected()) {
       return new PostgreSQLContentRepository();
     }
     return new ContentRepository();
   }
 
-  static getTemplateRepository() {
+  static async getTemplateRepository() {
+    await db.ready;
     if (db.isConnected()) {
       return new PostgreSQLTemplateRepository();
     }
     return new TemplateRepository();
   }
 
-  static getContentVersionRepository() {
+  static async getContentVersionRepository() {
+    await db.ready;
     if (db.isConnected()) {
       return new PostgreSQLContentVersionRepository();
     }
     return new ContentVersionRepository();
   }
 
-  static getQualityCheckRepository() {
+  static async getQualityCheckRepository() {
+    await db.ready;
     if (db.isConnected()) {
       return new PostgreSQLQualityCheckRepository();
     }
