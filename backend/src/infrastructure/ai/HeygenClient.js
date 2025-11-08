@@ -6,7 +6,7 @@ import { createClient } from '@supabase/supabase-js';
  * Generates avatar videos using Heygen API
  */
 export class HeygenClient {
-  constructor(apiKey) {
+  constructor({ apiKey }) {
     if (!apiKey) {
       console.warn('[HeygenClient] API key not provided - avatar video generation will be disabled');
       this.client = null;
@@ -168,6 +168,81 @@ export class HeygenClient {
     } catch (error) {
       console.error('[HeygenClient] Storage upload error:', error.message);
       return videoUrl; // Fallback to Heygen URL
+    }
+  }
+
+  /**
+   * Create video (alias for generateVideo step 1)
+   * @param {Object} options - Video options
+   * @returns {Promise<Object>} Video ID
+   */
+  async createVideo({ script, language, avatarId, voiceId }) {
+    if (!this.client) {
+      throw new Error('Heygen client not configured');
+    }
+
+    try {
+      const response = await this.client.post('/video/generate', {
+        test: false,
+        caption: false,
+        title: 'EduCore Lesson',
+        video_inputs: [
+          {
+            character: {
+              type: 'avatar',
+              avatar_id: avatarId || 'default',
+              avatar_style: 'normal',
+            },
+            voice: {
+              type: 'text',
+              input_text: script,
+              voice_id: voiceId || 'en-US-JennyNeural',
+              speed: 1.0,
+            },
+            background: {
+              type: 'color',
+              value: '#FFFFFF',
+            },
+          },
+        ],
+        dimension: {
+          width: 1280,
+          height: 720,
+        },
+      });
+
+      return {
+        videoId: response.data.data.video_id,
+      };
+    } catch (error) {
+      console.error('[HeygenClient] Create video error:', error.response?.data || error.message);
+      throw new Error(`Failed to create video: ${error.message}`);
+    }
+  }
+
+  /**
+   * Wait for video to be ready
+   * @param {string} videoId - Video ID
+   * @returns {Promise<string>} Video URL
+   */
+  async waitForVideo(videoId) {
+    return await this.pollVideoStatus(videoId);
+  }
+
+  /**
+   * Download video from URL
+   * @param {string} videoUrl - Video URL
+   * @returns {Promise<Buffer>} Video buffer
+   */
+  async downloadVideo(videoUrl) {
+    try {
+      const response = await axios.get(videoUrl, {
+        responseType: 'arraybuffer',
+      });
+      return Buffer.from(response.data);
+    } catch (error) {
+      console.error('[HeygenClient] Download video error:', error.message);
+      throw new Error(`Failed to download video: ${error.message}`);
     }
   }
 }
