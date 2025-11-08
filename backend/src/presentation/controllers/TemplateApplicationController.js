@@ -36,10 +36,9 @@ export class TemplateApplicationController {
       const { topicId } = req.params;
 
       // Get topic to find its template_id
-      const { TopicRepository } = await import('../../domain/repositories/TopicRepository.js');
       const { RepositoryFactory } = await import('../../infrastructure/database/repositories/RepositoryFactory.js');
       
-      const topicRepository = RepositoryFactory.getTopicRepository();
+      const topicRepository = await RepositoryFactory.getTopicRepository();
       const topic = await topicRepository.findById(parseInt(topicId));
 
       if (!topic) {
