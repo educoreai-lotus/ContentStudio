@@ -75,7 +75,7 @@ export const CourseForm = () => {
       setLoading(true);
       const courseData = {
         ...formData,
-        trainer_id: 'trainer123', // TODO: Get from auth context
+        trainer_id: 'trainer-maya-levi', // Using mock trainer ID
       };
 
       if (isEditing) {
