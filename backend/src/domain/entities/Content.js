@@ -38,19 +38,9 @@ export class Content {
       errors.push('topic_id must be a positive integer');
     }
 
-    // Content type validation
-    const validContentTypes = [
-      'avatar_video',
-      'text',
-      'code',
-      'presentation',
-      'audio',
-      'mind_map',
-    ];
-    if (!this.content_type_id || !validContentTypes.includes(this.content_type_id)) {
-      errors.push(
-        `content_type_id must be one of: ${validContentTypes.join(', ')}`
-      );
+    // Content type validation (accept both string and integer)
+    if (!this.content_type_id) {
+      errors.push('content_type_id is required');
     }
 
     // Content data validation
@@ -58,15 +48,9 @@ export class Content {
       errors.push('content_data must be an object');
     }
 
-    // Generation method validation
-    const validGenerationMethods = ['ai_assisted', 'manual', 'video_to_lesson'];
-    if (
-      !this.generation_method_id ||
-      !validGenerationMethods.includes(this.generation_method_id)
-    ) {
-      errors.push(
-        `generation_method_id must be one of: ${validGenerationMethods.join(', ')}`
-      );
+    // Generation method validation (accept both string and integer)
+    if (!this.generation_method_id) {
+      errors.push('generation_method_id is required');
     }
 
     // Quality check status validation (if provided)
