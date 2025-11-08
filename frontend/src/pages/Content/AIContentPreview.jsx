@@ -319,6 +319,94 @@ export const AIContentPreview = () => {
             </div>
           )}
 
+          {/* Mind Map */}
+          {content.content_type_id === 5 && (
+            <div className="space-y-4">
+              {editedContent?.mermaidSyntax || content.content_data?.mermaidSyntax ? (
+                <div
+                  className={`p-4 rounded-lg ${
+                    theme === 'day-mode' ? 'bg-gray-50' : 'bg-gray-900'
+                  }`}
+                >
+                  <h4
+                    className={`font-semibold mb-2 ${
+                      theme === 'day-mode' ? 'text-gray-900' : 'text-white'
+                    }`}
+                  >
+                    Mermaid Syntax
+                  </h4>
+                  <pre
+                    className={`whitespace-pre-wrap font-mono text-sm ${
+                      theme === 'day-mode' ? 'text-gray-900' : 'text-gray-100'
+                    }`}
+                  >
+                    {editedContent?.mermaidSyntax || content.content_data?.mermaidSyntax}
+                  </pre>
+                </div>
+              ) : null}
+              {editedContent?.imageUrl || content.content_data?.imageUrl ? (
+                <div className="text-center">
+                  <img
+                    src={editedContent?.imageUrl || content.content_data?.imageUrl}
+                    alt="Mind Map"
+                    className="max-w-full h-auto rounded-lg shadow-lg mx-auto"
+                  />
+                </div>
+              ) : null}
+            </div>
+          )}
+
+          {/* Avatar Video */}
+          {content.content_type_id === 6 && (
+            <div className="space-y-4">
+              {isEditing ? (
+                <textarea
+                  value={editedContent?.script || ''}
+                  onChange={e => handleContentChange('script', e.target.value)}
+                  rows={8}
+                  placeholder="Video narration script..."
+                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 ${
+                    theme === 'day-mode'
+                      ? 'border-gray-300 bg-white text-gray-900'
+                      : 'border-gray-600 bg-gray-700 text-white'
+                  }`}
+                />
+              ) : (
+                <div
+                  className={`p-4 rounded-lg ${
+                    theme === 'day-mode' ? 'bg-gray-50' : 'bg-gray-900'
+                  }`}
+                >
+                  <h4
+                    className={`font-semibold mb-2 ${
+                      theme === 'day-mode' ? 'text-gray-900' : 'text-white'
+                    }`}
+                  >
+                    Video Script
+                  </h4>
+                  <pre
+                    className={`whitespace-pre-wrap font-sans ${
+                      theme === 'day-mode' ? 'text-gray-900' : 'text-gray-100'
+                    }`}
+                  >
+                    {editedContent?.script || content.content_data?.script}
+                  </pre>
+                </div>
+              )}
+              {(editedContent?.videoUrl || content.content_data?.videoUrl) && (
+                <div className="text-center">
+                  <video
+                    src={editedContent?.videoUrl || content.content_data?.videoUrl}
+                    controls
+                    className="max-w-full h-auto rounded-lg shadow-lg mx-auto"
+                  >
+                    Your browser does not support the video tag.
+                  </video>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Metadata */}
           {content.content_data?.metadata && (
             <div

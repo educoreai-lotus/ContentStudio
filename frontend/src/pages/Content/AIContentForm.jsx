@@ -71,10 +71,12 @@ export const AIContentForm = () => {
         prompt: formData.prompt || undefined,
         template_id: formData.template_id || undefined,
         template_variables: formData.template_variables,
-        language: formData.content_type_id === 'code' ? formData.language : undefined,
+        language: formData.content_type_id === 2 ? formData.language : undefined,
       });
 
       console.log('AI Generated content:', content);
+      console.log('Content data:', content?.content_data);
+      console.log('Content type ID:', content?.content_type_id);
 
       setGenerationProgress('Content generated successfully! Redirecting to preview...');
       setTimeout(() => {
