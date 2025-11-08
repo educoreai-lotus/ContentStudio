@@ -149,9 +149,10 @@ export class ContentController {
 
       const contents = await this.contentRepository.findAllByTopicId(topicId, filters);
 
+      const response = ContentDTO.toContentListResponse(contents);
       res.json({
         success: true,
-        data: ContentDTO.toContentListResponse(contents),
+        ...response,
       });
     } catch (error) {
       next(error);
