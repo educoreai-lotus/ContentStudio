@@ -49,7 +49,6 @@ export function TemplateSelectionModal({
         );
       }
 
-      setTemplates(result || []);
       setTemplates(filtered);
     } catch (err) {
       setError(err?.error?.message || 'Failed to load templates');

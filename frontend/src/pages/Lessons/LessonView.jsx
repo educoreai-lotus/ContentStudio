@@ -23,8 +23,8 @@ export default function LessonView() {
     try {
       setLoading(true);
       setError(null);
-      const response = await templateApplicationService.getLessonView(topicId);
-      setLessonView(response.data);
+      const viewData = await templateApplicationService.getLessonView(topicId);
+      setLessonView(viewData);
     } catch (err) {
       console.error('Failed to load lesson view:', err);
       setError(err.response?.data?.error || 'Failed to load lesson view');
