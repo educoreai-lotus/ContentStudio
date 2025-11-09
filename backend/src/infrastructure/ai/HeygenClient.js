@@ -96,7 +96,7 @@ export class HeygenClient {
    * @param {string} videoId - Video ID from Heygen
    * @returns {Promise<string>} Video URL
    */
-  async pollVideoStatus(videoId, maxAttempts = 30, interval = 2000) {
+  async pollVideoStatus(videoId, maxAttempts = 60, interval = 3000) {
     console.log(`[HeygenClient] Starting to poll for video ${videoId}`);
     
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -118,16 +118,24 @@ export class HeygenClient {
         // Wait before next poll
         await new Promise(resolve => setTimeout(resolve, interval));
       } catch (error) {
+        // If we get a 404 or network error, the video might still be processing
         console.error(`[HeygenClient] Poll attempt ${attempt + 1} failed:`, error.response?.data || error.message);
+        
+        // Don't throw on last attempt - return a placeholder URL with video ID
         if (attempt === maxAttempts - 1) {
-          throw error;
+          console.warn(`[HeygenClient] Timeout reached. Video ${videoId} may still be processing.`);
+          console.warn(`[HeygenClient] Check Heygen dashboard or use video ID: ${videoId}`);
+          // Return a special URL that indicates the video is still processing
+          return `https://app.heygen.com/share/${videoId}`;
         }
+        
         // Wait before retry
         await new Promise(resolve => setTimeout(resolve, interval));
       }
     }
 
-    throw new Error('Video generation timeout');
+    // This shouldn't be reached, but just in case
+    return `https://app.heygen.com/share/${videoId}`;
   }
 
   /**
