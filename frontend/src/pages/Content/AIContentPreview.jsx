@@ -394,14 +394,40 @@ export const AIContentPreview = () => {
                 </div>
               )}
               {(editedContent?.videoUrl || content.content_data?.videoUrl) && (
-                <div className="text-center">
-                  <video
-                    src={editedContent?.videoUrl || content.content_data?.videoUrl}
-                    controls
-                    className="max-w-full h-auto rounded-lg shadow-lg mx-auto"
+                <div className="space-y-3">
+                  <div
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg ${
+                      theme === 'day-mode' ? 'bg-blue-50' : 'bg-blue-900/20'
+                    }`}
                   >
-                    Your browser does not support the video tag.
-                  </video>
+                    <i className="fas fa-video text-blue-600"></i>
+                    <span
+                      className={`text-sm font-medium ${
+                        theme === 'day-mode' ? 'text-blue-900' : 'text-blue-300'
+                      }`}
+                    >
+                      Avatar Video Preview
+                    </span>
+                  </div>
+                  <div className="relative rounded-lg overflow-hidden shadow-2xl bg-black">
+                    <video
+                      src={editedContent?.videoUrl || content.content_data?.videoUrl}
+                      controls
+                      className="w-full h-auto"
+                      style={{ maxHeight: '500px' }}
+                    >
+                      Your browser does not support the video tag.
+                    </video>
+                  </div>
+                  {content.content_data?.videoId && (
+                    <div
+                      className={`text-xs text-center ${
+                        theme === 'day-mode' ? 'text-gray-500' : 'text-gray-400'
+                      }`}
+                    >
+                      Video ID: {content.content_data.videoId}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
