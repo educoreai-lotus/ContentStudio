@@ -76,11 +76,18 @@ export class HeygenClient {
       console.log(`[HeygenClient] Full response:`, JSON.stringify(response.data, null, 2));
 
       // Step 2: Poll for video completion
-      const videoUrl = await this.pollVideoStatus(videoId);
+      const heygenVideoUrl = await this.pollVideoStatus(videoId);
 
-      // Step 3: Return Heygen URL directly (no Supabase upload for now)
+      // Step 3: Download and upload to Supabase Storage
+      console.log(`[HeygenClient] Downloading video from Heygen...`);
+      const videoBuffer = await this.downloadVideo(heygenVideoUrl);
+      
+      console.log(`[HeygenClient] Uploading to Supabase Storage...`);
+      const storagePath = await this.uploadToStorage(heygenVideoUrl, `avatar_${videoId}.mp4`);
+
       return {
-        videoUrl: videoUrl,
+        videoUrl: storagePath,
+        heygenVideoUrl: heygenVideoUrl,
         videoId,
         duration: config.duration || 15,
         script,
