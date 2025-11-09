@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { templateApplicationService } from '../../services/template-application';
 import { useApp } from '../../context/AppContext';
+import { MindMapViewer } from '../../components/MindMapViewer.jsx';
 
 /**
  * Lesson View Component
@@ -51,44 +52,403 @@ export default function LessonView() {
     avatar_video: 'Avatar Video',
   };
 
-  const renderContent = (contentItem) => {
-    const { content_id, content_data, generation_method } = contentItem;
+  const renderTextContent = contentData => {
+    const textValue =
+      typeof contentData === 'string'
+        ? contentData
+        : contentData?.text || JSON.stringify(contentData, null, 2);
 
     return (
       <div
-        key={content_id}
-        className={`p-4 rounded-lg mb-4 ${
-          theme === 'day-mode'
-            ? 'bg-gray-50 border border-gray-200'
-            : 'bg-gray-700/50 border border-gray-600'
+        className={`p-4 rounded-lg ${
+          theme === 'day-mode' ? 'bg-gray-50 border border-gray-200' : 'bg-gray-900 border border-gray-700'
         }`}
       >
-        {content_data && (
-          <div>
-            {typeof content_data === 'string' ? (
-              <p className={theme === 'day-mode' ? 'text-gray-900' : 'text-white'}>
-                {content_data}
+        <pre
+          className={`whitespace-pre-wrap font-sans ${
+            theme === 'day-mode' ? 'text-gray-900' : 'text-gray-100'
+          }`}
+        >
+          {textValue}
+        </pre>
+        {contentData?.audioUrl && (
+          <div
+            className={`mt-4 p-4 rounded-lg ${
+              theme === 'day-mode' ? 'bg-blue-50' : 'bg-blue-900/20'
+            }`}
+          >
+            <div className="flex items-center gap-3 mb-3">
+              <i className="fas fa-volume-up text-blue-600 text-xl"></i>
+              <h4
+                className={`font-semibold ${
+                  theme === 'day-mode' ? 'text-gray-900' : 'text-white'
+                }`}
+              >
+                Audio Narration
+              </h4>
+              {contentData?.audioDuration && (
+                <span
+                  className={`text-sm ${
+                    theme === 'day-mode' ? 'text-gray-600' : 'text-gray-400'
+                  }`}
+                >
+                  ({Math.round(contentData.audioDuration)}s)
+                </span>
+              )}
+            </div>
+            <audio controls className="w-full" style={{ maxWidth: '100%' }}>
+              <source
+                src={contentData.audioUrl}
+                type={`audio/${contentData.audioFormat || 'mp3'}`}
+              />
+              Your browser does not support the audio element.
+            </audio>
+            {contentData?.audioVoice && (
+              <p
+                className={`text-xs mt-2 ${
+                  theme === 'day-mode' ? 'text-gray-500' : 'text-gray-400'
+                }`}
+              >
+                Voice: {contentData.audioVoice}
               </p>
-            ) : (
-              <pre className={`text-sm overflow-x-auto ${
-                theme === 'day-mode' ? 'text-gray-800' : 'text-gray-200'
-              }`}>
-                {JSON.stringify(content_data, null, 2)}
-              </pre>
             )}
           </div>
         )}
-        <div className="mt-2 text-xs">
-          <span className={`px-2 py-1 rounded ${
-            theme === 'day-mode'
-              ? 'bg-blue-100 text-blue-700'
-              : 'bg-blue-900/30 text-blue-300'
-          }`}>
-            {generation_method}
-          </span>
+      </div>
+    );
+  };
+
+  const renderCodeContent = contentData => (
+    <div className="space-y-4">
+      <div
+        className={`p-4 rounded-lg ${
+          theme === 'day-mode' ? 'bg-gray-900' : 'bg-gray-950'
+        }`}
+      >
+        <pre className="text-green-400 font-mono text-sm overflow-x-auto">
+          {contentData?.code || JSON.stringify(contentData, null, 2)}
+        </pre>
+      </div>
+      {contentData?.explanation && (
+        <div
+          className={`p-4 rounded-lg ${
+            theme === 'day-mode' ? 'bg-gray-50' : 'bg-gray-900'
+          }`}
+        >
+          <p
+            className={`${
+              theme === 'day-mode' ? 'text-gray-900' : 'text-gray-100'
+            }`}
+          >
+            {contentData.explanation}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+
+  const renderPresentationContent = contentData => (
+    <div
+      className={`p-6 rounded-lg border-2 border-dashed ${
+        theme === 'day-mode'
+          ? 'bg-purple-50 border-purple-300'
+          : 'bg-purple-900/20 border-purple-500/30'
+      }`}
+    >
+      <div className="flex items-center justify-center mb-4">
+        <i className="fas fa-file-powerpoint text-6xl text-purple-600"></i>
+      </div>
+      <div className="text-center space-y-2">
+        <h3
+          className={`text-lg font-semibold ${
+            theme === 'day-mode' ? 'text-gray-900' : 'text-white'
+          }`}
+        >
+          {contentData?.fileName || 'Presentation File'}
+        </h3>
+        {contentData?.fileSize && (
+          <p
+            className={`text-sm ${
+              theme === 'day-mode' ? 'text-gray-600' : 'text-gray-400'
+            }`}
+          >
+            Size: {(contentData.fileSize / 1024 / 1024).toFixed(2)} MB
+          </p>
+        )}
+        {contentData?.fileUrl && (
+          <div className="mt-4 space-y-2">
+            <a
+              href={contentData.fileUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-block px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+            >
+              <i className="fas fa-external-link-alt mr-2"></i>
+              Open Presentation
+            </a>
+            <p
+              className={`text-xs ${
+                theme === 'day-mode' ? 'text-gray-500' : 'text-gray-500'
+              }`}
+            >
+              Opens in a new tab
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  const renderAudioContent = contentData => (
+    <div
+      className={`p-4 rounded-lg ${
+        theme === 'day-mode' ? 'bg-blue-50 border border-blue-200' : 'bg-blue-900/20 border border-blue-600/50'
+      }`}
+    >
+      <h4
+        className={`font-semibold mb-2 ${
+          theme === 'day-mode' ? 'text-blue-900' : 'text-blue-200'
+        }`}
+      >
+        Audio Narration
+      </h4>
+      <audio controls className="w-full">
+        <source
+          src={contentData?.audioUrl}
+          type={`audio/${contentData?.audioFormat || 'mp3'}`}
+        />
+        Your browser does not support the audio element.
+      </audio>
+      {contentData?.audioVoice && (
+        <p
+          className={`text-xs mt-2 ${
+            theme === 'day-mode' ? 'text-blue-700' : 'text-blue-300'
+          }`}
+        >
+          Voice: {contentData.audioVoice}
+        </p>
+      )}
+    </div>
+  );
+
+  const renderMindMapContent = contentData => (
+    <div className="space-y-6">
+      {contentData?.nodes && (
+        <div>
+          <h4
+            className={`font-semibold mb-4 text-lg ${
+              theme === 'day-mode' ? 'text-gray-900' : 'text-white'
+            }`}
+          >
+            <i className="fas fa-project-diagram mr-2 text-purple-600"></i>
+            Mind Map Visualization
+          </h4>
+          <MindMapViewer data={contentData} />
+        </div>
+      )}
+      {contentData?.metadata && (
+        <div
+          className={`p-4 rounded-lg ${
+            theme === 'day-mode' ? 'bg-blue-50' : 'bg-blue-900/20'
+          }`}
+        >
+          <h4
+            className={`font-semibold mb-3 ${
+              theme === 'day-mode' ? 'text-gray-900' : 'text-white'
+            }`}
+          >
+            <i className="fas fa-info-circle mr-2 text-blue-600"></i>
+            Lesson Information
+          </h4>
+          <div className="space-y-2 text-sm">
+            {contentData.metadata.lessonTopic && (
+              <p>
+                <strong>Topic:</strong> {contentData.metadata.lessonTopic}
+              </p>
+            )}
+            {contentData.metadata.language && (
+              <p>
+                <strong>Language:</strong> {contentData.metadata.language}
+              </p>
+            )}
+            {contentData.metadata.skillsList && (
+              <p>
+                <strong>Skills:</strong> {contentData.metadata.skillsList.join(', ')}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+      {contentData?.imageUrl && (
+        <div className="text-center">
+          <img
+            src={contentData.imageUrl}
+            alt="Mind Map"
+            className="max-w-full h-auto rounded-lg shadow-lg mx-auto"
+          />
+        </div>
+      )}
+    </div>
+  );
+
+  const renderAvatarVideoContent = contentData => (
+    <div className="space-y-4">
+      {contentData?.script && (
+        <div
+          className={`p-4 rounded-lg ${
+            theme === 'day-mode' ? 'bg-gray-50' : 'bg-gray-900'
+          }`}
+        >
+          <h4
+            className={`font-semibold mb-2 ${
+              theme === 'day-mode' ? 'text-gray-900' : 'text-white'
+            }`}
+          >
+            Video Script
+          </h4>
+          <pre
+            className={`whitespace-pre-wrap font-sans ${
+              theme === 'day-mode' ? 'text-gray-900' : 'text-gray-100'
+            }`}
+          >
+            {contentData.script}
+          </pre>
+        </div>
+      )}
+
+      {contentData?.videoUrl && (
+        <div className="space-y-3">
+          <div
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg ${
+              theme === 'day-mode' ? 'bg-blue-50' : 'bg-blue-900/20'
+            }`}
+          >
+            <i className="fas fa-video text-blue-600"></i>
+            <span
+              className={`text-sm font-medium ${
+                theme === 'day-mode' ? 'text-blue-900' : 'text-blue-300'
+              }`}
+            >
+              Avatar Video
+            </span>
+          </div>
+          <div className="relative rounded-lg overflow-hidden shadow-2xl bg-black">
+            <video
+              src={contentData.videoUrl}
+              controls
+              className="w-full h-auto"
+              style={{ maxHeight: '500px' }}
+            >
+              Your browser does not support the video tag.
+            </video>
+          </div>
+          {contentData?.videoId && (
+            <div
+              className={`text-xs text-center ${
+                theme === 'day-mode' ? 'text-gray-500' : 'text-gray-400'
+              }`}
+            >
+              Video ID: {contentData.videoId}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
+  const renderMetadataFooter = contentData => {
+    if (!contentData?.metadata) {
+      return null;
+    }
+
+    const { metadata } = contentData;
+    return (
+      <div
+        className={`mt-4 p-3 rounded-lg border ${
+          theme === 'day-mode'
+            ? 'bg-blue-50 border-blue-200 text-blue-700'
+            : 'bg-blue-900/20 border-blue-600/40 text-blue-200'
+        }`}
+      >
+        <div className="text-xs space-y-1">
+          {metadata.lessonTopic && (
+            <p>
+              <strong>Topic:</strong> {metadata.lessonTopic}
+            </p>
+          )}
+          {metadata.lessonDescription && (
+            <p>
+              <strong>Description:</strong> {metadata.lessonDescription}
+            </p>
+          )}
+          {metadata.skillsList && (
+            <p>
+              <strong>Skills:</strong> {metadata.skillsList.join(', ')}
+            </p>
+          )}
         </div>
       </div>
     );
+  };
+
+  const renderContentItem = (formatType, contentItem, index) => {
+    const contentData = contentItem.content_data || contentItem;
+
+    switch (formatType) {
+      case 'text':
+        return (
+          <div key={contentItem.content_id || `text-${index}`} className="space-y-4">
+            {renderTextContent(contentData)}
+            {renderMetadataFooter(contentData)}
+          </div>
+        );
+      case 'code':
+        return (
+          <div key={contentItem.content_id || `code-${index}`}>
+            {renderCodeContent(contentData)}
+            {renderMetadataFooter(contentData)}
+          </div>
+        );
+      case 'presentation':
+        return (
+          <div key={contentItem.content_id || `presentation-${index}`}>
+            {renderPresentationContent(contentData)}
+            {renderMetadataFooter(contentData)}
+          </div>
+        );
+      case 'audio':
+        return (
+          <div key={contentItem.content_id || `audio-${index}`}>
+            {renderAudioContent(contentData)}
+            {renderMetadataFooter(contentData)}
+          </div>
+        );
+      case 'mind_map':
+        return (
+          <div key={contentItem.content_id || `mindmap-${index}`}>
+            {renderMindMapContent(contentData)}
+            {renderMetadataFooter(contentData)}
+          </div>
+        );
+      case 'avatar_video':
+        return (
+          <div key={contentItem.content_id || `avatar-${index}`}>
+            {renderAvatarVideoContent(contentData)}
+            {renderMetadataFooter(contentData)}
+          </div>
+        );
+      default:
+        return (
+          <pre
+            key={contentItem.content_id || `unknown-${index}`}
+            className={`text-sm overflow-x-auto p-4 rounded-lg ${
+              theme === 'day-mode' ? 'bg-gray-100 text-gray-700' : 'bg-gray-800 text-gray-200'
+            }`}
+          >
+            {JSON.stringify(contentData, null, 2)}
+          </pre>
+        );
+    }
   };
 
   if (loading) {
@@ -196,6 +556,22 @@ export default function LessonView() {
           <p className={theme === 'day-mode' ? 'text-gray-600' : 'text-gray-400'}>
             Content organized according to template format order
           </p>
+          {lessonView.template && (
+            <div
+              className={`mt-4 inline-flex flex-wrap items-center gap-2 px-4 py-2 rounded-lg ${
+                theme === 'day-mode'
+                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                  : 'bg-emerald-900/20 text-emerald-200 border border-emerald-500/30'
+              }`}
+            >
+              <span className="font-semibold">
+                Template: {lessonView.template.template_name}
+              </span>
+              <span className="text-xs uppercase tracking-wide opacity-70">
+                {lessonView.template.template_type?.replace(/_/g, ' ')}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Lesson Content by Format Order */}
@@ -237,7 +613,9 @@ export default function LessonView() {
               {/* Content Items */}
               {formatItem.content && formatItem.content.length > 0 ? (
                 <div>
-                  {formatItem.content.map((contentItem) => renderContent(contentItem))}
+                  {formatItem.content.map((contentItem, itemIndex) =>
+                    renderContentItem(formatItem.type, contentItem, itemIndex)
+                  )}
                 </div>
               ) : (
                 <div className={`text-center py-8 ${
