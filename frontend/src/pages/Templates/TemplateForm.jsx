@@ -24,8 +24,6 @@ export const TemplateForm = () => {
   const [formData, setFormData] = useState({
     template_name: '',
     format_order: [],
-    description: '',
-    notes: '',
   });
   const [availableFormats, setAvailableFormats] = useState([...AVAILABLE_FORMATS]);
   const [errors, setErrors] = useState({});
@@ -44,8 +42,6 @@ export const TemplateForm = () => {
       setFormData({
         template_name: template.template_name,
         format_order: template.format_order,
-        description: template.description || '',
-        notes: template.notes || '',
       });
       updateAvailableFormats(template.format_order);
     } catch (err) {
@@ -118,10 +114,14 @@ export const TemplateForm = () => {
       setErrors({});
 
       if (isEdit) {
-        await templatesService.updateTemplate(parseInt(id), formData);
+        await templatesService.updateTemplate(parseInt(id), {
+          template_name: formData.template_name,
+          format_order: formData.format_order,
+        });
       } else {
         await templatesService.createTemplate({
-          ...formData,
+          template_name: formData.template_name,
+          format_order: formData.format_order,
           created_by: 'trainer123', // TODO: Get from auth
         });
       }
@@ -230,28 +230,6 @@ export const TemplateForm = () => {
               {errors.template_name && (
                 <p className="mt-1 text-sm text-red-600">{errors.template_name}</p>
               )}
-            </div>
-
-            <div className="mb-6">
-              <label
-                className={`block text-sm font-medium mb-2 ${
-                  theme === 'day-mode' ? 'text-gray-700' : 'text-gray-300'
-                }`}
-              >
-                Description
-              </label>
-              <textarea
-                name="description"
-                value={formData.description}
-                onChange={handleChange}
-                rows={3}
-                className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors resize-vertical ${
-                  theme === 'day-mode'
-                    ? 'border-gray-300 bg-white text-gray-900 placeholder-gray-500'
-                    : 'border-gray-600 bg-gray-700 text-white placeholder-gray-400'
-                }`}
-                placeholder="Describe when to use this template"
-              />
             </div>
 
             <div className="mb-6">

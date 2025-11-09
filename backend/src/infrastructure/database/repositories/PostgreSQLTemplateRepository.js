@@ -18,20 +18,16 @@ export class PostgreSQLTemplateRepository extends ITemplateRepository {
 
     const query = `
       INSERT INTO templates (
-        template_name, template_type, description, notes,
-        format_order, created_by, is_active
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+        template_name, template_type, created_by, format_order
+      ) VALUES ($1, $2, $3, $4)
       RETURNING *
     `;
 
     const values = [
       template.template_name,
       template.template_type || 'manual',
-      template.description || null,
-      template.notes || null,
-      JSON.stringify(template.format_order || []),
       template.created_by,
-      template.is_active !== undefined ? template.is_active : true,
+      JSON.stringify(template.format_order || []),
     ];
 
     const result = await this.db.query(query, values);
@@ -76,12 +72,6 @@ export class PostgreSQLTemplateRepository extends ITemplateRepository {
       paramIndex++;
     }
 
-    if (filters.is_active !== undefined) {
-      query += ` AND is_active = $${paramIndex}`;
-      params.push(filters.is_active);
-      paramIndex++;
-    }
-
     query += ' ORDER BY created_at DESC';
 
     const result = await this.db.query(query, params);
@@ -93,15 +83,7 @@ export class PostgreSQLTemplateRepository extends ITemplateRepository {
       throw new Error('Database not connected. Using in-memory repository.');
     }
 
-    const allowedFields = [
-      'template_name',
-      'template_type',
-      'description',
-      'notes',
-      'format_order',
-      'is_active',
-      'usage_count',
-    ];
+    const allowedFields = ['template_name', 'template_type', 'format_order'];
     const setClauses = [];
     const values = [];
     let paramIndex = 1;
@@ -122,10 +104,6 @@ export class PostgreSQLTemplateRepository extends ITemplateRepository {
     if (setClauses.length === 0) {
       return await this.findById(templateId);
     }
-
-    setClauses.push(`updated_at = $${paramIndex}`);
-    values.push(new Date());
-    paramIndex++;
 
     values.push(templateId);
 
@@ -150,8 +128,9 @@ export class PostgreSQLTemplateRepository extends ITemplateRepository {
       throw new Error('Database not connected. Using in-memory repository.');
     }
 
-    // Soft delete by deactivating
-    return await this.update(templateId, { is_active: false });
+    const query = 'DELETE FROM templates WHERE template_id = $1';
+    await this.db.query(query, [templateId]);
+    return true;
   }
 
   /**
@@ -164,16 +143,11 @@ export class PostgreSQLTemplateRepository extends ITemplateRepository {
       template_id: row.template_id,
       template_name: row.template_name,
       template_type: row.template_type,
-      description: row.description,
-      notes: row.notes,
       format_order: typeof row.format_order === 'string'
         ? JSON.parse(row.format_order)
         : row.format_order || [],
       created_by: row.created_by,
-      is_active: row.is_active,
-      usage_count: row.usage_count || 0,
       created_at: row.created_at,
-      updated_at: row.updated_at,
     });
   }
 }

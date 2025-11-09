@@ -8,25 +8,15 @@ export class Template {
     template_name,
     template_type = 'manual',
     format_order,
-    description = null,
-    notes = null,
     created_by,
-    is_active = true,
-    usage_count = 0,
     created_at = new Date(),
-    updated_at = new Date(),
   }) {
     this.template_id = template_id;
     this.template_name = template_name;
     this.template_type = template_type;
     this.format_order = format_order;
-    this.description = description;
-    this.notes = notes;
     this.created_by = created_by;
-    this.is_active = is_active;
-    this.usage_count = usage_count;
     this.created_at = created_at instanceof Date ? created_at : new Date(created_at);
-    this.updated_at = updated_at instanceof Date ? updated_at : new Date(updated_at);
 
     this.validate();
   }
@@ -115,30 +105,6 @@ export class Template {
   }
 
   /**
-   * Increment usage count
-   */
-  incrementUsage() {
-    this.usage_count += 1;
-    this.updated_at = new Date();
-  }
-
-  /**
-   * Deactivate template
-   */
-  deactivate() {
-    this.is_active = false;
-    this.updated_at = new Date();
-  }
-
-  /**
-   * Activate template
-   */
-  activate() {
-    this.is_active = true;
-    this.updated_at = new Date();
-  }
-
-  /**
    * Update format order
    * @param {string[]} newFormatOrder - New format order
    */
@@ -163,7 +129,6 @@ export class Template {
     }
 
     this.format_order = newFormatOrder;
-    this.updated_at = new Date();
   }
 
   /**

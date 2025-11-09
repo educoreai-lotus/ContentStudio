@@ -28,8 +28,6 @@ export class TemplateController {
       const templateData = {
         template_name: req.body.template_name,
         format_order: req.body.format_order,
-        description: req.body.description,
-        notes: req.body.notes,
         created_by: req.body.created_by || 'trainer123', // TODO: Get from auth
       };
 
@@ -96,8 +94,6 @@ export class TemplateController {
       const updates = {
         template_name: req.body.template_name,
         format_order: req.body.format_order,
-        description: req.body.description,
-        notes: req.body.notes,
       };
 
       // Remove undefined fields
