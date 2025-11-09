@@ -2,7 +2,7 @@ import { Content } from '../../domain/entities/Content.js';
 
 const PROMPT_BUILDERS = {
   text: ({ lessonTopic, lessonDescription, language, skillsList }) => `You are an expert educational content creator in EduCore Content Studio.
-🎯 Objective: Generate a full, structured lesson text for ${lessonTopic}.
+🎯 Objective: Generate a concise, audio-friendly lesson text for ${lessonTopic}.
 
 Lesson Context:
 - Topic: ${lessonTopic}
@@ -10,11 +10,25 @@ Lesson Context:
 - Language: ${language}
 - Skills Focus: ${skillsList}
 
-Guidelines:
-- Write in ${language}, structured as introduction → explanation → examples → short summary.
-- Ensure clarity and logical flow aligned with the listed skills.
-- Avoid any JSON or markup.
-Output only pure text.`,
+⚠️ CRITICAL CONSTRAINTS:
+1. **Maximum Length: 3500 characters** (to fit audio narration limit of 4000 chars)
+2. **NO CODE EXAMPLES** - this is pure explanatory text (code has its own format)
+3. **NO special symbols or formatting** - plain text only for audio conversion
+
+📝 Structure (keep concise):
+- **Introduction** (2-3 sentences): Brief overview of the topic
+- **Explanation** (main content): Clear, simple explanation of key concepts
+- **Real-world Examples** (2-3 examples): Short, practical examples WITHOUT code
+- **Summary** (2-3 sentences): Quick recap of main points
+
+✅ Writing Style:
+- Use simple, clear language suitable for audio narration
+- Short paragraphs (2-4 sentences each)
+- Avoid technical jargon unless necessary
+- Write as if speaking to a student
+- NO bullet points, NO code blocks, NO markdown
+
+Output only pure, conversational text in ${language}.`,
   code: ({ lessonTopic, lessonDescription, language, skillsList }) => `You are a senior coding mentor in EduCore Content Studio.
 🎯 Objective: Generate a complete, working code example related to ${lessonTopic}.
 
