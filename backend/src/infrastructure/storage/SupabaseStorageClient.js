@@ -26,6 +26,47 @@ export class SupabaseStorageClient {
   }
 
   /**
+   * Upload a file to Supabase Storage
+   * @param {Buffer} fileBuffer - File buffer to upload
+   * @param {string} fileName - File name
+   * @param {string} contentType - MIME type (e.g., 'audio/mp3', 'video/mp4')
+   * @returns {Promise<Object>} Upload result with URL
+   */
+  async uploadFile(fileBuffer, fileName, contentType = 'application/octet-stream') {
+    if (!this.isConfigured()) {
+      console.warn('[SupabaseStorageClient] Not configured, skipping upload');
+      return { url: null, path: null };
+    }
+
+    try {
+      const filePath = `${fileName}`;
+
+      const { data, error } = await this.client.storage
+        .from(this.bucketName)
+        .upload(filePath, fileBuffer, {
+          contentType,
+          upsert: true, // Overwrite if exists
+        });
+
+      if (error) {
+        throw new Error(`Supabase storage error: ${error.message}`);
+      }
+
+      // Get public URL
+      const { data: urlData } = this.client.storage
+        .from(this.bucketName)
+        .getPublicUrl(filePath);
+
+      return {
+        url: urlData.publicUrl,
+        path: filePath,
+      };
+    } catch (error) {
+      throw new Error(`Failed to upload file to Supabase: ${error.message}`);
+    }
+  }
+
+  /**
    * Store lesson content in Supabase Storage
    * @param {string} languageCode - Language code (e.g., 'en', 'he', 'ar')
    * @param {string} lessonId - Lesson/Topic ID
