@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import { useApp } from '../../context/AppContext.jsx';
+import { MindMapViewer } from '../../components/MindMapViewer';
 
 export const ContentViewer = () => {
   const navigate = useNavigate();
@@ -215,51 +216,70 @@ export const ContentViewer = () => {
 
           {/* Mind Map */}
           {content.content_type_id === 5 && (
-            <div className="space-y-4">
-              {content.content_data?.mermaidSyntax && (
-                <div
-                  className={`p-4 rounded-lg ${
-                    theme === 'day-mode' ? 'bg-gray-50' : 'bg-gray-900'
-                  }`}
-                >
+            <div className="space-y-6">
+              {/* Visual Mind Map */}
+              {content.content_data?.nodes && (
+                <div>
                   <h4
-                    className={`font-semibold mb-2 ${
+                    className={`font-semibold mb-4 text-lg ${
                       theme === 'day-mode' ? 'text-gray-900' : 'text-white'
                     }`}
                   >
-                    Mind Map Structure (Mermaid)
+                    <i className="fas fa-project-diagram mr-2 text-purple-600"></i>
+                    Mind Map Visualization
                   </h4>
-                  <pre
-                    className={`text-sm overflow-x-auto ${
-                      theme === 'day-mode' ? 'text-gray-800' : 'text-gray-200'
-                    }`}
-                  >
-                    {content.content_data.mermaidSyntax}
-                  </pre>
+                  <MindMapViewer data={content.content_data} />
                 </div>
               )}
-              {content.content_data?.nodes && (
+
+              {/* Metadata */}
+              {content.content_data?.metadata && (
                 <div
                   className={`p-4 rounded-lg ${
                     theme === 'day-mode' ? 'bg-blue-50' : 'bg-blue-900/20'
                   }`}
                 >
                   <h4
-                    className={`font-semibold mb-2 ${
+                    className={`font-semibold mb-3 ${
                       theme === 'day-mode' ? 'text-gray-900' : 'text-white'
                     }`}
                   >
-                    Mind Map JSON Structure
+                    <i className="fas fa-info-circle mr-2 text-blue-600"></i>
+                    Lesson Information
                   </h4>
-                  <pre
-                    className={`text-sm overflow-x-auto ${
-                      theme === 'day-mode' ? 'text-gray-800' : 'text-gray-200'
-                    }`}
-                  >
-                    {JSON.stringify(content.content_data, null, 2)}
-                  </pre>
+                  <div className="space-y-2">
+                    {content.content_data.metadata.lessonTopic && (
+                      <p
+                        className={`text-sm ${
+                          theme === 'day-mode' ? 'text-gray-700' : 'text-gray-300'
+                        }`}
+                      >
+                        <strong>Topic:</strong> {content.content_data.metadata.lessonTopic}
+                      </p>
+                    )}
+                    {content.content_data.metadata.language && (
+                      <p
+                        className={`text-sm ${
+                          theme === 'day-mode' ? 'text-gray-700' : 'text-gray-300'
+                        }`}
+                      >
+                        <strong>Language:</strong> {content.content_data.metadata.language}
+                      </p>
+                    )}
+                    {content.content_data.metadata.skillsList && (
+                      <p
+                        className={`text-sm ${
+                          theme === 'day-mode' ? 'text-gray-700' : 'text-gray-300'
+                        }`}
+                      >
+                        <strong>Skills:</strong> {content.content_data.metadata.skillsList.join(', ')}
+                      </p>
+                    )}
+                  </div>
                 </div>
               )}
+
+              {/* Image (if available) */}
               {content.content_data?.imageUrl && (
                 <div className="text-center">
                   <img

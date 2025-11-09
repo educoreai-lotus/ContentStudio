@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import { contentService } from '../../services/content.js';
 import { useApp } from '../../context/AppContext.jsx';
+import { MindMapViewer } from '../../components/MindMapViewer';
 
 export const AIContentPreview = () => {
   const navigate = useNavigate();
@@ -321,30 +322,24 @@ export const AIContentPreview = () => {
 
           {/* Mind Map */}
           {content.content_type_id === 5 && (
-            <div className="space-y-4">
-              {editedContent?.mermaidSyntax || content.content_data?.mermaidSyntax ? (
-                <div
-                  className={`p-4 rounded-lg ${
-                    theme === 'day-mode' ? 'bg-gray-50' : 'bg-gray-900'
-                  }`}
-                >
+            <div className="space-y-6">
+              {/* Visual Mind Map */}
+              {(editedContent?.nodes || content.content_data?.nodes) && (
+                <div>
                   <h4
-                    className={`font-semibold mb-2 ${
+                    className={`font-semibold mb-4 text-lg ${
                       theme === 'day-mode' ? 'text-gray-900' : 'text-white'
                     }`}
                   >
-                    Mermaid Syntax
+                    <i className="fas fa-project-diagram mr-2 text-purple-600"></i>
+                    Mind Map Visualization
                   </h4>
-                  <pre
-                    className={`whitespace-pre-wrap font-mono text-sm ${
-                      theme === 'day-mode' ? 'text-gray-900' : 'text-gray-100'
-                    }`}
-                  >
-                    {editedContent?.mermaidSyntax || content.content_data?.mermaidSyntax}
-                  </pre>
+                  <MindMapViewer data={editedContent || content.content_data} />
                 </div>
-              ) : null}
-              {editedContent?.imageUrl || content.content_data?.imageUrl ? (
+              )}
+
+              {/* Image (if available) */}
+              {(editedContent?.imageUrl || content.content_data?.imageUrl) && (
                 <div className="text-center">
                   <img
                     src={editedContent?.imageUrl || content.content_data?.imageUrl}
@@ -352,7 +347,7 @@ export const AIContentPreview = () => {
                     className="max-w-full h-auto rounded-lg shadow-lg mx-auto"
                   />
                 </div>
-              ) : null}
+              )}
             </div>
           )}
 
