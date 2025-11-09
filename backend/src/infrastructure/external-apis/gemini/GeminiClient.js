@@ -31,8 +31,8 @@ export class GeminiClient {
    */
   async generate(prompt, options = {}) {
     try {
-      // Use the latest Gemini model (gemini-2.0-flash-exp is faster and more capable)
-      const model = options.model || 'gemini-2.0-flash-exp';
+      // Use Gemini 1.5 Flash (free, stable, and fast)
+      const model = options.model || 'gemini-1.5-flash';
       const genModel = this.genAI.getGenerativeModel({ model });
 
       const generationConfig = {
