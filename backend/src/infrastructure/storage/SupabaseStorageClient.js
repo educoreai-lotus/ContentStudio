@@ -5,14 +5,26 @@ import { createClient } from '@supabase/supabase-js';
  * Handles file storage and retrieval from Supabase Storage
  */
 export class SupabaseStorageClient {
-  constructor({ supabaseUrl, supabaseKey, bucketName }) {
-    if (!supabaseUrl || !supabaseKey) {
+  constructor({
+    supabaseUrl,
+    supabaseKey,
+    supabaseServiceKey,
+    bucketName,
+  }) {
+    const resolvedKey =
+      supabaseKey ||
+      supabaseServiceKey ||
+      process.env.SUPABASE_SERVICE_ROLE_KEY ||
+      process.env.SUPABASE_KEY ||
+      process.env.SUPABASE_SECRET_KEY;
+
+    if (!supabaseUrl || !resolvedKey) {
       console.warn('Supabase credentials not provided, using mock storage');
       this.client = null;
       return;
     }
 
-    this.client = createClient(supabaseUrl, supabaseKey);
+    this.client = createClient(supabaseUrl, resolvedKey);
     // Use bucket name from parameter, env var, or default to 'media' (Railway default)
     this.bucketName = bucketName || process.env.SUPABASE_BUCKET_NAME || 'media';
   }
