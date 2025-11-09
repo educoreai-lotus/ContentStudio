@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { templatesService } from '../../services/templates.js';
 import { useApp } from '../../context/AppContext.jsx';
 
@@ -14,9 +14,12 @@ const AVAILABLE_FORMATS = [
 
 export const TemplateForm = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { id } = useParams();
   const { theme } = useApp();
   const isEdit = !!id;
+  const searchParams = new URLSearchParams(location.search);
+  const redirectTo = searchParams.get('redirect');
 
   const [formData, setFormData] = useState({
     template_name: '',
@@ -123,7 +126,11 @@ export const TemplateForm = () => {
         });
       }
 
-      navigate('/templates');
+      if (redirectTo) {
+        navigate(redirectTo);
+      } else {
+        navigate('/templates');
+      }
     } catch (err) {
       setErrors({ submit: err.error?.message || 'Failed to save template' });
     } finally {

@@ -24,6 +24,31 @@ export class PostgreSQLContentRepository extends IContentRepository {
   }
 
   /**
+   * Retrieve a map of content type IDs to names
+   * @param {number[]} typeIds
+   * @returns {Promise<Map<number, string>>}
+   */
+  async getContentTypeNamesByIds(typeIds = []) {
+    const map = new Map();
+    if (!typeIds || typeIds.length === 0) {
+      return map;
+    }
+
+    const uniqueIds = [...new Set(typeIds)].filter(id => Number.isInteger(id));
+    if (uniqueIds.length === 0) {
+      return map;
+    }
+
+    const placeholders = uniqueIds.map((_, index) => `$${index + 1}`).join(', ');
+    const query = `SELECT type_id, type_name FROM content_types WHERE type_id IN (${placeholders})`;
+    const result = await this.db.query(query, uniqueIds);
+    result.rows.forEach(row => {
+      map.set(row.type_id, row.type_name);
+    });
+    return map;
+  }
+
+  /**
    * Get method_id from method_name
    */
   async getGenerationMethodId(methodName) {

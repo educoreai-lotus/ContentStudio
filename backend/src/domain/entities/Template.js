@@ -6,6 +6,7 @@ export class Template {
   constructor({
     template_id,
     template_name,
+    template_type = 'manual',
     format_order,
     description = null,
     notes = null,
@@ -17,6 +18,7 @@ export class Template {
   }) {
     this.template_id = template_id;
     this.template_name = template_name;
+    this.template_type = template_type;
     this.format_order = format_order;
     this.description = description;
     this.notes = notes;
@@ -35,6 +37,17 @@ export class Template {
     // Required fields
     if (!this.template_name || this.template_name.trim() === '') {
       errors.push('template_name is required and cannot be empty');
+    }
+
+    // Template type validation
+    const allowedTemplateTypes = [
+      'ready_template',
+      'ai_generated',
+      'manual',
+      'mixed_ai_manual',
+    ];
+    if (!this.template_type || !allowedTemplateTypes.includes(this.template_type)) {
+      errors.push(`template_type must be one of: ${allowedTemplateTypes.join(', ')}`);
     }
 
     // Format order validation

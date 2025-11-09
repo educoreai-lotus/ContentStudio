@@ -5,15 +5,22 @@ import { IntegrationServiceManager } from '../../infrastructure/integrations/Int
 
 const router = express.Router();
 
-// Initialize repository (PostgreSQL if connected, otherwise in-memory)
+// Initialize repositories (PostgreSQL if connected, otherwise in-memory)
 const topicRepository = await RepositoryFactory.getTopicRepository();
+const templateRepository = await RepositoryFactory.getTemplateRepository();
+const contentRepository = await RepositoryFactory.getContentRepository();
 
 // Initialize integration services
 const integrationManager = new IntegrationServiceManager();
 const skillsEngineClient = integrationManager.getSkillsEngine();
 
 // Initialize controller
-const topicController = new TopicController(topicRepository, skillsEngineClient);
+const topicController = new TopicController(
+  topicRepository,
+  skillsEngineClient,
+  templateRepository,
+  contentRepository
+);
 
 router.post('/', topicController.create.bind(topicController));
 router.get('/', topicController.list.bind(topicController));
@@ -23,6 +30,7 @@ router.get('/:id', topicController.getById.bind(topicController));
 router.put('/:id', topicController.update.bind(topicController));
 router.delete('/:id', topicController.delete.bind(topicController));
 router.post('/:id/validate-formats', topicController.validateFormatRequirements.bind(topicController));
+router.post('/:id/apply-template', topicController.applyTemplate.bind(topicController));
 
 export default router;
 

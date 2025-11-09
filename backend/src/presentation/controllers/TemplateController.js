@@ -3,18 +3,24 @@ import { GetTemplatesUseCase } from '../../application/use-cases/GetTemplatesUse
 import { GetTemplateUseCase } from '../../application/use-cases/GetTemplateUseCase.js';
 import { UpdateTemplateUseCase } from '../../application/use-cases/UpdateTemplateUseCase.js';
 import { DeleteTemplateUseCase } from '../../application/use-cases/DeleteTemplateUseCase.js';
+import { GenerateTemplateWithAIUseCase } from '../../application/use-cases/GenerateTemplateWithAIUseCase.js';
 import { TemplateDTO } from '../../application/dtos/TemplateDTO.js';
 
 /**
  * Template Controller
  */
 export class TemplateController {
-  constructor({ templateRepository }) {
+  constructor({ templateRepository, topicRepository, aiGenerationService }) {
     this.createTemplateUseCase = new CreateTemplateUseCase({ templateRepository });
     this.getTemplatesUseCase = new GetTemplatesUseCase({ templateRepository });
     this.getTemplateUseCase = new GetTemplateUseCase({ templateRepository });
     this.updateTemplateUseCase = new UpdateTemplateUseCase({ templateRepository });
     this.deleteTemplateUseCase = new DeleteTemplateUseCase({ templateRepository });
+    this.generateTemplateWithAIUseCase = new GenerateTemplateWithAIUseCase({
+      templateRepository,
+      topicRepository,
+      aiGenerationService,
+    });
   }
 
   async create(req, res, next) {
@@ -127,6 +133,27 @@ export class TemplateController {
       res.json({
         success: true,
         message: 'Template deleted successfully',
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async generateWithAI(req, res, next) {
+    try {
+      const topicId = parseInt(req.body.topic_id);
+      const trainerId = req.body.trainer_id || req.auth?.trainer?.trainer_id || 'system';
+      const templateName = req.body.template_name;
+
+      const template = await this.generateTemplateWithAIUseCase.execute({
+        topicId,
+        trainerId,
+        templateName,
+      });
+
+      res.status(201).json({
+        success: true,
+        data: TemplateDTO.toTemplateResponse(template),
       });
     } catch (error) {
       next(error);

@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { contentService } from '../../services/content.js';
+import { topicsService } from '../../services/topics.js';
 import { useApp } from '../../context/AppContext';
+import { TemplateSelectionModal } from '../../components/Templates/TemplateSelectionModal.jsx';
 
 const CONTENT_TYPES = [
   { id: 'text', name: 'Text Content', icon: 'fa-file-alt', color: 'blue', dbId: 1, allowManual: true },
@@ -21,11 +23,15 @@ export default function TopicContentManager() {
   const { theme } = useApp();
   
   const [existingContent, setExistingContent] = useState([]);
+  const [topicDetails, setTopicDetails] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [templateModalOpen, setTemplateModalOpen] = useState(false);
+  const [templateAppliedMessage, setTemplateAppliedMessage] = useState(null);
 
   useEffect(() => {
     fetchContent();
+    fetchTopicDetails();
   }, [topicId]);
 
   // Refresh content when returning to this page
@@ -52,6 +58,17 @@ export default function TopicContentManager() {
       setError(err.message || 'Failed to load content');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchTopicDetails = async () => {
+    try {
+      const topic = await topicsService.getById(parseInt(topicId));
+      // API returns {success?, data?}. ensure compatibility
+      const topicData = topic.topic || topic.data || topic;
+      setTopicDetails(topicData);
+    } catch (err) {
+      console.warn('Failed to fetch topic details', err);
     }
   };
 
@@ -101,6 +118,24 @@ export default function TopicContentManager() {
     };
 
     return colors[color] || colors.blue;
+  };
+
+  const trainerId = useMemo(() => {
+    if (topicDetails?.trainer_id) return topicDetails.trainer_id;
+    return undefined;
+  }, [topicDetails]);
+
+  const hasAllFormats = existingContent.length >= 5;
+  const hasAvatarVideo = existingContent.some(
+    content => content.content_type_id === CONTENT_TYPES.find(t => t.id === 'avatar_video')?.dbId
+  );
+
+  const handleTemplateApplied = async (templateId, templateData) => {
+    await fetchTopicDetails();
+    await fetchContent();
+    setTemplateAppliedMessage(
+      `Template "${templateData?.template_name || templateId}" applied successfully.`
+    );
   };
 
   return (
@@ -165,14 +200,14 @@ export default function TopicContentManager() {
             </h2>
             <span
               className={`text-2xl font-bold ${
-                existingContent.length === 5
+                existingContent.length >= 5
                   ? 'text-emerald-600'
                   : theme === 'day-mode'
                   ? 'text-gray-700'
                   : 'text-gray-300'
               }`}
             >
-              {existingContent.length}/5
+              {Math.min(existingContent.length, 5)}/5
             </span>
           </div>
           <div
@@ -182,15 +217,63 @@ export default function TopicContentManager() {
           >
             <div
               className={`h-3 rounded-full transition-all ${
-                existingContent.length === 5
+                existingContent.length >= 5
                   ? 'bg-emerald-600'
                   : existingContent.length >= 3
                   ? 'bg-yellow-500'
                   : 'bg-red-500'
               }`}
-              style={{ width: `${(existingContent.length / 5) * 100}%` }}
+              style={{ width: `${Math.min(existingContent.length / 5, 1) * 100}%` }}
             />
           </div>
+          {templateAppliedMessage && (
+            <div
+              className={`mt-4 px-4 py-3 rounded-lg text-sm ${
+                theme === 'day-mode'
+                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                  : 'bg-emerald-900/20 text-emerald-300 border border-emerald-500/40'
+              }`}
+            >
+              {templateAppliedMessage}
+            </div>
+          )}
+          {topicDetails?.template_id ? (
+            <div
+              className={`mt-4 p-4 rounded-lg border ${
+                theme === 'day-mode'
+                  ? 'border-emerald-200 bg-emerald-50'
+                  : 'border-emerald-500/40 bg-emerald-900/10'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <p className="text-sm text-emerald-700 dark:text-emerald-300 font-semibold">
+                    Template Applied
+                  </p>
+                  <p className="text-lg font-bold">
+                    {topicDetails.template_name || 'Selected Template'}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setTemplateModalOpen(true)}
+                  className="px-3 py-1 text-sm bg-emerald-600 hover:bg-emerald-700 text-white rounded-md"
+                >
+                  Change Template
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {(topicDetails.template_format_order || []).map((format, index) => (
+                  <span
+                    key={`${format}-${index}`}
+                    className="px-3 py-1 rounded-full bg-white/70 text-emerald-700 text-xs font-medium border border-emerald-200 dark:bg-slate-900/60 dark:text-emerald-300"
+                  >
+                    <span className="opacity-60 mr-1">{index + 1}.</span>
+                    {format.replace('_', ' ')}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
 
         {/* Content Types Grid */}
@@ -295,6 +378,21 @@ export default function TopicContentManager() {
           })}
         </div>
 
+        {hasAllFormats && !topicDetails?.template_id && (
+          <div className="mt-8 text-center">
+            <button
+              onClick={() => {
+                setTemplateAppliedMessage(null);
+                setTemplateModalOpen(true);
+              }}
+              className="px-8 py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-lg font-semibold shadow-lg"
+            >
+              <i className="fas fa-layer-group mr-2"></i>
+              Choose Template
+            </button>
+          </div>
+        )}
+
         {/* View Lesson Button */}
         {existingContent.length > 0 && (
           <div className="mt-8 text-center">
@@ -308,6 +406,15 @@ export default function TopicContentManager() {
           </div>
         )}
       </div>
+
+      <TemplateSelectionModal
+        open={templateModalOpen}
+        onClose={() => setTemplateModalOpen(false)}
+        topicId={parseInt(topicId)}
+        onApplied={handleTemplateApplied}
+        trainerId={trainerId}
+        hasAvatarVideo={hasAvatarVideo}
+      />
     </div>
   );
 }

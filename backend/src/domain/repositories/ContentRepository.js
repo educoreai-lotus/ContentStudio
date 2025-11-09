@@ -59,6 +59,15 @@ export class ContentRepository {
   async hasContentType(topicId, contentType) {
     throw new Error('ContentRepository.hasContentType() must be implemented');
   }
+
+  /**
+   * Retrieve a map of content type IDs to their string names
+   * @param {number[]} typeIds - Array of type IDs
+   * @returns {Promise<Map<number, string>>}
+   */
+  async getContentTypeNamesByIds(typeIds) {
+    throw new Error('ContentRepository.getContentTypeNamesByIds() must be implemented');
+  }
 }
 
 

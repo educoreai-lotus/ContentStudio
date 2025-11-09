@@ -29,6 +29,18 @@ export const templatesService = {
   },
 
   /**
+   * Generate a template using AI
+   * @param {Object} payload
+   * @param {number} payload.topic_id
+   * @param {string} [payload.template_name]
+   * @returns {Promise<Object>} Generated template
+   */
+  async generateWithAI(payload) {
+    const response = await apiClient.post('/api/templates/generate/ai', payload);
+    return response.data.data;
+  },
+
+  /**
    * Get template by ID
    * @param {number} templateId - Template ID
    * @returns {Promise<Object>} Template

@@ -38,7 +38,10 @@ export class CreateTemplateUseCase {
       }
     }
 
-    const template = new Template(templateData);
+    const template = new Template({
+      template_type: templateData.template_type || 'manual',
+      ...templateData,
+    });
     return await this.templateRepository.create(template);
   }
 }

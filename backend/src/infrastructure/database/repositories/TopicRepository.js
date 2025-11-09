@@ -123,16 +123,42 @@ export class TopicRepository extends ITopicRepository {
     return courseTopics.map(t => new Topic(t.toJSON()));
   }
 
-  async update(topic) {
+  async update(topicOrId, updates = null) {
     // TODO: Replace with actual database UPDATE
-    const index = this.topics.findIndex(t => t.topic_id === topic.topic_id);
+    let targetTopic;
+    let index;
+
+    if (topicOrId instanceof Topic) {
+      targetTopic = topicOrId;
+      index = this.topics.findIndex(t => t.topic_id === targetTopic.topic_id);
+    } else if (typeof topicOrId === 'object' && topicOrId.topic_id) {
+      targetTopic = new Topic(topicOrId);
+      index = this.topics.findIndex(t => t.topic_id === targetTopic.topic_id);
+    } else {
+      const topicId = topicOrId;
+      index = this.topics.findIndex(t => t.topic_id === topicId);
+      if (index === -1) {
+        return null;
+      }
+      const current = this.topics[index];
+      const merged = {
+        ...current.toJSON(),
+        ...(updates || {}),
+        topic_id: current.topic_id,
+        updated_at: new Date().toISOString(),
+      };
+      const updatedTopic = new Topic(merged);
+      this.topics[index] = updatedTopic;
+      return updatedTopic;
+    }
 
     if (index === -1) {
       return null;
     }
 
     const updatedTopic = new Topic({
-      ...topic.toJSON(),
+      ...targetTopic.toJSON(),
+      ...(updates || {}),
       updated_at: new Date().toISOString(),
     });
 

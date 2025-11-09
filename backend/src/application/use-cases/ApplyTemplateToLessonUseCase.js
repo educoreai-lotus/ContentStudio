@@ -52,14 +52,22 @@ export class ApplyTemplateToLessonUseCase {
     // Get all content for this topic
     const contents = await this.contentRepository.findAllByTopicId(topicId);
 
-    // Organize content by type
+    // Build map of type IDs to type names for ordering
+    const typeIds = contents
+      .map(content => content.content_type_id)
+      .filter(id => typeof id === 'number');
+    const typeNameMap = await this.contentRepository.getContentTypeNamesByIds(typeIds);
+
+    // Organize content by type name
     const contentByType = {};
-    contents.forEach((content) => {
-      const type = content.content_type_id;
-      if (!contentByType[type]) {
-        contentByType[type] = [];
+    contents.forEach(content => {
+      const typeId = content.content_type_id;
+      const typeName =
+        typeof typeId === 'string' ? typeId : typeNameMap.get(typeId) || typeId;
+      if (!contentByType[typeName]) {
+        contentByType[typeName] = [];
       }
-      contentByType[type].push(content);
+      contentByType[typeName].push(content);
     });
 
     // Apply template format order
@@ -88,14 +96,15 @@ export class ApplyTemplateToLessonUseCase {
     });
 
     // Update topic with template_id
-    topic.template_id = templateId;
-    await this.topicRepository.update(topic);
+    await this.topicRepository.update(topicId, { template_id: templateId });
 
     return {
       success: true,
+      message: 'Template applied successfully',
       template: {
         template_id: template.template_id,
         template_name: template.template_name,
+        template_type: template.template_type,
         format_order: formatOrder,
       },
       lesson: {
@@ -104,18 +113,6 @@ export class ApplyTemplateToLessonUseCase {
         template_id: templateId,
       },
       ordered_content: orderedContent,
-      view_data: {
-        // Structure for frontend rendering
-        formats: orderedContent.map((item) => ({
-          type: item.format_type,
-          display_order: formatOrder.indexOf(item.format_type),
-          content: item.content.map((c) => ({
-            content_id: c.content_id,
-            content_data: c.content_data,
-            generation_method: c.generation_method_id,
-          })),
-        })),
-      },
     };
   }
 }

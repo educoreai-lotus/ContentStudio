@@ -85,6 +85,19 @@ export const topicsService = {
     });
     return response.data;
   },
+
+  /**
+   * Apply a template to a topic
+   * @param {number} topicId
+   * @param {number} templateId
+   * @returns {Promise<Object>}
+   */
+  async applyTemplate(topicId, templateId) {
+    const response = await apiClient.post(`/api/topics/${topicId}/apply-template`, {
+      template_id: templateId,
+    });
+    return response.data;
+  },
 };
 
 

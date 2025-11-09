@@ -80,6 +80,18 @@ export class ContentRepository extends IContentRepository {
       c => c.topic_id === topicId && c.content_type_id === contentType
     );
   }
+
+  async getContentTypeNamesByIds(typeIds = []) {
+    const map = new Map();
+    typeIds.forEach(id => {
+      if (typeof id === 'string') {
+        map.set(id, id);
+      } else if (typeof id === 'number') {
+        map.set(id, id.toString());
+      }
+    });
+    return map;
+  }
 }
 
 

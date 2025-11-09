@@ -4,11 +4,12 @@ import { GetTopicUseCase } from '../../application/use-cases/GetTopicUseCase.js'
 import { UpdateTopicUseCase } from '../../application/use-cases/UpdateTopicUseCase.js';
 import { DeleteTopicUseCase } from '../../application/use-cases/DeleteTopicUseCase.js';
 import { ValidateFormatRequirementsUseCase } from '../../application/use-cases/ValidateFormatRequirementsUseCase.js';
+import { ApplyTemplateToLessonUseCase } from '../../application/use-cases/ApplyTemplateToLessonUseCase.js';
 import { CreateTopicDTO, UpdateTopicDTO, TopicResponseDTO } from '../../application/dtos/TopicDTO.js';
 import { logger } from '../../infrastructure/logging/Logger.js';
 
 export class TopicController {
-  constructor(topicRepository, skillsEngineClient = null) {
+  constructor(topicRepository, skillsEngineClient = null, templateRepository = null, contentRepository = null) {
     this.createTopicUseCase = new CreateTopicUseCase({
       topicRepository,
       skillsEngineClient,
@@ -18,7 +19,37 @@ export class TopicController {
     this.updateTopicUseCase = new UpdateTopicUseCase(topicRepository);
     this.deleteTopicUseCase = new DeleteTopicUseCase(topicRepository);
     this.validateFormatRequirementsUseCase = new ValidateFormatRequirementsUseCase(topicRepository);
+    this.templateRepository = templateRepository;
+    this.applyTemplateToLessonUseCase =
+      templateRepository && contentRepository
+        ? new ApplyTemplateToLessonUseCase({
+            templateRepository,
+            topicRepository,
+            contentRepository,
+          })
+        : null;
     this.skillsEngineClient = skillsEngineClient;
+  }
+
+  async buildTopicResponse(topic) {
+    const responseDTO = new TopicResponseDTO(topic);
+    if (this.templateRepository && topic.template_id) {
+      try {
+        const template = await this.templateRepository.findById(topic.template_id);
+        if (template) {
+          responseDTO.template_name = template.template_name;
+          responseDTO.template_format_order = template.format_order;
+          responseDTO.template_type = template.template_type;
+        }
+      } catch (error) {
+        logger.warn('Failed to load template for topic response', {
+          topicId: topic.topic_id,
+          templateId: topic.template_id,
+          error: error.message,
+        });
+      }
+    }
+    return responseDTO;
   }
 
   async create(req, res, next) {
@@ -30,7 +61,7 @@ export class TopicController {
         trainer_id: trainerId,
       });
       const topic = await this.createTopicUseCase.execute(createDTO);
-      const responseDTO = new TopicResponseDTO(topic);
+      const responseDTO = await this.buildTopicResponse(topic);
 
       res.status(201).json(responseDTO);
     } catch (error) {
@@ -59,8 +90,12 @@ export class TopicController {
 
       const result = await this.getTopicsUseCase.execute(trainerId, filters, pagination);
 
+      const topicsWithTemplates = await Promise.all(
+        result.topics.map(topic => this.buildTopicResponse(topic))
+      );
+
       res.status(200).json({
-        topics: result.topics.map(topic => new TopicResponseDTO(topic)),
+        topics: topicsWithTemplates,
         pagination: result.pagination,
       });
     } catch (error) {
@@ -83,7 +118,7 @@ export class TopicController {
         });
       }
 
-      const responseDTO = new TopicResponseDTO(topic);
+      const responseDTO = await this.buildTopicResponse(topic);
       res.status(200).json(responseDTO);
     } catch (error) {
       next(error);
@@ -106,7 +141,7 @@ export class TopicController {
         });
       }
 
-      const responseDTO = new TopicResponseDTO(topic);
+      const responseDTO = await this.buildTopicResponse(topic);
       res.status(200).json(responseDTO);
     } catch (error) {
       next(error);
@@ -133,6 +168,36 @@ export class TopicController {
       const contentItems = req.body.content_items || [];
 
       const result = await this.validateFormatRequirementsUseCase.execute(topicId, contentItems);
+
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async applyTemplate(req, res, next) {
+    try {
+      if (!this.applyTemplateToLessonUseCase) {
+        return res.status(503).json({
+          success: false,
+          error: 'Template application service is not available',
+        });
+      }
+
+      const topicId = parseInt(req.params.id);
+      const templateId = parseInt(req.body.template_id);
+
+      if (!templateId) {
+        return res.status(400).json({
+          success: false,
+          error: 'template_id is required',
+        });
+      }
+
+      const result = await this.applyTemplateToLessonUseCase.execute({
+        topicId,
+        templateId,
+      });
 
       res.status(200).json(result);
     } catch (error) {
