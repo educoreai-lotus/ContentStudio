@@ -16,9 +16,8 @@ const promptTemplateService = new PromptTemplateService({
 
 // Initialize AI services (use environment variables)
 const openaiApiKey = process.env.OPENAI_API_KEY;
-// Support both GEMINI_API_KEY (direct API key) and Google OAuth credentials
-// For Railway: Use GEMINI_API_KEY if available, otherwise use Google OAuth
-const geminiApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+// Support multiple Gemini API key names (Railway uses Gemini_API_Key)
+const geminiApiKey = process.env.GEMINI_API_KEY || process.env.Gemini_API_Key || process.env.GOOGLE_API_KEY;
 const heygenApiKey = process.env.HEYGEN_API_KEY;
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;

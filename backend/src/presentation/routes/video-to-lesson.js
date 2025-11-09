@@ -13,7 +13,7 @@ const router = express.Router();
 
 // Initialize clients
 const openaiApiKey = process.env.OPENAI_API_KEY;
-const geminiApiKey = process.env.GEMINI_API_KEY;
+const geminiApiKey = process.env.GEMINI_API_KEY || process.env.Gemini_API_Key || process.env.GOOGLE_API_KEY;
 
 const whisperClient = openaiApiKey ? new WhisperClient({ apiKey: openaiApiKey }) : null;
 const openaiClient = openaiApiKey ? new OpenAIClient({ apiKey: openaiApiKey }) : null;
