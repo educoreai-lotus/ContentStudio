@@ -98,6 +98,33 @@ export class ApplyTemplateToLessonUseCase {
     // Update topic with template_id
     await this.topicRepository.update(topicId, { template_id: templateId });
 
+    const viewData = {
+      lesson: {
+        topic_id: topic.topic_id,
+        topic_name: topic.topic_name,
+        template_id: templateId,
+        template_name: template.template_name,
+      },
+      template: {
+        template_id: template.template_id,
+        template_name: template.template_name,
+        template_type: template.template_type,
+        format_order: formatOrder,
+      },
+      formats: orderedContent.map((item, index) => ({
+        type: item.format_type,
+        display_order: index,
+        content: item.content.map(c => ({
+          content_id: c.content_id,
+          content_type_id: c.content_type_id,
+          content_data: c.content_data,
+          generation_method_id: c.generation_method_id,
+          created_at: c.created_at,
+          updated_at: c.updated_at,
+        })),
+      })),
+    };
+
     return {
       success: true,
       message: 'Template applied successfully',
@@ -113,6 +140,7 @@ export class ApplyTemplateToLessonUseCase {
         template_id: templateId,
       },
       ordered_content: orderedContent,
+      view_data: viewData,
     };
   }
 }
