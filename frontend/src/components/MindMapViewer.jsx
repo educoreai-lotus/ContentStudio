@@ -20,8 +20,16 @@ export const MindMapViewer = ({ data }) => {
 
     // Create SVG elements
     const svg = svgRef.current;
-    const width = svg.clientWidth || 800;
-    const height = Math.max(600, data.nodes.length * 50);
+    const width = 1200;
+    
+    // Calculate height based on levels
+    const maxLevel = Math.max(...Object.values(
+      data.edges.reduce((levels, edge) => {
+        levels[edge.target] = (levels[edge.source] || 0) + 1;
+        return levels;
+      }, { [data.nodes[0].id]: 0 })
+    ));
+    const height = (maxLevel + 1) * 180 + 200;
 
     svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
 
@@ -96,22 +104,35 @@ function calculateNodePositions(nodes, edges) {
     }
   }
 
-  // Calculate positions
-  const width = 800;
-  const height = 600;
-  const levelHeight = height / (Math.max(...Object.values(levels)) + 1);
+  // Calculate positions with better spacing
+  const width = 1200; // Increased width
+  const maxLevel = Math.max(...Object.values(levels));
+  const levelHeight = 180; // Fixed spacing between levels
+  const height = (maxLevel + 1) * levelHeight + 100;
 
   const levelCounters = {};
+  const levelNodes = {};
+  
+  // Group nodes by level
   nodes.forEach((node) => {
     const level = levels[node.id] || 0;
-    const nodesInLevel = childrenCount[level] || 1;
-    const index = levelCounters[level] || 0;
-    levelCounters[level] = index + 1;
+    if (!levelNodes[level]) levelNodes[level] = [];
+    levelNodes[level].push(node);
+  });
 
-    const x = (width / (nodesInLevel + 1)) * (index + 1);
-    const y = levelHeight * (level + 0.5);
+  // Position nodes with better spacing
+  Object.keys(levelNodes).forEach((level) => {
+    const nodesInLevel = levelNodes[level];
+    const spacing = Math.min(width / (nodesInLevel.length + 1), 150); // Max 150px spacing
+    const totalWidth = spacing * (nodesInLevel.length + 1);
+    const startX = (width - totalWidth) / 2 + spacing;
 
-    positions[node.id] = { x, y, node };
+    nodesInLevel.forEach((node, index) => {
+      const x = startX + spacing * index;
+      const y = parseInt(level) * levelHeight + 100;
+
+      positions[node.id] = { x, y, node };
+    });
   });
 
   return positions;
@@ -139,7 +160,17 @@ function drawNode(svg, node, pos, theme) {
   };
 
   const color = colors[node.type] || colors.detail;
-  const radius = node.type === 'topic' ? 60 : node.type === 'subtopic' ? 50 : 40;
+  
+  // Calculate radius based on text length
+  const labelLength = node.label.length;
+  let radius;
+  if (node.type === 'topic') {
+    radius = Math.max(70, labelLength * 3);
+  } else if (node.type === 'subtopic') {
+    radius = Math.max(60, labelLength * 2.5);
+  } else {
+    radius = Math.max(45, labelLength * 2);
+  }
 
   // Create group for node
   const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
@@ -166,34 +197,51 @@ function drawNode(svg, node, pos, theme) {
     circle.setAttribute('stroke-width', '3');
   });
 
-  // Text (label)
+  // Text (label) - wrap text intelligently
   const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
   text.setAttribute('x', pos.x);
   text.setAttribute('y', pos.y);
   text.setAttribute('text-anchor', 'middle');
   text.setAttribute('dominant-baseline', 'middle');
   text.setAttribute('fill', color.text);
-  text.setAttribute('font-size', node.type === 'topic' ? '16' : '14');
+  text.setAttribute('font-size', node.type === 'topic' ? '14' : '12');
   text.setAttribute('font-weight', node.type === 'topic' ? 'bold' : 'normal');
   text.setAttribute('pointer-events', 'none');
 
-  // Wrap text if too long
+  // Wrap text to fit in circle
+  const maxCharsPerLine = Math.floor(radius / 4);
   const words = node.label.split(' ');
-  if (words.length > 2 && node.type !== 'topic') {
-    // Multi-line text for long labels
-    const tspan1 = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
-    tspan1.setAttribute('x', pos.x);
-    tspan1.setAttribute('dy', '-0.5em');
-    tspan1.textContent = words.slice(0, Math.ceil(words.length / 2)).join(' ');
-    text.appendChild(tspan1);
+  const lines = [];
+  let currentLine = '';
 
-    const tspan2 = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
-    tspan2.setAttribute('x', pos.x);
-    tspan2.setAttribute('dy', '1em');
-    tspan2.textContent = words.slice(Math.ceil(words.length / 2)).join(' ');
-    text.appendChild(tspan2);
+  words.forEach((word) => {
+    if ((currentLine + word).length <= maxCharsPerLine) {
+      currentLine += (currentLine ? ' ' : '') + word;
+    } else {
+      if (currentLine) lines.push(currentLine);
+      currentLine = word;
+    }
+  });
+  if (currentLine) lines.push(currentLine);
+
+  // Limit to 3 lines max
+  const displayLines = lines.slice(0, 3);
+  if (lines.length > 3) {
+    displayLines[2] = displayLines[2].substring(0, maxCharsPerLine - 3) + '...';
+  }
+
+  if (displayLines.length === 1) {
+    text.textContent = displayLines[0];
   } else {
-    text.textContent = node.label;
+    const lineHeight = 1.2;
+    const startY = -(displayLines.length - 1) * 0.5 * lineHeight;
+    displayLines.forEach((line, i) => {
+      const tspan = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
+      tspan.setAttribute('x', pos.x);
+      tspan.setAttribute('dy', i === 0 ? `${startY}em` : `${lineHeight}em`);
+      tspan.textContent = line;
+      text.appendChild(tspan);
+    });
   }
 
   group.appendChild(circle);
