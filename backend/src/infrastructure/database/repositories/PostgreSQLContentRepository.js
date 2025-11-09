@@ -57,11 +57,20 @@ export class PostgreSQLContentRepository extends IContentRepository {
       RETURNING *
     `;
 
+    // Log content_data before saving
+    console.log('[PostgreSQLContentRepository] Saving content_data:', {
+      type: typeof content.content_data,
+      isString: typeof content.content_data === 'string',
+      value: content.content_data,
+    });
+
     const values = [
       content.topic_id,
       contentTypeId,
       generationMethodId,
-      JSON.stringify(content.content_data),
+      typeof content.content_data === 'string' 
+        ? content.content_data  // Already a JSON string, don't stringify again
+        : JSON.stringify(content.content_data),
       content.quality_check_status || 'pending',
       content.quality_check_data ? JSON.stringify(content.quality_check_data) : null,
     ];
