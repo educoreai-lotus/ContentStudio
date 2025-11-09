@@ -213,6 +213,65 @@ export const ContentViewer = () => {
             </div>
           )}
 
+          {/* Mind Map */}
+          {content.content_type_id === 5 && (
+            <div className="space-y-4">
+              {content.content_data?.mermaidSyntax && (
+                <div
+                  className={`p-4 rounded-lg ${
+                    theme === 'day-mode' ? 'bg-gray-50' : 'bg-gray-900'
+                  }`}
+                >
+                  <h4
+                    className={`font-semibold mb-2 ${
+                      theme === 'day-mode' ? 'text-gray-900' : 'text-white'
+                    }`}
+                  >
+                    Mind Map Structure (Mermaid)
+                  </h4>
+                  <pre
+                    className={`text-sm overflow-x-auto ${
+                      theme === 'day-mode' ? 'text-gray-800' : 'text-gray-200'
+                    }`}
+                  >
+                    {content.content_data.mermaidSyntax}
+                  </pre>
+                </div>
+              )}
+              {content.content_data?.nodes && (
+                <div
+                  className={`p-4 rounded-lg ${
+                    theme === 'day-mode' ? 'bg-blue-50' : 'bg-blue-900/20'
+                  }`}
+                >
+                  <h4
+                    className={`font-semibold mb-2 ${
+                      theme === 'day-mode' ? 'text-gray-900' : 'text-white'
+                    }`}
+                  >
+                    Mind Map JSON Structure
+                  </h4>
+                  <pre
+                    className={`text-sm overflow-x-auto ${
+                      theme === 'day-mode' ? 'text-gray-800' : 'text-gray-200'
+                    }`}
+                  >
+                    {JSON.stringify(content.content_data, null, 2)}
+                  </pre>
+                </div>
+              )}
+              {content.content_data?.imageUrl && (
+                <div className="text-center">
+                  <img
+                    src={content.content_data.imageUrl}
+                    alt="Mind Map"
+                    className="max-w-full h-auto rounded-lg shadow-lg mx-auto"
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Avatar Video */}
           {content.content_type_id === 6 && (
             <div className="space-y-4">
