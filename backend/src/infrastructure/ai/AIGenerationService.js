@@ -191,8 +191,26 @@ The content should be clear, well-structured, and engaging.`;
       speed: config.speed || 1.0,
     });
 
+    // Upload audio to Supabase Storage
+    let audioUrl = null;
+    if (this.storageClient && audioData.audio) {
+      try {
+        const fileName = `audio_${Date.now()}.${audioData.format}`;
+        const uploadResult = await this.storageClient.uploadFile(
+          audioData.audio,
+          fileName,
+          `audio/${audioData.format}`
+        );
+        audioUrl = uploadResult.url;
+        console.log('[AIGenerationService] Audio uploaded to storage:', audioUrl);
+      } catch (uploadError) {
+        console.warn('[AIGenerationService] Failed to upload audio to storage:', uploadError.message);
+      }
+    }
+
     return {
-      audio: audioData.audio,
+      audio: audioData.audio, // Keep buffer for backward compatibility
+      audioUrl, // URL for playback
       format: audioData.format,
       duration: audioData.duration,
       voice: audioData.voice,

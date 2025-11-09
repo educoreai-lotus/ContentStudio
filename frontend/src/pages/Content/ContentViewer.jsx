@@ -116,18 +116,66 @@ export const ContentViewer = () => {
 
           {/* Text Content */}
           {content.content_type_id === 1 && (
-            <div
-              className={`p-4 rounded-lg ${
-                theme === 'day-mode' ? 'bg-gray-50' : 'bg-gray-900'
-              }`}
-            >
-              <pre
-                className={`whitespace-pre-wrap font-sans ${
-                  theme === 'day-mode' ? 'text-gray-900' : 'text-gray-100'
+            <div className="space-y-4">
+              <div
+                className={`p-4 rounded-lg ${
+                  theme === 'day-mode' ? 'bg-gray-50' : 'bg-gray-900'
                 }`}
               >
-                {content.content_data?.text}
-              </pre>
+                <pre
+                  className={`whitespace-pre-wrap font-sans ${
+                    theme === 'day-mode' ? 'text-gray-900' : 'text-gray-100'
+                  }`}
+                >
+                  {content.content_data?.text}
+                </pre>
+              </div>
+
+              {/* Auto-generated Audio */}
+              {content.content_data?.audioUrl && (
+                <div
+                  className={`p-4 rounded-lg ${
+                    theme === 'day-mode' ? 'bg-blue-50' : 'bg-blue-900/20'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 mb-3">
+                    <i className="fas fa-volume-up text-blue-600 text-xl"></i>
+                    <h4
+                      className={`font-semibold ${
+                        theme === 'day-mode' ? 'text-gray-900' : 'text-white'
+                      }`}
+                    >
+                      Audio Narration
+                    </h4>
+                    {content.content_data?.audioDuration && (
+                      <span
+                        className={`text-sm ${
+                          theme === 'day-mode' ? 'text-gray-600' : 'text-gray-400'
+                        }`}
+                      >
+                        ({Math.round(content.content_data.audioDuration)}s)
+                      </span>
+                    )}
+                  </div>
+                  <audio
+                    controls
+                    className="w-full"
+                    style={{ maxWidth: '100%' }}
+                  >
+                    <source src={content.content_data.audioUrl} type={`audio/${content.content_data.audioFormat || 'mp3'}`} />
+                    Your browser does not support the audio element.
+                  </audio>
+                  {content.content_data?.audioVoice && (
+                    <p
+                      className={`text-xs mt-2 ${
+                        theme === 'day-mode' ? 'text-gray-500' : 'text-gray-400'
+                      }`}
+                    >
+                      Voice: {content.content_data.audioVoice}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

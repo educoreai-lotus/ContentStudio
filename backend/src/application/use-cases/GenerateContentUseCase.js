@@ -205,8 +205,33 @@ export class GenerateContentUseCase {
           const text = await this.aiGenerationService.generateText(prompt, {
             language: promptVariables.language,
           });
+          
+          // Auto-generate audio narration for the text
+          let audioData = null;
+          try {
+            console.log('[AI Generation] Auto-generating audio for text content...');
+            audioData = await this.aiGenerationService.generateAudio(text, {
+              voice: 'alloy',
+              model: 'tts-1',
+              format: 'mp3',
+              language: promptVariables.language,
+            });
+            console.log('[AI Generation] Audio generated successfully:', {
+              hasAudio: !!audioData.audio,
+              format: audioData.format,
+              duration: audioData.duration,
+            });
+          } catch (audioError) {
+            console.warn('[AI Generation] Failed to generate audio, continuing without it:', audioError.message);
+          }
+          
           contentData = {
             text,
+            audioUrl: audioData?.audioUrl, // URL for playback
+            audioFormat: audioData?.format,
+            audioDuration: audioData?.duration,
+            audioVoice: audioData?.voice,
+            audioText: audioData?.text, // The text that was converted to audio
             metadata,
           };
           break;
