@@ -5,10 +5,10 @@ import { RepositoryFactory } from '../../infrastructure/database/repositories/Re
 
 const router = express.Router();
 
-// Initialize repositories
-const templateRepository = RepositoryFactory.getTemplateRepository();
-const topicRepository = RepositoryFactory.getTopicRepository();
-const contentRepository = RepositoryFactory.getContentRepository();
+// Initialize repositories (PostgreSQL if connected, otherwise in-memory)
+const templateRepository = await RepositoryFactory.getTemplateRepository();
+const topicRepository = await RepositoryFactory.getTopicRepository();
+const contentRepository = await RepositoryFactory.getContentRepository();
 
 // Initialize use case
 const applyTemplateToLessonUseCase = new ApplyTemplateToLessonUseCase({
@@ -25,7 +25,7 @@ const templateApplicationController = new TemplateApplicationController({
 /**
  * Apply template to lesson
  * POST /api/templates/:templateId/apply/:topicId
- * 
+ *
  * Flow: Trainer creates content → selects template → sees lesson view
  */
 router.post(

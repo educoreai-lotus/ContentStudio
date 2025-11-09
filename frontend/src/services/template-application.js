@@ -22,7 +22,7 @@ export const templateApplicationService = {
    */
   async getLessonView(topicId) {
     const response = await apiClient.get(`/api/topics/${topicId}/view`);
-    return response.data;
+    return response.data.data || response.data;
   },
 };
 
