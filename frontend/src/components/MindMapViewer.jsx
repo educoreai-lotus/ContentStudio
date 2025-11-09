@@ -1,12 +1,12 @@
 import { useEffect, useRef } from 'react';
-import { useTheme } from '../context/ThemeContext';
+import { useApp } from '../context/AppContext';
 
 /**
  * MindMapViewer Component
  * Displays mind map data with beautiful visual circles and colors
  */
 export const MindMapViewer = ({ data }) => {
-  const { theme } = useTheme();
+  const { theme } = useApp();
   const svgRef = useRef(null);
 
   useEffect(() => {
