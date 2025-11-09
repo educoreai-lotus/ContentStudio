@@ -81,11 +81,43 @@ export class AIGenerationService extends IAIGenerationService {
   }
 
   async generateMindMap(topicText, config = {}) {
-    if (!this.geminiClient) {
-      throw new Error('Gemini client not configured');
+    // Try Gemini first, fallback to OpenAI if it fails
+    if (this.geminiClient) {
+      try {
+        return await this.geminiClient.generateMindMap(topicText, config);
+      } catch (error) {
+        console.warn('[AIGenerationService] Gemini failed, falling back to OpenAI:', error.message);
+      }
     }
 
-    return await this.geminiClient.generateMindMap(topicText, config);
+    // Fallback: Use OpenAI to generate mind map
+    if (!this.openaiClient) {
+      throw new Error('Neither Gemini nor OpenAI client is configured for mind map generation');
+    }
+
+    const prompt = `Analyze the following educational content and create a mind map structure in JSON format.
+The JSON should have a "nodes" array with objects containing "id", "label", and "type" fields,
+and an "edges" array with objects containing "source", "target" fields representing relationships.
+
+Content to analyze:
+${topicText}
+
+Return only valid JSON, no additional text.`;
+
+    const response = await this.openaiClient.generateText(prompt, {
+      systemPrompt: 'You are a mind map generator. Create structured JSON representations of educational content.',
+      temperature: 0.3,
+      max_tokens: 3000,
+    });
+
+    // Parse JSON response
+    const cleanedResponse = response.trim();
+    const jsonMatch = cleanedResponse.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      return JSON.parse(jsonMatch[0]);
+    }
+
+    throw new Error('Invalid JSON response from OpenAI');
   }
 
   buildSystemPrompt(contentType, config) {
