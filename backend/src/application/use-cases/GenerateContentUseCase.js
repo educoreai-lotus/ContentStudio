@@ -270,10 +270,23 @@ export class GenerateContentUseCase {
         case 3: { // presentation
           const presentation = await this.aiGenerationService.generatePresentation(prompt, {
             slide_count: generationRequest.slide_count || 10,
+            style: generationRequest.presentation_style || 'educational',
+            lessonTopic: promptVariables.lessonTopic,
+            lessonDescription: promptVariables.lessonDescription,
+            language: promptVariables.language,
+            skillsList: promptVariables.skillsListArray,
           });
           contentData = {
             ...presentation,
-            metadata,
+            storageUrl: presentation.googleSlidesUrl,
+            metadata: {
+              ...metadata,
+              googleSlidesUrl: presentation.googleSlidesUrl,
+              lessonTopic: promptVariables.lessonTopic,
+              lessonDescription: promptVariables.lessonDescription,
+              language: promptVariables.language,
+              skillsList: promptVariables.skillsListArray,
+            },
           };
           break;
         }
