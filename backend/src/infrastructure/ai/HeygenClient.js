@@ -185,12 +185,20 @@ export class HeygenClient {
       );
 
       const filePath = `avatar_videos/${fileName}`;
-      const { data, error } = await supabase.storage
-        .from('media')
-        .upload(filePath, fileBuffer, {
+      const arrayBuffer = fileBuffer.buffer.slice(
+        fileBuffer.byteOffset,
+        fileBuffer.byteOffset + fileBuffer.byteLength,
+      );
+
+      const { data, error } = await supabase.storage.from('media').upload(
+        filePath,
+        arrayBuffer,
+        {
           contentType,
+          cacheControl: '3600',
           upsert: true,
-        });
+        },
+      );
 
       if (error) {
         console.error('[HeygenClient] Supabase upload error:', error);
@@ -283,7 +291,11 @@ export class HeygenClient {
         maxContentLength: Infinity,
         maxBodyLength: Infinity,
       });
-      return Buffer.from(response.data);
+      const buffer = Buffer.from(response.data);
+      if (!buffer || buffer.length === 0) {
+        throw new Error('Downloaded video buffer is empty');
+      }
+      return buffer;
     } catch (error) {
       console.error('[HeygenClient] Download video error:', error.message);
       throw new Error(`Failed to download video: ${error.message}`);
