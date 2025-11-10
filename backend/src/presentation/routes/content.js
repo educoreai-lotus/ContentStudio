@@ -3,6 +3,7 @@ import { ContentController } from '../controllers/ContentController.js';
 import { RepositoryFactory } from '../../infrastructure/database/repositories/RepositoryFactory.js';
 import { ContentVersionRepository } from '../../infrastructure/database/repositories/ContentVersionRepository.js';
 import { CreateContentVersionUseCase } from '../../application/use-cases/CreateContentVersionUseCase.js';
+import { AIGenerationService } from '../../infrastructure/ai/AIGenerationService.js';
 
 const router = express.Router();
 
@@ -22,9 +23,18 @@ let contentController;
   // TODO: Initialize quality check service
   const qualityCheckService = null; // Will be implemented later
 
+  const aiGenerationService = new AIGenerationService({
+    openaiApiKey: process.env.OPENAI_API_KEY,
+    geminiApiKey: process.env.GEMINI_API_KEY || process.env.Gemini_API_Key,
+    heygenApiKey: process.env.HEYGEN_API_KEY,
+    supabaseUrl: process.env.SUPABASE_URL,
+    supabaseServiceKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+  });
+
   contentController = new ContentController({
     contentRepository,
     qualityCheckService,
+    aiGenerationService,
     contentVersionRepository,
     createContentVersionUseCase,
   });

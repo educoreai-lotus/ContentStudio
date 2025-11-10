@@ -10,12 +10,14 @@ export class ContentController {
   constructor({
     contentRepository,
     qualityCheckService,
+    aiGenerationService,
     contentVersionRepository,
     createContentVersionUseCase,
   }) {
     this.createContentUseCase = new CreateContentUseCase({
       contentRepository,
       qualityCheckService,
+      aiGenerationService,
     });
     this.updateContentUseCase = new UpdateContentUseCase({
       contentRepository,
@@ -60,7 +62,8 @@ export class ContentController {
         content_data,
         was_edited,
         original_content_data,
-      } = req.body;
+          generation_method_id: requestedGenerationMethod,
+        } = req.body;
 
       console.log('[Content Approve] Approving content:', {
         topic_id,
@@ -69,17 +72,21 @@ export class ContentController {
       });
 
       // Determine generation method based on whether content was edited
-      let generation_method_id = 'ai_assisted';
-      if (was_edited) {
-        generation_method_id = 'manual_edited';
-        console.log('[Content Approve] Content was edited by trainer, will trigger quality check');
-      }
+        let generation_method_id = requestedGenerationMethod || null;
+        if (!generation_method_id) {
+          generation_method_id = was_edited ? 'manual_edited' : 'ai_assisted';
+        } else if (generation_method_id === 'manual_edited' && !was_edited) {
+          console.log('[Content Approve] Manual edited generation method requested without edits, proceeding as manual.');
+        }
+        if (!requestedGenerationMethod && was_edited) {
+          console.log('[Content Approve] Content was edited by trainer, will trigger quality check');
+        }
 
       const contentData = {
         topic_id: parseInt(topic_id),
         content_type_id,
         content_data,
-        generation_method_id,
+          generation_method_id,
       };
 
       const content = await this.createContentUseCase.execute(contentData);

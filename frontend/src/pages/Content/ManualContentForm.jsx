@@ -3,6 +3,8 @@ import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import { contentService } from '../../services/content.js';
 import { useApp } from '../../context/AppContext.jsx';
 
+const MAX_TEXT_LENGTH = 4000;
+
 export const ManualContentForm = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -21,6 +23,15 @@ export const ManualContentForm = () => {
   const [error, setError] = useState(null);
 
   const handleInputChange = (field, value) => {
+    if (field === 'text') {
+      const trimmedValue = value.slice(0, MAX_TEXT_LENGTH);
+      setFormData(prev => ({
+        ...prev,
+        text: trimmedValue,
+      }));
+      return;
+    }
+
     setFormData(prev => ({
       ...prev,
       [field]: value,
@@ -57,6 +68,10 @@ export const ManualContentForm = () => {
       if (contentType === 'text') {
         if (!formData.text.trim()) {
           setError('Please enter text content');
+          return;
+        }
+        if (formData.text.length > MAX_TEXT_LENGTH) {
+          setError(`Text content cannot exceed ${MAX_TEXT_LENGTH} characters`);
           return;
         }
         content_data = {
@@ -121,6 +136,7 @@ export const ManualContentForm = () => {
         content_data,
         was_edited: false, // Manual creation, not edited
         original_content_data: null,
+        generation_method_id: 'manual',
       });
 
       // Navigate back to content manager
@@ -248,8 +264,13 @@ export const ManualContentForm = () => {
                       ? 'border-gray-300 bg-white text-gray-900'
                       : 'border-gray-600 bg-gray-700 text-white'
                   }`}
+                  maxLength={MAX_TEXT_LENGTH}
                   required
                 />
+                <div className="mt-2 flex justify-between text-xs text-gray-500">
+                  <span>{formData.text.length} / {MAX_TEXT_LENGTH} characters</span>
+                  <span>Audio auto-generates after save</span>
+                </div>
               </div>
             )}
 
