@@ -4,20 +4,31 @@ import { TTSClient } from '../external-apis/openai/TTSClient.js';
 import { GeminiClient } from '../external-apis/gemini/GeminiClient.js';
 import { HeygenClient } from './HeygenClient.js';
 import { SupabaseStorageClient } from '../storage/SupabaseStorageClient.js';
+import { GoogleSlidesClient } from '../external-apis/google-slides/GoogleSlidesClient.js';
 
 /**
  * AI Generation Service Implementation
  * Uses OpenAI and Gemini APIs for content generation
  */
 export class AIGenerationService extends IAIGenerationService {
-  constructor({ openaiApiKey, geminiApiKey, heygenApiKey, supabaseUrl, supabaseServiceKey }) {
+  constructor({
+    openaiApiKey,
+    geminiApiKey,
+    heygenApiKey,
+    supabaseUrl,
+    supabaseServiceKey,
+    googleServiceAccountJson,
+  }) {
     super();
     this.openaiClient = openaiApiKey ? new OpenAIClient({ apiKey: openaiApiKey }) : null;
     this.ttsClient = openaiApiKey ? new TTSClient({ apiKey: openaiApiKey }) : null;
     this.geminiClient = geminiApiKey ? new GeminiClient({ apiKey: geminiApiKey }) : null;
     this.heygenClient = heygenApiKey ? new HeygenClient({ apiKey: heygenApiKey }) : null;
-    this.storageClient = (supabaseUrl && supabaseServiceKey) 
+    this.storageClient = (supabaseUrl && supabaseServiceKey)
       ? new SupabaseStorageClient({ supabaseUrl, supabaseServiceKey })
+      : null;
+    this.googleSlidesClient = googleServiceAccountJson
+      ? new GoogleSlidesClient({ serviceAccountJson: googleServiceAccountJson })
       : null;
   }
 
@@ -268,7 +279,7 @@ Format as JSON with this structure:
     let presentationData;
     try {
       // Extract JSON from markdown code blocks if present
-      const jsonMatch = generatedContent.match(/```json\s*([\s\S]*?)\s*```/) || 
+      const jsonMatch = generatedContent.match(/```json\s*([\s\S]*?)\s*```/) ||
                        generatedContent.match(/```\s*([\s\S]*?)\s*```/);
       const jsonText = jsonMatch ? jsonMatch[1] : generatedContent;
       presentationData = JSON.parse(jsonText);
@@ -285,15 +296,61 @@ Format as JSON with this structure:
       };
     }
 
+    let googleSlidesUrl = null;
+    if (this.googleSlidesClient?.isEnabled?.()) {
+      try {
+        const slidesPayload = this.normalizeSlides(presentationData);
+        if (slidesPayload.length > 0) {
+          const lessonTopic = config.lessonTopic || topic;
+          const { publicUrl } = await this.googleSlidesClient.createPresentation({
+            lessonTopic,
+            slides: slidesPayload,
+            accentColor: '#00B894',
+          });
+          googleSlidesUrl = publicUrl;
+        }
+      } catch (slidesError) {
+        console.warn('[AIGenerationService] Google Slides generation failed:', slidesError.message);
+      }
+    }
+
     return {
       presentation: presentationData,
-      format: 'json', // Will be converted to Google Slides format later
+      format: 'json',
       slide_count: presentationData.slides?.length || 0,
+      googleSlidesUrl,
       metadata: {
         style,
         generated_at: new Date().toISOString(),
+        googleSlidesUrl,
+        language: config.language,
       },
     };
+  }
+
+  normalizeSlides(presentationData) {
+    if (!presentationData || !Array.isArray(presentationData.slides)) {
+      return [];
+    }
+
+    return presentationData.slides.map((slide, index) => ({
+      title: this.truncateWords(slide.title || `Slide ${index + 1}`, 7),
+      points: Array.isArray(slide.content)
+        ? slide.content.map(point => String(point).trim()).filter(Boolean)
+        : Array.isArray(slide.points)
+          ? slide.points.map(point => String(point).trim()).filter(Boolean)
+          : [],
+    }));
+  }
+
+  truncateWords(text = '', maxWords = 7) {
+    const words = String(text)
+      .split(/\s+/)
+      .filter(Boolean);
+    if (words.length <= maxWords) {
+      return words.join(' ');
+    }
+    return `${words.slice(0, maxWords).join(' ')}…`;
   }
 
   async generateAvatarScript(prompt, config = {}) {
