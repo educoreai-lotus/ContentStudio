@@ -28,6 +28,7 @@ const aiGenerationService = new AIGenerationService({
   heygenApiKey,
   supabaseUrl,
   supabaseServiceKey,
+  googleServiceAccountJson: process.env.GOOGLE_SERVICE_ACCOUNT_JSON,
 });
 
 // TODO: Initialize quality check service
