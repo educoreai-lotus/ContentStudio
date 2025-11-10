@@ -308,6 +308,7 @@ Format as JSON with this structure:
             accentColor: '#00B894',
           });
           googleSlidesUrl = publicUrl;
+          console.log('[AIGenerationService] Google Slides shared successfully:', googleSlidesUrl);
         }
       } catch (slidesError) {
         console.warn('[AIGenerationService] Google Slides generation failed:', slidesError.message);

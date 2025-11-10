@@ -167,10 +167,11 @@ export class GoogleSlidesClient {
         type: 'anyone',
         allowFileDiscovery: false,
       },
+      supportsAllDrives: true,
     });
 
-    // 4. Return public URL
     const publicUrl = `https://docs.google.com/presentation/d/${presentationId}/edit?usp=sharing`;
+    console.log('[GoogleSlidesClient] Presentation shared publicly:', publicUrl);
 
     return {
       presentationId,
