@@ -48,16 +48,22 @@ export class GoogleSlidesClient {
     }
 
     const title = lessonTopic ? `Lesson - ${lessonTopic}` : 'EduCore Lesson Deck';
+    const folderId = process.env.GOOGLE_SLIDES_FOLDER_ID;
     let presentationId = null;
 
     try {
-      console.log('[GoogleSlidesClient] Step 1: Creating presentation');
-      const createResponse = await this.slides.presentations.create({
-        requestBody: { title },
+      console.log('[GoogleSlidesClient] Step 1: Creating Drive file (presentation)');
+      const createResponse = await this.drive.files.create({
+        requestBody: {
+          name: title,
+          mimeType: 'application/vnd.google-apps.presentation',
+          ...(folderId ? { parents: [folderId] } : {}),
+        },
+        fields: 'id',
       });
-      presentationId = createResponse.data.presentationId;
+      presentationId = createResponse.data.id;
     } catch (error) {
-      console.error('[GoogleSlidesClient] FAILED at Step 1 (presentations.create):', error.response?.data || error.message);
+      console.error('[GoogleSlidesClient] FAILED at Step 1 (drive.files.create):', error.response?.data || error.message);
       throw error;
     }
 
