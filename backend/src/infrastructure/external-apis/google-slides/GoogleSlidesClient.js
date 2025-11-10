@@ -51,6 +51,19 @@ export class GoogleSlidesClient {
     const folderId = process.env.GOOGLE_SLIDES_FOLDER_ID;
     if (!folderId) {
       console.warn('[GoogleSlidesClient] WARNING: GOOGLE_SLIDES_FOLDER_ID not set – file will be created in the service account Drive.');
+    } else {
+      try {
+        console.log('[GoogleSlidesClient] Verifying folder access...');
+        const folderCheck = await this.drive.files.get({
+          fileId: folderId,
+          fields: 'id, name',
+          supportsAllDrives: true,
+        });
+        console.log('[GoogleSlidesClient] Folder access OK:', folderCheck.data.name);
+      } catch (error) {
+        console.error('[GoogleSlidesClient] Service Account CANNOT ACCESS folder:', error.response?.data || error.message);
+        throw new Error('Service Account has no access to shared folder');
+      }
     }
     let presentationId = null;
 
@@ -62,6 +75,7 @@ export class GoogleSlidesClient {
           mimeType: 'application/vnd.google-apps.presentation',
           ...(folderId ? { parents: [folderId] } : {}),
         },
+        supportsAllDrives: true,
       });
       presentationId = createResponse.data.id;
       console.log('[GoogleSlidesClient] Presentation created successfully in folder:', folderId || '(service account root)');
