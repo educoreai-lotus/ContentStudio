@@ -49,19 +49,22 @@ export class GoogleSlidesClient {
 
     const title = lessonTopic ? `Lesson - ${lessonTopic}` : 'EduCore Lesson Deck';
     const folderId = process.env.GOOGLE_SLIDES_FOLDER_ID;
+    if (!folderId) {
+      console.warn('[GoogleSlidesClient] WARNING: GOOGLE_SLIDES_FOLDER_ID not set – file will be created in the service account Drive.');
+    }
     let presentationId = null;
 
     try {
-      console.log('[GoogleSlidesClient] Step 1: Creating Drive file (presentation)');
+      console.log('[GoogleSlidesClient] Step 1: Creating Drive file (presentation) in shared folder...');
       const createResponse = await this.drive.files.create({
         requestBody: {
           name: title,
           mimeType: 'application/vnd.google-apps.presentation',
           ...(folderId ? { parents: [folderId] } : {}),
         },
-        fields: 'id',
       });
       presentationId = createResponse.data.id;
+      console.log('[GoogleSlidesClient] Presentation created successfully in folder:', folderId || '(service account root)');
     } catch (error) {
       console.error('[GoogleSlidesClient] FAILED at Step 1 (drive.files.create):', error.response?.data || error.message);
       throw error;
