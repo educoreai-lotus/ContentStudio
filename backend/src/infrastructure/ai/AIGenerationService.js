@@ -322,7 +322,10 @@ Format as JSON with this structure:
       voiceId: config.voiceId,
     });
 
-    console.log('[Avatar Video] Video generated:', videoResult.videoUrl);
+    console.log('[Avatar Video] Video generated:', videoResult.videoUrl, {
+      status: videoResult.status,
+      fallback: videoResult.fallback,
+    });
 
     return {
       script,
@@ -330,6 +333,14 @@ Format as JSON with this structure:
       videoId: videoResult.videoId,
       language: config.language || 'en',
       duration_seconds: videoResult.duration || 15,
+      status: videoResult.status || 'completed',
+      fallback: !!videoResult.fallback,
+      metadata: {
+        heygen_video_url: videoResult.heygenVideoUrl,
+        generation_status: videoResult.status || 'completed',
+        storage_fallback: !!videoResult.fallback,
+        error: videoResult.error || null,
+      },
     };
   }
 }

@@ -78,35 +78,74 @@ export class HeygenClient {
       console.log(`[HeygenClient] Full response:`, JSON.stringify(response.data, null, 2));
 
       // Step 2: Poll for video completion
-      const heygenVideoUrl = await this.pollVideoStatus(videoId);
+      let pollResult;
+      try {
+        pollResult = await this.pollVideoStatus(
+          videoId,
+          config.pollAttempts || 120,
+          config.pollInterval || 5000,
+        );
+      } catch (pollError) {
+        const fallbackUrl = pollError.videoUrl || `https://app.heygen.com/share/${videoId}`;
+        console.warn('[HeygenClient] Video not ready within polling window, returning fallback URL:', fallbackUrl);
+        return {
+          videoUrl: fallbackUrl,
+          heygenVideoUrl: fallbackUrl,
+          videoId,
+          duration: config.duration || 15,
+          script,
+          status: pollError.status || 'processing',
+          fallback: true,
+        };
+      }
+
+      const heygenVideoUrl = pollResult.videoUrl;
 
       // Step 3: Download and upload to Supabase Storage
       console.log(`[HeygenClient] Downloading video from Heygen...`);
-      const videoBuffer = await this.downloadVideo(heygenVideoUrl);
-      console.log(`[HeygenClient] Video downloaded (${videoBuffer.length} bytes)`);
-      
-      console.log(`[HeygenClient] Uploading to Supabase Storage...`);
-      let storagePath = heygenVideoUrl;
       try {
-        const uploadedUrl = await this.uploadToStorage({
-          fileBuffer: videoBuffer,
-          fileName: `avatar_${videoId}.mp4`,
-          contentType: 'video/mp4',
-        });
-        if (uploadedUrl) {
-          storagePath = uploadedUrl;
+        const videoBuffer = await this.downloadVideo(heygenVideoUrl);
+        console.log(`[HeygenClient] Video downloaded (${videoBuffer.length} bytes)`);
+
+        console.log(`[HeygenClient] Uploading to Supabase Storage...`);
+        let storagePath = heygenVideoUrl;
+        try {
+          const uploadedUrl = await this.uploadToStorage({
+            fileBuffer: videoBuffer,
+            fileName: `avatar_${videoId}.mp4`,
+            contentType: 'video/mp4',
+          });
+          if (uploadedUrl) {
+            storagePath = uploadedUrl;
+          }
+        } catch (uploadErr) {
+          console.warn('[HeygenClient] Falling back to Heygen URL due to upload error:', uploadErr.message);
         }
-      } catch (uploadErr) {
-        console.warn('[HeygenClient] Falling back to Heygen URL due to upload error:', uploadErr.message);
+
+        return {
+          videoUrl: storagePath,
+          heygenVideoUrl: heygenVideoUrl,
+          videoId,
+          duration: config.duration || 15,
+          script,
+          status: 'completed',
+          fallback: false,
+        };
+      } catch (downloadErr) {
+        const fallbackUrl = `https://app.heygen.com/share/${videoId}`;
+        console.warn('[HeygenClient] Failed to download/upload video; returning fallback URL:', fallbackUrl, downloadErr.message);
+        return {
+          videoUrl: fallbackUrl,
+          heygenVideoUrl: heygenVideoUrl,
+          videoId,
+          duration: config.duration || 15,
+          script,
+          status: 'processing',
+          fallback: true,
+          error: downloadErr.message,
+        };
       }
 
-      return {
-        videoUrl: storagePath,
-        heygenVideoUrl: heygenVideoUrl,
-        videoId,
-        duration: config.duration || 15,
-        script,
-      };
     } catch (error) {
       console.error('[HeygenClient] Video generation error:', error.response?.data || error.message);
       throw new Error(`Failed to generate avatar video: ${error.message}`);
@@ -116,7 +155,7 @@ export class HeygenClient {
   /**
    * Poll video generation status
    * @param {string} videoId - Video ID from Heygen
-   * @returns {Promise<string>} Video URL
+   * @returns {Promise<{status: string, videoUrl: string}>} Video status data
    */
   async pollVideoStatus(videoId, maxAttempts = 60, interval = 3000) {
     console.log(`[HeygenClient] Starting to poll for video ${videoId}`);
@@ -132,7 +171,7 @@ export class HeygenClient {
         if (status === 'completed') {
           const videoUrl = response.data.data.video_url;
           console.log(`[HeygenClient] Video completed! URL: ${videoUrl}`);
-          return videoUrl;
+          return { status, videoUrl };
         } else if (status === 'failed') {
           throw new Error('Video generation failed');
         }
@@ -143,12 +182,9 @@ export class HeygenClient {
         // If we get a 404 or network error, the video might still be processing
         console.error(`[HeygenClient] Poll attempt ${attempt + 1} failed:`, error.response?.data || error.message);
         
-        // Don't throw on last attempt - return a placeholder URL with video ID
+        // Don't throw on last attempt - just continue to retry
         if (attempt === maxAttempts - 1) {
           console.warn(`[HeygenClient] Timeout reached. Video ${videoId} may still be processing.`);
-          console.warn(`[HeygenClient] Check Heygen dashboard or use video ID: ${videoId}`);
-          // Return a special URL that indicates the video is still processing
-          return `https://app.heygen.com/share/${videoId}`;
         }
         
         // Wait before retry
@@ -156,8 +192,10 @@ export class HeygenClient {
       }
     }
 
-    // This shouldn't be reached, but just in case
-    return `https://app.heygen.com/share/${videoId}`;
+    const timeoutError = new Error(`Video ${videoId} not ready after polling`);
+    timeoutError.status = 'processing';
+    timeoutError.videoUrl = `https://app.heygen.com/share/${videoId}`;
+    throw timeoutError;
   }
 
   /**
@@ -291,6 +329,10 @@ export class HeygenClient {
         maxContentLength: Infinity,
         maxBodyLength: Infinity,
       });
+      const contentType = response.headers['content-type'];
+      if (!contentType || !contentType.includes('video')) {
+        throw new Error(`Unexpected content type received: ${contentType || 'unknown'}`);
+      }
       const buffer = Buffer.from(response.data);
       if (!buffer || buffer.length === 0) {
         throw new Error('Downloaded video buffer is empty');
