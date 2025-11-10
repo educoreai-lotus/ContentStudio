@@ -22,6 +22,8 @@ export class HeygenClient {
         'Content-Type': 'application/json',
       },
       timeout: 60000, // 60 seconds
+      maxContentLength: Infinity,
+      maxBodyLength: Infinity,
     });
   }
 
@@ -81,9 +83,22 @@ export class HeygenClient {
       // Step 3: Download and upload to Supabase Storage
       console.log(`[HeygenClient] Downloading video from Heygen...`);
       const videoBuffer = await this.downloadVideo(heygenVideoUrl);
+      console.log(`[HeygenClient] Video downloaded (${videoBuffer.length} bytes)`);
       
       console.log(`[HeygenClient] Uploading to Supabase Storage...`);
-      const storagePath = await this.uploadToStorage(heygenVideoUrl, `avatar_${videoId}.mp4`);
+      let storagePath = heygenVideoUrl;
+      try {
+        const uploadedUrl = await this.uploadToStorage({
+          fileBuffer: videoBuffer,
+          fileName: `avatar_${videoId}.mp4`,
+          contentType: 'video/mp4',
+        });
+        if (uploadedUrl) {
+          storagePath = uploadedUrl;
+        }
+      } catch (uploadErr) {
+        console.warn('[HeygenClient] Falling back to Heygen URL due to upload error:', uploadErr.message);
+      }
 
       return {
         videoUrl: storagePath,
@@ -147,21 +162,21 @@ export class HeygenClient {
 
   /**
    * Upload video to Supabase Storage
-   * @param {string} videoUrl - Heygen video URL
-   * @param {string} fileName - File name for storage
+   * @param {Object} params
+   * @param {Buffer} params.fileBuffer - Binary video buffer
+   * @param {string} params.fileName - File name for storage
+   * @param {string} params.contentType - MIME type
    * @returns {Promise<string>} Supabase storage path
    */
-  async uploadToStorage(videoUrl, fileName) {
+  async uploadToStorage({ fileBuffer, fileName, contentType = 'video/mp4' }) {
     try {
-      // Download video from Heygen
-      const videoResponse = await axios.get(videoUrl, {
-        responseType: 'arraybuffer',
-      });
+      if (!fileBuffer || !(fileBuffer instanceof Buffer) || fileBuffer.length === 0) {
+        throw new Error('Invalid video buffer received for upload');
+      }
 
-      // Upload to Supabase Storage
       if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
         console.warn('[HeygenClient] Supabase not configured, returning Heygen URL');
-        return videoUrl;
+        return null;
       }
 
       const supabase = createClient(
@@ -172,14 +187,14 @@ export class HeygenClient {
       const filePath = `avatar_videos/${fileName}`;
       const { data, error } = await supabase.storage
         .from('media')
-        .upload(filePath, videoResponse.data, {
-          contentType: 'video/mp4',
-          upsert: false,
+        .upload(filePath, fileBuffer, {
+          contentType,
+          upsert: true,
         });
 
       if (error) {
         console.error('[HeygenClient] Supabase upload error:', error);
-        return videoUrl; // Fallback to Heygen URL
+        throw error;
       }
 
       // Get public URL
@@ -190,7 +205,7 @@ export class HeygenClient {
       return urlData.publicUrl;
     } catch (error) {
       console.error('[HeygenClient] Storage upload error:', error.message);
-      return videoUrl; // Fallback to Heygen URL
+      throw new Error(`Failed to upload video to storage: ${error.message}`);
     }
   }
 
@@ -265,6 +280,8 @@ export class HeygenClient {
     try {
       const response = await axios.get(videoUrl, {
         responseType: 'arraybuffer',
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity,
       });
       return Buffer.from(response.data);
     } catch (error) {
