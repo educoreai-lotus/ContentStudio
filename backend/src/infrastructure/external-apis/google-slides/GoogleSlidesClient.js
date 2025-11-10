@@ -49,9 +49,7 @@ export class GoogleSlidesClient {
 
     const title = lessonTopic ? `Lesson - ${lessonTopic}` : 'EduCore Lesson Deck';
     const folderId = process.env.GOOGLE_SLIDES_FOLDER_ID;
-    if (!folderId) {
-      console.warn('[GoogleSlidesClient] WARNING: GOOGLE_SLIDES_FOLDER_ID not set – file will be created in the service account Drive.');
-    } else {
+    if (folderId) {
       try {
         console.log('[GoogleSlidesClient] Verifying folder access...');
         const folderCheck = await this.drive.files.get({
@@ -64,6 +62,8 @@ export class GoogleSlidesClient {
         console.error('[GoogleSlidesClient] Service Account CANNOT ACCESS folder:', error.response?.data || error.message);
         throw new Error('Service Account has no access to shared folder');
       }
+    } else {
+      console.log('[GoogleSlidesClient] No folder ID configured – using Service Account Drive as default.');
     }
     let presentationId = null;
 

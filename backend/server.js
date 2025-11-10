@@ -84,6 +84,7 @@ import multilingualStatsRouter from './src/presentation/routes/multilingual-stat
 import jobsRouter from './src/presentation/routes/jobs.js';
 import exchangeRouter from './src/presentation/routes/exchange.js';
 import uploadRouter from './src/presentation/routes/upload.js';
+import debugRouter from './src/presentation/routes/debug.js';
 import { errorHandler } from './src/presentation/middleware/errorHandler.js';
 import { requestLogger } from './src/presentation/middleware/requestLogger.js';
 import { authenticationMiddleware } from './src/presentation/middleware/authentication.js';
@@ -104,6 +105,7 @@ app.use('/api/content/multilingual', multilingualStatsRouter);
 app.use('/api/jobs', jobsRouter);
 app.use('/api/exchange', exchangeRouter);
 app.use('/api/upload', uploadRouter);
+app.use('/api/debug', debugRouter);
 
 // Error handling middleware (must be after routes)
 app.use(errorHandler);
