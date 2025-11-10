@@ -48,14 +48,29 @@ export class GoogleSlidesClient {
     }
 
     const title = lessonTopic ? `Lesson - ${lessonTopic}` : 'EduCore Lesson Deck';
+    let presentationId = null;
 
-    const createResponse = await this.slides.presentations.create({
-      requestBody: { title },
-    });
+    try {
+      console.log('[GoogleSlidesClient] Step 1: Creating presentation');
+      const createResponse = await this.slides.presentations.create({
+        requestBody: { title },
+      });
+      presentationId = createResponse.data.presentationId;
+    } catch (error) {
+      console.error('[GoogleSlidesClient] FAILED at Step 1 (presentations.create):', error.response?.data || error.message);
+      throw error;
+    }
 
-    const presentationId = createResponse.data.presentationId;
-    const presentation = await this.slides.presentations.get({ presentationId });
-    const firstSlide = presentation.data.slides?.[0];
+    let presentation;
+    let firstSlide;
+    try {
+      console.log('[GoogleSlidesClient] Step 2: Fetching initial slide data');
+      presentation = await this.slides.presentations.get({ presentationId });
+      firstSlide = presentation.data.slides?.[0];
+    } catch (error) {
+      console.error('[GoogleSlidesClient] FAILED at Step 2 (presentations.get):', error.response?.data || error.message);
+      throw error;
+    }
 
     const requests = [];
 
@@ -195,25 +210,35 @@ export class GoogleSlidesClient {
     });
 
     if (requests.length > 0) {
-      await this.slides.presentations.batchUpdate({
-        presentationId,
-        requestBody: { requests },
-      });
+      try {
+        console.log('[GoogleSlidesClient] Step 3: Applying slide updates');
+        await this.slides.presentations.batchUpdate({
+          presentationId,
+          requestBody: { requests },
+        });
+      } catch (error) {
+        console.error('[GoogleSlidesClient] FAILED at Step 3 (presentations.batchUpdate):', error.response?.data || error.message);
+        throw error;
+      }
     }
 
-    await this.drive.permissions.create({
-      fileId: presentationId,
-      requestBody: {
-        role: 'reader',
-        type: 'anyone',
-        allowFileDiscovery: false,
-      },
-      supportsAllDrives: true,
-      sendNotificationEmail: false,
-    });
+    let publicUrl = `https://docs.google.com/presentation/d/${presentationId}/edit`;
 
-    const publicUrl = `https://docs.google.com/presentation/d/${presentationId}/edit`;
-    console.log('[GoogleSlidesClient] Presentation shared publicly:', publicUrl);
+    try {
+      console.log('[GoogleSlidesClient] Step 4: Setting permissions for public access');
+      await this.drive.permissions.create({
+        fileId: presentationId,
+        requestBody: {
+          role: 'reader',
+          type: 'anyone',
+          allowFileDiscovery: false,
+        },
+        sendNotificationEmail: false,
+      });
+      console.log('[GoogleSlidesClient] Presentation shared publicly:', publicUrl);
+    } catch (error) {
+      console.warn('[GoogleSlidesClient] WARNING: failed to make file public. Returning URL anyway.', error.response?.data || error.message);
+    }
 
     return {
       presentationId,
