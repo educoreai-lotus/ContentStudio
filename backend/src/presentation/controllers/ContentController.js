@@ -11,8 +11,7 @@ export class ContentController {
     contentRepository,
     qualityCheckService,
     aiGenerationService,
-    contentVersionRepository,
-    createContentVersionUseCase,
+    contentHistoryService,
   }) {
     this.createContentUseCase = new CreateContentUseCase({
       contentRepository,
@@ -21,10 +20,10 @@ export class ContentController {
     });
     this.updateContentUseCase = new UpdateContentUseCase({
       contentRepository,
-      contentVersionRepository,
-      createContentVersionUseCase,
+      contentHistoryService,
     });
     this.contentRepository = contentRepository;
+    this.contentHistoryService = contentHistoryService;
   }
 
   /**
@@ -219,6 +218,23 @@ export class ContentController {
   async remove(req, res, next) {
     try {
       const contentId = parseInt(req.params.id);
+      const existingContent = await this.contentRepository.findById(contentId);
+
+      if (!existingContent) {
+        return res.status(404).json({
+          error: {
+            code: 'CONTENT_NOT_FOUND',
+            message: 'Content not found',
+          },
+        });
+      }
+
+      try {
+        await this.contentHistoryService.saveVersion(existingContent, { force: true });
+      } catch (historyError) {
+        console.error('Failed to persist content history before delete:', historyError);
+      }
+
       await this.contentRepository.delete(contentId);
 
       res.status(204).send();
@@ -227,6 +243,81 @@ export class ContentController {
         return res.status(404).json({
           error: {
             code: 'CONTENT_NOT_FOUND',
+            message: error.message,
+          },
+        });
+      }
+      next(error);
+    }
+  }
+
+  /**
+   * Get history for a content item
+   * GET /api/content/:id/history
+   */
+  async history(req, res, next) {
+    try {
+      const contentId = parseInt(req.params.id);
+      const history = await this.contentHistoryService.getHistoryByContent(contentId);
+
+      res.json({
+        success: true,
+        data: history,
+      });
+    } catch (error) {
+      if (error.message.includes('not found')) {
+        return res.status(404).json({
+          error: {
+            code: 'CONTENT_NOT_FOUND',
+            message: error.message,
+          },
+        });
+      }
+      next(error);
+    }
+  }
+
+  /**
+   * Restore a specific history version
+   * POST /api/content/history/:historyId/restore
+   */
+  async restoreHistory(req, res, next) {
+    try {
+      const historyId = parseInt(req.params.historyId);
+      const restoredContent = await this.contentHistoryService.restoreVersion(historyId);
+
+      res.json({
+        success: true,
+        data: restoredContent,
+        message: 'Content restored successfully.',
+      });
+    } catch (error) {
+      if (error.message.includes('not found')) {
+        return res.status(404).json({
+          error: {
+            code: 'CONTENT_HISTORY_NOT_FOUND',
+            message: error.message,
+          },
+        });
+      }
+      next(error);
+    }
+  }
+
+  /**
+   * Delete (archive) a history version
+   * DELETE /api/content/history/:historyId
+   */
+  async deleteHistory(req, res, next) {
+    try {
+      const historyId = parseInt(req.params.historyId);
+      await this.contentHistoryService.deleteVersion(historyId);
+      res.status(204).send();
+    } catch (error) {
+      if (error.message.includes('not found')) {
+        return res.status(404).json({
+          error: {
+            code: 'CONTENT_HISTORY_NOT_FOUND',
             message: error.message,
           },
         });

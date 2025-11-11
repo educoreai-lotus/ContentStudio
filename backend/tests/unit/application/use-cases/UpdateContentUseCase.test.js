@@ -4,8 +4,7 @@ import { Content } from '../../../../src/domain/entities/Content.js';
 
 describe('UpdateContentUseCase', () => {
   let contentRepository;
-  let contentVersionRepository;
-  let createContentVersionUseCase;
+  let contentHistoryService;
   let useCase;
 
   beforeEach(() => {
@@ -14,18 +13,13 @@ describe('UpdateContentUseCase', () => {
       update: jest.fn(),
     };
 
-    contentVersionRepository = {
-      create: jest.fn(),
-    };
-
-    createContentVersionUseCase = {
-      execute: jest.fn(),
+    contentHistoryService = {
+      saveVersion: jest.fn(),
     };
 
     useCase = new UpdateContentUseCase({
       contentRepository,
-      contentVersionRepository,
-      createContentVersionUseCase,
+      contentHistoryService,
     });
   });
 
@@ -49,13 +43,13 @@ describe('UpdateContentUseCase', () => {
 
       contentRepository.findById.mockResolvedValue(existingContent);
       contentRepository.update.mockResolvedValue(updatedContent);
-      createContentVersionUseCase.execute.mockResolvedValue({});
+      contentHistoryService.saveVersion.mockResolvedValue({});
 
       const result = await useCase.execute(1, { content_data: { text: 'Updated content' } }, 'trainer123');
 
       expect(result).toBeInstanceOf(Content);
       expect(result.content_data.text).toBe('Updated content');
-      expect(createContentVersionUseCase.execute).toHaveBeenCalled();
+      expect(contentHistoryService.saveVersion).toHaveBeenCalled();
     });
 
     it('should create version before updating if content changed', async () => {
@@ -77,16 +71,11 @@ describe('UpdateContentUseCase', () => {
 
       contentRepository.findById.mockResolvedValue(existingContent);
       contentRepository.update.mockResolvedValue(updatedContent);
-      createContentVersionUseCase.execute.mockResolvedValue({});
+      contentHistoryService.saveVersion.mockResolvedValue({});
 
       await useCase.execute(1, { content_data: { text: 'Updated' } }, 'trainer123');
 
-      expect(createContentVersionUseCase.execute).toHaveBeenCalledWith(
-        1,
-        { text: 'Original' },
-        'trainer123',
-        'Auto-version before update'
-      );
+      expect(contentHistoryService.saveVersion).toHaveBeenCalledWith(existingContent);
     });
 
     it('should not create version if content_data unchanged', async () => {
@@ -111,7 +100,7 @@ describe('UpdateContentUseCase', () => {
 
       await useCase.execute(1, { quality_check_status: 'completed' }, 'trainer123');
 
-      expect(createContentVersionUseCase.execute).not.toHaveBeenCalled();
+      expect(contentHistoryService.saveVersion).not.toHaveBeenCalled();
     });
 
     it('should throw error if content_id is missing', async () => {
@@ -143,7 +132,7 @@ describe('UpdateContentUseCase', () => {
 
       contentRepository.findById.mockResolvedValue(existingContent);
       contentRepository.update.mockResolvedValue(updatedContent);
-      createContentVersionUseCase.execute.mockRejectedValue(new Error('Versioning failed'));
+      contentHistoryService.saveVersion.mockRejectedValue(new Error('Versioning failed'));
 
       // Should not throw, update should succeed
       const result = await useCase.execute(1, { content_data: { text: 'Updated' } }, 'trainer123');

@@ -62,6 +62,35 @@ export const contentService = {
   },
 
   /**
+   * Get content history versions
+   * @param {number} contentId
+   * @returns {Promise<Object>}
+   */
+  async getHistory(contentId) {
+    const response = await apiClient.get(`/api/content/${contentId}/history`);
+    return response.data.data;
+  },
+
+  /**
+   * Restore a specific history version
+   * @param {number} historyId
+   * @returns {Promise<Object>}
+   */
+  async restoreVersion(historyId) {
+    const response = await apiClient.post(`/api/content/history/${historyId}/restore`);
+    return response.data.data;
+  },
+
+  /**
+   * Delete (archive) a history version
+   * @param {number} historyId
+   * @returns {Promise<void>}
+   */
+  async deleteVersion(historyId) {
+    await apiClient.delete(`/api/content/history/${historyId}`);
+  },
+
+  /**
    * Approve and save AI-generated content
    * @param {Object} approvalData - Approval data
    * @returns {Promise<Object>} Saved content

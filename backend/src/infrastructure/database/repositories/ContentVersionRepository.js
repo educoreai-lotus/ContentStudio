@@ -17,7 +17,7 @@ export class ContentVersionRepository extends IContentVersionRepository {
     const createdVersion = new ContentVersion({
       ...version,
       version_id: versionId,
-      created_at: new Date(),
+      created_at: version.created_at || new Date(),
     });
 
     this.versions.push(createdVersion);
@@ -31,7 +31,7 @@ export class ContentVersionRepository extends IContentVersionRepository {
 
   async findByContentId(contentId) {
     return this.versions
-      .filter(v => v.content_id === contentId)
+      .filter(v => v.content_id === contentId && !v.deleted_at)
       .sort((a, b) => b.version_number - a.version_number);
   }
 
@@ -75,6 +75,14 @@ export class ContentVersionRepository extends IContentVersionRepository {
         this.versions[index] = version;
       }
     });
+  }
+
+  async softDelete(versionId) {
+    const index = this.versions.findIndex(v => v.version_id === versionId);
+    if (index === -1) {
+      throw new Error(`Version with id ${versionId} not found`);
+    }
+    this.versions[index].deleted_at = new Date();
   }
 }
 

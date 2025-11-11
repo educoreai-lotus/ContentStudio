@@ -4,6 +4,7 @@ import { contentService } from '../../services/content.js';
 import { topicsService } from '../../services/topics.js';
 import { useApp } from '../../context/AppContext';
 import { TemplateSelectionModal } from '../../components/Templates/TemplateSelectionModal.jsx';
+import { ContentHistorySidebar } from '../../components/Content/ContentHistorySidebar.jsx';
 
 const CONTENT_TYPES = [
   { id: 'text', name: 'Text Content', icon: 'fa-file-alt', color: 'blue', dbId: 1, allowManual: true },
@@ -182,239 +183,248 @@ export default function TopicContentManager() {
           </div>
         )}
 
-        {/* Content Progress */}
-        <div
-          className={`mb-8 p-6 rounded-2xl shadow-lg ${
-            theme === 'day-mode'
-              ? 'bg-white border border-gray-200'
-              : 'bg-gray-800 border border-gray-700'
-          }`}
-        >
-          <div className="flex items-center justify-between mb-4">
-            <h2
-              className={`text-xl font-semibold ${
-                theme === 'day-mode' ? 'text-gray-900' : 'text-white'
-              }`}
-            >
-              Content Progress
-            </h2>
-            <span
-              className={`text-2xl font-bold ${
-                existingContent.length >= 5
-                  ? 'text-emerald-600'
-                  : theme === 'day-mode'
-                  ? 'text-gray-700'
-                  : 'text-gray-300'
-              }`}
-            >
-              {Math.min(existingContent.length, 5)}/5
-            </span>
-          </div>
-          <div
-            className={`w-full rounded-full h-3 ${
-              theme === 'day-mode' ? 'bg-gray-200' : 'bg-gray-700'
-            }`}
-          >
+        <div className="grid gap-8 lg:grid-cols-[2fr,1fr]">
+          <div>
+            {/* Content Progress */}
             <div
-              className={`h-3 rounded-full transition-all ${
-                existingContent.length >= 5
-                  ? 'bg-emerald-600'
-                  : existingContent.length >= 3
-                  ? 'bg-yellow-500'
-                  : 'bg-red-500'
-              }`}
-              style={{ width: `${Math.min(existingContent.length / 5, 1) * 100}%` }}
-            />
-          </div>
-          {templateAppliedMessage && (
-            <div
-              className={`mt-4 px-4 py-3 rounded-lg text-sm ${
+              className={`mb-8 p-6 rounded-2xl shadow-lg ${
                 theme === 'day-mode'
-                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                  : 'bg-emerald-900/20 text-emerald-300 border border-emerald-500/40'
+                  ? 'bg-white border border-gray-200'
+                  : 'bg-gray-800 border border-gray-700'
               }`}
             >
-              {templateAppliedMessage}
-            </div>
-          )}
-          {topicDetails?.template_id ? (
-            <div
-              className={`mt-4 p-4 rounded-lg border ${
-                theme === 'day-mode'
-                  ? 'border-emerald-200 bg-emerald-50'
-                  : 'border-emerald-500/40 bg-emerald-900/10'
-              }`}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <div>
-                  <p className="text-sm text-emerald-700 dark:text-emerald-300 font-semibold">
-                    Template Applied
-                  </p>
-                  <p className="text-lg font-bold">
-                    {topicDetails.template_name || 'Selected Template'}
-                  </p>
-                </div>
-                <button
-                  onClick={() => setTemplateModalOpen(true)}
-                  className="px-3 py-1 text-sm bg-emerald-600 hover:bg-emerald-700 text-white rounded-md"
+              <div className="flex items-center justify-between mb-4">
+                <h2
+                  className={`text-xl font-semibold ${
+                    theme === 'day-mode' ? 'text-gray-900' : 'text-white'
+                  }`}
                 >
-                  Change Template
-                </button>
+                  Content Progress
+                </h2>
+                <span
+                  className={`text-2xl font-bold ${
+                    existingContent.length >= 5
+                      ? 'text-emerald-600'
+                      : theme === 'day-mode'
+                      ? 'text-gray-700'
+                      : 'text-gray-300'
+                  }`}
+                >
+                  {Math.min(existingContent.length, 5)}/5
+                </span>
               </div>
-              <div className="flex flex-wrap gap-2">
-                {(topicDetails.template_format_order || []).map((format, index) => (
-                  <span
-                    key={`${format}-${index}`}
-                    className="px-3 py-1 rounded-full bg-white/70 text-emerald-700 text-xs font-medium border border-emerald-200 dark:bg-slate-900/60 dark:text-emerald-300"
-                  >
-                    <span className="opacity-60 mr-1">{index + 1}.</span>
-                    {format.replace('_', ' ')}
-                  </span>
-                ))}
-              </div>
-            </div>
-          ) : null}
-        </div>
-
-        {/* Content Types Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {CONTENT_TYPES.map(type => {
-            const content = getContentByType(type);
-            const hasContent = !!content;
-
-            return (
               <div
-                key={type.id}
-                className={`p-6 rounded-2xl shadow-lg border-2 transition-all ${getColorClasses(
-                  type.color,
-                  hasContent
-                )}`}
+                className={`w-full rounded-full h-3 ${
+                  theme === 'day-mode' ? 'bg-gray-200' : 'bg-gray-700'
+                }`}
               >
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center">
-                    <i className={`fas ${type.icon} text-2xl mr-3`}></i>
-                    <h3 className="text-lg font-semibold">{type.name}</h3>
-                  </div>
-                  {hasContent && (
-                    <span className="px-2 py-1 bg-emerald-600 text-white text-xs rounded-full">
-                      Created
-                    </span>
-                  )}
+                <div
+                  className={`h-3 rounded-full transition-all ${
+                    existingContent.length >= 5
+                      ? 'bg-emerald-600'
+                      : existingContent.length >= 3
+                      ? 'bg-yellow-500'
+                      : 'bg-red-500'
+                  }`}
+                  style={{ width: `${Math.min(existingContent.length / 5, 1) * 100}%` }}
+                />
+              </div>
+              {templateAppliedMessage && (
+                <div
+                  className={`mt-4 px-4 py-3 rounded-lg text-sm ${
+                    theme === 'day-mode'
+                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                      : 'bg-emerald-900/20 text-emerald-300 border border-emerald-500/40'
+                  }`}
+                >
+                  {templateAppliedMessage}
                 </div>
-
-                {hasContent ? (
-                  <div className="space-y-3">
-                    <p className={`text-sm ${theme === 'day-mode' ? 'text-gray-600' : 'text-gray-400'}`}>
-                      Created: {new Date(content.created_at).toLocaleDateString()}
-                    </p>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => navigate(`/topics/${topicId}/content/view`, {
-                          state: { content }
-                        })}
-                        className="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm"
-                      >
-                        <i className="fas fa-eye mr-1"></i>
-                        View
-                      </button>
-                      <button
-                        onClick={() => navigate(`/topics/${topicId}/content/ai-generate`, {
-                          state: { contentType: type.id, existingContent: content }
-                        })}
-                        className="flex-1 px-3 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg text-sm"
-                      >
-                        <i className="fas fa-sync mr-1"></i>
-                        Regenerate
-                      </button>
-                      <button
-                        onClick={() => handleDelete(content.content_id)}
-                        className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm"
-                      >
-                        <i className="fas fa-trash"></i>
-                      </button>
+              )}
+              {topicDetails?.template_id ? (
+                <div
+                  className={`mt-4 p-4 rounded-lg border ${
+                    theme === 'day-mode'
+                      ? 'border-emerald-200 bg-emerald-50'
+                      : 'border-emerald-500/40 bg-emerald-900/10'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <div>
+                      <p className="text-sm text-emerald-700 dark:text-emerald-300 font-semibold">
+                        Template Applied
+                      </p>
+                      <p className="text-lg font-bold">
+                        {topicDetails.template_name || 'Selected Template'}
+                      </p>
                     </div>
+                    <button
+                      onClick={() => setTemplateModalOpen(true)}
+                      className="px-3 py-1 text-sm bg-emerald-600 hover:bg-emerald-700 text-white rounded-md"
+                    >
+                      Change Template
+                    </button>
                   </div>
-                ) : (
-                  <div className="space-y-3">
-                    <p className={`text-sm ${theme === 'day-mode' ? 'text-gray-500' : 'text-gray-500'}`}>
-                      Not created yet
-                    </p>
-                    {type.allowManual ? (
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => navigate(`/topics/${topicId}/content/ai-generate`, {
-                            state: { contentType: type.id }
-                          })}
-                          className="flex-1 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm"
-                        >
-                          <i className="fas fa-robot mr-1"></i>
-                          AI
-                        </button>
-                        <button
-                          onClick={() => navigate(`/topics/${topicId}/content/manual-create`, {
-                            state: { contentType: type.id, contentTypeId: type.dbId }
-                          })}
-                          className="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm"
-                        >
-                          <i className="fas fa-edit mr-1"></i>
-                          Manual
-                        </button>
+                  <div className="flex flex-wrap gap-2">
+                    {(topicDetails.template_format_order || []).map((format, index) => (
+                      <span
+                        key={`${format}-${index}`}
+                        className="px-3 py-1 rounded-full bg-white/70 text-emerald-700 text-xs font-medium border border-emerald-200 dark:bg-slate-900/60 dark:text-emerald-300"
+                      >
+                        <span className="opacity-60 mr-1">{index + 1}.</span>
+                        {format.replace('_', ' ')}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            {/* Content Types Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {CONTENT_TYPES.map(type => {
+                const content = getContentByType(type);
+                const hasContent = !!content;
+
+                return (
+                  <div
+                    key={type.id}
+                    className={`p-6 rounded-2xl shadow-lg border-2 transition-all ${getColorClasses(
+                      type.color,
+                      hasContent
+                    )}`}
+                  >
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center">
+                        <i className={`fas ${type.icon} text-2xl mr-3`}></i>
+                        <h3 className="text-lg font-semibold">{type.name}</h3>
+                      </div>
+                      {hasContent && (
+                        <span className="px-2 py-1 bg-emerald-600 text-white text-xs rounded-full">
+                          Created
+                        </span>
+                      )}
+                    </div>
+
+                    {hasContent ? (
+                      <div className="space-y-3">
+                        <p className={`text-sm ${theme === 'day-mode' ? 'text-gray-600' : 'text-gray-400'}`}>
+                          Created: {new Date(content.created_at).toLocaleDateString()}
+                        </p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => navigate(`/topics/${topicId}/content/view`, {
+                              state: { content }
+                            })}
+                            className="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm"
+                          >
+                            <i className="fas fa-eye mr-1"></i>
+                            View
+                          </button>
+                          <button
+                            onClick={() => navigate(`/topics/${topicId}/content/ai-generate`, {
+                              state: { contentType: type.id, existingContent: content }
+                            })}
+                            className="flex-1 px-3 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg text-sm"
+                          >
+                            <i className="fas fa-sync mr-1"></i>
+                            Regenerate
+                          </button>
+                          <button
+                            onClick={() => handleDelete(content.content_id)}
+                            className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm"
+                          >
+                            <i className="fas fa-trash"></i>
+                          </button>
+                        </div>
                       </div>
                     ) : (
-                      <button
-                        onClick={() => navigate(`/topics/${topicId}/content/ai-generate`, {
-                          state: { contentType: type.id }
-                        })}
-                        className="w-full px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm"
-                      >
-                        <i className="fas fa-robot mr-1"></i>
-                        Create with AI
-                      </button>
+                      <div className="space-y-3">
+                        <p className={`text-sm ${theme === 'day-mode' ? 'text-gray-500' : 'text-gray-500'}`}>
+                          Not created yet
+                        </p>
+                        {type.allowManual ? (
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => navigate(`/topics/${topicId}/content/ai-generate`, {
+                                state: { contentType: type.id }
+                              })}
+                              className="flex-1 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm"
+                            >
+                              <i className="fas fa-robot mr-1"></i>
+                              AI
+                            </button>
+                            <button
+                              onClick={() => navigate(`/topics/${topicId}/content/manual-create`, {
+                                state: { contentType: type.id, contentTypeId: type.dbId }
+                              })}
+                              className="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm"
+                            >
+                              <i className="fas fa-edit mr-1"></i>
+                              Manual
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => navigate(`/topics/${topicId}/content/ai-generate`, {
+                              state: { contentType: type.id }
+                            })}
+                            className="w-full px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm"
+                          >
+                            <i className="fas fa-robot mr-1"></i>
+                            Create with AI
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
-                )}
+                );
+              })}
+            </div>
+
+            {hasAllFormats && !topicDetails?.template_id && (
+              <div className="mt-8 text-center">
+                <button
+                  onClick={() => {
+                    setTemplateAppliedMessage(null);
+                    setTemplateModalOpen(true);
+                  }}
+                  className="px-8 py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-lg font-semibold shadow-lg"
+                >
+                  <i className="fas fa-layer-group mr-2"></i>
+                  Choose Template
+                </button>
               </div>
-            );
-          })}
+            )}
+
+            {/* View Lesson Button */}
+            {existingContent.length > 0 && (
+              <div className="mt-8 text-center">
+                <button
+                  onClick={() => navigate(`/lessons/${topicId}/view`)}
+                  className="px-8 py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-lg font-semibold shadow-lg"
+                >
+                  <i className="fas fa-eye mr-2"></i>
+                  View Complete Lesson
+                </button>
+              </div>
+            )}
+          </div>
+
+          <ContentHistorySidebar
+            existingContent={existingContent}
+            onHistoryChanged={fetchContent}
+          />
         </div>
 
-        {hasAllFormats && !topicDetails?.template_id && (
-          <div className="mt-8 text-center">
-            <button
-              onClick={() => {
-                setTemplateAppliedMessage(null);
-                setTemplateModalOpen(true);
-              }}
-              className="px-8 py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-lg font-semibold shadow-lg"
-            >
-              <i className="fas fa-layer-group mr-2"></i>
-              Choose Template
-            </button>
-          </div>
-        )}
-
-        {/* View Lesson Button */}
-        {existingContent.length > 0 && (
-          <div className="mt-8 text-center">
-            <button
-              onClick={() => navigate(`/lessons/${topicId}/view`)}
-              className="px-8 py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-lg font-semibold shadow-lg"
-            >
-              <i className="fas fa-eye mr-2"></i>
-              View Complete Lesson
-            </button>
-          </div>
-        )}
+        <TemplateSelectionModal
+          open={templateModalOpen}
+          onClose={() => setTemplateModalOpen(false)}
+          topicId={parseInt(topicId)}
+          onApplied={handleTemplateApplied}
+          trainerId={trainerId}
+          hasAvatarVideo={hasAvatarVideo}
+        />
       </div>
-
-      <TemplateSelectionModal
-        open={templateModalOpen}
-        onClose={() => setTemplateModalOpen(false)}
-        topicId={parseInt(topicId)}
-        onApplied={handleTemplateApplied}
-        trainerId={trainerId}
-        hasAvatarVideo={hasAvatarVideo}
-      />
     </div>
   );
 }

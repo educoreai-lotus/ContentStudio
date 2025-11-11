@@ -1,8 +1,7 @@
 import express from 'express';
 import { ContentController } from '../controllers/ContentController.js';
 import { RepositoryFactory } from '../../infrastructure/database/repositories/RepositoryFactory.js';
-import { ContentVersionRepository } from '../../infrastructure/database/repositories/ContentVersionRepository.js';
-import { CreateContentVersionUseCase } from '../../application/use-cases/CreateContentVersionUseCase.js';
+import { ContentHistoryService } from '../../application/services/ContentHistoryService.js';
 import { AIGenerationService } from '../../infrastructure/ai/AIGenerationService.js';
 
 const router = express.Router();
@@ -13,11 +12,12 @@ let contentController;
 (async () => {
   // Initialize repositories (PostgreSQL if connected, otherwise in-memory)
   const contentRepository = await RepositoryFactory.getContentRepository();
-  const contentVersionRepository = new ContentVersionRepository();
+  const contentVersionRepository = await RepositoryFactory.getContentVersionRepository();
 
   // Initialize use cases
-  const createContentVersionUseCase = new CreateContentVersionUseCase({
-    contentVersionRepository,
+  const contentHistoryService = new ContentHistoryService({
+    contentRepository,
+    contentHistoryRepository: contentVersionRepository,
   });
 
   // TODO: Initialize quality check service
@@ -36,8 +36,7 @@ let contentController;
     contentRepository,
     qualityCheckService,
     aiGenerationService,
-    contentVersionRepository,
-    createContentVersionUseCase,
+    contentHistoryService,
   });
 })();
 
@@ -61,6 +60,27 @@ router.get('/', async (req, res, next) => {
     return res.status(503).json({ error: 'Service initializing, please try again' });
   }
   return contentController.list(req, res, next);
+});
+
+router.get('/:id/history', async (req, res, next) => {
+  if (!contentController) {
+    return res.status(503).json({ error: 'Service initializing, please try again' });
+  }
+  return contentController.history(req, res, next);
+});
+
+router.post('/history/:historyId/restore', async (req, res, next) => {
+  if (!contentController) {
+    return res.status(503).json({ error: 'Service initializing, please try again' });
+  }
+  return contentController.restoreHistory(req, res, next);
+});
+
+router.delete('/history/:historyId', async (req, res, next) => {
+  if (!contentController) {
+    return res.status(503).json({ error: 'Service initializing, please try again' });
+  }
+  return contentController.deleteHistory(req, res, next);
 });
 
 router.get('/:id', async (req, res, next) => {

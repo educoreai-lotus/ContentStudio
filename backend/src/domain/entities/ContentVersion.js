@@ -6,16 +6,23 @@ export class ContentVersion {
   constructor({
     version_id,
     content_id,
+    topic_id = null,
+    content_type_id = null,
+    generation_method_id = null,
     version_number,
     content_data,
-    created_by,
+    created_by = 'system',
     is_current_version = false,
     change_description = null,
     parent_version_id = null,
     created_at = new Date(),
+    deleted_at = null,
   }) {
     this.version_id = version_id;
     this.content_id = content_id;
+    this.topic_id = topic_id;
+    this.content_type_id = content_type_id;
+    this.generation_method_id = generation_method_id;
     this.version_number = version_number;
     this.content_data = content_data;
     this.created_by = created_by;
@@ -23,6 +30,7 @@ export class ContentVersion {
     this.change_description = change_description;
     this.parent_version_id = parent_version_id;
     this.created_at = created_at instanceof Date ? created_at : new Date(created_at);
+    this.deleted_at = deleted_at ? (deleted_at instanceof Date ? deleted_at : new Date(deleted_at)) : null;
 
     this.validate();
   }
@@ -41,10 +49,6 @@ export class ContentVersion {
 
     if (!this.content_data || (typeof this.content_data !== 'object' && typeof this.content_data !== 'string')) {
       errors.push('content_data is required and must be an object or string');
-    }
-
-    if (!this.created_by || this.created_by.trim() === '') {
-      errors.push('created_by is required');
     }
 
     if (errors.length > 0) {

@@ -25,30 +25,42 @@ export class PostgreSQLContentVersionRepository extends IContentVersionRepositor
       INSERT INTO content_history (
         content_id, topic_id, content_type_id,
         version_number, content_data, generation_method_id,
-        created_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+        created_at, deleted_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, NULL)
       RETURNING *
     `;
 
-    // Get content to get topic_id and content_type_id
-    const contentQuery = 'SELECT topic_id, content_type_id, generation_method_id FROM content WHERE content_id = $1';
-    const contentResult = await this.db.query(contentQuery, [version.content_id]);
-    
-    if (contentResult.rows.length === 0) {
-      throw new Error(`Content with id ${version.content_id} not found`);
-    }
+    let topicId = version.topic_id;
+    let contentTypeId = version.content_type_id;
+    let generationMethodId = version.generation_method_id;
 
-    const content = contentResult.rows[0];
+    if (!topicId || !contentTypeId || !generationMethodId) {
+      const contentQuery = `
+        SELECT topic_id, content_type_id, generation_method_id
+        FROM content
+        WHERE content_id = $1
+      `;
+      const contentResult = await this.db.query(contentQuery, [version.content_id]);
+
+      if (contentResult.rows.length === 0) {
+        throw new Error(`Content with id ${version.content_id} not found`);
+      }
+
+      const content = contentResult.rows[0];
+      topicId = topicId || content.topic_id;
+      contentTypeId = contentTypeId || content.content_type_id;
+      generationMethodId = generationMethodId || content.generation_method_id;
+    }
 
     const values = [
       version.content_id,
-      content.topic_id,
-      content.content_type_id,
+      topicId,
+      contentTypeId,
       version.version_number,
-      typeof version.content_data === 'string' 
-        ? version.content_data 
+      typeof version.content_data === 'string'
+        ? version.content_data
         : JSON.stringify(version.content_data),
-      content.generation_method_id,
+      generationMethodId,
       version.created_at || new Date(),
     ];
 
@@ -80,7 +92,8 @@ export class PostgreSQLContentVersionRepository extends IContentVersionRepositor
 
     const query = `
       SELECT * FROM content_history 
-      WHERE content_id = $1 
+      WHERE content_id = $1
+        AND deleted_at IS NULL
       ORDER BY version_number DESC
     `;
     const result = await this.db.query(query, [contentId]);
@@ -97,6 +110,7 @@ export class PostgreSQLContentVersionRepository extends IContentVersionRepositor
     const query = `
       SELECT * FROM content_history 
       WHERE content_id = $1 
+        AND deleted_at IS NULL
       ORDER BY version_number DESC 
       LIMIT 1
     `;
@@ -130,35 +144,23 @@ export class PostgreSQLContentVersionRepository extends IContentVersionRepositor
     return result.rows[0].max_version + 1;
   }
 
-  async update(versionId, updates) {
+  async update() {
+    throw new Error('Updating content history entries is not supported.');
+  }
+
+  async softDelete(versionId) {
     if (!this.db.isConnected()) {
       throw new Error('Database not connected. Using in-memory repository.');
     }
 
-    // Note: content_history is typically append-only, but we can update metadata
-    const setClause = [];
-    const values = [];
-    let paramIndex = 1;
-
-    if (updates.change_description !== undefined) {
-      setClause.push(`change_description = $${paramIndex}`);
-      values.push(updates.change_description);
-      paramIndex++;
-    }
-
-    if (setClause.length === 0) {
-      throw new Error('No fields to update');
-    }
-
-    values.push(versionId);
     const query = `
-      UPDATE content_history 
-      SET ${setClause.join(', ')}, updated_at = CURRENT_TIMESTAMP
-      WHERE history_id = $${paramIndex}
+      UPDATE content_history
+      SET deleted_at = CURRENT_TIMESTAMP
+      WHERE history_id = $1
       RETURNING *
     `;
 
-    const result = await this.db.query(query, values);
+    const result = await this.db.query(query, [versionId]);
 
     if (result.rows.length === 0) {
       throw new Error(`Version with id ${versionId} not found`);
@@ -176,15 +178,17 @@ export class PostgreSQLContentVersionRepository extends IContentVersionRepositor
     return new ContentVersion({
       version_id: row.history_id, // Map history_id to version_id
       content_id: row.content_id,
+      topic_id: row.topic_id,
+      content_type_id: row.content_type_id,
+      generation_method_id: row.generation_method_id,
       version_number: row.version_number,
       content_data: typeof row.content_data === 'string' 
         ? JSON.parse(row.content_data) 
         : row.content_data,
       created_by: row.created_by || 'system',
       is_current_version: false, // Will be determined by findCurrentVersion
-      change_description: row.change_description || null,
-      parent_version_id: row.parent_version_id || null,
       created_at: row.created_at,
+      deleted_at: row.deleted_at || null,
     });
   }
 }

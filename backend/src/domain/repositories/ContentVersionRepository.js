@@ -66,6 +66,15 @@ export class ContentVersionRepository {
   async markAllAsNotCurrent(contentId) {
     throw new Error('ContentVersionRepository.markAllAsNotCurrent() must be implemented');
   }
+
+  /**
+   * Soft delete (archive) a version entry
+   * @param {number} versionId - Version/history ID
+   * @returns {Promise<void>}
+   */
+  async softDelete(versionId) {
+    throw new Error('ContentVersionRepository.softDelete() must be implemented');
+  }
 }
 
 

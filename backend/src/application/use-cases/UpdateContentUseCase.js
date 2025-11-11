@@ -1,5 +1,3 @@
-import { Content } from '../../domain/entities/Content.js';
-
 /**
  * Update Content Use Case
  * Updates content and automatically creates a version
@@ -7,12 +5,10 @@ import { Content } from '../../domain/entities/Content.js';
 export class UpdateContentUseCase {
   constructor({
     contentRepository,
-    contentVersionRepository,
-    createContentVersionUseCase,
+    contentHistoryService,
   }) {
     this.contentRepository = contentRepository;
-    this.contentVersionRepository = contentVersionRepository;
-    this.createContentVersionUseCase = createContentVersionUseCase;
+    this.contentHistoryService = contentHistoryService;
   }
 
   async execute(contentId, updates, updatedBy) {
@@ -29,15 +25,9 @@ export class UpdateContentUseCase {
     // Create version from current content before updating
     if (updates.content_data && this.hasContentChanged(existingContent.content_data, updates.content_data)) {
       try {
-        await this.createContentVersionUseCase.execute(
-          contentId,
-          existingContent.content_data,
-          updatedBy || existingContent.created_by,
-          'Auto-version before update'
-        );
+        await this.contentHistoryService.saveVersion(existingContent);
       } catch (error) {
-        // Log but don't fail the update if versioning fails
-        console.error('Failed to create version before update:', error);
+        console.error('Failed to store content history before update:', error);
       }
     }
 
