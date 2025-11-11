@@ -333,7 +333,7 @@ export class PostgreSQLContentRepository extends IContentRepository {
         }
       }
 
-      const supportsStatus = await this.ensureStatusSupport?.() ?? true;
+      const supportsStatus = await this.ensureStatusSupport();
       if (supportsStatus) {
         const archiveQuery = `
           UPDATE content
@@ -345,6 +345,9 @@ export class PostgreSQLContentRepository extends IContentRepository {
         `;
         await this.db.query(archiveQuery, [contentId]);
       } else {
+        const deleteHistoryQuery = 'DELETE FROM content_history WHERE content_id = $1';
+        await this.db.query(deleteHistoryQuery, [contentId]);
+
         const deleteQuery = 'DELETE FROM content WHERE content_id = $1 RETURNING *';
         await this.db.query(deleteQuery, [contentId]);
       }
