@@ -48,8 +48,8 @@ export class GoogleSlidesClient {
     }
 
     const title = lessonTopic ? `Lesson - ${lessonTopic}` : 'EduCore Lesson Deck';
-    const folderId = process.env.GOOGLE_SLIDES_FOLDER_ID;
-    if (folderId) {
+    const folderId = process.env.GOOGLE_SLIDES_FOLDER_ID?.trim();
+    if (folderId && folderId.length > 0) {
       try {
         console.log('[GoogleSlidesClient] Verifying folder access...');
         const folderCheck = await this.drive.files.get({
