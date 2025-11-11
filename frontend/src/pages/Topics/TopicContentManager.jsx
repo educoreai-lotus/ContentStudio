@@ -76,6 +76,18 @@ export default function TopicContentManager() {
   };
 
   const handleDelete = async (contentId) => {
+    if (!window.confirm('Are you sure you want to delete this content?')) {
+      return;
+    }
+
+    try {
+      await contentService.delete(contentId);
+      await fetchContent(); // Refresh list
+    } catch (err) {
+      alert('Failed to delete content: ' + err.message);
+    }
+  };
+
   const handleRegenerate = (type, content) => {
     if (!type.allowManual) {
       navigate(`/topics/${topicId}/content/ai-generate`, {
@@ -109,18 +121,6 @@ export default function TopicContentManager() {
     }
 
     setRegenerateTarget(null);
-  };
-
-    if (!window.confirm('Are you sure you want to delete this content?')) {
-      return;
-    }
-
-    try {
-      await contentService.delete(contentId);
-      await fetchContent(); // Refresh list
-    } catch (err) {
-      alert('Failed to delete content: ' + err.message);
-    }
   };
 
   const getContentByType = (type) => {
