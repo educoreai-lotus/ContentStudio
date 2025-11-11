@@ -161,12 +161,18 @@ export class PostgreSQLContentRepository extends IContentRepository {
     const params = [topicId];
     let paramIndex = 2;
 
-    const supportsStatus = await this.ensureStatusSupport?.() ?? true;
+    const supportsStatus = await this.ensureStatusSupport();
 
-    if (!filters.includeArchived && supportsStatus) {
-      query += ` AND (status IS NULL OR status != $${paramIndex})`;
-      params.push('archived');
-      paramIndex++;
+    if (!filters.includeArchived) {
+      if (supportsStatus) {
+        query += ` AND (status IS NULL OR status != $${paramIndex})`;
+        params.push('archived');
+        paramIndex++;
+      } else {
+        query += ` AND (quality_check_status IS NULL OR quality_check_status != $${paramIndex})`;
+        params.push('deleted');
+        paramIndex++;
+      }
     }
 
     if (filters.content_type_id) {
@@ -275,13 +281,15 @@ export class PostgreSQLContentRepository extends IContentRepository {
       }
     }
 
-    const supportsStatus = await this.ensureStatusSupport?.() ?? true;
+    const supportsStatus = await this.ensureStatusSupport();
 
     const query = `
       SELECT * FROM content
       WHERE topic_id = $1
         AND content_type_id = $2
-        ${supportsStatus ? "AND (status IS NULL OR status != 'archived')" : ''}
+        ${supportsStatus
+          ? "AND (status IS NULL OR status != 'archived')"
+          : "AND (quality_check_status IS NULL OR quality_check_status != 'deleted')"}
       ORDER BY updated_at DESC, created_at DESC
       LIMIT 1
     `;
