@@ -51,7 +51,50 @@ export class ContentHistoryService {
       throw new Error('Content not found');
     }
 
-    const historyEntries = await this.contentHistoryRepository.findByContentId(contentId);
+    let historyEntries = await this.contentHistoryRepository.findByContentId(contentId);
+
+    if ((!historyEntries || historyEntries.length === 0) && typeof this.contentRepository.findAllByTopicId === 'function') {
+      try {
+        const allContent = await this.contentRepository.findAllByTopicId(content.topic_id);
+        const related = (allContent || [])
+          .filter(item => item.content_id !== content.content_id)
+          .filter(item => this.#contentTypesMatch(item.content_type_id, content.content_type_id));
+
+        const relatedHistoryEntries = [];
+        for (const relatedContent of related) {
+          try {
+            const entries = await this.contentHistoryRepository.findByContentId(relatedContent.content_id);
+            entries.forEach(entry => {
+              relatedHistoryEntries.push({
+                ...entry,
+                source_content_id: relatedContent.content_id,
+              });
+            });
+          } catch (error) {
+            console.warn(
+              '[ContentHistoryService] Failed to load history for related content:',
+              relatedContent.content_id,
+              error.message
+            );
+          }
+        }
+
+        if (relatedHistoryEntries.length > 0) {
+          historyEntries = relatedHistoryEntries;
+        }
+      } catch (error) {
+        console.warn(
+          '[ContentHistoryService] Failed to inspect related content for history backfill:',
+          error.message
+        );
+      }
+    }
+
+    const sortedHistoryEntries = Array.isArray(historyEntries)
+      ? [...historyEntries].sort(
+          (a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)
+        )
+      : [];
     const typeKey = CONTENT_TYPE_MAP[content.content_type_id] || 'unknown';
 
     return {
@@ -66,13 +109,14 @@ export class ContentHistoryService {
         content_data: content.content_data,
         generation_method_id: content.generation_method_id,
       },
-      versions: historyEntries.map(entry => ({
+      versions: sortedHistoryEntries.map(entry => ({
         history_id: entry.version_id,
         version_number: entry.version_number,
         created_at: entry.created_at,
         preview: this.#buildPreview(typeKey, entry.content_data),
         content_data: entry.content_data,
         generation_method_id: entry.generation_method_id,
+        source_content_id: entry.source_content_id || content.content_id,
       })),
     };
   }
@@ -140,5 +184,45 @@ export class ContentHistoryService {
           ? contentData.slice(0, 160)
           : JSON.stringify(contentData).slice(0, 160);
     }
+  }
+
+  #contentTypesMatch(a, b) {
+    if (a === b) return true;
+
+    const normalize = value => {
+      if (value === undefined || value === null) {
+        return { numeric: null, text: null };
+      }
+
+      const numeric = Number(value);
+      const text =
+        typeof value === 'string'
+          ? value.trim().toLowerCase()
+          : typeof numeric === 'number' && !Number.isNaN(numeric)
+          ? String(numeric)
+          : null;
+
+      return {
+        numeric: Number.isNaN(numeric) ? null : numeric,
+        text,
+      };
+    };
+
+    const normalizedA = normalize(a);
+    const normalizedB = normalize(b);
+
+    if (
+      normalizedA.numeric !== null &&
+      normalizedB.numeric !== null &&
+      normalizedA.numeric === normalizedB.numeric
+    ) {
+      return true;
+    }
+
+    if (normalizedA.text && normalizedB.text && normalizedA.text === normalizedB.text) {
+      return true;
+    }
+
+    return false;
   }
 }
