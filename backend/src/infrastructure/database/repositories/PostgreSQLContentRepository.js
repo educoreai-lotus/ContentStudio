@@ -305,10 +305,13 @@ export class PostgreSQLContentRepository extends IContentRepository {
       throw new Error('Database not connected. Using in-memory repository.');
     }
 
+    const client = await this.db.getClient();
+
     try {
-      // First, get the content to check if we need to delete files from storage
+      await client.query('BEGIN');
+
       const getQuery = 'SELECT * FROM content WHERE content_id = $1';
-      const getResult = await this.db.query(getQuery, [contentId]);
+      const getResult = await client.query(getQuery, [contentId]);
 
       if (getResult.rows.length === 0) {
         throw new Error(`Content with id ${contentId} not found`);
@@ -317,15 +320,14 @@ export class PostgreSQLContentRepository extends IContentRepository {
       const content = getResult.rows[0];
 
       try {
-        await this.saveRowToHistory(content);
+        await this.saveRowToHistory(content, client);
       } catch (historyError) {
         console.error('[PostgreSQLContentRepository] Failed to archive content before delete:', historyError);
+        throw historyError;
       }
 
-      // If it's a presentation with a file in storage, delete it
       if (content.content_type_id === 3 && content.content_data?.storagePath) {
         try {
-          // Only attempt storage deletion if Supabase is configured (using correct env var names)
           if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
             const { createClient } = await import('@supabase/supabase-js');
             const supabase = createClient(
@@ -343,37 +345,25 @@ export class PostgreSQLContentRepository extends IContentRepository {
           }
         } catch (storageError) {
           console.error('Failed to delete file from storage:', storageError);
-          // Continue with DB deletion even if storage deletion fails
         }
       }
 
-      const supportsStatus = await this.ensureStatusSupport();
-      if (supportsStatus) {
-        const archiveQuery = `
-          UPDATE content
-          SET status = 'archived',
-              quality_check_status = 'deleted',
-              updated_at = NOW()
-          WHERE content_id = $1
-          RETURNING *
-        `;
-        await this.db.query(archiveQuery, [contentId]);
-      } else {
-        const deleteHistoryQuery = 'DELETE FROM content_history WHERE content_id = $1';
-        await this.db.query(deleteHistoryQuery, [contentId]);
+      const deleteQuery = 'DELETE FROM content WHERE content_id = $1';
+      await client.query(deleteQuery, [contentId]);
 
-        const deleteQuery = 'DELETE FROM content WHERE content_id = $1 RETURNING *';
-        await this.db.query(deleteQuery, [contentId]);
-      }
+      await client.query('COMMIT');
 
       return true;
     } catch (error) {
-      console.error('Database query error:', error);
+      await client.query('ROLLBACK');
+      console.error('[PostgreSQLContentRepository] Delete failed:', error);
       throw error;
+    } finally {
+      client.release();
     }
   }
 
-  async saveRowToHistory(contentRow) {
+  async saveRowToHistory(contentRow, client = this.db) {
     if (!contentRow) return;
 
     const normalizedContentData =
@@ -392,7 +382,7 @@ export class PostgreSQLContentRepository extends IContentRepository {
       FROM content_history
       WHERE content_id = $1
     `;
-    const versionResult = await this.db.query(versionQuery, [contentRow.content_id]);
+    const versionResult = await client.query(versionQuery, [contentRow.content_id]);
     const nextVersionNumber = versionResult.rows?.[0]?.next_version || 1;
 
     const insertQuery = `
@@ -407,7 +397,7 @@ export class PostgreSQLContentRepository extends IContentRepository {
       ) VALUES ($1, $2, $3, $4, $5, $6, NOW())
     `;
 
-    await this.db.query(insertQuery, [
+    await client.query(insertQuery, [
       contentRow.content_id,
       contentRow.topic_id,
       contentRow.content_type_id,
