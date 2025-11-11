@@ -138,6 +138,12 @@ export class ContentHistoryService {
       content_data: historyEntry.content_data,
     });
 
+    try {
+      await this.contentHistoryRepository.softDelete(historyId);
+    } catch (error) {
+      console.warn('[ContentHistoryService] Failed to archive restored history entry:', error.message);
+    }
+
     return ContentDTO.toContentResponse(updatedContent);
   }
 
