@@ -316,6 +316,12 @@ export class PostgreSQLContentRepository extends IContentRepository {
 
       const content = getResult.rows[0];
 
+      try {
+        await this.saveRowToHistory(content);
+      } catch (historyError) {
+        console.error('[PostgreSQLContentRepository] Failed to archive content before delete:', historyError);
+      }
+
       // If it's a presentation with a file in storage, delete it
       if (content.content_type_id === 3 && content.content_data?.storagePath) {
         try {
@@ -365,6 +371,50 @@ export class PostgreSQLContentRepository extends IContentRepository {
       console.error('Database query error:', error);
       throw error;
     }
+  }
+
+  async saveRowToHistory(contentRow) {
+    if (!contentRow) return;
+
+    const normalizedContentData =
+      typeof contentRow.content_data === 'string'
+        ? (() => {
+            try {
+              return JSON.parse(contentRow.content_data);
+            } catch (parseError) {
+              return { raw: contentRow.content_data };
+            }
+          })()
+        : contentRow.content_data;
+
+    const versionQuery = `
+      SELECT COALESCE(MAX(version_number), 0) + 1 AS next_version
+      FROM content_history
+      WHERE content_id = $1
+    `;
+    const versionResult = await this.db.query(versionQuery, [contentRow.content_id]);
+    const nextVersionNumber = versionResult.rows?.[0]?.next_version || 1;
+
+    const insertQuery = `
+      INSERT INTO content_history (
+        content_id,
+        topic_id,
+        content_type_id,
+        version_number,
+        content_data,
+        generation_method_id,
+        created_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, NOW())
+    `;
+
+    await this.db.query(insertQuery, [
+      contentRow.content_id,
+      contentRow.topic_id,
+      contentRow.content_type_id,
+      nextVersionNumber,
+      JSON.stringify(normalizedContentData),
+      contentRow.generation_method_id,
+    ]);
   }
 
   /**
