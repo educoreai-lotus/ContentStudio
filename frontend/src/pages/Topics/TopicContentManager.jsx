@@ -83,6 +83,7 @@ export default function TopicContentManager() {
     try {
       await contentService.delete(contentId);
       await fetchContent(); // Refresh list
+      setTemplateAppliedMessage('Content removed from active list and archived in history.');
     } catch (err) {
       alert('Failed to delete content: ' + err.message);
     }

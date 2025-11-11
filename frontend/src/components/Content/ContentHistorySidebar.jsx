@@ -49,7 +49,6 @@ const VersionRow = ({
   isCurrent,
   onPreview,
   onRestore,
-  onDelete,
   theme,
 }) => {
   const baseClasses = theme === 'day-mode'
@@ -94,21 +93,13 @@ const VersionRow = ({
           Preview
         </button>
         {!isCurrent && (
-          <>
-            <button
-              onClick={() => onRestore(version)}
-              className="flex-1 px-3 py-2 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white"
-            >
-              <i className="fas fa-history mr-2"></i>
-              Restore
-            </button>
-            <button
-              onClick={() => onDelete(version)}
-              className="w-10 h-9 flex items-center justify-center rounded-lg bg-red-600 hover:bg-red-700 text-white"
-            >
-              <i className="fas fa-trash"></i>
-            </button>
-          </>
+          <button
+            onClick={() => onRestore(version)}
+            className="flex-1 px-3 py-2 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white"
+          >
+            <i className="fas fa-history mr-2"></i>
+            Restore
+          </button>
         )}
       </div>
     </div>
@@ -120,7 +111,6 @@ VersionRow.propTypes = {
   isCurrent: PropTypes.bool,
   onPreview: PropTypes.func.isRequired,
   onRestore: PropTypes.func,
-  onDelete: PropTypes.func,
   theme: PropTypes.string.isRequired,
 };
 
@@ -202,22 +192,6 @@ export function ContentHistorySidebar({ existingContent = [], onHistoryChanged }
     }
   };
 
-  const handleDelete = async (section, version) => {
-    if (!window.confirm('Delete this historical version? It will be archived and hidden.')) {
-      return;
-    }
-
-    try {
-      await contentService.deleteVersion(version.history_id);
-      const contentItem = contentByType.get(section.typeId);
-      if (contentItem) {
-        await loadHistory(section, contentItem.content_id);
-      }
-    } catch (error) {
-      alert(error?.response?.data?.error?.message || 'Failed to delete version');
-    }
-  };
-
   const renderSectionBody = section => {
     const contentItem = contentByType.get(section.typeId);
     if (!contentItem) {
@@ -284,7 +258,6 @@ export function ContentHistorySidebar({ existingContent = [], onHistoryChanged }
                 })
               }
               onRestore={version => handleRestore(section, version)}
-              onDelete={version => handleDelete(section, version)}
               theme={theme}
             />
           ))
