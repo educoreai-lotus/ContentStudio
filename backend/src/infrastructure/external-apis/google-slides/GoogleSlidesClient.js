@@ -63,12 +63,15 @@ export class GoogleSlidesClient {
         throw new Error('Service Account has no access to shared folder');
       }
     } else {
-      console.log('[GoogleSlidesClient] No folder ID configured – using Service Account Drive as default.');
+      console.log('[GoogleSlidesClient] No GOOGLE_SLIDES_FOLDER_ID set – creating file in Service Account root Drive.');
     }
     let presentationId = null;
 
     try {
-      console.log('[GoogleSlidesClient] Step 1: Creating Drive file (presentation) in shared folder...');
+      const creationScopeMessage = folderId
+        ? '[GoogleSlidesClient] Step 1: Creating Drive file (presentation) in shared folder...'
+        : '[GoogleSlidesClient] Step 1: Creating Drive file (presentation) in Service Account root...';
+      console.log(creationScopeMessage);
       const createResponse = await this.drive.files.create({
         requestBody: {
           name: title,
@@ -76,9 +79,14 @@ export class GoogleSlidesClient {
           ...(folderId ? { parents: [folderId] } : {}),
         },
         supportsAllDrives: true,
+        auth: this.auth,
       });
       presentationId = createResponse.data.id;
-      console.log('[GoogleSlidesClient] Presentation created successfully in folder:', folderId || '(service account root)');
+      if (folderId) {
+        console.log('[GoogleSlidesClient] Presentation created successfully in shared folder.');
+      } else {
+        console.log('[GoogleSlidesClient] Presentation created successfully inside Service Account Drive.');
+      }
     } catch (error) {
       console.error('[GoogleSlidesClient] FAILED at Step 1 (drive.files.create):', error.response?.data || error.message);
       throw error;
