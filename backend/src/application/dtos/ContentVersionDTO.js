@@ -5,7 +5,6 @@ export class ContentVersionDTO {
   static toVersionResponse(version) {
     return {
       version_id: version.version_id,
-      content_id: version.content_id,
       version_number: version.version_number,
       content_data: version.content_data,
       created_by: version.created_by,
