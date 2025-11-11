@@ -140,8 +140,8 @@ export default function TopicContentManager() {
   };
 
   return (
-    <div className={`min-h-screen p-8 ${theme === 'day-mode' ? 'bg-gray-50' : 'bg-slate-900'}`}>
-      <div className="max-w-6xl mx-auto">
+    <div className={`min-h-screen p-6 lg:p-8 ${theme === 'day-mode' ? 'bg-gray-50' : 'bg-slate-900'}`}>
+      <div className="max-w-7xl mx-auto">
         <div className="mb-8">
           <button
             onClick={() => navigate(-1)}
@@ -183,8 +183,8 @@ export default function TopicContentManager() {
           </div>
         )}
 
-        <div className="grid gap-8 lg:grid-cols-[2fr,1fr]">
-          <div>
+        <div className="lg:flex lg:items-start lg:gap-8 xl:gap-12">
+          <div className="flex-1 min-w-0">
             {/* Content Progress */}
             <div
               className={`mb-8 p-6 rounded-2xl shadow-lg ${
@@ -410,10 +410,12 @@ export default function TopicContentManager() {
             )}
           </div>
 
-          <ContentHistorySidebar
-            existingContent={existingContent}
-            onHistoryChanged={fetchContent}
-          />
+          <div className="mt-8 lg:mt-0 lg:w-[360px] lg:ml-auto">
+            <ContentHistorySidebar
+              existingContent={existingContent}
+              onHistoryChanged={fetchContent}
+            />
+          </div>
         </div>
 
         <TemplateSelectionModal

@@ -9,6 +9,37 @@ export class PostgreSQLContentVersionRepository extends IContentVersionRepositor
   constructor() {
     super();
     this.db = db;
+    this.supportsDeletedAt = undefined;
+  }
+
+  async ensureDeletedAtSupport() {
+    if (this.supportsDeletedAt !== undefined) {
+      return this.supportsDeletedAt;
+    }
+
+    if (!this.db.isConnected()) {
+      throw new Error('Database not connected. Using in-memory repository.');
+    }
+
+    const query = `
+      SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'content_history'
+          AND column_name = 'deleted_at'
+      ) AS has_column
+    `;
+
+    try {
+      const result = await this.db.query(query);
+      this.supportsDeletedAt = Boolean(result.rows?.[0]?.has_column);
+    } catch (error) {
+      console.warn('[PostgreSQLContentVersionRepository] Unable to detect deleted_at column, assuming absent.', error.message);
+      this.supportsDeletedAt = false;
+    }
+
+    return this.supportsDeletedAt;
   }
 
   async create(version) {
@@ -21,14 +52,23 @@ export class PostgreSQLContentVersionRepository extends IContentVersionRepositor
       version.version_number = await this.getNextVersionNumber(version.content_id);
     }
 
-    const query = `
-      INSERT INTO content_history (
-        content_id, topic_id, content_type_id,
-        version_number, content_data, generation_method_id,
-        created_at, deleted_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, NULL)
-      RETURNING *
-    `;
+    const supportsDeletedAt = await this.ensureDeletedAtSupport();
+
+    const baseColumns = [
+      'content_id',
+      'topic_id',
+      'content_type_id',
+      'version_number',
+      'content_data',
+      'generation_method_id',
+      'created_at',
+    ];
+
+    const columns = supportsDeletedAt
+      ? [...baseColumns, 'deleted_at']
+      : baseColumns;
+
+    const placeholders = columns.map((_, index) => `$${index + 1}`).join(', ');
 
     let topicId = version.topic_id;
     let contentTypeId = version.content_type_id;
@@ -64,6 +104,16 @@ export class PostgreSQLContentVersionRepository extends IContentVersionRepositor
       version.created_at || new Date(),
     ];
 
+    if (supportsDeletedAt) {
+      values.push(null);
+    }
+
+    const query = `
+      INSERT INTO content_history (${columns.join(', ')})
+      VALUES (${placeholders})
+      RETURNING *
+    `;
+
     const result = await this.db.query(query, values);
     const row = result.rows[0];
 
@@ -90,12 +140,21 @@ export class PostgreSQLContentVersionRepository extends IContentVersionRepositor
       throw new Error('Database not connected. Using in-memory repository.');
     }
 
-    const query = `
-      SELECT * FROM content_history 
-      WHERE content_id = $1
-        AND deleted_at IS NULL
-      ORDER BY version_number DESC
-    `;
+    const supportsDeletedAt = await this.ensureDeletedAtSupport();
+
+    const query = supportsDeletedAt
+      ? `
+        SELECT * FROM content_history 
+        WHERE content_id = $1
+          AND deleted_at IS NULL
+        ORDER BY version_number DESC
+      `
+      : `
+        SELECT * FROM content_history 
+        WHERE content_id = $1
+        ORDER BY version_number DESC
+      `;
+
     const result = await this.db.query(query, [contentId]);
 
     return result.rows.map(row => this.mapRowToContentVersion(row));
@@ -106,14 +165,24 @@ export class PostgreSQLContentVersionRepository extends IContentVersionRepositor
       throw new Error('Database not connected. Using in-memory repository.');
     }
 
+    const supportsDeletedAt = await this.ensureDeletedAtSupport();
+
     // Get the latest version (highest version_number)
-    const query = `
-      SELECT * FROM content_history 
-      WHERE content_id = $1 
-        AND deleted_at IS NULL
-      ORDER BY version_number DESC 
-      LIMIT 1
-    `;
+    const query = supportsDeletedAt
+      ? `
+        SELECT * FROM content_history 
+        WHERE content_id = $1 
+          AND deleted_at IS NULL
+        ORDER BY version_number DESC 
+        LIMIT 1
+      `
+      : `
+        SELECT * FROM content_history 
+        WHERE content_id = $1 
+        ORDER BY version_number DESC 
+        LIMIT 1
+      `;
+
     const result = await this.db.query(query, [contentId]);
 
     if (result.rows.length === 0) {
@@ -151,6 +220,22 @@ export class PostgreSQLContentVersionRepository extends IContentVersionRepositor
   async softDelete(versionId) {
     if (!this.db.isConnected()) {
       throw new Error('Database not connected. Using in-memory repository.');
+    }
+
+    const supportsDeletedAt = await this.ensureDeletedAtSupport();
+
+    if (!supportsDeletedAt) {
+      // Fall back to hard delete if column absent
+      const deleteQuery = `
+        DELETE FROM content_history
+        WHERE history_id = $1
+        RETURNING *
+      `;
+      const deleteResult = await this.db.query(deleteQuery, [versionId]);
+      if (deleteResult.rows.length === 0) {
+        throw new Error(`Version with id ${versionId} not found`);
+      }
+      return this.mapRowToContentVersion(deleteResult.rows[0]);
     }
 
     const query = `
