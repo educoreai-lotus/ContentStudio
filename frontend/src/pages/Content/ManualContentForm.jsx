@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import { contentService } from '../../services/content.js';
 import { useApp } from '../../context/AppContext.jsx';
@@ -11,14 +11,42 @@ export const ManualContentForm = () => {
   const { topicId } = useParams();
   const { theme } = useApp();
   
-  const { contentType, contentTypeId } = location.state || {};
+  const { contentType, contentTypeId, existingContent } = location.state || {};
+
+  const initialFormData = useMemo(() => {
+    const contentData = existingContent?.content_data || existingContent || {};
+
+    if (contentType === 'text') {
+      return {
+        text: contentData.text || '',
+        code: '',
+        explanation: '',
+        presentationFile: null,
+      };
+    }
+
+    if (contentType === 'code') {
+      return {
+        text: '',
+        code: contentData.code || '',
+        explanation: contentData.explanation || '',
+        presentationFile: null,
+      };
+    }
+
+    return {
+      text: '',
+      code: '',
+      explanation: '',
+      presentationFile: null,
+    };
+  }, [contentType, existingContent]);
   
-  const [formData, setFormData] = useState({
-    text: '',
-    code: '',
-    explanation: '',
-    presentationFile: null,
-  });
+  const [formData, setFormData] = useState(initialFormData);
+
+  useEffect(() => {
+    setFormData(initialFormData);
+  }, [initialFormData]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 

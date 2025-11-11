@@ -4,6 +4,7 @@ import { contentService } from '../../services/content.js';
 import { topicsService } from '../../services/topics.js';
 import { useApp } from '../../context/AppContext';
 import { TemplateSelectionModal } from '../../components/Templates/TemplateSelectionModal.jsx';
+import { RegenerateOptionsModal } from '../../components/Content/RegenerateOptionsModal.jsx';
 import { ContentHistorySidebar } from '../../components/Content/ContentHistorySidebar.jsx';
 
 const CONTENT_TYPES = [
@@ -29,6 +30,7 @@ export default function TopicContentManager() {
   const [error, setError] = useState(null);
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
   const [templateAppliedMessage, setTemplateAppliedMessage] = useState(null);
+  const [regenerateTarget, setRegenerateTarget] = useState(null);
 
   useEffect(() => {
     fetchContent();
@@ -74,6 +76,41 @@ export default function TopicContentManager() {
   };
 
   const handleDelete = async (contentId) => {
+  const handleRegenerate = (type, content) => {
+    if (!type.allowManual) {
+      navigate(`/topics/${topicId}/content/ai-generate`, {
+        state: { contentType: type.id, existingContent: content },
+      });
+      return;
+    }
+
+    setRegenerateTarget({ type, content });
+  };
+
+  const handleRegenerateSelection = mode => {
+    if (!regenerateTarget || !mode) {
+      setRegenerateTarget(null);
+      return;
+    }
+
+    const { type, content } = regenerateTarget;
+    if (mode === 'ai') {
+      navigate(`/topics/${topicId}/content/ai-generate`, {
+        state: { contentType: type.id, existingContent: content },
+      });
+    } else if (mode === 'manual') {
+      navigate(`/topics/${topicId}/content/manual-create`, {
+        state: {
+          contentType: type.id,
+          contentTypeId: type.dbId,
+          existingContent: content,
+        },
+      });
+    }
+
+    setRegenerateTarget(null);
+  };
+
     if (!window.confirm('Are you sure you want to delete this content?')) {
       return;
     }
@@ -321,9 +358,7 @@ export default function TopicContentManager() {
                             View
                           </button>
                           <button
-                            onClick={() => navigate(`/topics/${topicId}/content/ai-generate`, {
-                              state: { contentType: type.id, existingContent: content }
-                            })}
+                            onClick={() => handleRegenerate(type, content)}
                             className="flex-1 px-3 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg text-sm"
                           >
                             <i className="fas fa-sync mr-1"></i>
@@ -425,6 +460,13 @@ export default function TopicContentManager() {
           onApplied={handleTemplateApplied}
           trainerId={trainerId}
           hasAvatarVideo={hasAvatarVideo}
+        />
+
+        <RegenerateOptionsModal
+          open={!!regenerateTarget}
+          onClose={() => setRegenerateTarget(null)}
+          onSelect={handleRegenerateSelection}
+          contentType={regenerateTarget?.type}
         />
       </div>
     </div>
