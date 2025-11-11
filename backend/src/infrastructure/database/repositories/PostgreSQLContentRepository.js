@@ -130,6 +130,12 @@ export class PostgreSQLContentRepository extends IContentRepository {
     const params = [topicId];
     let paramIndex = 2;
 
+    if (!filters.includeArchived) {
+      query += ` AND (status IS NULL OR status != $${paramIndex})`;
+      params.push('archived');
+      paramIndex++;
+    }
+
     if (filters.content_type_id) {
       // Convert type_name to type_id if it's a string
       const contentTypeId = typeof filters.content_type_id === 'string'
@@ -240,6 +246,7 @@ export class PostgreSQLContentRepository extends IContentRepository {
       SELECT * FROM content
       WHERE topic_id = $1
         AND content_type_id = $2
+        AND (status IS NULL OR status != 'archived')
       ORDER BY updated_at DESC, created_at DESC
       LIMIT 1
     `;
@@ -291,9 +298,15 @@ export class PostgreSQLContentRepository extends IContentRepository {
         }
       }
 
-      // Hard delete from database
-      const deleteQuery = 'DELETE FROM content WHERE content_id = $1 RETURNING *';
-      const result = await this.db.query(deleteQuery, [contentId]);
+      const archiveQuery = `
+        UPDATE content
+        SET status = 'archived',
+            quality_check_status = 'deleted',
+            updated_at = NOW()
+        WHERE content_id = $1
+        RETURNING *
+      `;
+      await this.db.query(archiveQuery, [contentId]);
 
       return true;
     } catch (error) {

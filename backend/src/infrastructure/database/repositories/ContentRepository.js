@@ -31,7 +31,9 @@ export class ContentRepository extends IContentRepository {
   }
 
   async findByTopicId(topicId, filters = {}) {
-    let results = this.contents.filter(c => c.topic_id === topicId);
+    let results = this.contents
+      .filter(c => c.topic_id === topicId)
+      .filter(c => filters.includeArchived ? true : c.status !== 'archived');
 
     // Apply filters
     if (filters.content_type_id) {
@@ -71,7 +73,6 @@ export class ContentRepository extends IContentRepository {
       throw new Error(`Content with id ${contentId} not found`);
     }
 
-    // Soft delete
     this.contents[index].softDelete();
   }
 
@@ -83,7 +84,12 @@ export class ContentRepository extends IContentRepository {
 
   async findLatestByTopicAndType(topicId, contentType) {
     const matches = this.contents
-      .filter(c => c.topic_id === topicId && c.content_type_id === contentType)
+      .filter(
+        c =>
+          c.topic_id === topicId &&
+          c.content_type_id === contentType &&
+          c.status !== 'archived'
+      )
       .sort((a, b) => b.created_at - a.created_at);
     return matches.length > 0 ? matches[0] : null;
   }

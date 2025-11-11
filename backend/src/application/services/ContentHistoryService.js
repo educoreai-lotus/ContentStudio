@@ -55,7 +55,9 @@ export class ContentHistoryService {
 
     if ((!historyEntries || historyEntries.length === 0) && typeof this.contentRepository.findAllByTopicId === 'function') {
       try {
-        const allContent = await this.contentRepository.findAllByTopicId(content.topic_id);
+        const allContent = await this.contentRepository.findAllByTopicId(content.topic_id, {
+          includeArchived: true,
+        });
         const related = (allContent || [])
           .filter(item => item.content_id !== content.content_id)
           .filter(item => this.#contentTypesMatch(item.content_type_id, content.content_type_id));

@@ -98,6 +98,7 @@ export class Content {
    */
   softDelete() {
     this.quality_check_status = 'deleted';
+    this.status = 'archived';
     this.updated_at = new Date();
   }
 }
