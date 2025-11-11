@@ -85,7 +85,12 @@ export default function TopicContentManager() {
       await fetchContent(); // Refresh list
       setTemplateAppliedMessage('Content removed from active list and archived in history.');
     } catch (err) {
-      alert('Failed to delete content: ' + err.message);
+      const message =
+        err?.response?.data?.error?.message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        'Unknown error';
+      alert('Failed to delete content: ' + message);
     }
   };
 
