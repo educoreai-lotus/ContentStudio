@@ -9,6 +9,37 @@ export class PostgreSQLContentRepository extends IContentRepository {
   constructor() {
     super();
     this.db = db;
+    this.supportsStatusColumn = undefined;
+  }
+
+  async ensureStatusSupport() {
+    if (this.supportsStatusColumn !== undefined) {
+      return this.supportsStatusColumn;
+    }
+
+    if (!this.db.isConnected()) {
+      throw new Error('Database not connected. Using in-memory repository.');
+    }
+
+    const query = `
+      SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'content'
+          AND column_name = 'status'
+      ) AS has_column
+    `;
+
+    try {
+      const result = await this.db.query(query);
+      this.supportsStatusColumn = Boolean(result.rows?.[0]?.has_column);
+    } catch (error) {
+      console.warn('[PostgreSQLContentRepository] Unable to detect status column, assuming absent.', error.message);
+      this.supportsStatusColumn = false;
+    }
+
+    return this.supportsStatusColumn;
   }
 
   /**
@@ -130,7 +161,9 @@ export class PostgreSQLContentRepository extends IContentRepository {
     const params = [topicId];
     let paramIndex = 2;
 
-    if (!filters.includeArchived) {
+    const supportsStatus = await this.ensureStatusSupport?.() ?? true;
+
+    if (!filters.includeArchived && supportsStatus) {
       query += ` AND (status IS NULL OR status != $${paramIndex})`;
       params.push('archived');
       paramIndex++;
@@ -242,11 +275,13 @@ export class PostgreSQLContentRepository extends IContentRepository {
       }
     }
 
+    const supportsStatus = await this.ensureStatusSupport?.() ?? true;
+
     const query = `
       SELECT * FROM content
       WHERE topic_id = $1
         AND content_type_id = $2
-        AND (status IS NULL OR status != 'archived')
+        ${supportsStatus ? "AND (status IS NULL OR status != 'archived')" : ''}
       ORDER BY updated_at DESC, created_at DESC
       LIMIT 1
     `;
@@ -298,15 +333,21 @@ export class PostgreSQLContentRepository extends IContentRepository {
         }
       }
 
-      const archiveQuery = `
-        UPDATE content
-        SET status = 'archived',
-            quality_check_status = 'deleted',
-            updated_at = NOW()
-        WHERE content_id = $1
-        RETURNING *
-      `;
-      await this.db.query(archiveQuery, [contentId]);
+      const supportsStatus = await this.ensureStatusSupport?.() ?? true;
+      if (supportsStatus) {
+        const archiveQuery = `
+          UPDATE content
+          SET status = 'archived',
+              quality_check_status = 'deleted',
+              updated_at = NOW()
+          WHERE content_id = $1
+          RETURNING *
+        `;
+        await this.db.query(archiveQuery, [contentId]);
+      } else {
+        const deleteQuery = 'DELETE FROM content WHERE content_id = $1 RETURNING *';
+        await this.db.query(deleteQuery, [contentId]);
+      }
 
       return true;
     } catch (error) {
