@@ -29,15 +29,20 @@ export class ContentHistoryService {
     }
 
     const versionNumber = await this.contentHistoryRepository.getNextVersionNumber(content.content_id);
-    return await this.contentHistoryRepository.create({
+    const payload = {
       content_id: content.content_id,
       topic_id: content.topic_id,
       content_type_id: content.content_type_id,
       generation_method_id: content.generation_method_id,
-      version_number,
       content_data: content.content_data,
       created_at: new Date(),
-    });
+    };
+
+    if (typeof versionNumber === 'number' && !Number.isNaN(versionNumber)) {
+      payload.version_number = versionNumber;
+    }
+
+    return await this.contentHistoryRepository.create(payload);
   }
 
   async getHistoryByContent(contentId) {
