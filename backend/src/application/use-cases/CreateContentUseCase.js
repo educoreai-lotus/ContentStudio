@@ -42,17 +42,8 @@ export class CreateContentUseCase {
       generation_method_id: enrichedContentData.generation_method_id || 'manual',
     });
 
-    let existingContent = null;
-    if (typeof this.contentRepository.findLatestByTopicAndType === 'function') {
-      try {
-        existingContent = await this.contentRepository.findLatestByTopicAndType(
-          content.topic_id,
-          content.content_type_id
-        );
-      } catch (error) {
-        console.warn('[CreateContentUseCase] Failed to fetch existing content for history tracking:', error.message);
-      }
-    }
+    const { candidateIdsOrNames, resolverDebugLabel } = await this.getContentTypeIdentifiers(content);
+    let existingContent = await this.findExistingContent(content.topic_id, candidateIdsOrNames, resolverDebugLabel);
 
     if (existingContent) {
       if (this.contentHistoryService?.saveVersion) {
@@ -95,6 +86,112 @@ export class CreateContentUseCase {
     }
 
     return createdContent;
+  }
+
+  async findExistingContent(topicId, candidates, debugLabel) {
+    if (!Array.isArray(candidates) || candidates.length === 0) {
+      return null;
+    }
+
+    const tryCandidates = async lookupFn => {
+      for (const candidate of candidates) {
+        try {
+          const result = await lookupFn(candidate);
+          if (result) {
+            return result;
+          }
+        } catch (error) {
+          console.warn(
+            `[CreateContentUseCase] Failed lookup for candidate "${candidate}" (${debugLabel}): ${error.message}`
+          );
+        }
+      }
+      return null;
+    };
+
+    if (typeof this.contentRepository.findLatestByTopicAndType === 'function') {
+      const found = await tryCandidates(candidate =>
+        this.contentRepository.findLatestByTopicAndType(topicId, candidate)
+      );
+      if (found) {
+        return found;
+      }
+    }
+
+    if (typeof this.contentRepository.findAllByTopicId === 'function') {
+      try {
+        const allContent = await this.contentRepository.findAllByTopicId(topicId);
+        const sorted = Array.isArray(allContent)
+          ? [...allContent].sort(
+              (a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at)
+            )
+          : [];
+        return sorted.find(item =>
+          candidates.some(candidate => this.contentTypesMatch(item.content_type_id, candidate))
+        );
+      } catch (error) {
+        console.warn('[CreateContentUseCase] Failed to load all content for fallback lookup:', error.message);
+      }
+    }
+
+    return null;
+  }
+
+  contentTypesMatch(existingType, candidate) {
+    if (existingType === candidate) {
+      return true;
+    }
+
+    const existingLower = typeof existingType === 'string' ? existingType.toLowerCase() : null;
+    const candidateLower = typeof candidate === 'string' ? candidate.toLowerCase() : null;
+    if (existingLower && candidateLower && existingLower === candidateLower) {
+      return true;
+    }
+
+    const existingNumeric = Number(existingType);
+    const candidateNumeric = Number(candidate);
+    if (!Number.isNaN(existingNumeric) && !Number.isNaN(candidateNumeric) && existingNumeric === candidateNumeric) {
+      return true;
+    }
+
+    return false;
+  }
+
+  async getContentTypeIdentifiers(content) {
+    const rawType = content.content_type_id;
+    const candidates = new Set();
+
+    if (rawType !== undefined && rawType !== null) {
+      candidates.add(rawType);
+    }
+
+    const numericId = Number(rawType);
+    if (!Number.isNaN(numericId)) {
+      candidates.add(numericId);
+    }
+
+    if (typeof rawType === 'string') {
+      candidates.add(rawType.toLowerCase());
+    }
+
+    // Attempt to resolve official type name via repository
+    if (!Number.isNaN(numericId) && typeof this.contentRepository.getContentTypeNamesByIds === 'function') {
+      try {
+        const map = await this.contentRepository.getContentTypeNamesByIds([numericId]);
+        const name = map?.get?.(numericId);
+        if (name) {
+          candidates.add(name);
+          candidates.add(name.toLowerCase());
+        }
+      } catch (error) {
+        console.warn('[CreateContentUseCase] Failed to resolve content type name:', error.message);
+      }
+    }
+
+    return {
+      candidateIdsOrNames: Array.from(candidates).filter(Boolean),
+      resolverDebugLabel: `topic:${content.topic_id}`,
+    };
   }
 
   async shouldGenerateAudio(contentData) {
