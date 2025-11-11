@@ -436,52 +436,95 @@ function renderPreviewContent(sectionId, version, theme) {
       );
 
     case 'slides': {
-      const title = data.presentation?.title || data.title || 'Slides';
+      const title =
+        data.presentation?.title ||
+        data.metadata?.lessonTopic ||
+        data.title ||
+        data.fileName ||
+        'Presentation Deck';
       const slides = data.presentation?.slides || data.slides || [];
-      const googleUrl = data.googleSlidesUrl || data.storageUrl || data.presentation?.url;
+      const googleUrl =
+        data.googleSlidesUrl ||
+        data.presentation?.publicUrl ||
+        data.presentation?.url ||
+        data.storageUrl ||
+        data.fileUrl;
+
+      const summaryItems = [
+        data.slide_count ? `${data.slide_count} total slides` : null,
+        data.presentation?.createdBy ? `Author: ${data.presentation.createdBy}` : null,
+        data.presentation?.language ? `Language: ${data.presentation.language}` : null,
+        data.presentation?.subject ? `Subject: ${data.presentation.subject}` : null,
+      ].filter(Boolean);
 
       return (
-        <div className="space-y-4">
-          <div>
-            <h4 className="text-lg font-semibold">{title}</h4>
-            <p className="text-sm opacity-70">
-              {slides.length || data.slide_count
-                ? `${data.slide_count || slides.length} slides`
-                : 'Slide deck'}
-            </p>
+        <div className="space-y-5">
+          <div className="flex items-start gap-4">
+            <div className="flex-shrink-0">
+              <div className="w-14 h-14 rounded-xl bg-purple-500/15 text-purple-600 flex items-center justify-center text-2xl">
+                <i className="fas fa-file-powerpoint"></i>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <h4 className="text-lg font-semibold leading-tight">{title}</h4>
+              {summaryItems.length > 0 && (
+                <ul className="text-xs opacity-70 space-y-1">
+                  {summaryItems.map(item => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              )}
+              {googleUrl && (
+                <a
+                  href={googleUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-600 hover:text-emerald-700"
+                >
+                  <i className="fas fa-external-link-alt"></i>
+                  Open presentation
+                </a>
+              )}
+            </div>
           </div>
 
-          {googleUrl && (
-            <a
-              href={googleUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-600 hover:text-emerald-700"
-            >
-              <i className="fas fa-external-link-alt"></i>
-              Open in Google Slides
-            </a>
-          )}
-
-          {slides.length > 0 && (
+          {slides.length > 0 ? (
             <div className="space-y-2">
               <h5 className="text-sm font-semibold opacity-80">Slide Outline</h5>
               <ol className="space-y-2 text-sm">
-                {slides.slice(0, 6).map((slide, index) => (
-                  <li key={slide.slide_number || index} className="border-l-2 border-emerald-500 pl-3">
-                    <p className="font-medium">{slide.title}</p>
-                    {Array.isArray(slide.content) && (
+                {slides.slice(0, 8).map((slide, index) => (
+                  <li
+                    key={slide.slide_number || index}
+                    className="border-l-2 border-purple-400 pl-3"
+                  >
+                    <p className="font-medium">{slide.title || `Slide ${index + 1}`}</p>
+                    {Array.isArray(slide.content) && slide.content.length > 0 && (
                       <ul className="list-disc list-inside opacity-80">
-                        {slide.content.slice(0, 3).map((item, i) => (
+                        {slide.content.slice(0, 4).map((item, i) => (
                           <li key={i}>{item}</li>
                         ))}
-                        {slide.content.length > 3 && <li>…</li>}
+                        {slide.content.length > 4 && <li>…</li>}
                       </ul>
                     )}
                   </li>
                 ))}
-                {slides.length > 6 && <li className="opacity-60">… {slides.length - 6} more slides</li>}
+                {slides.length > 8 && (
+                  <li className="opacity-60">… {slides.length - 8} more slides</li>
+                )}
               </ol>
+            </div>
+          ) : (
+            <div
+              className={`p-4 rounded-lg border ${
+                theme === 'day-mode'
+                  ? 'bg-purple-50 border-purple-200'
+                  : 'bg-purple-900/20 border-purple-500/30'
+              }`}
+            >
+              <p className="text-sm opacity-80">
+                Slide outline not available for this version, but you can open the deck using the link
+                above.
+              </p>
             </div>
           )}
         </div>
