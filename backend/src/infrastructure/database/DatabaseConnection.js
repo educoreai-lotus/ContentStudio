@@ -180,6 +180,19 @@ export class DatabaseConnection {
   }
 
   /**
+   * Get a raw client for transactional operations
+   * @returns {Promise<pg.PoolClient>}
+   */
+  async getClient() {
+    await this.ready;
+    if (!this.pool) {
+      throw new Error('Database not configured. Set DATABASE_URL environment variable.');
+    }
+
+    return this.pool.connect();
+  }
+
+  /**
    * Close database connection
    * @returns {Promise<void>}
    */
