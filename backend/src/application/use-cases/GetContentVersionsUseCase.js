@@ -2,8 +2,9 @@
  * Get Content Versions Use Case
  */
 export class GetContentVersionsUseCase {
-  constructor({ contentVersionRepository }) {
+  constructor({ contentVersionRepository, contentRepository }) {
     this.contentVersionRepository = contentVersionRepository;
+    this.contentRepository = contentRepository;
   }
 
   async execute(contentId) {
@@ -22,6 +23,3 @@ export class GetContentVersionsUseCase {
     );
   }
 }
-
-
-
