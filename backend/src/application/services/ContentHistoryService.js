@@ -29,12 +29,25 @@ export class ContentHistoryService {
     }
 
     const versionNumber = await this.contentHistoryRepository.getNextVersionNumber(content.content_id);
+    const rawContentData = content.content_data;
+    const normalizedContentData =
+      typeof rawContentData === 'string'
+        ? (() => {
+            try {
+              return JSON.parse(rawContentData);
+            } catch (parseError) {
+              console.warn('[ContentHistoryService] Failed to parse string content_data for history snapshot:', parseError.message);
+              return { raw: rawContentData };
+            }
+          })()
+        : rawContentData;
+
     const payload = {
       content_id: content.content_id,
       topic_id: content.topic_id,
       content_type_id: content.content_type_id,
       generation_method_id: content.generation_method_id,
-      content_data: content.content_data,
+      content_data: normalizedContentData,
       created_at: new Date(),
     };
 
