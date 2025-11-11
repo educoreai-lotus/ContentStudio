@@ -17,6 +17,7 @@ export class ContentController {
       contentRepository,
       qualityCheckService,
       aiGenerationService,
+      contentHistoryService,
     });
     this.updateContentUseCase = new UpdateContentUseCase({
       contentRepository,

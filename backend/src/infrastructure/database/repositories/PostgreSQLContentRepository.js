@@ -168,23 +168,33 @@ export class PostgreSQLContentRepository extends IContentRepository {
       'quality_check_status',
       'quality_check_data',
       'status',
+      'generation_method_id',
     ];
     const setClauses = [];
     const values = [];
     let paramIndex = 1;
 
-    Object.keys(updates).forEach(key => {
-      if (allowedFields.includes(key) && updates[key] !== undefined) {
-        if (key === 'content_data' || key === 'quality_check_data') {
-          setClauses.push(`${key} = $${paramIndex}::jsonb`);
-          values.push(JSON.stringify(updates[key]));
-        } else {
-          setClauses.push(`${key} = $${paramIndex}`);
-          values.push(updates[key]);
-        }
-        paramIndex++;
+    for (const key of Object.keys(updates)) {
+      if (!allowedFields.includes(key) || updates[key] === undefined) {
+        continue;
       }
-    });
+
+      if (key === 'content_data' || key === 'quality_check_data') {
+        setClauses.push(`${key} = $${paramIndex}::jsonb`);
+        values.push(JSON.stringify(updates[key]));
+      } else if (key === 'generation_method_id') {
+        const generationMethodId =
+          typeof updates[key] === 'string'
+            ? await this.getGenerationMethodId(updates[key])
+            : updates[key];
+        setClauses.push(`${key} = $${paramIndex}`);
+        values.push(generationMethodId);
+      } else {
+        setClauses.push(`${key} = $${paramIndex}`);
+        values.push(updates[key]);
+      }
+      paramIndex++;
+    }
 
     if (setClauses.length === 0) {
       return await this.findById(contentId);
@@ -209,6 +219,34 @@ export class PostgreSQLContentRepository extends IContentRepository {
       return null;
     }
 
+    return this.mapRowToContent(result.rows[0]);
+  }
+
+  async findLatestByTopicAndType(topicId, contentTypeIdOrName) {
+    if (!this.db.isConnected()) {
+      throw new Error('Database not connected. Using in-memory repository.');
+    }
+
+    let contentTypeId = contentTypeIdOrName;
+    if (typeof contentTypeIdOrName === 'string') {
+      if (/^\d+$/.test(contentTypeIdOrName)) {
+        contentTypeId = parseInt(contentTypeIdOrName, 10);
+      } else {
+        contentTypeId = await this.getContentTypeId(contentTypeIdOrName);
+      }
+    }
+
+    const query = `
+      SELECT * FROM content
+      WHERE topic_id = $1
+        AND content_type_id = $2
+      ORDER BY updated_at DESC, created_at DESC
+      LIMIT 1
+    `;
+    const result = await this.db.query(query, [topicId, contentTypeId]);
+    if (result.rows.length === 0) {
+      return null;
+    }
     return this.mapRowToContent(result.rows[0]);
   }
 

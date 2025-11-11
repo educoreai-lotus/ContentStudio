@@ -81,6 +81,13 @@ export class ContentRepository extends IContentRepository {
     );
   }
 
+  async findLatestByTopicAndType(topicId, contentType) {
+    const matches = this.contents
+      .filter(c => c.topic_id === topicId && c.content_type_id === contentType)
+      .sort((a, b) => b.created_at - a.created_at);
+    return matches.length > 0 ? matches[0] : null;
+  }
+
   async getContentTypeNamesByIds(typeIds = []) {
     const map = new Map();
     typeIds.forEach(id => {

@@ -61,6 +61,16 @@ export class ContentRepository {
   }
 
   /**
+   * Find the latest content entry for a topic and type
+   * @param {number} topicId
+  * @param {number|string} contentTypeIdOrName
+   * @returns {Promise<Content|null>}
+   */
+  async findLatestByTopicAndType(topicId, contentTypeIdOrName) {
+    throw new Error('ContentRepository.findLatestByTopicAndType() must be implemented');
+  }
+
+  /**
    * Retrieve a map of content type IDs to their string names
    * @param {number[]} typeIds - Array of type IDs
    * @returns {Promise<Map<number, string>>}

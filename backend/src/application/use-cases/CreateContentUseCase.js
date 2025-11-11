@@ -5,10 +5,11 @@ import { Content } from '../../domain/entities/Content.js';
  * Handles manual content creation with automatic quality check trigger
  */
 export class CreateContentUseCase {
-  constructor({ contentRepository, qualityCheckService, aiGenerationService }) {
+  constructor({ contentRepository, qualityCheckService, aiGenerationService, contentHistoryService }) {
     this.contentRepository = contentRepository;
     this.qualityCheckService = qualityCheckService;
     this.aiGenerationService = aiGenerationService;
+    this.contentHistoryService = contentHistoryService;
   }
 
   async execute(contentData) {
@@ -40,6 +41,45 @@ export class CreateContentUseCase {
       ...enrichedContentData,
       generation_method_id: enrichedContentData.generation_method_id || 'manual',
     });
+
+    let existingContent = null;
+    if (typeof this.contentRepository.findLatestByTopicAndType === 'function') {
+      try {
+        existingContent = await this.contentRepository.findLatestByTopicAndType(
+          content.topic_id,
+          content.content_type_id
+        );
+      } catch (error) {
+        console.warn('[CreateContentUseCase] Failed to fetch existing content for history tracking:', error.message);
+      }
+    }
+
+    if (existingContent) {
+      if (this.contentHistoryService?.saveVersion) {
+        try {
+          await this.contentHistoryService.saveVersion(existingContent, { force: true });
+        } catch (error) {
+          console.error('[CreateContentUseCase] Failed to save previous version before update:', error.message);
+        }
+      }
+
+      const updatedContent = await this.contentRepository.update(existingContent.content_id, {
+        content_data: content.content_data,
+        quality_check_status: 'pending',
+        quality_check_data: null,
+        generation_method_id: content.generation_method_id,
+      });
+
+      if (updatedContent.needsQualityCheck() && this.qualityCheckService) {
+        try {
+          await this.qualityCheckService.triggerQualityCheck(updatedContent.content_id);
+        } catch (error) {
+          console.error('Failed to trigger quality check:', error);
+        }
+      }
+
+      return updatedContent;
+    }
 
     // Save content to repository
     const createdContent = await this.contentRepository.create(content);
