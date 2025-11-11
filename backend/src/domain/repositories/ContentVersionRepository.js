@@ -22,29 +22,32 @@ export class ContentVersionRepository {
   }
 
   /**
-   * Find all versions for content
-   * @param {number} contentId - Content ID
+   * Find all versions for a topic + content type
+   * @param {number} topicId - Topic ID
+   * @param {number} contentTypeId - Content type ID
    * @returns {Promise<ContentVersion[]>} Array of versions
    */
-  async findByContentId(contentId) {
-    throw new Error('ContentVersionRepository.findByContentId() must be implemented');
+  async findByTopicAndType(topicId, contentTypeId) {
+    throw new Error('ContentVersionRepository.findByTopicAndType() must be implemented');
   }
 
   /**
    * Find current version for content
-   * @param {number} contentId - Content ID
+   * @param {number} topicId - Topic ID
+   * @param {number} contentTypeId - Content type ID
    * @returns {Promise<ContentVersion|null>} Current version or null
    */
-  async findCurrentVersion(contentId) {
+  async findCurrentVersion(topicId, contentTypeId) {
     throw new Error('ContentVersionRepository.findCurrentVersion() must be implemented');
   }
 
   /**
    * Get next version number for content
-   * @param {number} contentId - Content ID
+   * @param {number} topicId - Topic ID
+   * @param {number} contentTypeId - Content type ID
    * @returns {Promise<number>} Next version number
    */
-  async getNextVersionNumber(contentId) {
+  async getNextVersionNumber(topicId, contentTypeId) {
     throw new Error('ContentVersionRepository.getNextVersionNumber() must be implemented');
   }
 
@@ -60,10 +63,11 @@ export class ContentVersionRepository {
 
   /**
    * Mark all versions as not current for content
-   * @param {number} contentId - Content ID
+   * @param {number} topicId - Topic ID
+   * @param {number} contentTypeId - Content type ID
    * @returns {Promise<void>}
    */
-  async markAllAsNotCurrent(contentId) {
+  async markAllAsNotCurrent(topicId, contentTypeId) {
     throw new Error('ContentVersionRepository.markAllAsNotCurrent() must be implemented');
   }
 

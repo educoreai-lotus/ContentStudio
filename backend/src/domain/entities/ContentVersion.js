@@ -5,7 +5,7 @@
 export class ContentVersion {
   constructor({
     version_id,
-    content_id,
+    content_id = null,
     topic_id = null,
     content_type_id = null,
     generation_method_id = null,
@@ -39,10 +39,6 @@ export class ContentVersion {
     const errors = [];
 
     // Required fields
-    if (!this.content_id || typeof this.content_id !== 'number') {
-      errors.push('content_id is required and must be a number');
-    }
-
     if (!this.version_number || typeof this.version_number !== 'number' || this.version_number < 1) {
       errors.push('version_number is required and must be a positive number');
     }

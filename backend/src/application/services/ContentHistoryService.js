@@ -155,10 +155,16 @@ export class ContentHistoryService {
       throw new Error('History entry not found');
     }
 
-    const content = await this.contentRepository.findByTopicAndType?.(
-      historyEntry.topic_id,
-      historyEntry.content_type_id
-    );
+    const content =
+      (typeof this.contentRepository.findLatestByTopicAndType === 'function'
+        ? await this.contentRepository.findLatestByTopicAndType(
+            historyEntry.topic_id,
+            historyEntry.content_type_id
+          )
+        : null) ||
+      (typeof this.contentRepository.findById === 'function'
+        ? await this.contentRepository.findById(historyEntry.source_content_id)
+        : null);
     if (!content) {
       throw new Error('Content not found for history entry');
     }

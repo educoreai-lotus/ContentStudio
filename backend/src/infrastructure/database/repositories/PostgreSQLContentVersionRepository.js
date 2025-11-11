@@ -47,8 +47,19 @@ export class PostgreSQLContentVersionRepository extends IContentVersionRepositor
       throw new Error('Database not connected. Using in-memory repository.');
     }
 
-    // Get next version number if not provided
     const supportsDeletedAt = await this.ensureDeletedAtSupport();
+
+    let topicId = version.topic_id || version.topicId;
+    let contentTypeId = version.content_type_id || version.contentTypeId;
+    let generationMethodId = version.generation_method_id || version.generationMethodId;
+
+    if (!topicId || !contentTypeId) {
+      throw new Error('topic_id and content_type_id are required to create a content history entry');
+    }
+
+    if (!version.version_number) {
+      version.version_number = await this.getNextVersionNumber(topicId, contentTypeId);
+    }
 
     const baseColumns = [
       'topic_id',
@@ -64,10 +75,6 @@ export class PostgreSQLContentVersionRepository extends IContentVersionRepositor
       : baseColumns;
 
     const placeholders = columns.map((_, index) => `$${index + 1}`).join(', ');
-
-    let topicId = version.topic_id || version.topicId;
-    let contentTypeId = version.content_type_id || version.contentTypeId;
-    let generationMethodId = version.generation_method_id || version.generationMethodId;
 
     const values = [
       topicId,
@@ -138,39 +145,30 @@ export class PostgreSQLContentVersionRepository extends IContentVersionRepositor
     return result.rows.map(row => this.mapRowToContentVersion(row));
   }
 
-  async findCurrentVersion(contentId) {
+  async findCurrentVersion(topicId, contentTypeId) {
     if (!this.db.isConnected()) {
       throw new Error('Database not connected. Using in-memory repository.');
     }
 
     const supportsDeletedAt = await this.ensureDeletedAtSupport();
 
-    // Get the latest version (highest version_number)
-    const query = supportsDeletedAt
-      ? `
-        SELECT * FROM content_history 
-        WHERE topic_id = $1
-          AND content_type_id = $2 
-          AND deleted_at IS NULL
-        ORDER BY version_number DESC 
-        LIMIT 1
-      `
-      : `
-        SELECT * FROM content_history 
-        WHERE topic_id = $1
-          AND content_type_id = $2 
-        ORDER BY version_number DESC 
-        LIMIT 1
-      `;
+    const query = `
+      SELECT * FROM content_history 
+      WHERE topic_id = $1
+        AND content_type_id = $2
+        ${supportsDeletedAt ? 'AND deleted_at IS NULL' : ''}
+      ORDER BY version_number DESC 
+      LIMIT 1
+    `;
 
-    const result = await this.db.query(query, [contentId.topic_id, contentId.content_type_id]);
+    const result = await this.db.query(query, [topicId, contentTypeId]);
 
     if (result.rows.length === 0) {
       return null;
     }
 
     const version = this.mapRowToContentVersion(result.rows[0]);
-    version.is_current_version = true; // Latest version is current
+    version.is_current_version = true;
     return version;
   }
 
@@ -235,6 +233,10 @@ export class PostgreSQLContentVersionRepository extends IContentVersionRepositor
     return this.mapRowToContentVersion(result.rows[0]);
   }
 
+  async markAllAsNotCurrent() {
+    // No-op: "current" is determined at read time by selecting the highest version number.
+  }
+
   /**
    * Map database row to ContentVersion entity
    * @param {Object} row - Database row
@@ -243,7 +245,6 @@ export class PostgreSQLContentVersionRepository extends IContentVersionRepositor
   mapRowToContentVersion(row) {
     return new ContentVersion({
       version_id: row.history_id, // Map history_id to version_id
-      content_id: row.content_id,
       topic_id: row.topic_id,
       content_type_id: row.content_type_id,
       generation_method_id: row.generation_method_id,

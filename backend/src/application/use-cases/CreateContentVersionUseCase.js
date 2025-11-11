@@ -5,8 +5,9 @@ import { ContentVersion } from '../../domain/entities/ContentVersion.js';
  * Creates a new version when content is updated
  */
 export class CreateContentVersionUseCase {
-  constructor({ contentVersionRepository }) {
+  constructor({ contentVersionRepository, contentRepository }) {
     this.contentVersionRepository = contentVersionRepository;
+    this.contentRepository = contentRepository;
   }
 
   async execute(contentId, contentData, createdBy, changeDescription = null) {
@@ -18,29 +19,39 @@ export class CreateContentVersionUseCase {
       throw new Error('content_data is required');
     }
 
-    // Get next version number
+    const content = await this.contentRepository.findById?.(contentId);
+    if (!content) {
+      throw new Error('Content not found');
+    }
+
+    const { topic_id, content_type_id } = content;
+
     const versionNumber = await this.contentVersionRepository.getNextVersionNumber(
-      contentId
+      topic_id,
+      content_type_id
     );
 
-    // Get current version as parent
     const currentVersion = await this.contentVersionRepository.findCurrentVersion(
-      contentId
+      topic_id,
+      content_type_id
     );
     const parentVersionId = currentVersion ? currentVersion.version_id : null;
 
-    // Mark all previous versions as not current
-    await this.contentVersionRepository.markAllAsNotCurrent(contentId);
+    await this.contentVersionRepository.markAllAsNotCurrent(
+      topic_id,
+      content_type_id
+    );
 
-    // Create new version
     const version = new ContentVersion({
-      content_id: contentId,
       version_number: versionNumber,
       content_data: contentData,
       created_by: createdBy,
       is_current_version: true,
       change_description: changeDescription,
       parent_version_id: parentVersionId,
+      topic_id,
+      content_type_id,
+      generation_method_id: content.generation_method_id,
     });
 
     return await this.contentVersionRepository.create(version);

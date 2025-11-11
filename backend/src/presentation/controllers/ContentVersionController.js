@@ -14,6 +14,7 @@ export class ContentVersionController {
   }) {
     this.createContentVersionUseCase = new CreateContentVersionUseCase({
       contentVersionRepository,
+      contentRepository,
     });
     this.getContentVersionsUseCase = new GetContentVersionsUseCase({
       contentVersionRepository,

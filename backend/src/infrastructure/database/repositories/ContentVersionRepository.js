@@ -29,19 +29,24 @@ export class ContentVersionRepository extends IContentVersionRepository {
     return version || null;
   }
 
-  async findByContentId(contentId) {
+  async findByTopicAndType(topicId, contentTypeId) {
     return this.versions
-      .filter(v => v.content_id === contentId && !v.deleted_at)
+      .filter(
+        v =>
+          v.topic_id === topicId &&
+          v.content_type_id === contentTypeId &&
+          !v.deleted_at
+      )
       .sort((a, b) => b.version_number - a.version_number);
   }
 
-  async findCurrentVersion(contentId) {
-    const versions = await this.findByContentId(contentId);
+  async findCurrentVersion(topicId, contentTypeId) {
+    const versions = await this.findByTopicAndType(topicId, contentTypeId);
     return versions.find(v => v.is_current_version) || null;
   }
 
-  async getNextVersionNumber(contentId) {
-    const versions = await this.findByContentId(contentId);
+  async getNextVersionNumber(topicId, contentTypeId) {
+    const versions = await this.findByTopicAndType(topicId, contentTypeId);
     if (versions.length === 0) {
       return 1;
     }
@@ -66,8 +71,8 @@ export class ContentVersionRepository extends IContentVersionRepository {
     return updatedVersion;
   }
 
-  async markAllAsNotCurrent(contentId) {
-    const versions = await this.findByContentId(contentId);
+  async markAllAsNotCurrent(topicId, contentTypeId) {
+    const versions = await this.findByTopicAndType(topicId, contentTypeId);
     versions.forEach(version => {
       version.markAsNotCurrent();
       const index = this.versions.findIndex(v => v.version_id === version.version_id);
