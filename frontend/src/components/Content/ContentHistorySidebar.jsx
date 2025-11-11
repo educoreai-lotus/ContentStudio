@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import PropTypes from 'prop-types';
 import { contentService } from '../../services/content.js';
 import { useApp } from '../../context/AppContext.jsx';
+import { MindMapViewer } from '../MindMapViewer.jsx';
 
 const SECTION_DEFINITIONS = [
   { id: 'text_audio', label: 'Text & Audio', icon: 'fa-file-audio', typeId: 1 },
@@ -129,7 +130,7 @@ export function ContentHistorySidebar({ existingContent = [], onHistoryChanged }
   const [historyData, setHistoryData] = useState({});
   const [loadingMap, setLoadingMap] = useState({});
   const [errorMap, setErrorMap] = useState({});
-  const [previewVersion, setPreviewVersion] = useState(null);
+  const [previewState, setPreviewState] = useState(null);
 
   const contentByType = useMemo(() => {
     const map = new Map();
@@ -275,7 +276,13 @@ export function ContentHistorySidebar({ existingContent = [], onHistoryChanged }
                 created_at: entry.created_at || history.current?.updated_at,
               }}
               isCurrent={entry.isCurrent}
-              onPreview={setPreviewVersion}
+              onPreview={version =>
+                setPreviewState({
+                  sectionId: section.id,
+                  sectionLabel: section.label,
+                  version,
+                })
+              }
               onRestore={version => handleRestore(section, version)}
               onDelete={version => handleDelete(section, version)}
               theme={theme}
@@ -359,7 +366,7 @@ export function ContentHistorySidebar({ existingContent = [], onHistoryChanged }
         })}
       </div>
 
-      {previewVersion && (
+      {previewState && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
           <div
             className={`max-w-2xl w-full mx-4 rounded-2xl shadow-2xl border p-6 relative ${
@@ -370,19 +377,19 @@ export function ContentHistorySidebar({ existingContent = [], onHistoryChanged }
           >
             <button
               className="absolute top-4 right-4 text-xl opacity-60 hover:opacity-100"
-              onClick={() => setPreviewVersion(null)}
+              onClick={() => setPreviewState(null)}
             >
               <i className="fas fa-times"></i>
             </button>
 
             <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
               <i className="fas fa-eye"></i>
-              Version Preview
+              {previewState.sectionLabel || 'Version Preview'}
             </h3>
 
-            <pre className="max-h-[60vh] overflow-auto text-sm whitespace-pre-wrap">
-              {JSON.stringify(previewVersion.content_data || previewVersion, null, 2)}
-            </pre>
+            <div className="max-h-[70vh] overflow-auto pr-1 space-y-4">
+              {renderPreviewContent(previewState.sectionId, previewState.version, theme)}
+            </div>
           </div>
         </div>
       )}
@@ -394,3 +401,150 @@ ContentHistorySidebar.propTypes = {
   existingContent: PropTypes.array,
   onHistoryChanged: PropTypes.func,
 };
+
+function renderPreviewContent(sectionId, version, theme) {
+  const data = version?.content_data || version || {};
+
+  if (!data || (typeof data === 'object' && Object.keys(data).length === 0)) {
+    return <p className="text-sm opacity-70">No data available for this version.</p>;
+  }
+
+  switch (sectionId) {
+    case 'text_audio':
+      return (
+        <div className="space-y-4">
+          {data.text && (
+            <div className="whitespace-pre-wrap leading-relaxed text-sm">
+              {data.text}
+            </div>
+          )}
+          {data.audioUrl && (
+            <div className="space-y-2">
+              <audio controls className="w-full" src={data.audioUrl}>
+                Your browser does not support the audio element.
+              </audio>
+              <div className="text-xs opacity-70 flex flex-wrap gap-3">
+                {data.audioVoice ? <span>Voice: {data.audioVoice}</span> : null}
+                {data.audioDuration ? (
+                  <span>Duration: {Math.round(data.audioDuration)}s</span>
+                ) : null}
+                {data.audioFormat ? <span>Format: {data.audioFormat}</span> : null}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+
+    case 'slides': {
+      const title = data.presentation?.title || data.title || 'Slides';
+      const slides = data.presentation?.slides || data.slides || [];
+      const googleUrl = data.googleSlidesUrl || data.storageUrl || data.presentation?.url;
+
+      return (
+        <div className="space-y-4">
+          <div>
+            <h4 className="text-lg font-semibold">{title}</h4>
+            <p className="text-sm opacity-70">
+              {slides.length || data.slide_count
+                ? `${data.slide_count || slides.length} slides`
+                : 'Slide deck'}
+            </p>
+          </div>
+
+          {googleUrl && (
+            <a
+              href={googleUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-600 hover:text-emerald-700"
+            >
+              <i className="fas fa-external-link-alt"></i>
+              Open in Google Slides
+            </a>
+          )}
+
+          {slides.length > 0 && (
+            <div className="space-y-2">
+              <h5 className="text-sm font-semibold opacity-80">Slide Outline</h5>
+              <ol className="space-y-2 text-sm">
+                {slides.slice(0, 6).map((slide, index) => (
+                  <li key={slide.slide_number || index} className="border-l-2 border-emerald-500 pl-3">
+                    <p className="font-medium">{slide.title}</p>
+                    {Array.isArray(slide.content) && (
+                      <ul className="list-disc list-inside opacity-80">
+                        {slide.content.slice(0, 3).map((item, i) => (
+                          <li key={i}>{item}</li>
+                        ))}
+                        {slide.content.length > 3 && <li>…</li>}
+                      </ul>
+                    )}
+                  </li>
+                ))}
+                {slides.length > 6 && <li className="opacity-60">… {slides.length - 6} more slides</li>}
+              </ol>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    case 'mind_map':
+      if (data.nodes?.length && data.edges?.length) {
+        return (
+          <div className="border rounded-xl p-3 bg-white/40 dark:bg-slate-800/60">
+            <MindMapViewer data={data} />
+          </div>
+        );
+      }
+      return <p className="text-sm opacity-70">Mind map data not available.</p>;
+
+    case 'code': {
+      const code = data.code || data.snippet || data.text;
+      const language = data.language || data.languageLabel || 'code';
+      return code ? (
+        <div className="space-y-2">
+          <div className="text-xs uppercase tracking-widest opacity-60">{language}</div>
+          <pre
+            className={`rounded-lg p-4 overflow-auto text-sm ${
+              theme === 'day-mode'
+                ? 'bg-gray-900 text-green-100'
+                : 'bg-slate-800 text-emerald-100'
+            }`}
+          >
+            {code}
+          </pre>
+        </div>
+      ) : (
+        <p className="text-sm opacity-70">No code snippet available.</p>
+      );
+    }
+
+    case 'avatar_video': {
+      const videoUrl = data.videoUrl || data.storageUrl || data.cloudUrl;
+      return videoUrl ? (
+        <div className="space-y-3">
+          <video
+            controls
+            src={videoUrl}
+            className="w-full rounded-xl border border-gray-200 dark:border-slate-700"
+          >
+            <track kind="captions" />
+          </video>
+          <div className="text-xs opacity-70">
+            <div>Voice: {data.voice || data.audioVoice || 'Unknown'}</div>
+            {data.duration && <div>Duration: {Math.round(data.duration)}s</div>}
+          </div>
+        </div>
+      ) : (
+        <p className="text-sm opacity-70">Video URL missing for this version.</p>
+      );
+    }
+
+    default:
+      return (
+        <pre className="max-h-[60vh] overflow-auto text-sm whitespace-pre-wrap">
+          {JSON.stringify(data, null, 2)}
+        </pre>
+      );
+  }
+}
