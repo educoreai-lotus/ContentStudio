@@ -11,7 +11,15 @@ export class GetContentVersionsUseCase {
       throw new Error('content_id is required');
     }
 
-    return await this.contentVersionRepository.findByContentId(contentId);
+    const content = await this.contentRepository.findById(contentId);
+    if (!content) {
+      throw new Error('Content not found');
+    }
+
+    return await this.contentVersionRepository.findByTopicAndType(
+      content.topic_id,
+      content.content_type_id
+    );
   }
 }
 

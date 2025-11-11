@@ -16,19 +16,25 @@ export class ContentHistoryService {
   }
 
   async saveVersion(content, { force = false } = {}) {
-    if (!content?.content_id) {
-      throw new Error('Content entity is required to save history');
+    if (!content?.topic_id || !content?.content_type_id) {
+      throw new Error('Content entity must include topic_id and content_type_id for history');
     }
 
     if (!force) {
-      const latest = await this.contentHistoryRepository.findByContentId(content.content_id);
+      const latest = await this.contentHistoryRepository.findByTopicAndType(
+        content.topic_id,
+        content.content_type_id
+      );
       const latestEntry = latest?.[0];
       if (latestEntry && this.#isSameContent(latestEntry.content_data, content.content_data)) {
         return latestEntry;
       }
     }
 
-    const versionNumber = await this.contentHistoryRepository.getNextVersionNumber(content.content_id);
+    const versionNumber = await this.contentHistoryRepository.getNextVersionNumber(
+      content.topic_id,
+      content.content_type_id
+    );
     const rawContentData = content.content_data;
     const normalizedContentData =
       typeof rawContentData === 'string'
@@ -43,7 +49,6 @@ export class ContentHistoryService {
         : rawContentData;
 
     const payload = {
-      content_id: content.content_id,
       topic_id: content.topic_id,
       content_type_id: content.content_type_id,
       generation_method_id: content.generation_method_id,
@@ -64,7 +69,10 @@ export class ContentHistoryService {
       throw new Error('Content not found');
     }
 
-    let historyEntries = await this.contentHistoryRepository.findByContentId(contentId);
+    let historyEntries = await this.contentHistoryRepository.findByTopicAndType(
+      content.topic_id,
+      content.content_type_id
+    );
 
     if ((!historyEntries || historyEntries.length === 0) && typeof this.contentRepository.findAllByTopicId === 'function') {
       try {
@@ -78,11 +86,15 @@ export class ContentHistoryService {
         const relatedHistoryEntries = [];
         for (const relatedContent of related) {
           try {
-            const entries = await this.contentHistoryRepository.findByContentId(relatedContent.content_id);
+            const entries = await this.contentHistoryRepository.findByTopicAndType(
+              relatedContent.topic_id,
+              relatedContent.content_type_id
+            );
             entries.forEach(entry => {
               relatedHistoryEntries.push({
                 ...entry,
-                source_content_id: relatedContent.content_id,
+                source_topic_id: relatedContent.topic_id,
+                source_content_type_id: relatedContent.content_type_id,
               });
             });
           } catch (error) {
@@ -131,7 +143,8 @@ export class ContentHistoryService {
         preview: this.#buildPreview(typeKey, entry.content_data),
         content_data: entry.content_data,
         generation_method_id: entry.generation_method_id,
-        source_content_id: entry.source_content_id || content.content_id,
+        source_topic_id: entry.source_topic_id || content.topic_id,
+        source_content_type_id: entry.source_content_type_id || content.content_type_id,
       })),
     };
   }
@@ -142,7 +155,28 @@ export class ContentHistoryService {
       throw new Error('History entry not found');
     }
 
-    const content = await this.contentRepository.findById(historyEntry.content_id);
+    const content = await this.contentRepository.findByTopicAndType?.(
+      historyEntry.topic_id,
+      historyEntry.content_type_id
+    );
+    if (!content) {
+      throw new Error('Content not found for history entry');
+    }
+
+    await this.saveVersion(content, { force: true });
+
+    const updatedContent = await this.contentRepository.update(content.content_id, {
+      content_data: historyEntry.content_data,
+    });
+
+    try {
+      await this.contentHistoryRepository.softDelete(historyId);
+    } catch (error) {
+      console.warn('[ContentHistoryService] Failed to archive restored history entry:', error.message);
+    }
+
+    return ContentDTO.toContentResponse(updatedContent);
+  }
     if (!content) {
       throw new Error('Content not found for history entry');
     }

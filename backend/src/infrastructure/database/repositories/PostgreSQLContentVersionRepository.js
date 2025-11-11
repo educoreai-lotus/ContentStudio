@@ -48,14 +48,9 @@ export class PostgreSQLContentVersionRepository extends IContentVersionRepositor
     }
 
     // Get next version number if not provided
-    if (!version.version_number) {
-      version.version_number = await this.getNextVersionNumber(version.content_id);
-    }
-
     const supportsDeletedAt = await this.ensureDeletedAtSupport();
 
     const baseColumns = [
-      'content_id',
       'topic_id',
       'content_type_id',
       'version_number',
@@ -70,30 +65,11 @@ export class PostgreSQLContentVersionRepository extends IContentVersionRepositor
 
     const placeholders = columns.map((_, index) => `$${index + 1}`).join(', ');
 
-    let topicId = version.topic_id;
-    let contentTypeId = version.content_type_id;
-    let generationMethodId = version.generation_method_id;
-
-    if (!topicId || !contentTypeId || !generationMethodId) {
-      const contentQuery = `
-        SELECT topic_id, content_type_id, generation_method_id
-        FROM content
-        WHERE content_id = $1
-      `;
-      const contentResult = await this.db.query(contentQuery, [version.content_id]);
-
-      if (contentResult.rows.length === 0) {
-        throw new Error(`Content with id ${version.content_id} not found`);
-      }
-
-      const content = contentResult.rows[0];
-      topicId = topicId || content.topic_id;
-      contentTypeId = contentTypeId || content.content_type_id;
-      generationMethodId = generationMethodId || content.generation_method_id;
-    }
+    let topicId = version.topic_id || version.topicId;
+    let contentTypeId = version.content_type_id || version.contentTypeId;
+    let generationMethodId = version.generation_method_id || version.generationMethodId;
 
     const values = [
-      version.content_id,
       topicId,
       contentTypeId,
       version.version_number,
@@ -135,7 +111,7 @@ export class PostgreSQLContentVersionRepository extends IContentVersionRepositor
     return this.mapRowToContentVersion(result.rows[0]);
   }
 
-  async findByContentId(contentId) {
+  async findByTopicAndType(topicId, contentTypeId) {
     if (!this.db.isConnected()) {
       throw new Error('Database not connected. Using in-memory repository.');
     }
@@ -145,17 +121,19 @@ export class PostgreSQLContentVersionRepository extends IContentVersionRepositor
     const query = supportsDeletedAt
       ? `
         SELECT * FROM content_history 
-        WHERE content_id = $1
+        WHERE topic_id = $1
+          AND content_type_id = $2
           AND deleted_at IS NULL
         ORDER BY version_number DESC
       `
       : `
         SELECT * FROM content_history 
-        WHERE content_id = $1
+        WHERE topic_id = $1
+          AND content_type_id = $2
         ORDER BY version_number DESC
       `;
 
-    const result = await this.db.query(query, [contentId]);
+    const result = await this.db.query(query, [topicId, contentTypeId]);
 
     return result.rows.map(row => this.mapRowToContentVersion(row));
   }
@@ -171,19 +149,21 @@ export class PostgreSQLContentVersionRepository extends IContentVersionRepositor
     const query = supportsDeletedAt
       ? `
         SELECT * FROM content_history 
-        WHERE content_id = $1 
+        WHERE topic_id = $1
+          AND content_type_id = $2 
           AND deleted_at IS NULL
         ORDER BY version_number DESC 
         LIMIT 1
       `
       : `
         SELECT * FROM content_history 
-        WHERE content_id = $1 
+        WHERE topic_id = $1
+          AND content_type_id = $2 
         ORDER BY version_number DESC 
         LIMIT 1
       `;
 
-    const result = await this.db.query(query, [contentId]);
+    const result = await this.db.query(query, [contentId.topic_id, contentId.content_type_id]);
 
     if (result.rows.length === 0) {
       return null;
@@ -194,7 +174,7 @@ export class PostgreSQLContentVersionRepository extends IContentVersionRepositor
     return version;
   }
 
-  async getNextVersionNumber(contentId) {
+  async getNextVersionNumber(topicId, contentTypeId) {
     if (!this.db.isConnected()) {
       throw new Error('Database not connected. Using in-memory repository.');
     }
@@ -202,9 +182,10 @@ export class PostgreSQLContentVersionRepository extends IContentVersionRepositor
     const query = `
       SELECT MAX(version_number) as max_version 
       FROM content_history 
-      WHERE content_id = $1
+      WHERE topic_id = $1
+        AND content_type_id = $2
     `;
-    const result = await this.db.query(query, [contentId]);
+    const result = await this.db.query(query, [topicId, contentTypeId]);
 
     if (result.rows.length === 0 || !result.rows[0].max_version) {
       return 1;

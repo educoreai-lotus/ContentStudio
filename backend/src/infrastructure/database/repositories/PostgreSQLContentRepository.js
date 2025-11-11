@@ -319,12 +319,7 @@ export class PostgreSQLContentRepository extends IContentRepository {
 
       const content = getResult.rows[0];
 
-      try {
-        await this.saveRowToHistory(content, client);
-      } catch (historyError) {
-        console.error('[PostgreSQLContentRepository] Failed to archive content before delete:', historyError);
-        throw historyError;
-      }
+      await this.saveRowToHistory(content, client);
 
       if (content.content_type_id === 3 && content.content_data?.storagePath) {
         try {
@@ -380,25 +375,27 @@ export class PostgreSQLContentRepository extends IContentRepository {
     const versionQuery = `
       SELECT COALESCE(MAX(version_number), 0) + 1 AS next_version
       FROM content_history
-      WHERE content_id = $1
+      WHERE topic_id = $1
+        AND content_type_id = $2
     `;
-    const versionResult = await client.query(versionQuery, [contentRow.content_id]);
+    const versionResult = await client.query(versionQuery, [
+      contentRow.topic_id,
+      contentRow.content_type_id,
+    ]);
     const nextVersionNumber = versionResult.rows?.[0]?.next_version || 1;
 
     const insertQuery = `
       INSERT INTO content_history (
-        content_id,
         topic_id,
         content_type_id,
         version_number,
         content_data,
         generation_method_id,
         created_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, NOW())
+      ) VALUES ($1, $2, $3, $4, $5, NOW())
     `;
 
     await client.query(insertQuery, [
-      contentRow.content_id,
       contentRow.topic_id,
       contentRow.content_type_id,
       nextVersionNumber,
