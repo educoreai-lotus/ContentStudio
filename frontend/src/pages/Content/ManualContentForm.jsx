@@ -233,7 +233,7 @@ export const ManualContentForm = () => {
               backgroundClip: 'text',
             }}
           >
-            Create {contentType === 'text' && 'Text Content'}
+            Create {contentType === 'text' && 'Text & Audio'}
             {contentType === 'code' && 'Code Example'}
             {contentType === 'presentation' && 'Presentation'}
           </h1>
@@ -272,7 +272,7 @@ export const ManualContentForm = () => {
                 : 'bg-gray-800 border border-gray-700'
             }`}
           >
-            {/* Text Content */}
+            {/* Text & Audio Content */}
             {contentType === 'text' && (
               <div>
                 <label
@@ -280,8 +280,16 @@ export const ManualContentForm = () => {
                     theme === 'day-mode' ? 'text-gray-700' : 'text-gray-300'
                   }`}
                 >
-                  Text Content *
+                  Text & Audio *
                 </label>
+                <div className={`mb-2 p-3 rounded-lg text-xs ${
+                  theme === 'day-mode'
+                    ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                    : 'bg-blue-900/20 text-blue-300 border border-blue-500/30'
+                }`}>
+                  <i className="fas fa-info-circle mr-1"></i>
+                  Audio will be automatically generated with AI after saving
+                </div>
                 <textarea
                   value={formData.text}
                   onChange={(e) => handleInputChange('text', e.target.value)}

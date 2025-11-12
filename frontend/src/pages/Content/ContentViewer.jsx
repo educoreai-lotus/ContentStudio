@@ -47,7 +47,7 @@ export const ContentViewer = () => {
 
   const getContentTypeName = (typeId) => {
     const types = {
-      1: 'Text Content',
+      1: 'Text & Audio',
       2: 'Code Example',
       3: 'Presentation',
       4: 'Audio Narration',

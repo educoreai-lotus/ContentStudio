@@ -44,7 +44,7 @@ export default function LessonView() {
   };
 
   const formatLabels = {
-    text: 'Text Content',
+    text: 'Text & Audio',
     code: 'Code Example',
     presentation: 'Presentation',
     audio: 'Audio Narration',

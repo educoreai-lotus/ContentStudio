@@ -155,7 +155,7 @@ export const AIContentPreview = () => {
                 theme === 'day-mode' ? 'text-gray-900' : 'text-white'
               }`}
             >
-              {content.content_type_id === 1 && 'Text Content'}
+              {content.content_type_id === 1 && 'Text & Audio'}
               {content.content_type_id === 2 && 'Code Example'}
               {content.content_type_id === 3 && 'Presentation'}
               {content.content_type_id === 4 && 'Audio Narration'}

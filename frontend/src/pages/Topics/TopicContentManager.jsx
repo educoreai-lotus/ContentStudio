@@ -8,7 +8,7 @@ import { RegenerateOptionsModal } from '../../components/Content/RegenerateOptio
 import { ContentHistorySidebar } from '../../components/Content/ContentHistorySidebar.jsx';
 
 const CONTENT_TYPES = [
-  { id: 'text', name: 'Text Content', icon: 'fa-file-alt', color: 'blue', dbId: 1, allowManual: true },
+  { id: 'text', name: 'Text & Audio', icon: 'fa-file-alt', color: 'blue', dbId: 1, allowManual: true },
   { id: 'code', name: 'Code Example', icon: 'fa-code', color: 'green', dbId: 2, allowManual: true },
   { id: 'presentation', name: 'Presentation', icon: 'fa-presentation', color: 'purple', dbId: 3, allowManual: true },
   { id: 'mind_map', name: 'Mind Map', icon: 'fa-project-diagram', color: 'yellow', dbId: 5, allowManual: false },
@@ -187,7 +187,13 @@ export default function TopicContentManager() {
       <div className="max-w-7xl mx-auto">
         <div className="mb-8">
           <button
-            onClick={() => navigate(-1)}
+            onClick={() => {
+              if (topicDetails?.course_id) {
+                navigate(`/courses/${topicDetails.course_id}`);
+              } else {
+                navigate(-1); // Fallback to previous page if course_id not available
+              }
+            }}
             className={`mb-4 px-4 py-2 rounded-lg ${
               theme === 'day-mode'
                 ? 'bg-gray-200 hover:bg-gray-300 text-gray-700'
