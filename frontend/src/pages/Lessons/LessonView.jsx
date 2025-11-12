@@ -711,14 +711,29 @@ export default function LessonView() {
 
         {/* Lesson Content by Format Order */}
         <div className="space-y-8">
-          {lessonView.formats
-            .sort((a, b) => {
-              // Sort by display_order if available, otherwise maintain array order
+          {(() => {
+            // Debug: Log the formats before sorting
+            console.log('[LessonView] Formats before sorting:', lessonView.formats.map(f => ({ 
+              type: f.type, 
+              display_order: f.display_order,
+              contentCount: f.content?.length || 0 
+            })));
+            console.log('[LessonView] Template format_order:', lessonView.template?.format_order);
+            
+            // Sort by display_order if available, otherwise maintain array order
+            const sortedFormats = [...lessonView.formats].sort((a, b) => {
               const orderA = a.display_order !== undefined ? a.display_order : 999;
               const orderB = b.display_order !== undefined ? b.display_order : 999;
               return orderA - orderB;
-            })
-            .map((formatItem, index) => (
+            });
+            
+            console.log('[LessonView] Formats after sorting:', sortedFormats.map(f => ({ 
+              type: f.type, 
+              display_order: f.display_order,
+              contentCount: f.content?.length || 0 
+            })));
+            
+            return sortedFormats.map((formatItem, index) => (
             <div
               key={`${formatItem.type}-${index}`}
               className={`p-6 rounded-lg ${
@@ -768,7 +783,8 @@ export default function LessonView() {
                 </div>
               )}
             </div>
-          ))}
+            ));
+          })()}
         </div>
       </div>
     </div>

@@ -86,6 +86,10 @@ export class ApplyTemplateToLessonUseCase {
     const formatOrder = template.format_order || [];
     const orderedContent = [];
 
+    console.log('[ApplyTemplateToLessonUseCase] Template format_order:', formatOrder);
+    console.log('[ApplyTemplateToLessonUseCase] Content by type keys:', Object.keys(contentByType));
+    console.log('[ApplyTemplateToLessonUseCase] Format name to DB name mapping:', formatNameToDbName);
+
     // Build ordered content array according to template
     // IMPORTANT: Follow the exact order specified in template.format_order
     for (let i = 0; i < formatOrder.length; i++) {
@@ -93,13 +97,20 @@ export class ApplyTemplateToLessonUseCase {
       // Map template format name to database type name
       const dbTypeName = formatNameToDbName[templateFormatType] || templateFormatType;
       
+      console.log(`[ApplyTemplateToLessonUseCase] Processing format ${i + 1}/${formatOrder.length}: template="${templateFormatType}" -> db="${dbTypeName}"`);
+      
       if (contentByType[dbTypeName]) {
+        console.log(`[ApplyTemplateToLessonUseCase] Found content for "${dbTypeName}", adding to orderedContent at position ${orderedContent.length}`);
         orderedContent.push({
           format_type: templateFormatType, // Keep template format name for frontend
           content: contentByType[dbTypeName],
         });
+      } else {
+        console.log(`[ApplyTemplateToLessonUseCase] No content found for "${dbTypeName}" (mapped from template "${templateFormatType}")`);
       }
     }
+    
+    console.log('[ApplyTemplateToLessonUseCase] Final orderedContent:', orderedContent.map(item => ({ type: item.format_type, contentCount: item.content.length })));
 
     // Add any remaining content types not in template order (at the end)
     // Map database type names back to template format names for display
