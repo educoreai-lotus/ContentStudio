@@ -58,16 +58,28 @@ export class ApplyTemplateToLessonUseCase {
       .filter(id => typeof id === 'number');
     const typeNameMap = await this.contentRepository.getContentTypeNamesByIds(typeIds);
 
-    // Organize content by type name
+    // Map template format names to database type names
+    // Template uses: 'text', 'code', 'presentation', 'audio', 'mind_map', 'avatar_video'
+    // Database might use: 'text_audio' for text type
+    const formatNameToDbName = {
+      'text': 'text_audio', // Map template 'text' to database 'text_audio'
+      'code': 'code',
+      'presentation': 'presentation',
+      'audio': 'audio',
+      'mind_map': 'mind_map',
+      'avatar_video': 'avatar_video',
+    };
+
+    // Organize content by type name (using database names)
     const contentByType = {};
     contents.forEach(content => {
       const typeId = content.content_type_id;
-      const typeName =
+      const dbTypeName =
         typeof typeId === 'string' ? typeId : typeNameMap.get(typeId) || typeId;
-      if (!contentByType[typeName]) {
-        contentByType[typeName] = [];
+      if (!contentByType[dbTypeName]) {
+        contentByType[dbTypeName] = [];
       }
-      contentByType[typeName].push(content);
+      contentByType[dbTypeName].push(content);
     });
 
     // Apply template format order
@@ -77,28 +89,43 @@ export class ApplyTemplateToLessonUseCase {
     // Build ordered content array according to template
     // IMPORTANT: Follow the exact order specified in template.format_order
     for (let i = 0; i < formatOrder.length; i++) {
-      const formatType = formatOrder[i];
-      if (contentByType[formatType]) {
+      const templateFormatType = formatOrder[i];
+      // Map template format name to database type name
+      const dbTypeName = formatNameToDbName[templateFormatType] || templateFormatType;
+      
+      if (contentByType[dbTypeName]) {
         orderedContent.push({
-          format_type: formatType,
-          content: contentByType[formatType],
+          format_type: templateFormatType, // Keep template format name for frontend
+          content: contentByType[dbTypeName],
         });
       }
     }
 
     // Add any remaining content types not in template order (at the end)
-    const templateTypes = new Set(formatOrder);
-    Object.keys(contentByType).forEach((type) => {
-      if (!templateTypes.has(type)) {
+    // Map database type names back to template format names for display
+    const dbNameToFormatName = {
+      'text_audio': 'text',
+      'code': 'code',
+      'presentation': 'presentation',
+      'audio': 'audio',
+      'mind_map': 'mind_map',
+      'avatar_video': 'avatar_video',
+    };
+    const templateDbTypes = new Set(formatOrder.map(f => formatNameToDbName[f] || f));
+    Object.keys(contentByType).forEach((dbTypeName) => {
+      if (!templateDbTypes.has(dbTypeName)) {
+        const formatType = dbNameToFormatName[dbTypeName] || dbTypeName;
         orderedContent.push({
-          format_type: type,
-          content: contentByType[type],
+          format_type: formatType,
+          content: contentByType[dbTypeName],
         });
       }
     });
 
-    // Update topic with template_id
+    // Update topic with template_id (always update, even if template changed)
+    // This ensures the database is always in sync with the selected template
     await this.topicRepository.update(topicId, { template_id: templateId });
+    console.log(`[ApplyTemplateToLessonUseCase] Updated topic ${topicId} with template_id ${templateId}`);
 
     const viewData = {
       lesson: {
