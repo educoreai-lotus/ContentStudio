@@ -1,4 +1,4 @@
-import { readdir, readFile } from 'fs/promises';
+import { readdir, readFile, access } from 'fs/promises';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { db } from '../DatabaseConnection.js';
@@ -13,7 +13,52 @@ const __dirname = dirname(__filename);
  */
 export class MigrationRunner {
   constructor() {
-    this.migrationsPath = join(__dirname, '../../../../database/migrations');
+    // Try multiple possible paths for migrations directory
+    // Path 1: Relative to this file (development) - backend/src/infrastructure/database/services -> ../../../../database/migrations
+    const relativePath = join(__dirname, '../../../../database/migrations');
+    // Path 2: Relative to project root from backend directory (production/Railway)
+    const rootPath = join(process.cwd(), 'database/migrations');
+    // Path 3: Relative to project root from backend (if cwd is backend)
+    const backendRootPath = join(process.cwd(), '../database/migrations');
+    // Path 4: Absolute from app root (Railway/Docker)
+    const appRootPath = '/app/database/migrations';
+    // Path 5: From backend directory (if cwd is /app/backend)
+    const backendAppPath = '/app/backend/../database/migrations';
+    
+    // Use the first path that exists, or default to relative path
+    this.migrationsPath = relativePath;
+    this.alternativePaths = [rootPath, backendRootPath, appRootPath, backendAppPath];
+  }
+
+  /**
+   * Get the correct migrations path by checking which one exists
+   */
+  async getMigrationsPath() {
+    // Check if primary path exists
+    try {
+      await access(this.migrationsPath);
+      logger.info(`[MigrationRunner] 📂 Using migrations path: ${this.migrationsPath}`);
+      return this.migrationsPath;
+    } catch (error) {
+      // Try alternative paths
+      for (const altPath of this.alternativePaths) {
+        try {
+          await access(altPath);
+          logger.info(`[MigrationRunner] 📂 Using migrations path: ${altPath}`);
+          return altPath;
+        } catch (err) {
+          // Continue to next path
+        }
+      }
+      
+      // If none exist, log all attempted paths
+      logger.error('[MigrationRunner] ❌ Could not find migrations directory', {
+        attemptedPaths: [this.migrationsPath, ...this.alternativePaths],
+        cwd: process.cwd(),
+        __dirname: __dirname
+      });
+      throw new Error(`Migrations directory not found. Tried: ${[this.migrationsPath, ...this.alternativePaths].join(', ')}`);
+    }
   }
 
   /**
@@ -92,14 +137,18 @@ export class MigrationRunner {
    */
   async getMigrationFiles() {
     try {
-      const files = await readdir(this.migrationsPath);
-      return files
+      const migrationsPath = await this.getMigrationsPath();
+      const files = await readdir(migrationsPath);
+      const sqlFiles = files
         .filter(file => file.endsWith('.sql'))
         .sort(); // Sort alphabetically (which works for date-prefixed files)
+      
+      logger.info(`[MigrationRunner] 📂 Found ${sqlFiles.length} SQL file(s) in ${migrationsPath}`);
+      return sqlFiles;
     } catch (error) {
-      logger.error('Failed to read migrations directory', { 
-        path: this.migrationsPath,
-        error: error.message 
+      logger.error('[MigrationRunner] ❌ Failed to read migrations directory', { 
+        error: error.message,
+        stack: error.stack
       });
       return [];
     }
@@ -109,7 +158,8 @@ export class MigrationRunner {
    * Execute a single migration file
    */
   async executeMigration(fileName) {
-    const filePath = join(this.migrationsPath, fileName);
+    const migrationsPath = await this.getMigrationsPath();
+    const filePath = join(migrationsPath, fileName);
     const startTime = Date.now();
 
     try {
