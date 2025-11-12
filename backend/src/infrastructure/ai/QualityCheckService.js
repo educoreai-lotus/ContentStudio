@@ -66,6 +66,14 @@ export class QualityCheckService extends IQualityCheckService {
       });
 
       // Validate scores - reject if any score < 60
+      // CRITICAL: Check relevance first - this is the most important check
+      const relevanceScore = evaluationResult.relevance_score || evaluationResult.relevance || 100; // Default to 100 if not provided (backward compatibility)
+      if (relevanceScore < 60) {
+        throw new Error(
+          `Content failed quality check: Content is not relevant to the lesson topic (Relevance: ${relevanceScore}/100). ${evaluationResult.feedback_summary || 'The content does not match the lesson topic. Please ensure your content is directly related to the topic.'}`
+        );
+      }
+
       if (evaluationResult.originality_score < 60) {
         throw new Error(
           `Content failed quality check: Low originality score (${evaluationResult.originality_score}/100). ${evaluationResult.feedback_summary || 'Please revise your text to be more original.'}`
@@ -86,18 +94,19 @@ export class QualityCheckService extends IQualityCheckService {
 
       // Store results in the format expected by QualityCheck entity
       const results = {
+        relevance_score: relevanceScore,
         originality_score: evaluationResult.originality_score,
         difficulty_alignment_score: evaluationResult.difficulty_alignment_score,
         consistency_score: evaluationResult.consistency_score,
         feedback_summary: evaluationResult.feedback_summary,
       };
 
-      // Calculate overall score (average of the three scores)
+      // Calculate overall score (average of all four scores, with relevance weighted more)
       const overallScore = Math.round(
-        (evaluationResult.originality_score +
-          evaluationResult.difficulty_alignment_score +
-          evaluationResult.consistency_score) /
-          3
+        (relevanceScore * 0.4 + // Relevance is most important (40% weight)
+          evaluationResult.originality_score * 0.2 +
+          evaluationResult.difficulty_alignment_score * 0.2 +
+          evaluationResult.consistency_score * 0.2)
       );
 
       // Update quality check
@@ -111,6 +120,7 @@ export class QualityCheckService extends IQualityCheckService {
 
       console.log('[QualityCheckService] Quality check completed:', {
         contentId,
+        relevance_score: relevanceScore,
         originality_score: evaluationResult.originality_score,
         difficulty_alignment_score: evaluationResult.difficulty_alignment_score,
         consistency_score: evaluationResult.consistency_score,
@@ -131,29 +141,45 @@ export class QualityCheckService extends IQualityCheckService {
 
   async evaluateContentWithOpenAI({ courseName, topicName, skills, contentText }) {
     const systemPrompt = `You are an expert educational content evaluator.
-Your job is to check the quality, originality, and skill alignment of trainer-written lessons.
+Your job is to check the quality, originality, relevance, and skill alignment of trainer-written lessons.
+
+CRITICAL: You must STRICTLY verify that the content is relevant to the lesson topic. Content that is unrelated to the topic should be REJECTED with a low relevance score.
 
 Analyze the submitted text and evaluate it according to the following dimensions:
 
-1. Originality (0–100):
+1. Relevance to Topic (0–100) - MOST IMPORTANT:
+   - Check if the content is directly related to the lesson topic provided.
+   - Content must teach or explain concepts related to the topic name.
+   - If the content is about a completely different subject, give a score BELOW 60 (reject).
+   - If the content only mentions the topic briefly but focuses on something else, give a score BELOW 60.
+   - Higher score = content is highly relevant and directly addresses the topic.
+
+2. Originality (0–100):
    - Detect potential copying or similarity to known sources or common examples.
    - Higher score = more unique phrasing and structure.
 
-2. Difficulty Alignment (0–100):
+3. Difficulty Alignment (0–100):
    - Check if the text's difficulty level matches the provided skills.
    - If the skills are beginner-level but the text uses overly advanced terminology, reduce the score.
 
-3. Consistency and Coherence (0–100):
+4. Consistency and Coherence (0–100):
    - Assess if the text is well-structured, logically consistent, and coherent.
 
-4. Feedback Summary:
+5. Feedback Summary:
    - Write 2–3 short sentences describing:
+     * Whether the content is relevant to the topic (CRITICAL).
      * Strengths of the content.
      * Detected weaknesses or issues.
-     * Any plagiarism or mismatch detected.
+     * Any plagiarism, mismatch, or irrelevance detected.
+
+IMPORTANT: If the content is not relevant to the topic, you MUST:
+- Give relevance_score BELOW 60
+- Clearly state in feedback_summary that the content is not relevant to the topic
+- Explain what the content is about vs. what the topic should cover
 
 Return ONLY a valid JSON object with this exact structure:
 {
+  "relevance_score": <number 0-100>,
   "originality_score": <number 0-100>,
   "difficulty_alignment_score": <number 0-100>,
   "consistency_score": <number 0-100>,
@@ -165,6 +191,7 @@ Return ONLY a valid JSON object with this exact structure:
       topicName,
       skills,
       contentText: contentText.substring(0, 4000), // Limit text length for API
+      instruction: `Evaluate the content above. The content MUST be relevant to the topic "${topicName}" in the course "${courseName}". If the content is about something completely different, it should be rejected.`
     });
 
     try {
@@ -182,6 +209,7 @@ Return ONLY a valid JSON object with this exact structure:
         
         // Validate and normalize scores
         return {
+          relevance_score: Math.max(0, Math.min(100, result.relevance_score || result.relevance || 100)), // Default to 100 for backward compatibility
           originality_score: Math.max(0, Math.min(100, result.originality_score || 75)),
           difficulty_alignment_score: Math.max(0, Math.min(100, result.difficulty_alignment_score || 75)),
           consistency_score: Math.max(0, Math.min(100, result.consistency_score || 75)),

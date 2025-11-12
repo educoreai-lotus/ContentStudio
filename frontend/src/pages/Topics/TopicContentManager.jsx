@@ -350,6 +350,16 @@ export default function TopicContentManager() {
                             <div className={`p-2 rounded ${
                               theme === 'day-mode' ? 'bg-white' : 'bg-gray-700/50'
                             }`}>
+                              <div className="font-medium mb-1">Relevance to Topic</div>
+                              <div className="text-lg font-bold">{qualityCheckInfo.scores.relevance || 'N/A'}/100</div>
+                              <div className="text-xs opacity-75 mt-1">
+                                {qualityCheckInfo.scores.relevance && qualityCheckInfo.scores.relevance >= 80 ? 'Highly relevant' : 
+                                 qualityCheckInfo.scores.relevance && qualityCheckInfo.scores.relevance >= 60 ? 'Relevant' : 'Not relevant'}
+                              </div>
+                            </div>
+                            <div className={`p-2 rounded ${
+                              theme === 'day-mode' ? 'bg-white' : 'bg-gray-700/50'
+                            }`}>
                               <div className="font-medium mb-1">Originality</div>
                               <div className="text-lg font-bold">{qualityCheckInfo.scores.originality}/100</div>
                               <div className="text-xs opacity-75 mt-1">
@@ -377,7 +387,7 @@ export default function TopicContentManager() {
                                  qualityCheckInfo.scores.consistency >= 60 ? 'Good structure' : 'Needs improvement'}
                               </div>
                             </div>
-                            <div className={`p-2 rounded ${
+                            <div className={`p-2 rounded col-span-2 ${
                               theme === 'day-mode' ? 'bg-white' : 'bg-gray-700/50'
                             }`}>
                               <div className="font-medium mb-1">Overall Score</div>

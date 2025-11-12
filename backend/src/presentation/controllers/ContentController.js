@@ -110,12 +110,13 @@ export class ContentController {
         if (content.quality_check_status === 'approved') {
           const qualityData = content.quality_check_data || {};
           const scores = {
+            relevance: qualityData.relevance_score || 'N/A',
             originality: qualityData.originality_score || 'N/A',
             difficultyAlignment: qualityData.difficulty_alignment_score || 'N/A',
             consistency: qualityData.consistency_score || 'N/A',
             overall: qualityData.overall_score || qualityData.score || 'N/A',
           };
-          message = `Content saved and quality check completed successfully! Scores: Originality ${scores.originality}/100, Difficulty Alignment ${scores.difficultyAlignment}/100, Consistency ${scores.consistency}/100, Overall ${scores.overall}/100`;
+          message = `Content saved and quality check completed successfully! Scores: Relevance ${scores.relevance}/100, Originality ${scores.originality}/100, Difficulty Alignment ${scores.difficultyAlignment}/100, Consistency ${scores.consistency}/100, Overall ${scores.overall}/100`;
           qualityCheckInfo = {
             status: content.quality_check_status,
             scores: scores,

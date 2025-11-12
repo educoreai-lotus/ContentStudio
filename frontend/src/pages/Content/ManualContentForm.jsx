@@ -274,6 +274,13 @@ export const ManualContentForm = () => {
                 }`}>
                   {error}
                 </p>
+                {(error.includes('not relevant') || error.includes('Relevance') || error.includes('does not match the lesson topic')) && (
+                  <div className={`mt-2 p-2 rounded text-xs ${
+                    theme === 'day-mode' ? 'bg-red-100' : 'bg-red-800/30'
+                  }`}>
+                    <strong>Relevance Issue:</strong> Your content is not relevant to the lesson topic. Please ensure your content directly addresses the topic and teaches concepts related to it.
+                  </div>
+                )}
                 {error.includes('originality') && (
                   <div className={`mt-2 p-2 rounded text-xs ${
                     theme === 'day-mode' ? 'bg-red-100' : 'bg-red-800/30'
@@ -340,6 +347,7 @@ export const ManualContentForm = () => {
                     <i className="fas fa-check-circle mr-1"></i>
                     <strong>Quality Check:</strong> Your content will be automatically evaluated before audio generation:
                     <ul className="mt-2 ml-4 list-disc space-y-1">
+                      <li><strong>Relevance to Topic</strong> - Verifies content is directly related to the lesson topic (MOST IMPORTANT)</li>
                       <li><strong>Originality</strong> - Ensures your content is unique and not copied</li>
                       <li><strong>Difficulty Alignment</strong> - Verifies content matches the target skill level</li>
                       <li><strong>Consistency</strong> - Checks structure and coherence</li>
@@ -380,6 +388,7 @@ export const ManualContentForm = () => {
                   <i className="fas fa-check-circle mr-1"></i>
                   <strong>Quality Check:</strong> Your content will be automatically evaluated before saving:
                     <ul className="mt-2 ml-4 list-disc space-y-1">
+                      <li><strong>Relevance to Topic</strong> - Verifies content is directly related to the lesson topic (MOST IMPORTANT)</li>
                       <li><strong>Originality</strong> - Ensures your content is unique and not copied</li>
                       <li><strong>Difficulty Alignment</strong> - Verifies content matches the target skill level</li>
                       <li><strong>Consistency</strong> - Checks structure and coherence</li>
@@ -443,6 +452,7 @@ export const ManualContentForm = () => {
                   <i className="fas fa-check-circle mr-1"></i>
                   <strong>Quality Check:</strong> Your content will be automatically evaluated before saving:
                     <ul className="mt-2 ml-4 list-disc space-y-1">
+                      <li><strong>Relevance to Topic</strong> - Verifies content is directly related to the lesson topic (MOST IMPORTANT)</li>
                       <li><strong>Originality</strong> - Ensures your content is unique and not copied</li>
                       <li><strong>Difficulty Alignment</strong> - Verifies content matches the target skill level</li>
                       <li><strong>Consistency</strong> - Checks structure and coherence</li>
