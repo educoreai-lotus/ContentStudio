@@ -155,14 +155,17 @@ Analyze the submitted text and evaluate it according to the following dimensions
    - Higher score = content is highly relevant and directly addresses the topic.
 
 2. Originality (0–100) - CRITICAL FOR PLAGIARISM DETECTION:
-   - STRICTLY check if the content appears to be copied, plagiarized, or directly taken from official documentation, websites, or other sources.
-   - Look for exact or near-exact matches of phrases, sentences, or entire paragraphs from known sources (especially official documentation like React docs, MDN, W3C, etc.).
-   - Check if the writing style matches official documentation style (formal, structured, with specific terminology patterns).
-   - If content appears to be copied from official sources (even if relevant), give a score BELOW 60 (reject).
-   - If content has identical or very similar sentence structures to known documentation, reduce the score significantly.
-   - If content uses exact terminology and phrasing patterns from official sources, treat it as potential plagiarism.
-   - Higher score = completely original content written by the trainer in their own words.
-   - Lower score = content that appears copied, even if it's from official/legitimate sources.
+   - Check if the content appears to be DIRECTLY COPIED or plagiarized from official documentation, websites, or other sources.
+   - Look for EXACT or NEAR-EXACT matches of complete sentences, paragraphs, or large text blocks from known sources.
+   - IMPORTANT: Do NOT penalize content just because it uses similar terminology or has a formal writing style. Many educational topics naturally use standard terminology (e.g., "props", "components" in React).
+   - Only flag as plagiarism if you detect:
+     * Exact or near-exact copying of complete sentences or paragraphs
+     * Identical phrasing and structure that suggests direct copying
+     * Large blocks of text that match known documentation word-for-word
+   - If content appears to be DIRECTLY COPIED from official sources (exact or near-exact matches), give a score BELOW 60 (reject).
+   - If content is original but uses standard terminology or formal style (common in educational content), give a score of 70-100 (acceptable).
+   - Higher score = original content, even if it uses standard terminology or formal style.
+   - Lower score = content that appears to be directly copied word-for-word or with minimal changes.
 
 3. Difficulty Alignment (0–100):
    - Check if the text's difficulty level matches the provided skills.
@@ -186,11 +189,12 @@ IMPORTANT RULES:
    - Clearly state in feedback_summary that the content is not relevant to the topic
    - Explain what the content is about vs. what the topic should cover
 
-2. If the content appears to be copied or plagiarized (even from official sources), you MUST:
+2. If the content appears to be DIRECTLY COPIED or plagiarized (exact or near-exact matches), you MUST:
    - Give originality_score BELOW 60 (reject for plagiarism)
-   - Clearly state in feedback_summary that the content appears to be copied
+   - Clearly state in feedback_summary that the content appears to be directly copied
    - Identify the type of source (official documentation, website, etc.) if detectable
    - Recommend that the trainer rewrite the content in their own words
+   - IMPORTANT: Do NOT flag content as plagiarized just because it uses standard terminology or formal writing style. Only flag if you detect direct copying of sentences or paragraphs.
 
 Return ONLY a valid JSON object with this exact structure:
 {
@@ -208,9 +212,13 @@ Return ONLY a valid JSON object with this exact structure:
       contentText: contentText.substring(0, 4000), // Limit text length for API
       instruction: `Evaluate the content above. The content MUST be:
 1. Relevant to the topic "${topicName}" in the course "${courseName}". If the content is about something completely different, it should be rejected.
-2. ORIGINAL and written by the trainer in their own words. If the content appears to be copied from official documentation (like React docs, MDN, W3C, etc.), websites, or any other source, it MUST be rejected for plagiarism, even if it's relevant to the topic.
-3. Check carefully for exact or near-exact matches of phrases, sentences, or paragraphs from known sources.
-4. If you detect copying or plagiarism, give originality_score BELOW 60 and clearly explain in feedback_summary.`
+2. ORIGINAL and written by the trainer in their own words. 
+   - IMPORTANT: Only flag as plagiarism if you detect DIRECT COPYING (exact or near-exact matches of complete sentences or paragraphs).
+   - Do NOT flag content as plagiarized just because it uses standard terminology or formal writing style (this is normal for educational content).
+   - If content appears to be DIRECTLY COPIED from official documentation (like React docs, MDN, W3C, etc.), websites, or any other source, it MUST be rejected for plagiarism.
+   - If content is original but uses standard terminology or formal style, it should be accepted (score 70-100).
+3. Check carefully for EXACT or NEAR-EXACT matches of complete sentences or paragraphs from known sources.
+4. If you detect direct copying or plagiarism, give originality_score BELOW 60 and clearly explain in feedback_summary.`
     });
 
     try {
