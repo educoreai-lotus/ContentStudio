@@ -12,6 +12,43 @@ export class PostgreSQLQualityCheckRepository {
     this.db = db;
   }
 
+  /**
+   * Convert QualityCheck status to Content quality_check_status
+   * QualityCheck uses: 'pending', 'processing', 'completed', 'failed'
+   * Content uses: 'pending', 'approved', 'rejected', 'needs_revision'
+   * @param {string} qualityCheckStatus - Status from QualityCheck entity
+   * @param {Object} qualityCheckData - Quality check data (may contain score, results, etc.)
+   * @param {Object} updates - Optional updates object (may contain score, results, etc.)
+   */
+  convertQualityCheckStatusToContentStatus(qualityCheckStatus, qualityCheckData = {}, updates = {}) {
+    if (!qualityCheckStatus) {
+      return 'pending';
+    }
+
+    // Get score from updates first (most recent), then from qualityCheckData
+    const score = updates.score || updates.overall_score || qualityCheckData.overall_score || qualityCheckData.score;
+
+    switch (qualityCheckStatus) {
+      case 'pending':
+      case 'processing':
+        return 'pending';
+      case 'completed':
+        // Check if score is acceptable (>= 60)
+        if (score !== null && score !== undefined) {
+          return score >= 60 ? 'approved' : 'rejected';
+        }
+        return 'approved'; // Default to approved if completed without score
+      case 'failed':
+        return 'rejected';
+      default:
+        // If it's already a Content status, return as-is
+        if (['pending', 'approved', 'rejected', 'needs_revision'].includes(qualityCheckStatus)) {
+          return qualityCheckStatus;
+        }
+        return 'pending';
+    }
+  }
+
   async create(qualityCheck) {
     if (!this.db.isConnected()) {
       throw new Error('Database not connected. Using in-memory repository.');
@@ -44,8 +81,15 @@ export class PostgreSQLQualityCheckRepository {
       error_message: qualityCheck.error_message || null,
     };
 
-    const values = [
+    // Convert QualityCheck status to Content status
+    const contentStatus = this.convertQualityCheckStatusToContentStatus(
       qualityCheck.status,
+      qualityCheckData,
+      {} // No updates in create
+    );
+
+    const values = [
+      contentStatus, // Use converted status for content table
       JSON.stringify(qualityCheckData),
       qualityCheck.content_id,
     ];
@@ -185,8 +229,15 @@ export class PostgreSQLQualityCheckRepository {
           RETURNING *
         `;
 
-        const values = [
+        // Convert QualityCheck status to Content status
+        const contentStatus = this.convertQualityCheckStatusToContentStatus(
           updates.status || contentRow.quality_check_status,
+          updatedQualityCheckData,
+          updates // Pass updates to check for score
+        );
+
+        const values = [
+          contentStatus, // Use converted status for content table
           JSON.stringify(updatedQualityCheckData),
           contentRow.content_id,
         ];
@@ -250,8 +301,15 @@ export class PostgreSQLQualityCheckRepository {
       RETURNING *
     `;
 
-    const values = [
+    // Convert QualityCheck status to Content status
+    const contentStatus = this.convertQualityCheckStatusToContentStatus(
       updates.status || contentRow.quality_check_status,
+      updatedQualityCheckData,
+      updates // Pass updates to check for score
+    );
+
+    const values = [
+      contentStatus, // Use converted status for content table
       JSON.stringify(updatedQualityCheckData),
       contentRow.content_id,
     ];

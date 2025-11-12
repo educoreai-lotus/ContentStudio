@@ -405,11 +405,55 @@ export class PostgreSQLContentRepository extends IContentRepository {
   }
 
   /**
+   * Convert QualityCheck status to Content quality_check_status
+   * Handles legacy statuses: 'processing', 'completed', 'failed'
+   */
+  normalizeQualityCheckStatus(status, qualityCheckData = {}) {
+    if (!status) {
+      return null;
+    }
+
+    // If already a valid Content status, return as-is
+    if (['pending', 'approved', 'rejected', 'needs_revision'].includes(status)) {
+      return status;
+    }
+
+    // Convert legacy QualityCheck statuses
+    switch (status) {
+      case 'processing':
+        return 'pending';
+      case 'completed':
+        // Check if score is acceptable (>= 60)
+        const score = qualityCheckData?.overall_score || qualityCheckData?.score;
+        if (score !== null && score !== undefined) {
+          return score >= 60 ? 'approved' : 'rejected';
+        }
+        return 'approved'; // Default to approved if completed without score
+      case 'failed':
+        return 'rejected';
+      default:
+        return 'pending'; // Default fallback
+    }
+  }
+
+  /**
    * Map database row to Content entity
    * @param {Object} row - Database row
    * @returns {Content} Content entity
    */
   mapRowToContent(row) {
+    const qualityCheckData = row.quality_check_data
+      ? (typeof row.quality_check_data === 'string'
+          ? JSON.parse(row.quality_check_data)
+          : row.quality_check_data)
+      : null;
+
+    // Normalize quality_check_status to ensure it's valid for Content entity
+    const normalizedStatus = this.normalizeQualityCheckStatus(
+      row.quality_check_status,
+      qualityCheckData
+    );
+
     return new Content({
       content_id: row.content_id,
       topic_id: row.topic_id,
@@ -418,12 +462,8 @@ export class PostgreSQLContentRepository extends IContentRepository {
       content_data: typeof row.content_data === 'string' 
         ? JSON.parse(row.content_data) 
         : row.content_data,
-      quality_check_status: row.quality_check_status,
-      quality_check_data: row.quality_check_data
-        ? (typeof row.quality_check_data === 'string'
-            ? JSON.parse(row.quality_check_data)
-            : row.quality_check_data)
-        : null,
+      quality_check_status: normalizedStatus,
+      quality_check_data: qualityCheckData,
       status: row.status,
       created_at: row.created_at,
       updated_at: row.updated_at,
