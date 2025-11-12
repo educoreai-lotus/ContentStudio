@@ -290,7 +290,7 @@ export const AIContentForm = () => {
             <div className="flex justify-end gap-3">
               <button
                 type="button"
-                onClick={() => navigate(`/topics/${formData.topic_id}`)}
+                onClick={() => navigate(`/topics/${topicId || formData.topic_id}/content`)}
                 className={`px-4 py-2 rounded-lg transition-colors font-medium ${
                   theme === 'day-mode'
                     ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'

@@ -646,14 +646,14 @@ export default function LessonView() {
             {error}
           </p>
           <button
-            onClick={() => navigate('/lessons')}
+            onClick={() => navigate(`/topics/${topicId}/content`)}
             className={`px-4 py-2 rounded-lg ${
               theme === 'day-mode'
                 ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
                 : 'bg-emerald-500 hover:bg-emerald-600 text-white'
             }`}
           >
-            Back to Lessons
+            Back to Lesson
           </button>
         </div>
       </div>
@@ -698,13 +698,13 @@ export default function LessonView() {
         {/* Header */}
         <div className="mb-8">
           <button
-            onClick={() => navigate('/lessons')}
+            onClick={() => navigate(`/topics/${topicId}/content`)}
             className={`mb-4 flex items-center gap-2 ${
               theme === 'day-mode' ? 'text-gray-600 hover:text-gray-900' : 'text-gray-300 hover:text-white'
             }`}
           >
             <i className="fas fa-arrow-left"></i>
-            Back to Lessons
+            Back to Lesson
           </button>
           <h1
             className="text-4xl font-bold mb-2"
