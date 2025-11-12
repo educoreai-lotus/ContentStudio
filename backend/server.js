@@ -121,49 +121,86 @@ app.use((req, res) => {
   });
 });
 
-// Start server
-app.listen(PORT, async () => {
-  logger.info(`Content Studio Backend running on port ${PORT}`, {
-    environment: process.env.NODE_ENV || 'development',
-    logLevel: process.env.LOG_LEVEL || 'INFO',
-  });
+// Initialize database and run migrations BEFORE starting the server
+async function initializeDatabase() {
+  // Import database connection to ensure it's initialized
+  const { db } = await import('./src/infrastructure/database/DatabaseConnection.js');
+  
+  // Wait for database connection to be ready
+  logger.info('Waiting for database connection...');
+  await db.ready;
+  
+  // Test connection
+  const isConnected = await db.testConnection();
+  if (!isConnected) {
+    logger.warn('⚠️ Database connection not available, migrations will be skipped');
+    return false;
+  }
+  
+  logger.info('✅ Database connection established');
   
   // Run database migrations automatically
   if (process.env.SKIP_MIGRATIONS !== 'true') {
     try {
+      logger.info('🔄 Starting database migrations...');
       const { migrationRunner } = await import('./src/infrastructure/database/services/MigrationRunner.js');
       await migrationRunner.runMigrations();
-      logger.info('Database migrations completed');
+      logger.info('✅ Database migrations completed successfully');
+      return true;
     } catch (error) {
-      logger.error('Failed to run database migrations', { error: error.message });
+      logger.error('❌ Failed to run database migrations', { 
+        error: error.message,
+        stack: error.stack 
+      });
       // Decide whether to continue or exit based on severity
       if (process.env.NODE_ENV === 'production') {
         logger.error('❌ CRITICAL: Migrations failed in production. Server may not function correctly.');
-        // In production, you might want to exit here, but for now we'll continue
-        // Uncomment the next line if you want to exit on migration failure in production:
-        // process.exit(1);
+        // In production, exit on migration failure
+        process.exit(1);
       } else {
         logger.warn('⚠️ Continuing without migrations (development mode)');
+        return false;
       }
     }
   } else {
-    logger.info('Database migrations skipped (SKIP_MIGRATIONS=true)');
+    logger.info('⏭️ Database migrations skipped (SKIP_MIGRATIONS=true)');
+    return true;
   }
+}
+
+// Start server after database initialization
+async function startServer() {
+  // Initialize database and run migrations first
+  await initializeDatabase();
   
-  // Start background jobs (if enabled)
-  if (process.env.ENABLE_BACKGROUND_JOBS !== 'false') {
-    try {
-      const { getJobScheduler } = await import('./src/infrastructure/jobs/JobScheduler.js');
-      const scheduler = getJobScheduler();
-      await scheduler.start();
-      logger.info('Background jobs scheduler started');
-    } catch (error) {
-      logger.error('Failed to start background jobs scheduler', { error: error.message });
-      logger.warn('Continuing without background jobs...');
+  // Now start the Express server
+  app.listen(PORT, async () => {
+    logger.info(`🚀 Content Studio Backend running on port ${PORT}`, {
+      environment: process.env.NODE_ENV || 'development',
+      logLevel: process.env.LOG_LEVEL || 'INFO',
+    });
+    
+    // Start background jobs (if enabled)
+    if (process.env.ENABLE_BACKGROUND_JOBS !== 'false') {
+      try {
+        const { getJobScheduler } = await import('./src/infrastructure/jobs/JobScheduler.js');
+        const scheduler = getJobScheduler();
+        await scheduler.start();
+        logger.info('Background jobs scheduler started');
+      } catch (error) {
+        logger.error('Failed to start background jobs scheduler', { error: error.message });
+        logger.warn('Continuing without background jobs...');
+      }
+    } else {
+      logger.info('Background jobs disabled (ENABLE_BACKGROUND_JOBS=false)');
     }
-  } else {
-    logger.info('Background jobs disabled (ENABLE_BACKGROUND_JOBS=false)');
-  }
+  });
+}
+
+// Start the application
+startServer().catch(error => {
+  logger.error('❌ Failed to start application', { error: error.message, stack: error.stack });
+  process.exit(1);
 });
 
 export default app;

@@ -113,29 +113,35 @@ export class MigrationRunner {
     const startTime = Date.now();
 
     try {
-      logger.info(`Executing migration: ${fileName}`);
+      logger.info(`[MigrationRunner] 🔄 Executing migration: ${fileName}`);
       
       const sql = await readFile(filePath, 'utf-8');
       
       if (!sql.trim()) {
-        logger.warn(`Migration file ${fileName} is empty, skipping`);
+        logger.warn(`[MigrationRunner] ⚠️ Migration file ${fileName} is empty, skipping`);
         await this.markMigrationExecuted(fileName, Date.now() - startTime, true);
         return;
       }
 
+      logger.info(`[MigrationRunner] 📝 Migration SQL (first 200 chars): ${sql.substring(0, 200)}...`);
+
       // Execute the SQL
-      await db.query(sql);
+      const result = await db.query(sql);
       
       const duration = Date.now() - startTime;
       await this.markMigrationExecuted(fileName, duration, true);
       
-      logger.info(`✅ Migration ${fileName} executed successfully (${duration}ms)`);
+      logger.info(`[MigrationRunner] ✅ Migration ${fileName} executed successfully (${duration}ms)`);
+      if (result.rowCount !== undefined) {
+        logger.info(`[MigrationRunner] 📊 Rows affected: ${result.rowCount}`);
+      }
     } catch (error) {
       const duration = Date.now() - startTime;
       await this.markMigrationExecuted(fileName, duration, false, error.message);
       
-      logger.error(`❌ Migration ${fileName} failed`, { 
+      logger.error(`[MigrationRunner] ❌ Migration ${fileName} failed`, { 
         error: error.message,
+        stack: error.stack,
         duration: `${duration}ms`
       });
       
@@ -199,19 +205,26 @@ export class MigrationRunner {
    * Run all pending migrations
    */
   async runMigrations() {
+    logger.info('[MigrationRunner] 🚀 Starting migration process...');
+    
     if (!db.isConnected()) {
-      logger.warn('Database not connected, skipping migrations');
+      logger.warn('[MigrationRunner] ⚠️ Database not connected, skipping migrations');
+      logger.warn('[MigrationRunner] 💡 Check DATABASE_URL environment variable');
       return;
     }
 
+    logger.info('[MigrationRunner] ✅ Database connection verified');
+
     try {
       // Step 1: Check if migration_log table exists
+      logger.info('[MigrationRunner] 🔍 Checking for migration_log table...');
       const tableExists = await this.migrationTableExists();
+      logger.info(`[MigrationRunner] ${tableExists ? '✅' : '❌'} Migration log table exists: ${tableExists}`);
       
       // Step 2: If table doesn't exist, we need to create it manually first
       // (before we can track migrations)
       if (!tableExists) {
-        logger.info('Migration log table does not exist, creating it...');
+        logger.info('[MigrationRunner] 📝 Migration log table does not exist, creating it...');
         try {
           const createTableQuery = `
             CREATE TABLE migration_log (
@@ -226,14 +239,16 @@ export class MigrationRunner {
             CREATE INDEX IF NOT EXISTS idx_migration_log_executed_at ON migration_log(executed_at DESC);
           `;
           await db.query(createTableQuery);
-          logger.info('✅ Migration log table created successfully');
+          logger.info('[MigrationRunner] ✅ Migration log table created successfully');
           
           // Mark the migration file as executed
           await this.markMigrationExecuted('20251111_create_migration_log_table.sql', 0, true, 'Created via ensureMigrationTable');
         } catch (error) {
-          logger.error('Failed to create migration_log table', { error: error.message });
+          logger.error('[MigrationRunner] ❌ Failed to create migration_log table', { error: error.message, stack: error.stack });
           throw error;
         }
+      } else {
+        logger.info('[MigrationRunner] ✅ Migration log table already exists');
       }
 
       // Step 3: Now run the migration_log table migration if it hasn't been tracked yet
@@ -256,18 +271,24 @@ export class MigrationRunner {
       }
 
       // Step 4: Mark baseline migrations (migrations that were applied manually)
+      logger.info('[MigrationRunner] 📋 Marking baseline migrations...');
       await this.markBaselineMigrations();
+      logger.info('[MigrationRunner] ✅ Baseline migrations marked');
 
       // Step 5: Get all migration files (excluding non-SQL files)
+      logger.info('[MigrationRunner] 📂 Scanning migration files...');
       const migrationFiles = await this.getMigrationFiles();
+      logger.info(`[MigrationRunner] 📋 Found ${migrationFiles.length} migration file(s): ${migrationFiles.join(', ')}`);
       
       if (migrationFiles.length === 0) {
-        logger.info('No migration files found');
+        logger.info('[MigrationRunner] ⚠️ No migration files found');
         return;
       }
 
       // Step 6: Get updated list of executed migrations (after baseline marking)
+      logger.info('[MigrationRunner] 📊 Checking executed migrations...');
       const updatedExecutedMigrations = await this.getExecutedMigrations();
+      logger.info(`[MigrationRunner] ✅ Found ${updatedExecutedMigrations.size} already executed migration(s)`);
 
       // Step 7: Filter out already executed migrations
       const pendingMigrations = migrationFiles.filter(
@@ -275,18 +296,18 @@ export class MigrationRunner {
       );
 
       if (pendingMigrations.length === 0) {
-        logger.info('✅ All migrations are up to date');
+        logger.info('[MigrationRunner] ✅ All migrations are up to date - no pending migrations');
         return;
       }
 
-      logger.info(`Found ${pendingMigrations.length} pending migration(s): ${pendingMigrations.join(', ')}`);
+      logger.info(`[MigrationRunner] 🔄 Found ${pendingMigrations.length} pending migration(s): ${pendingMigrations.join(', ')}`);
 
       // Step 8: Execute pending migrations in order
       for (const fileName of pendingMigrations) {
         await this.executeMigration(fileName);
       }
 
-      logger.info(`✅ All ${pendingMigrations.length} migration(s) completed successfully`);
+      logger.info(`[MigrationRunner] ✅ All ${pendingMigrations.length} migration(s) completed successfully`);
     } catch (error) {
       logger.error('❌ Migration process failed', { error: error.message });
       throw error;
