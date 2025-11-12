@@ -20,8 +20,19 @@ let contentController;
     contentHistoryRepository: contentVersionRepository,
   });
 
-  // TODO: Initialize quality check service
-  const qualityCheckService = null; // Will be implemented later
+  // Initialize quality check service (only for manual content)
+  const qualityCheckRepository = await RepositoryFactory.getQualityCheckRepository();
+  const topicRepository = await RepositoryFactory.getTopicRepository();
+  const courseRepository = await RepositoryFactory.getCourseRepository();
+  
+  const { QualityCheckService } = await import('../../infrastructure/ai/QualityCheckService.js');
+  const qualityCheckService = new QualityCheckService({
+    openaiApiKey: process.env.OPENAI_API_KEY,
+    qualityCheckRepository,
+    contentRepository,
+    topicRepository,
+    courseRepository,
+  });
 
   const aiGenerationService = new AIGenerationService({
     openaiApiKey: process.env.OPENAI_API_KEY,

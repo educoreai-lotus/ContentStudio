@@ -62,11 +62,15 @@ export class CreateContentUseCase {
         generation_method_id: content.generation_method_id,
       });
 
-      if (updatedContent.needsQualityCheck() && this.qualityCheckService) {
+      // Trigger quality check ONLY for manual content (not AI-generated)
+      const isManualContent = content.generation_method_id === 'manual' || content.generation_method_id === 'manual_edited';
+      if (isManualContent && updatedContent.needsQualityCheck() && this.qualityCheckService) {
         try {
           await this.qualityCheckService.triggerQualityCheck(updatedContent.content_id);
         } catch (error) {
           console.error('Failed to trigger quality check:', error);
+          // Re-throw if quality check fails (content should be rejected)
+          throw error;
         }
       }
 
@@ -76,13 +80,15 @@ export class CreateContentUseCase {
     // Save content to repository
     const createdContent = await this.contentRepository.create(content);
 
-    // Trigger quality check automatically for manual content
-    if (createdContent.needsQualityCheck() && this.qualityCheckService) {
+    // Trigger quality check ONLY for manual content (not AI-generated)
+    const isManualContent = content.generation_method_id === 'manual' || content.generation_method_id === 'manual_edited';
+    if (isManualContent && createdContent.needsQualityCheck() && this.qualityCheckService) {
       try {
         await this.qualityCheckService.triggerQualityCheck(createdContent.content_id);
       } catch (error) {
-        // Log error but don't fail the creation
-        console.error('Failed to trigger quality check:', error);
+        // Re-throw if quality check fails (content should be rejected)
+        console.error('Quality check failed, rejecting content:', error.message);
+        throw error;
       }
     }
 

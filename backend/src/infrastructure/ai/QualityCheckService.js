@@ -7,11 +7,13 @@ import { OpenAIClient } from '../external-apis/openai/OpenAIClient.js';
  * Uses OpenAI GPT-4o-mini for quality checks
  */
 export class QualityCheckService extends IQualityCheckService {
-  constructor({ openaiApiKey, qualityCheckRepository, contentRepository }) {
+  constructor({ openaiApiKey, qualityCheckRepository, contentRepository, topicRepository, courseRepository }) {
     super();
     this.openaiClient = openaiApiKey ? new OpenAIClient({ apiKey: openaiApiKey }) : null;
     this.qualityCheckRepository = qualityCheckRepository;
     this.contentRepository = contentRepository;
+    this.topicRepository = topicRepository;
+    this.courseRepository = courseRepository;
   }
 
   async triggerQualityCheck(contentId, checkType = 'full') {
@@ -29,39 +31,90 @@ export class QualityCheckService extends IQualityCheckService {
     const savedCheck = await this.qualityCheckRepository.create(qualityCheck);
 
     try {
-      // Get content for checking (this would normally come from ContentRepository)
-      // For now, we'll simulate the check
-      const contentText = await this.getContentText(contentId);
-
-      if (!contentText) {
+      // Get content for checking
+      const content = await this.contentRepository.findById(contentId);
+      if (!content) {
         throw new Error('Content not found');
       }
 
-      // Perform quality checks based on check type
-      const results = {};
-
-      if (checkType === 'full' || checkType === 'quick') {
-        results.clarity = await this.checkClarity(contentText);
-        results.structure = await this.checkStructure(contentText);
+      const contentText = this.extractTextFromContent(content);
+      if (!contentText) {
+        throw new Error('Content text not found');
       }
 
-      if (checkType === 'full' || checkType === 'originality_only') {
-        const originalityResult = await this.checkOriginality(contentText);
-        results.originality = originalityResult.score;
-        results.plagiarism_detected = originalityResult.plagiarism_detected;
-        results.similarity_sources = originalityResult.sources || [];
+      // Get topic and course information for evaluation
+      const topic = await this.topicRepository?.findById(content.topic_id);
+      if (!topic) {
+        throw new Error('Topic not found');
       }
 
-      // Calculate overall score
-      const score = this.calculateOverallScore(results);
+      let courseName = null;
+      if (topic.course_id && this.courseRepository) {
+        const course = await this.courseRepository.findById(topic.course_id);
+        courseName = course?.course_name || null;
+      }
+
+      // Extract skills from topic
+      const skills = Array.isArray(topic.skills) ? topic.skills : (topic.skills ? [topic.skills] : []);
+
+      // Perform OpenAI evaluation with new format
+      const evaluationResult = await this.evaluateContentWithOpenAI({
+        courseName: courseName || 'General Course',
+        topicName: topic.topic_name || 'Untitled Topic',
+        skills: skills,
+        contentText: contentText,
+      });
+
+      // Validate scores - reject if any score < 60
+      if (evaluationResult.originality_score < 60) {
+        throw new Error(
+          `Content failed quality check: Low originality score (${evaluationResult.originality_score}/100). ${evaluationResult.feedback_summary || 'Please revise your text to be more original.'}`
+        );
+      }
+
+      if (evaluationResult.difficulty_alignment_score < 60) {
+        throw new Error(
+          `Content failed quality check: Difficulty level mismatch (${evaluationResult.difficulty_alignment_score}/100). ${evaluationResult.feedback_summary || 'Please adjust the difficulty level to match the target skills.'}`
+        );
+      }
+
+      if (evaluationResult.consistency_score < 60) {
+        throw new Error(
+          `Content failed quality check: Low consistency score (${evaluationResult.consistency_score}/100). ${evaluationResult.feedback_summary || 'Please improve the structure and coherence of your content.'}`
+        );
+      }
+
+      // Store results in the format expected by QualityCheck entity
+      const results = {
+        originality_score: evaluationResult.originality_score,
+        difficulty_alignment_score: evaluationResult.difficulty_alignment_score,
+        consistency_score: evaluationResult.consistency_score,
+        feedback_summary: evaluationResult.feedback_summary,
+      };
+
+      // Calculate overall score (average of the three scores)
+      const overallScore = Math.round(
+        (evaluationResult.originality_score +
+          evaluationResult.difficulty_alignment_score +
+          evaluationResult.consistency_score) /
+          3
+      );
 
       // Update quality check
-      savedCheck.markCompleted(results, score);
+      savedCheck.markCompleted(results, overallScore);
       await this.qualityCheckRepository.update(savedCheck.quality_check_id, {
         status: savedCheck.status,
         results: savedCheck.results,
         score: savedCheck.score,
         completed_at: savedCheck.completed_at,
+      });
+
+      console.log('[QualityCheckService] Quality check completed:', {
+        contentId,
+        originality_score: evaluationResult.originality_score,
+        difficulty_alignment_score: evaluationResult.difficulty_alignment_score,
+        consistency_score: evaluationResult.consistency_score,
+        overallScore,
       });
 
       return savedCheck;
@@ -74,6 +127,96 @@ export class QualityCheckService extends IQualityCheckService {
       });
       throw error;
     }
+  }
+
+  async evaluateContentWithOpenAI({ courseName, topicName, skills, contentText }) {
+    const systemPrompt = `You are an expert educational content evaluator.
+Your job is to check the quality, originality, and skill alignment of trainer-written lessons.
+
+Analyze the submitted text and evaluate it according to the following dimensions:
+
+1. Originality (0–100):
+   - Detect potential copying or similarity to known sources or common examples.
+   - Higher score = more unique phrasing and structure.
+
+2. Difficulty Alignment (0–100):
+   - Check if the text's difficulty level matches the provided skills.
+   - If the skills are beginner-level but the text uses overly advanced terminology, reduce the score.
+
+3. Consistency and Coherence (0–100):
+   - Assess if the text is well-structured, logically consistent, and coherent.
+
+4. Feedback Summary:
+   - Write 2–3 short sentences describing:
+     * Strengths of the content.
+     * Detected weaknesses or issues.
+     * Any plagiarism or mismatch detected.
+
+Return ONLY a valid JSON object with this exact structure:
+{
+  "originality_score": <number 0-100>,
+  "difficulty_alignment_score": <number 0-100>,
+  "consistency_score": <number 0-100>,
+  "feedback_summary": "<2-3 sentences>"
+}`;
+
+    const userPrompt = JSON.stringify({
+      courseName,
+      topicName,
+      skills,
+      contentText: contentText.substring(0, 4000), // Limit text length for API
+    });
+
+    try {
+      const response = await this.openaiClient.generateText(userPrompt, {
+        systemPrompt,
+        temperature: 0.3,
+        max_tokens: 300,
+      });
+
+      // Parse JSON response
+      const cleanedResponse = response.trim();
+      const jsonMatch = cleanedResponse.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const result = JSON.parse(jsonMatch[0]);
+        
+        // Validate and normalize scores
+        return {
+          originality_score: Math.max(0, Math.min(100, result.originality_score || 75)),
+          difficulty_alignment_score: Math.max(0, Math.min(100, result.difficulty_alignment_score || 75)),
+          consistency_score: Math.max(0, Math.min(100, result.consistency_score || 75)),
+          feedback_summary: result.feedback_summary || 'Evaluation completed.',
+        };
+      }
+
+      // Fallback if JSON parsing fails
+      throw new Error('Failed to parse OpenAI evaluation response');
+    } catch (error) {
+      console.error('[QualityCheckService] OpenAI evaluation failed:', error);
+      throw new Error(`Quality evaluation failed: ${error.message}`);
+    }
+  }
+
+  extractTextFromContent(content) {
+    // Extract text from content_data
+    if (typeof content.content_data === 'string') {
+      try {
+        const parsed = JSON.parse(content.content_data);
+        return parsed.text || parsed.code || JSON.stringify(parsed);
+      } catch {
+        return content.content_data;
+      }
+    }
+    
+    if (content.content_data?.text) {
+      return content.content_data.text;
+    }
+    
+    if (content.content_data?.code) {
+      return content.content_data.code;
+    }
+    
+    return JSON.stringify(content.content_data);
   }
 
   async checkClarity(contentText) {
@@ -239,27 +382,5 @@ Return only a number between 0-100 representing the difficulty match score.`;
     return totalWeight > 0 ? Math.round(totalScore / totalWeight) : null;
   }
 
-  async getContentText(contentId) {
-    // Get content from ContentRepository
-    if (!this.contentRepository) {
-      // Fallback if repository not injected
-      return 'Sample content text for quality checking...';
-    }
-
-    const content = await this.contentRepository.findById(contentId);
-    if (!content) return null;
-
-    // Extract text from content_data
-    if (typeof content.content_data === 'string') {
-      return content.content_data;
-    }
-    if (content.content_data?.text) {
-      return content.content_data.text;
-    }
-    if (content.content_data?.code) {
-      return content.content_data.code;
-    }
-    return JSON.stringify(content.content_data);
-  }
 }
 

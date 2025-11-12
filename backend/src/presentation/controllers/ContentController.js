@@ -78,9 +78,7 @@ export class ContentController {
         } else if (generation_method_id === 'manual_edited' && !was_edited) {
           console.log('[Content Approve] Manual edited generation method requested without edits, proceeding as manual.');
         }
-        if (!requestedGenerationMethod && was_edited) {
-          console.log('[Content Approve] Content was edited by trainer, will trigger quality check');
-        }
+        // Quality check will be triggered automatically in CreateContentUseCase for manual content only
 
       const contentData = {
         topic_id: parseInt(topic_id),
@@ -93,12 +91,16 @@ export class ContentController {
       
       console.log('[Content Approve] Content saved successfully:', content.content_id);
 
+      // Determine message based on generation method
+      const isManualContent = generation_method_id === 'manual' || generation_method_id === 'manual_edited';
+      const message = isManualContent
+        ? 'Content saved and quality check completed'
+        : 'Content saved successfully';
+
       res.status(201).json({
         success: true,
         data: ContentDTO.toContentResponse(content),
-        message: was_edited
-          ? 'Content saved and quality check triggered'
-          : 'Content saved successfully',
+        message,
       });
     } catch (error) {
       console.error('[Content Approve] Error:', error.message);

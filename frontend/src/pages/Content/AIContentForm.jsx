@@ -282,8 +282,7 @@ export const AIContentForm = () => {
               }`}
             >
               <p className="text-sm">
-                <strong>Note:</strong> AI generation may take a few moments. Quality check
-                will be automatically triggered after generation.
+                <strong>Note:</strong> AI generation may take a few moments.
               </p>
             </div>
 
