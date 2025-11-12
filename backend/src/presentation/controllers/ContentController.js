@@ -89,18 +89,61 @@ export class ContentController {
 
       const content = await this.createContentUseCase.execute(contentData);
       
-      console.log('[Content Approve] Content saved successfully:', content.content_id);
+      console.log('[Content Approve] Content saved successfully:', {
+        content_id: content.content_id,
+        generation_method_id: content.generation_method_id,
+        quality_check_status: content.quality_check_status,
+        has_quality_check_data: !!content.quality_check_data,
+      });
 
-      // Determine message based on generation method
+      // Determine message and quality check info based on generation method
       const isManualContent = generation_method_id === 'manual' || generation_method_id === 'manual_edited';
-      const message = isManualContent
-        ? 'Content saved and quality check completed'
-        : 'Content saved successfully';
+      console.log('[Content Approve] Quality check info:', {
+        isManualContent,
+        quality_check_status: content.quality_check_status,
+        quality_check_data: content.quality_check_data,
+      });
+      let message = 'Content saved successfully';
+      let qualityCheckInfo = null;
+
+      if (isManualContent) {
+        if (content.quality_check_status === 'approved') {
+          const qualityData = content.quality_check_data || {};
+          const scores = {
+            originality: qualityData.originality_score || 'N/A',
+            difficultyAlignment: qualityData.difficulty_alignment_score || 'N/A',
+            consistency: qualityData.consistency_score || 'N/A',
+            overall: qualityData.overall_score || 'N/A',
+          };
+          message = `Content saved and quality check completed successfully! Scores: Originality ${scores.originality}/100, Difficulty Alignment ${scores.difficultyAlignment}/100, Consistency ${scores.consistency}/100, Overall ${scores.overall}/100`;
+          qualityCheckInfo = {
+            status: content.quality_check_status,
+            scores: scores,
+            feedback: qualityData.feedback_summary || null,
+          };
+        } else if (content.quality_check_status === 'pending') {
+          message = 'Content saved. Quality check is in progress...';
+          qualityCheckInfo = {
+            status: 'pending',
+            message: 'Quality check is being performed. Please refresh to see results.',
+          };
+        } else if (content.quality_check_status === 'rejected') {
+          const qualityData = content.quality_check_data || {};
+          message = `Content saved but quality check failed: ${qualityData.feedback_summary || 'Content did not meet quality standards'}`;
+          qualityCheckInfo = {
+            status: content.quality_check_status,
+            feedback: qualityData.feedback_summary || null,
+          };
+        } else {
+          message = 'Content saved and quality check completed';
+        }
+      }
 
       res.status(201).json({
         success: true,
         data: ContentDTO.toContentResponse(content),
         message,
+        qualityCheck: qualityCheckInfo,
       });
     } catch (error) {
       console.error('[Content Approve] Error:', error.message);

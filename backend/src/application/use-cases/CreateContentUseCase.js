@@ -65,16 +65,27 @@ export class CreateContentUseCase {
       // Trigger quality check ONLY for manual content (not AI-generated)
       const isManualContent = content.generation_method_id === 'manual' || content.generation_method_id === 'manual_edited';
       if (isManualContent && updatedContent.needsQualityCheck() && this.qualityCheckService) {
+        console.log('[CreateContentUseCase] Triggering quality check for manual content:', updatedContent.content_id);
         try {
           await this.qualityCheckService.triggerQualityCheck(updatedContent.content_id);
+          console.log('[CreateContentUseCase] Quality check completed successfully for content:', updatedContent.content_id);
         } catch (error) {
-          console.error('Failed to trigger quality check:', error);
+          console.error('[CreateContentUseCase] Failed to trigger quality check:', error);
           // Re-throw if quality check fails (content should be rejected)
           throw error;
         }
+      } else {
+        console.log('[CreateContentUseCase] Skipping quality check:', {
+          isManualContent,
+          needsQualityCheck: updatedContent.needsQualityCheck(),
+          hasQualityCheckService: !!this.qualityCheckService,
+          generation_method_id: content.generation_method_id,
+        });
       }
 
-      return updatedContent;
+      // Reload content to get updated quality check results
+      const finalContent = await this.contentRepository.findById(updatedContent.content_id);
+      return finalContent || updatedContent;
     }
 
     // Save content to repository
@@ -83,16 +94,27 @@ export class CreateContentUseCase {
     // Trigger quality check ONLY for manual content (not AI-generated)
     const isManualContent = content.generation_method_id === 'manual' || content.generation_method_id === 'manual_edited';
     if (isManualContent && createdContent.needsQualityCheck() && this.qualityCheckService) {
+      console.log('[CreateContentUseCase] Triggering quality check for manual content:', createdContent.content_id);
       try {
         await this.qualityCheckService.triggerQualityCheck(createdContent.content_id);
+        console.log('[CreateContentUseCase] Quality check completed successfully for content:', createdContent.content_id);
       } catch (error) {
         // Re-throw if quality check fails (content should be rejected)
-        console.error('Quality check failed, rejecting content:', error.message);
+        console.error('[CreateContentUseCase] Quality check failed, rejecting content:', error.message);
         throw error;
       }
+    } else {
+      console.log('[CreateContentUseCase] Skipping quality check:', {
+        isManualContent,
+        needsQualityCheck: createdContent.needsQualityCheck(),
+        hasQualityCheckService: !!this.qualityCheckService,
+        generation_method_id: content.generation_method_id,
+      });
     }
 
-    return createdContent;
+    // Reload content to get updated quality check results
+    const finalContent = await this.contentRepository.findById(createdContent.content_id);
+    return finalContent || createdContent;
   }
 
   async findExistingContent(topicId, candidates, debugLabel) {

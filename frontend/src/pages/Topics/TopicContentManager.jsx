@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { contentService } from '../../services/content.js';
 import { topicsService } from '../../services/topics.js';
 import { useApp } from '../../context/AppContext';
@@ -22,6 +22,7 @@ const CONTENT_TYPES = [
 export default function TopicContentManager() {
   const { topicId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { theme } = useApp();
   
   const [existingContent, setExistingContent] = useState([]);
@@ -31,11 +32,24 @@ export default function TopicContentManager() {
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
   const [templateAppliedMessage, setTemplateAppliedMessage] = useState(null);
   const [regenerateTarget, setRegenerateTarget] = useState(null);
+  const [qualityCheckInfo, setQualityCheckInfo] = useState(null);
 
   useEffect(() => {
     fetchContent();
     fetchTopicDetails();
-  }, [topicId]);
+    
+    // Check for quality check info from navigation state
+    if (location.state?.qualityCheck) {
+      setQualityCheckInfo(location.state.qualityCheck);
+      // Clear location state to prevent showing again on refresh
+      window.history.replaceState({}, document.title);
+    }
+    if (location.state?.message) {
+      setTemplateAppliedMessage(location.state.message);
+      // Clear location state to prevent showing again on refresh
+      window.history.replaceState({}, document.title);
+    }
+  }, [topicId, location.state]);
 
   // Refresh content when returning to this page
   useEffect(() => {
@@ -287,6 +301,81 @@ export default function TopicContentManager() {
                   }`}
                 >
                   {templateAppliedMessage}
+                </div>
+              )}
+              {qualityCheckInfo && (
+                <div
+                  className={`mt-4 px-4 py-3 rounded-lg border ${
+                    qualityCheckInfo.status === 'approved'
+                      ? theme === 'day-mode'
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        : 'bg-emerald-900/20 text-emerald-300 border-emerald-500/40'
+                      : qualityCheckInfo.status === 'rejected'
+                      ? theme === 'day-mode'
+                        ? 'bg-red-50 text-red-700 border-red-200'
+                        : 'bg-red-900/20 text-red-300 border-red-500/40'
+                      : theme === 'day-mode'
+                      ? 'bg-yellow-50 text-yellow-700 border-yellow-200'
+                      : 'bg-yellow-900/20 text-yellow-300 border-yellow-500/40'
+                  }`}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center mb-2">
+                        <i className={`fas ${
+                          qualityCheckInfo.status === 'approved'
+                            ? 'fa-check-circle'
+                            : qualityCheckInfo.status === 'rejected'
+                            ? 'fa-times-circle'
+                            : 'fa-clock'
+                        } mr-2`}></i>
+                        <strong className="text-sm font-semibold">
+                          Quality Check {qualityCheckInfo.status === 'approved' ? 'Passed' : qualityCheckInfo.status === 'rejected' ? 'Failed' : 'In Progress'}
+                        </strong>
+                      </div>
+                      {qualityCheckInfo.status === 'approved' && qualityCheckInfo.scores && (
+                        <div className="mt-2 space-y-1 text-xs">
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <span className="font-medium">Originality:</span> {qualityCheckInfo.scores.originality}/100
+                            </div>
+                            <div>
+                              <span className="font-medium">Difficulty Alignment:</span> {qualityCheckInfo.scores.difficultyAlignment}/100
+                            </div>
+                            <div>
+                              <span className="font-medium">Consistency:</span> {qualityCheckInfo.scores.consistency}/100
+                            </div>
+                            <div>
+                              <span className="font-medium">Overall:</span> {qualityCheckInfo.scores.overall}/100
+                            </div>
+                          </div>
+                          {qualityCheckInfo.feedback && (
+                            <div className="mt-2 pt-2 border-t border-current border-opacity-20">
+                              <span className="font-medium">Feedback:</span> {qualityCheckInfo.feedback}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {qualityCheckInfo.status === 'rejected' && qualityCheckInfo.feedback && (
+                        <div className="mt-2 text-xs">
+                          <span className="font-medium">Reason:</span> {qualityCheckInfo.feedback}
+                        </div>
+                      )}
+                      {qualityCheckInfo.status === 'pending' && (
+                        <div className="mt-2 text-xs">
+                          {qualityCheckInfo.message || 'Quality check is being performed. Please refresh to see results.'}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => setQualityCheckInfo(null)}
+                      className={`ml-2 text-sm ${
+                        theme === 'day-mode' ? 'text-gray-500 hover:text-gray-700' : 'text-gray-400 hover:text-gray-200'
+                      }`}
+                    >
+                      <i className="fas fa-times"></i>
+                    </button>
+                  </div>
                 </div>
               )}
               {topicDetails?.template_id ? (

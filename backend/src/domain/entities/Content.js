@@ -90,7 +90,8 @@ export class Content {
    * @returns {boolean}
    */
   needsQualityCheck() {
-    return this.quality_check_status === null;
+    // Content needs quality check if status is null or 'pending'
+    return this.quality_check_status === null || this.quality_check_status === 'pending';
   }
 
   /**

@@ -158,7 +158,7 @@ export const ManualContentForm = () => {
       }
 
       // Save to database
-      await contentService.approve({
+      const response = await contentService.approve({
         topic_id: parseInt(topicId),
         content_type_id: contentTypeId,
         content_data,
@@ -167,9 +167,16 @@ export const ManualContentForm = () => {
         generation_method_id: 'manual',
       });
 
-      // Navigate back to content manager
+      // Build message with quality check results
+      let message = response.message || 'Content created successfully!';
+      let qualityCheckInfo = response.qualityCheck || null;
+
+      // Navigate back to content manager with quality check info
       navigate(`/topics/${topicId}/content`, {
-        state: { message: 'Content created successfully!' },
+        state: { 
+          message,
+          qualityCheck: qualityCheckInfo,
+        },
       });
     } catch (err) {
       setError(err.message || 'Failed to create content');
@@ -282,13 +289,23 @@ export const ManualContentForm = () => {
                 >
                   Text & Audio *
                 </label>
-                <div className={`mb-2 p-3 rounded-lg text-xs ${
-                  theme === 'day-mode'
-                    ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                    : 'bg-blue-900/20 text-blue-300 border border-blue-500/30'
-                }`}>
-                  <i className="fas fa-info-circle mr-1"></i>
-                  Audio will be automatically generated with AI after saving
+                <div className="mb-2 space-y-2">
+                  <div className={`p-3 rounded-lg text-xs ${
+                    theme === 'day-mode'
+                      ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                      : 'bg-blue-900/20 text-blue-300 border border-blue-500/30'
+                  }`}>
+                    <i className="fas fa-info-circle mr-1"></i>
+                    Audio will be automatically generated with AI after saving
+                  </div>
+                  <div className={`p-3 rounded-lg text-xs ${
+                    theme === 'day-mode'
+                      ? 'bg-yellow-50 text-yellow-700 border border-yellow-200'
+                      : 'bg-yellow-900/20 text-yellow-300 border border-yellow-500/30'
+                  }`}>
+                    <i className="fas fa-check-circle mr-1"></i>
+                    <strong>Quality Check:</strong> Your content will be automatically evaluated for originality, difficulty alignment, and consistency. Content with scores below 60 will be rejected.
+                  </div>
                 </div>
                 <textarea
                   value={formData.text}
@@ -313,6 +330,14 @@ export const ManualContentForm = () => {
             {/* Code Example */}
             {contentType === 'code' && (
               <div className="space-y-4">
+                <div className={`mb-2 p-3 rounded-lg text-xs ${
+                  theme === 'day-mode'
+                    ? 'bg-yellow-50 text-yellow-700 border border-yellow-200'
+                    : 'bg-yellow-900/20 text-yellow-300 border border-yellow-500/30'
+                }`}>
+                  <i className="fas fa-check-circle mr-1"></i>
+                  <strong>Quality Check:</strong> Your content will be automatically evaluated for originality, difficulty alignment, and consistency. Content with scores below 60 will be rejected.
+                </div>
                 <div>
                   <label
                     className={`block text-sm font-medium mb-2 ${
@@ -360,6 +385,14 @@ export const ManualContentForm = () => {
             {/* Presentation */}
             {contentType === 'presentation' && (
               <div>
+                <div className={`mb-2 p-3 rounded-lg text-xs ${
+                  theme === 'day-mode'
+                    ? 'bg-yellow-50 text-yellow-700 border border-yellow-200'
+                    : 'bg-yellow-900/20 text-yellow-300 border border-yellow-500/30'
+                }`}>
+                  <i className="fas fa-check-circle mr-1"></i>
+                  <strong>Quality Check:</strong> Your content will be automatically evaluated for originality, difficulty alignment, and consistency. Content with scores below 60 will be rejected.
+                </div>
                 <label
                   className={`block text-sm font-medium mb-2 ${
                     theme === 'day-mode' ? 'text-gray-700' : 'text-gray-300'
