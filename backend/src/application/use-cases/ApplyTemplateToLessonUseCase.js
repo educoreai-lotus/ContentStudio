@@ -109,6 +109,10 @@ export class ApplyTemplateToLessonUseCase {
     console.log('[ApplyTemplateToLessonUseCase] Content by type keys:', Object.keys(contentByType));
     console.log('[ApplyTemplateToLessonUseCase] Format name to DB name mapping:', formatNameToDbName);
 
+    // Track which content types have already been added to avoid duplicates
+    // This is important for text_audio which might be referenced by both 'text' and 'audio' in template
+    const addedContentTypes = new Set();
+    
     // Build ordered content array according to template
     // IMPORTANT: Follow the exact order specified in template.format_order
     for (let i = 0; i < formatOrder.length; i++) {
@@ -131,7 +135,39 @@ export class ApplyTemplateToLessonUseCase {
       
       console.log(`[ApplyTemplateToLessonUseCase] Processing format ${i + 1}/${formatOrder.length}: template="${templateFormatType}" -> tried: ${possibleNames.join(', ')} -> found: ${foundDbTypeName || 'none'}`);
       
-      if (foundContent) {
+      // Special handling: if both 'text' and 'audio' reference the same text_audio content,
+      // only add it once, but determine the order based on which comes first in template
+      if (foundContent && foundDbTypeName === 'text_audio') {
+        if (addedContentTypes.has('text_audio')) {
+          console.log(`[ApplyTemplateToLessonUseCase] text_audio already added, skipping duplicate for "${templateFormatType}"`);
+          continue; // Skip duplicate
+        }
+        
+        // Determine if audio should be before or after text based on template order
+        const textIndex = formatOrder.indexOf('text');
+        const audioIndex = formatOrder.indexOf('audio');
+        const audioBeforeText = audioIndex !== -1 && textIndex !== -1 && audioIndex < textIndex;
+        
+        // Mark as added
+        addedContentTypes.add('text_audio');
+        
+        // Add with combined format type that indicates order
+        orderedContent.push({
+          format_type: audioBeforeText ? 'audio_text' : 'text_audio_combined', // Special format type for combined display
+          originalFormatType: templateFormatType, // Keep original for reference
+          content: foundContent,
+          audioFirst: audioBeforeText, // Flag to indicate audio should be shown first
+        });
+        
+        console.log(`[ApplyTemplateToLessonUseCase] Added text_audio as combined format (audioFirst: ${audioBeforeText})`);
+      } else if (foundContent) {
+        // For other content types, check if already added
+        if (addedContentTypes.has(foundDbTypeName)) {
+          console.log(`[ApplyTemplateToLessonUseCase] ${foundDbTypeName} already added, skipping duplicate`);
+          continue;
+        }
+        
+        addedContentTypes.add(foundDbTypeName);
         console.log(`[ApplyTemplateToLessonUseCase] Found content for "${foundDbTypeName}", adding to orderedContent at position ${orderedContent.length}`);
         orderedContent.push({
           format_type: templateFormatType, // Keep template format name for frontend
@@ -186,6 +222,7 @@ export class ApplyTemplateToLessonUseCase {
       formats: orderedContent.map((item, index) => ({
         type: item.format_type,
         display_order: index,
+        audioFirst: item.audioFirst || false, // Pass audioFirst flag to frontend
         content: item.content.map(c => ({
           content_id: c.content_id,
           content_type_id: c.content_type_id,

@@ -52,7 +52,7 @@ export default function LessonView() {
     avatar_video: 'Avatar Video',
   };
 
-  const renderTextContent = contentData => {
+  const renderTextContent = (contentData, audioFirst = false) => {
     // Handle case where contentData might be a JSON string or already an object
     let parsedData = contentData;
     
@@ -73,6 +73,7 @@ export default function LessonView() {
 
     // Extract text value - check multiple possible locations
     const textValue = parsedData?.text || parsedData?.content || '';
+    const hasAudio = !!parsedData?.audioUrl;
 
     if (!textValue || textValue.trim() === '') {
       return (
@@ -88,12 +89,65 @@ export default function LessonView() {
       );
     }
 
+    // Render audio section
+    const renderAudioSection = () => {
+      if (!hasAudio) return null;
+      
+      return (
+        <div
+          className={`p-4 rounded-lg ${
+            theme === 'day-mode' ? 'bg-blue-50' : 'bg-blue-900/20'
+          }`}
+        >
+          <div className="flex items-center gap-3 mb-3">
+            <i className="fas fa-volume-up text-blue-600 text-xl"></i>
+            <h4
+              className={`font-semibold ${
+                theme === 'day-mode' ? 'text-gray-900' : 'text-white'
+              }`}
+            >
+              Audio Narration
+            </h4>
+            {parsedData?.audioDuration && (
+              <span
+                className={`text-sm ${
+                  theme === 'day-mode' ? 'text-gray-600' : 'text-gray-400'
+                }`}
+              >
+                ({Math.round(parsedData.audioDuration)}s)
+              </span>
+            )}
+          </div>
+          <audio controls className="w-full" style={{ maxWidth: '100%' }}>
+            <source
+              src={parsedData.audioUrl}
+              type={`audio/${parsedData.audioFormat || 'mp3'}`}
+            />
+            Your browser does not support the audio element.
+          </audio>
+          {parsedData?.audioVoice && (
+            <p
+              className={`text-xs mt-2 ${
+                theme === 'day-mode' ? 'text-gray-500' : 'text-gray-400'
+              }`}
+            >
+              Voice: {parsedData.audioVoice}
+            </p>
+          )}
+        </div>
+      );
+    };
+
     return (
       <div
         className={`p-4 rounded-lg ${
           theme === 'day-mode' ? 'bg-gray-50 border border-gray-200' : 'bg-gray-900 border border-gray-700'
         }`}
       >
+        {/* Show audio first if audioFirst is true */}
+        {audioFirst && renderAudioSection()}
+        
+        {/* Text content */}
         <div
           className={`whitespace-pre-wrap font-sans ${
             theme === 'day-mode' ? 'text-gray-900' : 'text-gray-100'
@@ -101,47 +155,11 @@ export default function LessonView() {
         >
           {textValue}
         </div>
-        {parsedData?.audioUrl && (
-          <div
-            className={`mt-4 p-4 rounded-lg ${
-              theme === 'day-mode' ? 'bg-blue-50' : 'bg-blue-900/20'
-            }`}
-          >
-            <div className="flex items-center gap-3 mb-3">
-              <i className="fas fa-volume-up text-blue-600 text-xl"></i>
-              <h4
-                className={`font-semibold ${
-                  theme === 'day-mode' ? 'text-gray-900' : 'text-white'
-                }`}
-              >
-                Audio Narration
-              </h4>
-              {parsedData?.audioDuration && (
-                <span
-                  className={`text-sm ${
-                    theme === 'day-mode' ? 'text-gray-600' : 'text-gray-400'
-                  }`}
-                >
-                  ({Math.round(parsedData.audioDuration)}s)
-                </span>
-              )}
-            </div>
-            <audio controls className="w-full" style={{ maxWidth: '100%' }}>
-              <source
-                src={parsedData.audioUrl}
-                type={`audio/${parsedData.audioFormat || 'mp3'}`}
-              />
-              Your browser does not support the audio element.
-            </audio>
-            {parsedData?.audioVoice && (
-              <p
-                className={`text-xs mt-2 ${
-                  theme === 'day-mode' ? 'text-gray-500' : 'text-gray-400'
-                }`}
-              >
-                Voice: {parsedData.audioVoice}
-              </p>
-            )}
+        
+        {/* Show audio after text if audioFirst is false */}
+        {!audioFirst && hasAudio && (
+          <div className="mt-4">
+            {renderAudioSection()}
           </div>
         )}
       </div>
@@ -490,7 +508,7 @@ export default function LessonView() {
     return null;
   };
 
-  const renderContentItem = (formatType, contentItem, index) => {
+  const renderContentItem = (formatType, contentItem, index, formatItem = null) => {
     // Extract content_data, handling both object and string formats
     let contentData = contentItem.content_data || contentItem;
     
@@ -522,9 +540,20 @@ export default function LessonView() {
     switch (formatType) {
       case 'text':
       case 'text_audio':
+      case 'text_audio_combined':
+        // Check if this is a combined format with audioFirst flag
+        const audioFirst = formatItem?.audioFirst || false;
         return (
           <div key={contentItem.content_id || `text-${index}`} className="space-y-4">
-            {renderTextContent(contentData)}
+            {renderTextContent(contentData, audioFirst)}
+            {renderMetadataFooter(contentData)}
+          </div>
+        );
+      case 'audio_text':
+        // Audio comes before text in template
+        return (
+          <div key={contentItem.content_id || `audio-text-${index}`} className="space-y-4">
+            {renderTextContent(contentData, true)}
             {renderMetadataFooter(contentData)}
           </div>
         );
@@ -733,57 +762,71 @@ export default function LessonView() {
               contentCount: f.content?.length || 0 
             })));
             
-            return sortedFormats.map((formatItem, index) => (
-            <div
-              key={`${formatItem.type}-${index}`}
-              className={`p-6 rounded-lg ${
-                theme === 'day-mode'
-                  ? 'bg-white border border-gray-200 shadow-sm'
-                  : 'bg-gray-800 border border-gray-700 shadow-lg'
-              }`}
-            >
-              {/* Format Header */}
-              <div className="flex items-center gap-3 mb-4">
-                <div
-                  className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                    theme === 'day-mode'
-                      ? 'bg-emerald-100 text-emerald-600'
-                      : 'bg-emerald-900/30 text-emerald-400'
-                  }`}
-                >
-                  <i className={`fas ${formatIcons[formatItem.type] || 'fa-file'}`}></i>
+            return sortedFormats.map((formatItem, index) => {
+              // Skip 'audio' format if it's part of text_audio_combined (to avoid duplicate)
+              if (formatItem.type === 'audio' && sortedFormats.some(f => f.type === 'text_audio_combined' || f.type === 'audio_text')) {
+                return null;
+              }
+              
+              // Determine display label and icon for combined formats
+              const displayType = formatItem.type === 'text_audio_combined' || formatItem.type === 'audio_text' 
+                ? 'text' 
+                : formatItem.type;
+              const displayLabel = formatLabels[displayType] || formatItem.type;
+              const displayIcon = formatIcons[displayType] || 'fa-file';
+              
+              return (
+              <div
+                key={`${formatItem.type}-${index}`}
+                className={`p-6 rounded-lg ${
+                  theme === 'day-mode'
+                    ? 'bg-white border border-gray-200 shadow-sm'
+                    : 'bg-gray-800 border border-gray-700 shadow-lg'
+                }`}
+              >
+                {/* Format Header */}
+                <div className="flex items-center gap-3 mb-4">
+                  <div
+                    className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                      theme === 'day-mode'
+                        ? 'bg-emerald-100 text-emerald-600'
+                        : 'bg-emerald-900/30 text-emerald-400'
+                    }`}
+                  >
+                    <i className={`fas ${displayIcon}`}></i>
+                  </div>
+                  <div>
+                    <h3 className={`text-lg font-semibold ${
+                      theme === 'day-mode' ? 'text-gray-900' : 'text-white'
+                    }`}>
+                      {displayLabel}
+                    </h3>
+                    <p className={`text-sm ${
+                      theme === 'day-mode' ? 'text-gray-500' : 'text-gray-400'
+                    }`}>
+                      Step {formatItem.display_order + 1} of {lessonView.formats.length}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className={`text-lg font-semibold ${
-                    theme === 'day-mode' ? 'text-gray-900' : 'text-white'
-                  }`}>
-                    {formatLabels[formatItem.type] || formatItem.type}
-                  </h3>
-                  <p className={`text-sm ${
-                    theme === 'day-mode' ? 'text-gray-500' : 'text-gray-400'
-                  }`}>
-                    Step {formatItem.display_order + 1} of {lessonView.formats.length}
-                  </p>
-                </div>
-              </div>
 
-              {/* Content Items */}
-              {formatItem.content && formatItem.content.length > 0 ? (
-                <div>
-                  {formatItem.content.map((contentItem, itemIndex) =>
-                    renderContentItem(formatItem.type, contentItem, itemIndex)
-                  )}
-                </div>
-              ) : (
-                <div className={`text-center py-8 ${
-                  theme === 'day-mode' ? 'text-gray-400' : 'text-gray-500'
-                }`}>
-                  <i className={`fas ${formatIcons[formatItem.type] || 'fa-file'} text-3xl mb-2`}></i>
-                  <p>No {formatLabels[formatItem.type]} content available</p>
-                </div>
-              )}
-            </div>
-            ));
+                {/* Content Items */}
+                {formatItem.content && formatItem.content.length > 0 ? (
+                  <div>
+                    {formatItem.content.map((contentItem, itemIndex) =>
+                      renderContentItem(formatItem.type, contentItem, itemIndex, formatItem)
+                    )}
+                  </div>
+                ) : (
+                  <div className={`text-center py-8 ${
+                    theme === 'day-mode' ? 'text-gray-400' : 'text-gray-500'
+                  }`}>
+                    <i className={`fas ${displayIcon} text-3xl mb-2`}></i>
+                    <p>No {displayLabel} content available</p>
+                  </div>
+                )}
+              </div>
+              );
+            });
           })()}
         </div>
       </div>
