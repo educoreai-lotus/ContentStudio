@@ -212,9 +212,16 @@ export class PostgreSQLQualityCheckRepository {
         
         // Generate a new quality_check_id if it doesn't exist
         const newQualityCheckId = existingQualityCheckData.quality_check_id || `qc_${contentRow.content_id}_${Date.now()}`;
+        
+        // Convert 'score' to 'overall_score' for consistency in qualityCheckData
+        const normalizedUpdates = { ...updates };
+        if (normalizedUpdates.score !== undefined && normalizedUpdates.overall_score === undefined) {
+          normalizedUpdates.overall_score = normalizedUpdates.score;
+        }
+
         const updatedQualityCheckData = {
           ...existingQualityCheckData,
-          ...updates,
+          ...normalizedUpdates,
           quality_check_id: newQualityCheckId,
           content_id: contentRow.content_id,
         };
@@ -283,9 +290,15 @@ export class PostgreSQLQualityCheckRepository {
       : contentRow.quality_check_data || {};
 
     // Merge updates with existing data
+    // Convert 'score' to 'overall_score' for consistency in qualityCheckData
+    const normalizedUpdates = { ...updates };
+    if (normalizedUpdates.score !== undefined && normalizedUpdates.overall_score === undefined) {
+      normalizedUpdates.overall_score = normalizedUpdates.score;
+    }
+
     const updatedQualityCheckData = {
       ...existingQualityCheckData,
-      ...updates,
+      ...normalizedUpdates,
       quality_check_id: qualityCheckId,
       content_id: contentRow.content_id, // Ensure content_id is preserved
     };

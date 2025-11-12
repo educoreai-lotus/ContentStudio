@@ -113,7 +113,7 @@ export class ContentController {
             originality: qualityData.originality_score || 'N/A',
             difficultyAlignment: qualityData.difficulty_alignment_score || 'N/A',
             consistency: qualityData.consistency_score || 'N/A',
-            overall: qualityData.overall_score || 'N/A',
+            overall: qualityData.overall_score || qualityData.score || 'N/A',
           };
           message = `Content saved and quality check completed successfully! Scores: Originality ${scores.originality}/100, Difficulty Alignment ${scores.difficultyAlignment}/100, Consistency ${scores.consistency}/100, Overall ${scores.overall}/100`;
           qualityCheckInfo = {

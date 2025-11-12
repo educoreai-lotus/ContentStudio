@@ -261,13 +261,47 @@ export const ManualContentForm = () => {
                 : 'bg-red-900/20 border-red-500/30'
             }`}
           >
-            <p
-              className={`${
-                theme === 'day-mode' ? 'text-red-800' : 'text-red-300'
-              }`}
-            >
-              {error}
-            </p>
+            <div className="flex items-start">
+              <i className="fas fa-exclamation-triangle mr-2 mt-1"></i>
+              <div className="flex-1">
+                <p className={`font-semibold mb-2 ${
+                  theme === 'day-mode' ? 'text-red-800' : 'text-red-300'
+                }`}>
+                  Content Rejected - Quality Check Failed
+                </p>
+                <p className={`mb-2 ${
+                  theme === 'day-mode' ? 'text-red-700' : 'text-red-300'
+                }`}>
+                  {error}
+                </p>
+                {error.includes('originality') && (
+                  <div className={`mt-2 p-2 rounded text-xs ${
+                    theme === 'day-mode' ? 'bg-red-100' : 'bg-red-800/30'
+                  }`}>
+                    <strong>Originality Issue:</strong> Your content may be too similar to existing sources. Try to write in your own words and add unique examples.
+                  </div>
+                )}
+                {error.includes('Difficulty') && (
+                  <div className={`mt-2 p-2 rounded text-xs ${
+                    theme === 'day-mode' ? 'bg-red-100' : 'bg-red-800/30'
+                  }`}>
+                    <strong>Difficulty Mismatch:</strong> Your content doesn't match the target skill level. Adjust the complexity to better align with the lesson's difficulty.
+                  </div>
+                )}
+                {error.includes('consistency') && (
+                  <div className={`mt-2 p-2 rounded text-xs ${
+                    theme === 'day-mode' ? 'bg-red-100' : 'bg-red-800/30'
+                  }`}>
+                    <strong>Consistency Issue:</strong> Your content structure needs improvement. Ensure logical flow and clear organization.
+                  </div>
+                )}
+                <p className={`mt-3 text-xs ${
+                  theme === 'day-mode' ? 'text-red-600' : 'text-red-400'
+                }`}>
+                  <strong>What to do:</strong> Review your content, address the issues mentioned above, and try again. You can edit your content and resubmit.
+                </p>
+              </div>
+            </div>
           </div>
         )}
 
@@ -304,7 +338,15 @@ export const ManualContentForm = () => {
                       : 'bg-yellow-900/20 text-yellow-300 border border-yellow-500/30'
                   }`}>
                     <i className="fas fa-check-circle mr-1"></i>
-                    <strong>Quality Check:</strong> Your content will be automatically evaluated for originality, difficulty alignment, and consistency. Content with scores below 60 will be rejected.
+                    <strong>Quality Check:</strong> Your content will be automatically evaluated before audio generation:
+                    <ul className="mt-2 ml-4 list-disc space-y-1">
+                      <li><strong>Originality</strong> - Ensures your content is unique and not copied</li>
+                      <li><strong>Difficulty Alignment</strong> - Verifies content matches the target skill level</li>
+                      <li><strong>Consistency</strong> - Checks structure and coherence</li>
+                    </ul>
+                    <p className="mt-2 font-semibold">
+                      ⚠️ Content with scores below 60 will be rejected. Audio will only be generated if quality check passes.
+                    </p>
                   </div>
                 </div>
                 <textarea
@@ -336,7 +378,15 @@ export const ManualContentForm = () => {
                     : 'bg-yellow-900/20 text-yellow-300 border border-yellow-500/30'
                 }`}>
                   <i className="fas fa-check-circle mr-1"></i>
-                  <strong>Quality Check:</strong> Your content will be automatically evaluated for originality, difficulty alignment, and consistency. Content with scores below 60 will be rejected.
+                  <strong>Quality Check:</strong> Your content will be automatically evaluated before saving:
+                    <ul className="mt-2 ml-4 list-disc space-y-1">
+                      <li><strong>Originality</strong> - Ensures your content is unique and not copied</li>
+                      <li><strong>Difficulty Alignment</strong> - Verifies content matches the target skill level</li>
+                      <li><strong>Consistency</strong> - Checks structure and coherence</li>
+                    </ul>
+                    <p className="mt-2 font-semibold">
+                      ⚠️ Content with scores below 60 will be rejected.
+                    </p>
                 </div>
                 <div>
                   <label
@@ -391,7 +441,15 @@ export const ManualContentForm = () => {
                     : 'bg-yellow-900/20 text-yellow-300 border border-yellow-500/30'
                 }`}>
                   <i className="fas fa-check-circle mr-1"></i>
-                  <strong>Quality Check:</strong> Your content will be automatically evaluated for originality, difficulty alignment, and consistency. Content with scores below 60 will be rejected.
+                  <strong>Quality Check:</strong> Your content will be automatically evaluated before saving:
+                    <ul className="mt-2 ml-4 list-disc space-y-1">
+                      <li><strong>Originality</strong> - Ensures your content is unique and not copied</li>
+                      <li><strong>Difficulty Alignment</strong> - Verifies content matches the target skill level</li>
+                      <li><strong>Consistency</strong> - Checks structure and coherence</li>
+                    </ul>
+                    <p className="mt-2 font-semibold">
+                      ⚠️ Content with scores below 60 will be rejected.
+                    </p>
                 </div>
                 <label
                   className={`block text-sm font-medium mb-2 ${

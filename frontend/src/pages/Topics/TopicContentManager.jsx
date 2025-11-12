@@ -334,36 +334,111 @@ export default function TopicContentManager() {
                         </strong>
                       </div>
                       {qualityCheckInfo.status === 'approved' && qualityCheckInfo.scores && (
-                        <div className="mt-2 space-y-1 text-xs">
+                        <div className="mt-2 space-y-2 text-xs">
+                          <div className={`p-2 rounded ${
+                            theme === 'day-mode' ? 'bg-emerald-100' : 'bg-emerald-800/30'
+                          }`}>
+                            <p className="font-semibold mb-1">
+                              <i className="fas fa-check-circle mr-1"></i>
+                              Your content is relevant and approved!
+                            </p>
+                            <p className="text-xs opacity-90">
+                              Your content passed all quality checks. Audio has been generated and your content is ready to use.
+                            </p>
+                          </div>
                           <div className="grid grid-cols-2 gap-2">
-                            <div>
-                              <span className="font-medium">Originality:</span> {qualityCheckInfo.scores.originality}/100
+                            <div className={`p-2 rounded ${
+                              theme === 'day-mode' ? 'bg-white' : 'bg-gray-700/50'
+                            }`}>
+                              <div className="font-medium mb-1">Originality</div>
+                              <div className="text-lg font-bold">{qualityCheckInfo.scores.originality}/100</div>
+                              <div className="text-xs opacity-75 mt-1">
+                                {qualityCheckInfo.scores.originality >= 80 ? 'Excellent - Unique content' : 
+                                 qualityCheckInfo.scores.originality >= 60 ? 'Good - Original work' : 'Needs improvement'}
+                              </div>
                             </div>
-                            <div>
-                              <span className="font-medium">Difficulty Alignment:</span> {qualityCheckInfo.scores.difficultyAlignment}/100
+                            <div className={`p-2 rounded ${
+                              theme === 'day-mode' ? 'bg-white' : 'bg-gray-700/50'
+                            }`}>
+                              <div className="font-medium mb-1">Difficulty Match</div>
+                              <div className="text-lg font-bold">{qualityCheckInfo.scores.difficultyAlignment}/100</div>
+                              <div className="text-xs opacity-75 mt-1">
+                                {qualityCheckInfo.scores.difficultyAlignment >= 80 ? 'Perfect match' : 
+                                 qualityCheckInfo.scores.difficultyAlignment >= 60 ? 'Good alignment' : 'Needs adjustment'}
+                              </div>
                             </div>
-                            <div>
-                              <span className="font-medium">Consistency:</span> {qualityCheckInfo.scores.consistency}/100
+                            <div className={`p-2 rounded ${
+                              theme === 'day-mode' ? 'bg-white' : 'bg-gray-700/50'
+                            }`}>
+                              <div className="font-medium mb-1">Consistency</div>
+                              <div className="text-lg font-bold">{qualityCheckInfo.scores.consistency}/100</div>
+                              <div className="text-xs opacity-75 mt-1">
+                                {qualityCheckInfo.scores.consistency >= 80 ? 'Well structured' : 
+                                 qualityCheckInfo.scores.consistency >= 60 ? 'Good structure' : 'Needs improvement'}
+                              </div>
                             </div>
-                            <div>
-                              <span className="font-medium">Overall:</span> {qualityCheckInfo.scores.overall}/100
+                            <div className={`p-2 rounded ${
+                              theme === 'day-mode' ? 'bg-white' : 'bg-gray-700/50'
+                            }`}>
+                              <div className="font-medium mb-1">Overall Score</div>
+                              <div className="text-lg font-bold">{qualityCheckInfo.scores.overall}/100</div>
+                              <div className="text-xs opacity-75 mt-1">
+                                {qualityCheckInfo.scores.overall >= 80 ? 'Excellent quality' : 
+                                 qualityCheckInfo.scores.overall >= 60 ? 'Good quality' : 'Acceptable'}
+                              </div>
                             </div>
                           </div>
                           {qualityCheckInfo.feedback && (
-                            <div className="mt-2 pt-2 border-t border-current border-opacity-20">
-                              <span className="font-medium">Feedback:</span> {qualityCheckInfo.feedback}
+                            <div className={`mt-2 pt-2 border-t ${
+                              theme === 'day-mode' ? 'border-emerald-200' : 'border-emerald-500/30'
+                            }`}>
+                              <span className="font-medium">Detailed Feedback:</span>
+                              <p className="mt-1 opacity-90">{qualityCheckInfo.feedback}</p>
                             </div>
                           )}
                         </div>
                       )}
                       {qualityCheckInfo.status === 'rejected' && qualityCheckInfo.feedback && (
-                        <div className="mt-2 text-xs">
-                          <span className="font-medium">Reason:</span> {qualityCheckInfo.feedback}
+                        <div className="mt-2 space-y-2 text-xs">
+                          <div className={`p-3 rounded ${
+                            theme === 'day-mode' ? 'bg-red-100 border border-red-300' : 'bg-red-800/30 border border-red-500/40'
+                          }`}>
+                            <p className="font-semibold mb-2">
+                              <i className="fas fa-exclamation-triangle mr-1"></i>
+                              Content Rejected - Not Relevant
+                            </p>
+                            <p className="mb-2">
+                              Your content did not meet the quality standards. Please review the feedback below and revise your content.
+                            </p>
+                            <div className={`p-2 rounded ${
+                              theme === 'day-mode' ? 'bg-white' : 'bg-gray-700/50'
+                            }`}>
+                              <span className="font-medium">Rejection Reason:</span>
+                              <p className="mt-1">{qualityCheckInfo.feedback}</p>
+                            </div>
+                            <p className="mt-2 text-xs opacity-90">
+                              <strong>What to do:</strong> Review your content and ensure it is original, matches the difficulty level, and is well-structured. You can edit and resubmit.
+                            </p>
+                          </div>
                         </div>
                       )}
                       {qualityCheckInfo.status === 'pending' && (
-                        <div className="mt-2 text-xs">
-                          {qualityCheckInfo.message || 'Quality check is being performed. Please refresh to see results.'}
+                        <div className="mt-2 space-y-2 text-xs">
+                          <div className={`p-3 rounded ${
+                            theme === 'day-mode' ? 'bg-yellow-100 border border-yellow-300' : 'bg-yellow-800/30 border border-yellow-500/40'
+                          }`}>
+                            <p className="font-semibold mb-1">
+                              <i className="fas fa-spinner fa-spin mr-1"></i>
+                              Quality Check In Progress
+                            </p>
+                            <p className="opacity-90">
+                              {qualityCheckInfo.message || 'Your content is being evaluated for originality, difficulty alignment, and consistency. This may take a few moments...'}
+                            </p>
+                            <p className="mt-2 text-xs opacity-75">
+                              <i className="fas fa-info-circle mr-1"></i>
+                              Audio generation will start automatically once quality check passes.
+                            </p>
+                          </div>
                         </div>
                       )}
                     </div>
