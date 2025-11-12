@@ -32,11 +32,6 @@ export class CreateContentUseCase {
       content_data: { ...contentData.content_data },
     };
 
-    // Auto-generate audio for manual text content when possible
-    if (await this.shouldGenerateAudio(enrichedContentData)) {
-      await this.attachGeneratedAudio(enrichedContentData);
-    }
-
     // Set generation method to manual for manual creation
     const content = new Content({
       ...enrichedContentData,
@@ -45,6 +40,10 @@ export class CreateContentUseCase {
 
     const { candidateIdsOrNames, resolverDebugLabel } = await this.getContentTypeIdentifiers(content);
     let existingContent = await this.findExistingContent(content.topic_id, candidateIdsOrNames, resolverDebugLabel);
+
+    // Check if this is manual content that needs quality check BEFORE audio generation
+    const isManualContent = content.generation_method_id === 'manual' || content.generation_method_id === 'manual_edited';
+    const needsQualityCheck = isManualContent && this.qualityCheckService;
 
     if (existingContent) {
       if (this.contentHistoryService?.saveVersion) {
@@ -55,6 +54,7 @@ export class CreateContentUseCase {
         }
       }
 
+      // Save content WITHOUT audio first (if quality check is needed)
       const updatedContent = await this.contentRepository.update(existingContent.content_id, {
         content_data: content.content_data,
         quality_check_status: 'pending',
@@ -62,25 +62,29 @@ export class CreateContentUseCase {
         generation_method_id: content.generation_method_id,
       });
 
-      // Trigger quality check ONLY for manual content (not AI-generated)
-      const isManualContent = content.generation_method_id === 'manual' || content.generation_method_id === 'manual_edited';
-      if (isManualContent && updatedContent.needsQualityCheck() && this.qualityCheckService) {
-        console.log('[CreateContentUseCase] Triggering quality check for manual content:', updatedContent.content_id);
+      // Trigger quality check BEFORE audio generation for manual content
+      if (needsQualityCheck && updatedContent.needsQualityCheck()) {
+        console.log('[CreateContentUseCase] Triggering quality check BEFORE audio generation for manual content:', updatedContent.content_id);
         try {
           await this.qualityCheckService.triggerQualityCheck(updatedContent.content_id);
-          console.log('[CreateContentUseCase] Quality check completed successfully for content:', updatedContent.content_id);
+          console.log('[CreateContentUseCase] Quality check passed, proceeding with audio generation');
         } catch (error) {
-          console.error('[CreateContentUseCase] Failed to trigger quality check:', error);
-          // Re-throw if quality check fails (content should be rejected)
+          console.error('[CreateContentUseCase] Quality check failed, rejecting content:', error.message);
+          // Re-throw if quality check fails (content should be rejected, no audio generation)
           throw error;
         }
-      } else {
-        console.log('[CreateContentUseCase] Skipping quality check:', {
-          isManualContent,
-          needsQualityCheck: updatedContent.needsQualityCheck(),
-          hasQualityCheckService: !!this.qualityCheckService,
-          generation_method_id: content.generation_method_id,
+      }
+
+      // Generate audio ONLY if quality check passed (or if not needed)
+      if (await this.shouldGenerateAudio(enrichedContentData)) {
+        await this.attachGeneratedAudio(enrichedContentData);
+        // Update content with audio
+        const finalUpdatedContent = await this.contentRepository.update(updatedContent.content_id, {
+          content_data: enrichedContentData.content_data,
         });
+        // Reload content to get updated quality check results
+        const finalContent = await this.contentRepository.findById(finalUpdatedContent.content_id);
+        return finalContent || finalUpdatedContent;
       }
 
       // Reload content to get updated quality check results
@@ -88,18 +92,17 @@ export class CreateContentUseCase {
       return finalContent || updatedContent;
     }
 
-    // Save content to repository
+    // Save content to repository WITHOUT audio first
     const createdContent = await this.contentRepository.create(content);
 
-    // Trigger quality check ONLY for manual content (not AI-generated)
-    const isManualContent = content.generation_method_id === 'manual' || content.generation_method_id === 'manual_edited';
-    if (isManualContent && createdContent.needsQualityCheck() && this.qualityCheckService) {
-      console.log('[CreateContentUseCase] Triggering quality check for manual content:', createdContent.content_id);
+    // Trigger quality check BEFORE audio generation for manual content
+    if (needsQualityCheck && createdContent.needsQualityCheck()) {
+      console.log('[CreateContentUseCase] Triggering quality check BEFORE audio generation for manual content:', createdContent.content_id);
       try {
         await this.qualityCheckService.triggerQualityCheck(createdContent.content_id);
-        console.log('[CreateContentUseCase] Quality check completed successfully for content:', createdContent.content_id);
+        console.log('[CreateContentUseCase] Quality check passed, proceeding with audio generation');
       } catch (error) {
-        // Re-throw if quality check fails (content should be rejected)
+        // Re-throw if quality check fails (content should be rejected, no audio generation)
         console.error('[CreateContentUseCase] Quality check failed, rejecting content:', error.message);
         throw error;
       }
@@ -110,6 +113,18 @@ export class CreateContentUseCase {
         hasQualityCheckService: !!this.qualityCheckService,
         generation_method_id: content.generation_method_id,
       });
+    }
+
+    // Generate audio ONLY if quality check passed (or if not needed)
+    if (await this.shouldGenerateAudio(enrichedContentData)) {
+      await this.attachGeneratedAudio(enrichedContentData);
+      // Update content with audio
+      const finalUpdatedContent = await this.contentRepository.update(createdContent.content_id, {
+        content_data: enrichedContentData.content_data,
+      });
+      // Reload content to get updated quality check results
+      const finalContent = await this.contentRepository.findById(finalUpdatedContent.content_id);
+      return finalContent || finalUpdatedContent;
     }
 
     // Reload content to get updated quality check results

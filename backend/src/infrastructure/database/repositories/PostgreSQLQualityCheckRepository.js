@@ -324,6 +324,42 @@ export class PostgreSQLQualityCheckRepository {
   }
 
   /**
+   * Convert Content status back to QualityCheck status
+   * Content uses: 'pending', 'approved', 'rejected', 'needs_revision'
+   * QualityCheck uses: 'pending', 'processing', 'completed', 'failed'
+   */
+  convertContentStatusToQualityCheckStatus(contentStatus, qualityCheckData = {}) {
+    if (!contentStatus) {
+      return 'pending';
+    }
+
+    // If it's already a QualityCheck status, return as-is
+    if (['pending', 'processing', 'completed', 'failed'].includes(contentStatus)) {
+      return contentStatus;
+    }
+
+    // Convert Content status back to QualityCheck status
+    switch (contentStatus) {
+      case 'pending':
+        return 'pending';
+      case 'approved':
+        // If we have quality check data with status, use it; otherwise assume completed
+        return qualityCheckData.status === 'failed' ? 'failed' : 'completed';
+      case 'rejected':
+        // Check if it was failed or completed with low score
+        const score = qualityCheckData.overall_score || qualityCheckData.score;
+        if (qualityCheckData.status === 'failed' || qualityCheckData.error_message) {
+          return 'failed';
+        }
+        return 'completed'; // Completed but rejected due to low score
+      case 'needs_revision':
+        return 'completed';
+      default:
+        return 'pending';
+    }
+  }
+
+  /**
    * Map content row to QualityCheck entity
    * @param {Object} row - Content database row
    * @returns {QualityCheck} QualityCheck entity
@@ -335,11 +371,17 @@ export class PostgreSQLQualityCheckRepository {
 
     // If quality_check_data doesn't exist, create a basic structure
     if (!qualityCheckData) {
+      // Convert Content status to QualityCheck status
+      const qualityCheckStatus = this.convertContentStatusToQualityCheckStatus(
+        row.quality_check_status,
+        {}
+      );
+      
       return new QualityCheck({
         quality_check_id: null,
         content_id: row.content_id,
         check_type: 'general',
-        status: row.quality_check_status || 'pending',
+        status: qualityCheckStatus,
         results: {},
         overall_score: null,
         created_at: row.created_at,
@@ -348,11 +390,19 @@ export class PostgreSQLQualityCheckRepository {
       });
     }
 
+    // Use qualityCheckData.status first (original QualityCheck status)
+    // If not available, convert from Content status
+    const qualityCheckStatus = qualityCheckData.status || 
+      this.convertContentStatusToQualityCheckStatus(
+        row.quality_check_status,
+        qualityCheckData
+      );
+
     return new QualityCheck({
       quality_check_id: qualityCheckData.quality_check_id || null,
       content_id: row.content_id,
       check_type: qualityCheckData.check_type || 'general',
-      status: row.quality_check_status || qualityCheckData.status || 'pending',
+      status: qualityCheckStatus,
       results: qualityCheckData.results || {},
       score: qualityCheckData.overall_score || qualityCheckData.score || null,
       created_at: qualityCheckData.created_at || row.created_at,
