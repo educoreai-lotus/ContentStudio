@@ -53,10 +53,33 @@ export default function LessonView() {
   };
 
   const renderTextContent = contentData => {
-    const textValue =
-      typeof contentData === 'string'
-        ? contentData
-        : contentData?.text || JSON.stringify(contentData, null, 2);
+    // Handle case where contentData might be a JSON string
+    let parsedData = contentData;
+    if (typeof contentData === 'string') {
+      try {
+        parsedData = JSON.parse(contentData);
+      } catch (e) {
+        // If it's not JSON, treat it as plain text
+        parsedData = { text: contentData };
+      }
+    }
+
+    // Extract text value
+    const textValue = parsedData?.text || (typeof parsedData === 'string' ? parsedData : '');
+
+    if (!textValue) {
+      return (
+        <div
+          className={`p-4 rounded-lg ${
+            theme === 'day-mode' ? 'bg-gray-50 border border-gray-200' : 'bg-gray-900 border border-gray-700'
+          }`}
+        >
+          <p className={theme === 'day-mode' ? 'text-gray-500' : 'text-gray-400'}>
+            No text content available
+          </p>
+        </div>
+      );
+    }
 
     return (
       <div
@@ -64,14 +87,14 @@ export default function LessonView() {
           theme === 'day-mode' ? 'bg-gray-50 border border-gray-200' : 'bg-gray-900 border border-gray-700'
         }`}
       >
-        <pre
+        <div
           className={`whitespace-pre-wrap font-sans ${
             theme === 'day-mode' ? 'text-gray-900' : 'text-gray-100'
           }`}
         >
           {textValue}
-        </pre>
-        {contentData?.audioUrl && (
+        </div>
+        {parsedData?.audioUrl && (
           <div
             className={`mt-4 p-4 rounded-lg ${
               theme === 'day-mode' ? 'bg-blue-50' : 'bg-blue-900/20'
@@ -86,30 +109,30 @@ export default function LessonView() {
               >
                 Audio Narration
               </h4>
-              {contentData?.audioDuration && (
+              {parsedData?.audioDuration && (
                 <span
                   className={`text-sm ${
                     theme === 'day-mode' ? 'text-gray-600' : 'text-gray-400'
                   }`}
                 >
-                  ({Math.round(contentData.audioDuration)}s)
+                  ({Math.round(parsedData.audioDuration)}s)
                 </span>
               )}
             </div>
             <audio controls className="w-full" style={{ maxWidth: '100%' }}>
               <source
-                src={contentData.audioUrl}
-                type={`audio/${contentData.audioFormat || 'mp3'}`}
+                src={parsedData.audioUrl}
+                type={`audio/${parsedData.audioFormat || 'mp3'}`}
               />
               Your browser does not support the audio element.
             </audio>
-            {contentData?.audioVoice && (
+            {parsedData?.audioVoice && (
               <p
                 className={`text-xs mt-2 ${
                   theme === 'day-mode' ? 'text-gray-500' : 'text-gray-400'
                 }`}
               >
-                Voice: {contentData.audioVoice}
+                Voice: {parsedData.audioVoice}
               </p>
             )}
           </div>
@@ -118,232 +141,341 @@ export default function LessonView() {
     );
   };
 
-  const renderCodeContent = contentData => (
-    <div className="space-y-4">
-      <div
-        className={`p-4 rounded-lg ${
-          theme === 'day-mode' ? 'bg-gray-900' : 'bg-gray-950'
-        }`}
-      >
-        <pre className="text-green-400 font-mono text-sm overflow-x-auto">
-          {contentData?.code || JSON.stringify(contentData, null, 2)}
-        </pre>
-      </div>
-      {contentData?.explanation && (
-        <div
-          className={`p-4 rounded-lg ${
-            theme === 'day-mode' ? 'bg-gray-50' : 'bg-gray-900'
-          }`}
-        >
-          <p
-            className={`${
-              theme === 'day-mode' ? 'text-gray-900' : 'text-gray-100'
-            }`}
-          >
-            {contentData.explanation}
-          </p>
-        </div>
-      )}
-    </div>
-  );
+  const renderCodeContent = contentData => {
+    // Handle case where contentData might be a JSON string
+    let parsedData = contentData;
+    if (typeof contentData === 'string') {
+      try {
+        parsedData = JSON.parse(contentData);
+      } catch (e) {
+        // If it's not JSON, treat as plain code
+        parsedData = { code: contentData };
+      }
+    }
 
-  const renderPresentationContent = contentData => (
-    <div
-      className={`p-6 rounded-lg border-2 border-dashed ${
-        theme === 'day-mode'
-          ? 'bg-purple-50 border-purple-300'
-          : 'bg-purple-900/20 border-purple-500/30'
-      }`}
-    >
-      <div className="flex items-center justify-center mb-4">
-        <i className="fas fa-file-powerpoint text-6xl text-purple-600"></i>
-      </div>
-      <div className="text-center space-y-2">
-        <h3
-          className={`text-lg font-semibold ${
-            theme === 'day-mode' ? 'text-gray-900' : 'text-white'
-          }`}
-        >
-          {contentData?.fileName || 'Presentation File'}
-        </h3>
-        {contentData?.fileSize && (
-          <p
-            className={`text-sm ${
-              theme === 'day-mode' ? 'text-gray-600' : 'text-gray-400'
-            }`}
-          >
-            Size: {(contentData.fileSize / 1024 / 1024).toFixed(2)} MB
-          </p>
-        )}
-        {contentData?.fileUrl && (
-          <div className="mt-4 space-y-2">
-            <a
-              href={contentData.fileUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-block px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-            >
-              <i className="fas fa-external-link-alt mr-2"></i>
-              Open Presentation
-            </a>
-            <p
-              className={`text-xs ${
-                theme === 'day-mode' ? 'text-gray-500' : 'text-gray-500'
-              }`}
-            >
-              Opens in a new tab
-            </p>
-          </div>
-        )}
-      </div>
-    </div>
-  );
+    const codeValue = parsedData?.code || '';
 
-  const renderAudioContent = contentData => (
-    <div
-      className={`p-4 rounded-lg ${
-        theme === 'day-mode' ? 'bg-blue-50 border border-blue-200' : 'bg-blue-900/20 border border-blue-600/50'
-      }`}
-    >
-      <h4
-        className={`font-semibold mb-2 ${
-          theme === 'day-mode' ? 'text-blue-900' : 'text-blue-200'
-        }`}
-      >
-        Audio Narration
-      </h4>
-      <audio controls className="w-full">
-        <source
-          src={contentData?.audioUrl}
-          type={`audio/${contentData?.audioFormat || 'mp3'}`}
-        />
-        Your browser does not support the audio element.
-      </audio>
-      {contentData?.audioVoice && (
-        <p
-          className={`text-xs mt-2 ${
-            theme === 'day-mode' ? 'text-blue-700' : 'text-blue-300'
-          }`}
-        >
-          Voice: {contentData.audioVoice}
-        </p>
-      )}
-    </div>
-  );
-
-  const renderMindMapContent = contentData => (
-    <div className="space-y-6">
-      {contentData?.nodes && (
-        <div>
-          <h4
-            className={`font-semibold mb-4 text-lg ${
-              theme === 'day-mode' ? 'text-gray-900' : 'text-white'
-            }`}
-          >
-            <i className="fas fa-project-diagram mr-2 text-purple-600"></i>
-            Mind Map Visualization
-          </h4>
-          <MindMapViewer data={contentData} />
-        </div>
-      )}
-      {contentData?.metadata && (
-        <div
-          className={`p-4 rounded-lg ${
-            theme === 'day-mode' ? 'bg-blue-50' : 'bg-blue-900/20'
-          }`}
-        >
-          <h4
-            className={`font-semibold mb-3 ${
-              theme === 'day-mode' ? 'text-gray-900' : 'text-white'
-            }`}
-          >
-            <i className="fas fa-info-circle mr-2 text-blue-600"></i>
-            Lesson Information
-          </h4>
-          {/* Metadata removed - topic, language, and skills are stored in topics table, not in content_data */}
-          <div className="space-y-2 text-sm">
-            <p className="text-gray-500 italic">
-              Topic information is available in the lesson details.
-            </p>
-          </div>
-        </div>
-      )}
-      {contentData?.imageUrl && (
-        <div className="text-center">
-          <img
-            src={contentData.imageUrl}
-            alt="Mind Map"
-            className="max-w-full h-auto rounded-lg shadow-lg mx-auto"
-          />
-        </div>
-      )}
-    </div>
-  );
-
-  const renderAvatarVideoContent = contentData => (
-    <div className="space-y-4">
-      {contentData?.script && (
-        <div
-          className={`p-4 rounded-lg ${
-            theme === 'day-mode' ? 'bg-gray-50' : 'bg-gray-900'
-          }`}
-        >
-          <h4
-            className={`font-semibold mb-2 ${
-              theme === 'day-mode' ? 'text-gray-900' : 'text-white'
-            }`}
-          >
-            Video Script
-          </h4>
-          <pre
-            className={`whitespace-pre-wrap font-sans ${
-              theme === 'day-mode' ? 'text-gray-900' : 'text-gray-100'
-            }`}
-          >
-            {contentData.script}
-          </pre>
-        </div>
-      )}
-
-      {contentData?.videoUrl && (
-        <div className="space-y-3">
+    return (
+      <div className="space-y-4">
+        {codeValue ? (
           <div
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg ${
-              theme === 'day-mode' ? 'bg-blue-50' : 'bg-blue-900/20'
+            className={`p-4 rounded-lg ${
+              theme === 'day-mode' ? 'bg-gray-900' : 'bg-gray-950'
             }`}
           >
-            <i className="fas fa-video text-blue-600"></i>
-            <span
-              className={`text-sm font-medium ${
-                theme === 'day-mode' ? 'text-blue-900' : 'text-blue-300'
+            <pre className="text-green-400 font-mono text-sm overflow-x-auto">
+              {codeValue}
+            </pre>
+          </div>
+        ) : (
+          <div
+            className={`p-4 rounded-lg ${
+              theme === 'day-mode' ? 'bg-gray-50' : 'bg-gray-900'
+            }`}
+          >
+            <p className={theme === 'day-mode' ? 'text-gray-500' : 'text-gray-400'}>
+              No code content available
+            </p>
+          </div>
+        )}
+        {parsedData?.explanation && (
+          <div
+            className={`p-4 rounded-lg ${
+              theme === 'day-mode' ? 'bg-gray-50' : 'bg-gray-900'
+            }`}
+          >
+            <p
+              className={`${
+                theme === 'day-mode' ? 'text-gray-900' : 'text-gray-100'
               }`}
             >
-              Avatar Video
-            </span>
+              {parsedData.explanation}
+            </p>
           </div>
-          <div className="relative rounded-lg overflow-hidden shadow-2xl bg-black">
-            <video
-              src={contentData.videoUrl}
-              controls
-              className="w-full h-auto"
-              style={{ maxHeight: '500px' }}
-            >
-              Your browser does not support the video tag.
-            </video>
-          </div>
-          {contentData?.videoId && (
-            <div
-              className={`text-xs text-center ${
-                theme === 'day-mode' ? 'text-gray-500' : 'text-gray-400'
+        )}
+      </div>
+    );
+  };
+
+  const renderPresentationContent = contentData => {
+    // Handle case where contentData might be a JSON string
+    let parsedData = contentData;
+    if (typeof contentData === 'string') {
+      try {
+        parsedData = JSON.parse(contentData);
+      } catch (e) {
+        parsedData = {};
+      }
+    }
+
+    const googleSlidesUrl = parsedData?.googleSlidesUrl || parsedData?.fileUrl;
+    const presentation = parsedData?.presentation;
+
+    return (
+      <div
+        className={`p-6 rounded-lg border-2 border-dashed ${
+          theme === 'day-mode'
+            ? 'bg-purple-50 border-purple-300'
+            : 'bg-purple-900/20 border-purple-500/30'
+        }`}
+      >
+        <div className="flex items-center justify-center mb-4">
+          <i className="fas fa-file-powerpoint text-6xl text-purple-600"></i>
+        </div>
+        <div className="text-center space-y-2">
+          <h3
+            className={`text-lg font-semibold ${
+              theme === 'day-mode' ? 'text-gray-900' : 'text-white'
+            }`}
+          >
+            {presentation?.title || parsedData?.fileName || 'Presentation File'}
+          </h3>
+          {parsedData?.slide_count && (
+            <p
+              className={`text-sm ${
+                theme === 'day-mode' ? 'text-gray-600' : 'text-gray-400'
               }`}
             >
-              Video ID: {contentData.videoId}
+              {parsedData.slide_count} slides
+            </p>
+          )}
+          {googleSlidesUrl && (
+            <div className="mt-4 space-y-2">
+              <a
+                href={googleSlidesUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-block px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+              >
+                <i className="fas fa-external-link-alt mr-2"></i>
+                Open Presentation
+              </a>
+              <p
+                className={`text-xs ${
+                  theme === 'day-mode' ? 'text-gray-500' : 'text-gray-500'
+                }`}
+              >
+                Opens in a new tab
+              </p>
             </div>
           )}
         </div>
-      )}
-    </div>
-  );
+      </div>
+    );
+  };
+
+  const renderAudioContent = contentData => {
+    // Handle case where contentData might be a JSON string
+    let parsedData = contentData;
+    if (typeof contentData === 'string') {
+      try {
+        parsedData = JSON.parse(contentData);
+      } catch (e) {
+        // If it's not JSON, return empty
+        parsedData = {};
+      }
+    }
+
+    if (!parsedData?.audioUrl) {
+      return (
+        <div
+          className={`p-4 rounded-lg ${
+            theme === 'day-mode' ? 'bg-blue-50 border border-blue-200' : 'bg-blue-900/20 border border-blue-600/50'
+          }`}
+        >
+          <p className={theme === 'day-mode' ? 'text-gray-500' : 'text-gray-400'}>
+            No audio content available
+          </p>
+        </div>
+      );
+    }
+
+    return (
+      <div
+        className={`p-4 rounded-lg ${
+          theme === 'day-mode' ? 'bg-blue-50 border border-blue-200' : 'bg-blue-900/20 border border-blue-600/50'
+        }`}
+      >
+        <h4
+          className={`font-semibold mb-2 ${
+            theme === 'day-mode' ? 'text-blue-900' : 'text-blue-200'
+          }`}
+        >
+          Audio Narration
+        </h4>
+        <audio controls className="w-full">
+          <source
+            src={parsedData.audioUrl}
+            type={`audio/${parsedData.audioFormat || 'mp3'}`}
+          />
+          Your browser does not support the audio element.
+        </audio>
+        {parsedData?.audioDuration && (
+          <p
+            className={`text-xs mt-2 ${
+              theme === 'day-mode' ? 'text-blue-700' : 'text-blue-300'
+            }`}
+          >
+            Duration: {Math.round(parsedData.audioDuration)}s
+          </p>
+        )}
+        {parsedData?.audioVoice && (
+          <p
+            className={`text-xs mt-1 ${
+              theme === 'day-mode' ? 'text-blue-700' : 'text-blue-300'
+            }`}
+          >
+            Voice: {parsedData.audioVoice}
+          </p>
+        )}
+      </div>
+    );
+  };
+
+  const renderMindMapContent = contentData => {
+    // Handle case where contentData might be a JSON string
+    let parsedData = contentData;
+    if (typeof contentData === 'string') {
+      try {
+        parsedData = JSON.parse(contentData);
+      } catch (e) {
+        parsedData = {};
+      }
+    }
+
+    return (
+      <div className="space-y-6">
+        {parsedData?.nodes && parsedData?.edges ? (
+          <div>
+            <h4
+              className={`font-semibold mb-4 text-lg ${
+                theme === 'day-mode' ? 'text-gray-900' : 'text-white'
+              }`}
+            >
+              <i className="fas fa-project-diagram mr-2 text-purple-600"></i>
+              Mind Map Visualization
+            </h4>
+            <MindMapViewer data={parsedData} />
+          </div>
+        ) : (
+          <div
+            className={`p-4 rounded-lg ${
+              theme === 'day-mode' ? 'bg-gray-50' : 'bg-gray-900'
+            }`}
+          >
+            <p className={theme === 'day-mode' ? 'text-gray-500' : 'text-gray-400'}>
+              No mind map data available
+            </p>
+          </div>
+        )}
+        {parsedData?.imageUrl && (
+          <div className="text-center">
+            <img
+              src={parsedData.imageUrl}
+              alt="Mind Map"
+              className="max-w-full h-auto rounded-lg shadow-lg mx-auto"
+            />
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderAvatarVideoContent = contentData => {
+    // Handle case where contentData might be a JSON string
+    let parsedData = contentData;
+    if (typeof contentData === 'string') {
+      try {
+        parsedData = JSON.parse(contentData);
+      } catch (e) {
+        parsedData = {};
+      }
+    }
+
+    return (
+      <div className="space-y-4">
+        {parsedData?.script && (
+          <div
+            className={`p-4 rounded-lg ${
+              theme === 'day-mode' ? 'bg-gray-50' : 'bg-gray-900'
+            }`}
+          >
+            <h4
+              className={`font-semibold mb-2 ${
+                theme === 'day-mode' ? 'text-gray-900' : 'text-white'
+              }`}
+            >
+              Video Script
+            </h4>
+            <div
+              className={`whitespace-pre-wrap font-sans ${
+                theme === 'day-mode' ? 'text-gray-900' : 'text-gray-100'
+              }`}
+            >
+              {parsedData.script}
+            </div>
+          </div>
+        )}
+
+        {parsedData?.videoUrl ? (
+          <div className="space-y-3">
+            <div
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg ${
+                theme === 'day-mode' ? 'bg-blue-50' : 'bg-blue-900/20'
+              }`}
+            >
+              <i className="fas fa-video text-blue-600"></i>
+              <span
+                className={`text-sm font-medium ${
+                  theme === 'day-mode' ? 'text-blue-900' : 'text-blue-300'
+                }`}
+              >
+                Avatar Video
+              </span>
+            </div>
+            <div className="relative rounded-lg overflow-hidden shadow-2xl bg-black">
+              <video
+                src={parsedData.videoUrl}
+                controls
+                className="w-full h-auto"
+                style={{ maxHeight: '500px' }}
+              >
+                Your browser does not support the video tag.
+              </video>
+            </div>
+            {parsedData?.videoId && (
+              <div
+                className={`text-xs text-center ${
+                  theme === 'day-mode' ? 'text-gray-500' : 'text-gray-400'
+                }`}
+              >
+                Video ID: {parsedData.videoId}
+              </div>
+            )}
+            {parsedData?.duration_seconds && (
+              <div
+                className={`text-xs text-center ${
+                  theme === 'day-mode' ? 'text-gray-500' : 'text-gray-400'
+                }`}
+              >
+                Duration: {Math.round(parsedData.duration_seconds)}s
+              </div>
+            )}
+          </div>
+        ) : (
+          <div
+            className={`p-4 rounded-lg ${
+              theme === 'day-mode' ? 'bg-gray-50' : 'bg-gray-900'
+            }`}
+          >
+            <p className={theme === 'day-mode' ? 'text-gray-500' : 'text-gray-400'}>
+              No video content available
+            </p>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const renderMetadataFooter = contentData => {
     // Metadata footer removed - redundant metadata (topic, language, skills) is stored in topics table
@@ -352,7 +484,18 @@ export default function LessonView() {
   };
 
   const renderContentItem = (formatType, contentItem, index) => {
-    const contentData = contentItem.content_data || contentItem;
+    // Extract content_data, handling both object and string formats
+    let contentData = contentItem.content_data || contentItem;
+    
+    // If content_data is a JSON string, parse it
+    if (typeof contentData === 'string') {
+      try {
+        contentData = JSON.parse(contentData);
+      } catch (e) {
+        // If parsing fails, keep as is
+        console.warn('Failed to parse content_data:', e);
+      }
+    }
 
     switch (formatType) {
       case 'text':
@@ -536,9 +679,16 @@ export default function LessonView() {
 
         {/* Lesson Content by Format Order */}
         <div className="space-y-8">
-          {lessonView.formats.map((formatItem, index) => (
+          {lessonView.formats
+            .sort((a, b) => {
+              // Sort by display_order if available, otherwise maintain array order
+              const orderA = a.display_order !== undefined ? a.display_order : 999;
+              const orderB = b.display_order !== undefined ? b.display_order : 999;
+              return orderA - orderB;
+            })
+            .map((formatItem, index) => (
             <div
-              key={index}
+              key={`${formatItem.type}-${index}`}
               className={`p-6 rounded-lg ${
                 theme === 'day-mode'
                   ? 'bg-white border border-gray-200 shadow-sm'

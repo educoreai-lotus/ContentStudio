@@ -75,7 +75,9 @@ export class ApplyTemplateToLessonUseCase {
     const orderedContent = [];
 
     // Build ordered content array according to template
-    for (const formatType of formatOrder) {
+    // IMPORTANT: Follow the exact order specified in template.format_order
+    for (let i = 0; i < formatOrder.length; i++) {
+      const formatType = formatOrder[i];
       if (contentByType[formatType]) {
         orderedContent.push({
           format_type: formatType,
@@ -84,7 +86,7 @@ export class ApplyTemplateToLessonUseCase {
       }
     }
 
-    // Add any remaining content types not in template order
+    // Add any remaining content types not in template order (at the end)
     const templateTypes = new Set(formatOrder);
     Object.keys(contentByType).forEach((type) => {
       if (!templateTypes.has(type)) {
