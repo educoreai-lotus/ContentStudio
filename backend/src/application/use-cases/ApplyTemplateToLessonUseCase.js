@@ -60,27 +60,45 @@ export class ApplyTemplateToLessonUseCase {
 
     // Map template format names to database type names
     // Template uses: 'text', 'code', 'presentation', 'audio', 'mind_map', 'avatar_video'
-    // Database might use: 'text_audio' for text type
+    // Database might use: 'text_audio' or 'text ' (with space) for text type
+    // Note: 'audio' is usually combined with 'text' in 'text_audio' type
     const formatNameToDbName = {
       'text': 'text_audio', // Map template 'text' to database 'text_audio'
       'code': 'code',
       'presentation': 'presentation',
-      'audio': 'audio',
+      'audio': 'text_audio', // Audio is usually part of text_audio content
       'mind_map': 'mind_map',
       'avatar_video': 'avatar_video',
     };
+    
+    // Also create reverse lookup for finding content
+    // Try multiple variations to handle database inconsistencies (spaces, different names)
+    const possibleDbNames = {
+      'text': ['text_audio', 'text', 'text '], // Try text_audio first, then text variations
+      'audio': ['text_audio', 'audio', 'audio '], // Audio might be in text_audio
+      'code': ['code', 'code '],
+      'presentation': ['presentation', 'presentation '],
+      'mind_map': ['mind_map', 'mind_map '],
+      'avatar_video': ['avatar_video', 'avatar_video '],
+    };
 
     // Organize content by type name (using database names)
+    // Normalize type names by trimming whitespace
     const contentByType = {};
     contents.forEach(content => {
       const typeId = content.content_type_id;
-      const dbTypeName =
+      let dbTypeName =
         typeof typeId === 'string' ? typeId : typeNameMap.get(typeId) || typeId;
+      // Trim whitespace from type name (fix for database issues)
+      dbTypeName = String(dbTypeName).trim();
+      
       if (!contentByType[dbTypeName]) {
         contentByType[dbTypeName] = [];
       }
       contentByType[dbTypeName].push(content);
     });
+    
+    console.log('[ApplyTemplateToLessonUseCase] Content by type (normalized):', Object.keys(contentByType));
 
     // Apply template format order
     const formatOrder = template.format_order || [];
@@ -94,19 +112,32 @@ export class ApplyTemplateToLessonUseCase {
     // IMPORTANT: Follow the exact order specified in template.format_order
     for (let i = 0; i < formatOrder.length; i++) {
       const templateFormatType = formatOrder[i];
-      // Map template format name to database type name
-      const dbTypeName = formatNameToDbName[templateFormatType] || templateFormatType;
       
-      console.log(`[ApplyTemplateToLessonUseCase] Processing format ${i + 1}/${formatOrder.length}: template="${templateFormatType}" -> db="${dbTypeName}"`);
+      // Try to find content by trying multiple possible database names
+      let foundContent = null;
+      let foundDbTypeName = null;
       
-      if (contentByType[dbTypeName]) {
-        console.log(`[ApplyTemplateToLessonUseCase] Found content for "${dbTypeName}", adding to orderedContent at position ${orderedContent.length}`);
+      const possibleNames = possibleDbNames[templateFormatType] || [formatNameToDbName[templateFormatType] || templateFormatType];
+      
+      for (const dbName of possibleNames) {
+        const normalizedName = String(dbName).trim();
+        if (contentByType[normalizedName]) {
+          foundContent = contentByType[normalizedName];
+          foundDbTypeName = normalizedName;
+          break;
+        }
+      }
+      
+      console.log(`[ApplyTemplateToLessonUseCase] Processing format ${i + 1}/${formatOrder.length}: template="${templateFormatType}" -> tried: ${possibleNames.join(', ')} -> found: ${foundDbTypeName || 'none'}`);
+      
+      if (foundContent) {
+        console.log(`[ApplyTemplateToLessonUseCase] Found content for "${foundDbTypeName}", adding to orderedContent at position ${orderedContent.length}`);
         orderedContent.push({
           format_type: templateFormatType, // Keep template format name for frontend
-          content: contentByType[dbTypeName],
+          content: foundContent,
         });
       } else {
-        console.log(`[ApplyTemplateToLessonUseCase] No content found for "${dbTypeName}" (mapped from template "${templateFormatType}")`);
+        console.log(`[ApplyTemplateToLessonUseCase] No content found for template "${templateFormatType}" (tried: ${possibleNames.join(', ')})`);
       }
     }
     
