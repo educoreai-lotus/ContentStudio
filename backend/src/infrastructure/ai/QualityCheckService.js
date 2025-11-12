@@ -76,7 +76,7 @@ export class QualityCheckService extends IQualityCheckService {
 
       if (evaluationResult.originality_score < 60) {
         throw new Error(
-          `Content failed quality check: Low originality score (${evaluationResult.originality_score}/100). ${evaluationResult.feedback_summary || 'Please revise your text to be more original.'}`
+          `Content failed quality check: Content appears to be copied or plagiarized (Originality: ${evaluationResult.originality_score}/100). ${evaluationResult.feedback_summary || 'Please rewrite the content in your own words. Copying from official sources or other materials is not allowed.'}`
         );
       }
 
@@ -154,9 +154,15 @@ Analyze the submitted text and evaluate it according to the following dimensions
    - If the content only mentions the topic briefly but focuses on something else, give a score BELOW 60.
    - Higher score = content is highly relevant and directly addresses the topic.
 
-2. Originality (0–100):
-   - Detect potential copying or similarity to known sources or common examples.
-   - Higher score = more unique phrasing and structure.
+2. Originality (0–100) - CRITICAL FOR PLAGIARISM DETECTION:
+   - STRICTLY check if the content appears to be copied, plagiarized, or directly taken from official documentation, websites, or other sources.
+   - Look for exact or near-exact matches of phrases, sentences, or entire paragraphs from known sources (especially official documentation like React docs, MDN, W3C, etc.).
+   - Check if the writing style matches official documentation style (formal, structured, with specific terminology patterns).
+   - If content appears to be copied from official sources (even if relevant), give a score BELOW 60 (reject).
+   - If content has identical or very similar sentence structures to known documentation, reduce the score significantly.
+   - If content uses exact terminology and phrasing patterns from official sources, treat it as potential plagiarism.
+   - Higher score = completely original content written by the trainer in their own words.
+   - Lower score = content that appears copied, even if it's from official/legitimate sources.
 
 3. Difficulty Alignment (0–100):
    - Check if the text's difficulty level matches the provided skills.
@@ -168,14 +174,23 @@ Analyze the submitted text and evaluate it according to the following dimensions
 5. Feedback Summary:
    - Write 2–3 short sentences describing:
      * Whether the content is relevant to the topic (CRITICAL).
-     * Strengths of the content.
+     * Whether the content appears to be copied or plagiarized from official sources (CRITICAL).
+     * Strengths of the content (if original).
      * Detected weaknesses or issues.
-     * Any plagiarism, mismatch, or irrelevance detected.
+     * Any plagiarism, copying, mismatch, or irrelevance detected.
+     * If plagiarism is detected, clearly state: "Content appears to be copied from [source type] and should be rewritten in the trainer's own words."
 
-IMPORTANT: If the content is not relevant to the topic, you MUST:
-- Give relevance_score BELOW 60
-- Clearly state in feedback_summary that the content is not relevant to the topic
-- Explain what the content is about vs. what the topic should cover
+IMPORTANT RULES:
+1. If the content is not relevant to the topic, you MUST:
+   - Give relevance_score BELOW 60
+   - Clearly state in feedback_summary that the content is not relevant to the topic
+   - Explain what the content is about vs. what the topic should cover
+
+2. If the content appears to be copied or plagiarized (even from official sources), you MUST:
+   - Give originality_score BELOW 60 (reject for plagiarism)
+   - Clearly state in feedback_summary that the content appears to be copied
+   - Identify the type of source (official documentation, website, etc.) if detectable
+   - Recommend that the trainer rewrite the content in their own words
 
 Return ONLY a valid JSON object with this exact structure:
 {
@@ -191,7 +206,11 @@ Return ONLY a valid JSON object with this exact structure:
       topicName,
       skills,
       contentText: contentText.substring(0, 4000), // Limit text length for API
-      instruction: `Evaluate the content above. The content MUST be relevant to the topic "${topicName}" in the course "${courseName}". If the content is about something completely different, it should be rejected.`
+      instruction: `Evaluate the content above. The content MUST be:
+1. Relevant to the topic "${topicName}" in the course "${courseName}". If the content is about something completely different, it should be rejected.
+2. ORIGINAL and written by the trainer in their own words. If the content appears to be copied from official documentation (like React docs, MDN, W3C, etc.), websites, or any other source, it MUST be rejected for plagiarism, even if it's relevant to the topic.
+3. Check carefully for exact or near-exact matches of phrases, sentences, or paragraphs from known sources.
+4. If you detect copying or plagiarism, give originality_score BELOW 60 and clearly explain in feedback_summary.`
     });
 
     try {

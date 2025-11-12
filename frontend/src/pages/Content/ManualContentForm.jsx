@@ -281,11 +281,11 @@ export const ManualContentForm = () => {
                     <strong>Relevance Issue:</strong> Your content is not relevant to the lesson topic. Please ensure your content directly addresses the topic and teaches concepts related to it.
                   </div>
                 )}
-                {error.includes('originality') && (
+                {(error.includes('originality') || error.includes('copied') || error.includes('plagiarized') || error.includes('plagiarism')) && (
                   <div className={`mt-2 p-2 rounded text-xs ${
                     theme === 'day-mode' ? 'bg-red-100' : 'bg-red-800/30'
                   }`}>
-                    <strong>Originality Issue:</strong> Your content may be too similar to existing sources. Try to write in your own words and add unique examples.
+                    <strong>⚠️ Plagiarism Detected:</strong> Your content appears to be copied from official documentation, websites, or other sources. You must rewrite the content in your own words. Copying from official sources (like React docs, MDN, W3C, etc.) or any other materials is not allowed, even if the content is relevant to the topic.
                   </div>
                 )}
                 {error.includes('Difficulty') && (
@@ -348,12 +348,15 @@ export const ManualContentForm = () => {
                     <strong>Quality Check:</strong> Your content will be automatically evaluated before audio generation:
                     <ul className="mt-2 ml-4 list-disc space-y-1">
                       <li><strong>Relevance to Topic</strong> - Verifies content is directly related to the lesson topic (MOST IMPORTANT)</li>
-                      <li><strong>Originality</strong> - Ensures your content is unique and not copied</li>
+                      <li><strong>Originality</strong> - Ensures your content is unique and not copied from official documentation, websites, or other sources (CRITICAL)</li>
                       <li><strong>Difficulty Alignment</strong> - Verifies content matches the target skill level</li>
                       <li><strong>Consistency</strong> - Checks structure and coherence</li>
                     </ul>
                     <p className="mt-2 font-semibold">
                       ⚠️ Content with scores below 60 will be rejected. Audio will only be generated if quality check passes.
+                    </p>
+                    <p className="mt-2 text-xs italic">
+                      ⛔ <strong>Important:</strong> Copying content from official documentation (React docs, MDN, W3C, etc.), websites, or any other sources is strictly prohibited, even if the content is relevant to the topic. You must write all content in your own words.
                     </p>
                   </div>
                 </div>
@@ -389,12 +392,15 @@ export const ManualContentForm = () => {
                   <strong>Quality Check:</strong> Your content will be automatically evaluated before saving:
                     <ul className="mt-2 ml-4 list-disc space-y-1">
                       <li><strong>Relevance to Topic</strong> - Verifies content is directly related to the lesson topic (MOST IMPORTANT)</li>
-                      <li><strong>Originality</strong> - Ensures your content is unique and not copied</li>
+                      <li><strong>Originality</strong> - Ensures your content is unique and not copied from official documentation, websites, or other sources (CRITICAL)</li>
                       <li><strong>Difficulty Alignment</strong> - Verifies content matches the target skill level</li>
                       <li><strong>Consistency</strong> - Checks structure and coherence</li>
                     </ul>
                     <p className="mt-2 font-semibold">
                       ⚠️ Content with scores below 60 will be rejected.
+                    </p>
+                    <p className="mt-2 text-xs italic">
+                      ⛔ <strong>Important:</strong> Copying content from official documentation, websites, or any other sources is strictly prohibited. You must write all content in your own words.
                     </p>
                 </div>
                 <div>
@@ -453,12 +459,15 @@ export const ManualContentForm = () => {
                   <strong>Quality Check:</strong> Your content will be automatically evaluated before saving:
                     <ul className="mt-2 ml-4 list-disc space-y-1">
                       <li><strong>Relevance to Topic</strong> - Verifies content is directly related to the lesson topic (MOST IMPORTANT)</li>
-                      <li><strong>Originality</strong> - Ensures your content is unique and not copied</li>
+                      <li><strong>Originality</strong> - Ensures your content is unique and not copied from official documentation, websites, or other sources (CRITICAL)</li>
                       <li><strong>Difficulty Alignment</strong> - Verifies content matches the target skill level</li>
                       <li><strong>Consistency</strong> - Checks structure and coherence</li>
                     </ul>
                     <p className="mt-2 font-semibold">
                       ⚠️ Content with scores below 60 will be rejected.
+                    </p>
+                    <p className="mt-2 text-xs italic">
+                      ⛔ <strong>Important:</strong> Copying content from official documentation, websites, or any other sources is strictly prohibited. You must write all content in your own words.
                     </p>
                 </div>
                 <label
