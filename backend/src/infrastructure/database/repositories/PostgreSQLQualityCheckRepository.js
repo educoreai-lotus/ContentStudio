@@ -17,6 +17,9 @@ export class PostgreSQLQualityCheckRepository {
       throw new Error('Database not connected. Using in-memory repository.');
     }
 
+    // Generate quality_check_id if not provided (use content_id as base for uniqueness)
+    const qualityCheckId = qualityCheck.quality_check_id || `qc_${qualityCheck.content_id}_${Date.now()}`;
+
     // Quality checks are stored in content.quality_check_data
     // We need to update the content record
     const query = `
@@ -30,7 +33,7 @@ export class PostgreSQLQualityCheckRepository {
     `;
 
     const qualityCheckData = {
-      quality_check_id: qualityCheck.quality_check_id || null,
+      quality_check_id: qualityCheckId,
       content_id: qualityCheck.content_id,
       check_type: qualityCheck.check_type,
       status: qualityCheck.status,
@@ -142,6 +145,124 @@ export class PostgreSQLQualityCheckRepository {
     return result.rows
       .filter(row => row.quality_check_data) // Only rows with quality check data
       .map(row => this.mapContentRowToQualityCheck(row));
+  }
+
+  async update(qualityCheckId, updates) {
+    if (!this.db.isConnected()) {
+      throw new Error('Database not connected. Using in-memory repository.');
+    }
+
+    // Handle null or undefined quality_check_id
+    if (!qualityCheckId) {
+      // If content_id is in updates, use it directly
+      if (updates.content_id) {
+        const findQuery = `SELECT * FROM content WHERE content_id = $1 LIMIT 1`;
+        const findResult = await this.db.query(findQuery, [updates.content_id]);
+        if (findResult.rows.length === 0) {
+          throw new Error(`Content with id ${updates.content_id} not found`);
+        }
+        const contentRow = findResult.rows[0];
+        const existingQualityCheckData = typeof contentRow.quality_check_data === 'string'
+          ? JSON.parse(contentRow.quality_check_data)
+          : contentRow.quality_check_data || {};
+        
+        // Generate a new quality_check_id if it doesn't exist
+        const newQualityCheckId = existingQualityCheckData.quality_check_id || `qc_${contentRow.content_id}_${Date.now()}`;
+        const updatedQualityCheckData = {
+          ...existingQualityCheckData,
+          ...updates,
+          quality_check_id: newQualityCheckId,
+          content_id: contentRow.content_id,
+        };
+
+        const updateQuery = `
+          UPDATE content 
+          SET 
+            quality_check_status = COALESCE($1, quality_check_status),
+            quality_check_data = $2,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE content_id = $3
+          RETURNING *
+        `;
+
+        const values = [
+          updates.status || contentRow.quality_check_status,
+          JSON.stringify(updatedQualityCheckData),
+          contentRow.content_id,
+        ];
+
+        const result = await this.db.query(updateQuery, values);
+        if (result.rows.length === 0) {
+          throw new Error(`Content with id ${contentRow.content_id} not found`);
+        }
+        return this.mapContentRowToQualityCheck(result.rows[0]);
+      }
+      throw new Error('quality_check_id is required for update');
+    }
+
+    // Find the content record with this quality check ID
+    // First try by quality_check_id in quality_check_data
+    let findQuery = `
+      SELECT * FROM content 
+      WHERE quality_check_data->>'quality_check_id' = $1::text
+      LIMIT 1
+    `;
+    let findParams = [qualityCheckId.toString()];
+    
+    let findResult = await this.db.query(findQuery, findParams);
+
+    // If not found, try to find by content_id (fallback for cases where quality_check_id format differs)
+    if (findResult.rows.length === 0) {
+      // Try to extract content_id from quality_check_id if it follows the pattern qc_{content_id}_{timestamp}
+      const match = qualityCheckId.toString().match(/^qc_(\d+)_/);
+      if (match && match[1]) {
+        findQuery = `SELECT * FROM content WHERE content_id = $1 LIMIT 1`;
+        findParams = [parseInt(match[1])];
+        findResult = await this.db.query(findQuery, findParams);
+      }
+    }
+
+    if (findResult.rows.length === 0) {
+      throw new Error(`Quality check with id ${qualityCheckId} not found`);
+    }
+
+    const contentRow = findResult.rows[0];
+    const existingQualityCheckData = typeof contentRow.quality_check_data === 'string'
+      ? JSON.parse(contentRow.quality_check_data)
+      : contentRow.quality_check_data || {};
+
+    // Merge updates with existing data
+    const updatedQualityCheckData = {
+      ...existingQualityCheckData,
+      ...updates,
+      quality_check_id: qualityCheckId,
+      content_id: contentRow.content_id, // Ensure content_id is preserved
+    };
+
+    // Update the content record
+    const updateQuery = `
+      UPDATE content 
+      SET 
+        quality_check_status = COALESCE($1, quality_check_status),
+        quality_check_data = $2,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE content_id = $3
+      RETURNING *
+    `;
+
+    const values = [
+      updates.status || contentRow.quality_check_status,
+      JSON.stringify(updatedQualityCheckData),
+      contentRow.content_id,
+    ];
+
+    const result = await this.db.query(updateQuery, values);
+
+    if (result.rows.length === 0) {
+      throw new Error(`Content with id ${contentRow.content_id} not found`);
+    }
+
+    return this.mapContentRowToQualityCheck(result.rows[0]);
   }
 
   /**
