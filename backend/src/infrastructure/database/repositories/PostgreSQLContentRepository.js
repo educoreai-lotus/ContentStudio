@@ -305,6 +305,8 @@ export class PostgreSQLContentRepository extends IContentRepository {
       throw new Error('Database not connected. Using in-memory repository.');
     }
 
+    console.log(`[PostgreSQLContentRepository] Deleting content_id=${contentId}`);
+
     const client = await this.db.getClient();
 
     try {
@@ -320,6 +322,7 @@ export class PostgreSQLContentRepository extends IContentRepository {
       const content = getResult.rows[0];
 
       await this.saveRowToHistory(content, client);
+      console.log(`[PostgreSQLContentRepository] Archived content_id=${contentId} → content_history (topic_id=${content.topic_id}, type_id=${content.content_type_id})`);
 
       if (content.content_type_id === 3 && content.content_data?.storagePath) {
         try {
@@ -347,6 +350,9 @@ export class PostgreSQLContentRepository extends IContentRepository {
       await client.query(deleteQuery, [contentId]);
 
       await client.query('COMMIT');
+
+      console.log(`[PostgreSQLContentRepository] Deleted content_id=${contentId} from content`);
+      console.log(`✅ History entry created once successfully.`);
 
       return true;
     } catch (error) {

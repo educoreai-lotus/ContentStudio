@@ -215,6 +215,9 @@ export class ContentController {
   /**
    * Delete content (soft delete)
    * DELETE /api/content/:id
+   * 
+   * Note: The repository's delete() method handles archiving to history
+   * within a transaction, so we don't need to call contentHistoryService.saveVersion() here.
    */
   async remove(req, res, next) {
     try {
@@ -230,12 +233,7 @@ export class ContentController {
         });
       }
 
-      try {
-        await this.contentHistoryService.saveVersion(existingContent, { force: true });
-      } catch (historyError) {
-        console.error('Failed to persist content history before delete:', historyError);
-      }
-
+      // Repository delete() method handles archiving to history within a transaction
       await this.contentRepository.delete(contentId);
 
       res.status(204).send();
