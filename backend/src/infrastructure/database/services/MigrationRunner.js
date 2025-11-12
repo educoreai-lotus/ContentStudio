@@ -14,20 +14,20 @@ const __dirname = dirname(__filename);
 export class MigrationRunner {
   constructor() {
     // Try multiple possible paths for migrations directory
-    // Path 1: Relative to this file (development) - backend/src/infrastructure/database/services -> ../../../../database/migrations
+    // Path 1: Inside backend directory (Railway/production) - backend/database/migrations
+    const backendPath = join(process.cwd(), 'database/migrations');
+    // Path 2: Relative to this file (development) - backend/src/infrastructure/database/services -> ../../../../database/migrations
     const relativePath = join(__dirname, '../../../../database/migrations');
-    // Path 2: Relative to project root from backend directory (production/Railway)
-    const rootPath = join(process.cwd(), 'database/migrations');
-    // Path 3: Relative to project root from backend (if cwd is backend)
-    const backendRootPath = join(process.cwd(), '../database/migrations');
+    // Path 3: Relative to project root from backend directory (if database is at root)
+    const rootPath = join(process.cwd(), '../database/migrations');
     // Path 4: Absolute from app root (Railway/Docker)
     const appRootPath = '/app/database/migrations';
     // Path 5: From backend directory (if cwd is /app/backend)
-    const backendAppPath = '/app/backend/../database/migrations';
+    const backendAppPath = '/app/backend/database/migrations';
     
-    // Use the first path that exists, or default to relative path
-    this.migrationsPath = relativePath;
-    this.alternativePaths = [rootPath, backendRootPath, appRootPath, backendAppPath];
+    // Use the first path that exists, prioritizing backend/database/migrations
+    this.migrationsPath = backendPath;
+    this.alternativePaths = [relativePath, rootPath, appRootPath, backendAppPath];
   }
 
   /**
