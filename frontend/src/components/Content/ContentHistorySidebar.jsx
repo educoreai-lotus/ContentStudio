@@ -67,10 +67,10 @@ const VersionRow = ({
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-sm font-semibold">
-            {isCurrent ? 'Active Version' : `Version ${version.version_number}`}
+            {isCurrent ? 'Active Version' : 'Saved Version'}
           </p>
           <p className="text-xs opacity-70">
-            {new Date(version.created_at || version.updated_at).toLocaleString()}
+            Saved on: {new Date(version.updated_at || version.created_at).toLocaleString()}
           </p>
         </div>
         {!isCurrent && (

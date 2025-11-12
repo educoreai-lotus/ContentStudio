@@ -26,24 +26,15 @@ export class CreateContentVersionUseCase {
 
     const { topic_id, content_type_id } = content;
 
-    const versionNumber = await this.contentVersionRepository.getNextVersionNumber(
-      topic_id,
-      content_type_id
-    );
-
     const currentVersion = await this.contentVersionRepository.findCurrentVersion(
       topic_id,
       content_type_id
     );
     const parentVersionId = currentVersion ? currentVersion.version_id : null;
 
-    await this.contentVersionRepository.markAllAsNotCurrent(
-      topic_id,
-      content_type_id
-    );
-
+    const now = new Date();
     const version = new ContentVersion({
-      version_number: versionNumber,
+      version_number: null, // Deprecated: use timestamps instead
       content_data: contentData,
       created_by: createdBy,
       is_current_version: true,
@@ -52,6 +43,8 @@ export class CreateContentVersionUseCase {
       topic_id,
       content_type_id,
       generation_method_id: content.generation_method_id,
+      created_at: now,
+      updated_at: now,
     });
 
     return await this.contentVersionRepository.create(version);

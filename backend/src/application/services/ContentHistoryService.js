@@ -31,10 +31,6 @@ export class ContentHistoryService {
       }
     }
 
-    const versionNumber = await this.contentHistoryRepository.getNextVersionNumber(
-      content.topic_id,
-      content.content_type_id
-    );
     const rawContentData = content.content_data;
     const normalizedContentData =
       typeof rawContentData === 'string'
@@ -48,17 +44,15 @@ export class ContentHistoryService {
           })()
         : rawContentData;
 
+    const now = new Date();
     const payload = {
       topic_id: content.topic_id,
       content_type_id: content.content_type_id,
       generation_method_id: content.generation_method_id,
       content_data: normalizedContentData,
-      created_at: new Date(),
+      created_at: now,
+      updated_at: now,
     };
-
-    if (typeof versionNumber === 'number' && !Number.isNaN(versionNumber)) {
-      payload.version_number = versionNumber;
-    }
 
     return await this.contentHistoryRepository.create(payload);
   }
@@ -117,10 +111,17 @@ export class ContentHistoryService {
       }
     }
 
+    // Sort by updated_at DESC, then created_at DESC (LIFO strategy)
     const sortedHistoryEntries = Array.isArray(historyEntries)
-      ? [...historyEntries].sort(
-          (a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)
-        )
+      ? [...historyEntries].sort((a, b) => {
+          const aTime = new Date(a.updated_at || a.created_at || 0).getTime();
+          const bTime = new Date(b.updated_at || b.created_at || 0).getTime();
+          if (bTime !== aTime) return bTime - aTime;
+          // If updated_at is the same, sort by created_at
+          const aCreated = new Date(a.created_at || 0).getTime();
+          const bCreated = new Date(b.created_at || 0).getTime();
+          return bCreated - aCreated;
+        })
       : [];
     const typeKey = CONTENT_TYPE_MAP[content.content_type_id] || 'unknown';
 
@@ -132,14 +133,15 @@ export class ContentHistoryService {
         history_id: null,
         version_label: 'current',
         updated_at: content.updated_at,
+        created_at: content.created_at,
         preview: this.#buildPreview(typeKey, content.content_data),
         content_data: content.content_data,
         generation_method_id: content.generation_method_id,
       },
       versions: sortedHistoryEntries.map(entry => ({
         history_id: entry.version_id,
-        version_number: entry.version_number,
         created_at: entry.created_at,
+        updated_at: entry.updated_at || entry.created_at,
         preview: this.#buildPreview(typeKey, entry.content_data),
         content_data: entry.content_data,
         generation_method_id: entry.generation_method_id,
@@ -164,12 +166,15 @@ export class ContentHistoryService {
       throw new Error('Content not found for history entry');
     }
 
+    // Save current content to history before restoring
     await this.saveVersion(content, { force: true });
 
+    // Restore the historical version to active content
     const updatedContent = await this.contentRepository.update(content.content_id, {
       content_data: historyEntry.content_data,
     });
 
+    // Soft delete the restored history entry (it's now the active version)
     try {
       await this.contentHistoryRepository.softDelete(historyId);
     } catch (error) {

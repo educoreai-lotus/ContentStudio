@@ -37,7 +37,14 @@ export class ContentVersionRepository extends IContentVersionRepository {
           v.content_type_id === contentTypeId &&
           !v.deleted_at
       )
-      .sort((a, b) => b.version_number - a.version_number);
+      .sort((a, b) => {
+        const aTime = new Date(a.updated_at || a.created_at || 0).getTime();
+        const bTime = new Date(b.updated_at || b.created_at || 0).getTime();
+        if (bTime !== aTime) return bTime - aTime;
+        const aCreated = new Date(a.created_at || 0).getTime();
+        const bCreated = new Date(b.created_at || 0).getTime();
+        return bCreated - aCreated;
+      });
   }
 
   async findCurrentVersion(topicId, contentTypeId) {
@@ -46,12 +53,10 @@ export class ContentVersionRepository extends IContentVersionRepository {
   }
 
   async getNextVersionNumber(topicId, contentTypeId) {
-    const versions = await this.findByTopicAndType(topicId, contentTypeId);
-    if (versions.length === 0) {
-      return 1;
-    }
-    const maxVersion = Math.max(...versions.map(v => v.version_number));
-    return maxVersion + 1;
+    // Deprecated: version_number is no longer used. This method is kept for backward compatibility
+    // but returns null to indicate timestamps should be used instead.
+    console.warn('[ContentVersionRepository] getNextVersionNumber is deprecated. Use timestamps for version tracking.');
+    return null;
   }
 
   async update(versionId, updates) {

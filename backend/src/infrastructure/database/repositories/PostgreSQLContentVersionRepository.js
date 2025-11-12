@@ -57,17 +57,14 @@ export class PostgreSQLContentVersionRepository extends IContentVersionRepositor
       throw new Error('topic_id and content_type_id are required to create a content history entry');
     }
 
-    if (!version.version_number) {
-      version.version_number = await this.getNextVersionNumber(topicId, contentTypeId);
-    }
-
+    const now = new Date();
     const baseColumns = [
       'topic_id',
       'content_type_id',
-      'version_number',
       'content_data',
       'generation_method_id',
       'created_at',
+      'updated_at',
     ];
 
     const columns = supportsDeletedAt
@@ -79,12 +76,12 @@ export class PostgreSQLContentVersionRepository extends IContentVersionRepositor
     const values = [
       topicId,
       contentTypeId,
-      version.version_number,
       typeof version.content_data === 'string'
         ? version.content_data
         : JSON.stringify(version.content_data),
       generationMethodId,
-      version.created_at || new Date(),
+      version.created_at || now,
+      version.updated_at || now,
     ];
 
     if (supportsDeletedAt) {
@@ -131,13 +128,13 @@ export class PostgreSQLContentVersionRepository extends IContentVersionRepositor
         WHERE topic_id = $1
           AND content_type_id = $2
           AND deleted_at IS NULL
-        ORDER BY version_number DESC
+        ORDER BY updated_at DESC, created_at DESC
       `
       : `
         SELECT * FROM content_history 
         WHERE topic_id = $1
           AND content_type_id = $2
-        ORDER BY version_number DESC
+        ORDER BY updated_at DESC, created_at DESC
       `;
 
     const result = await this.db.query(query, [topicId, contentTypeId]);
@@ -157,7 +154,7 @@ export class PostgreSQLContentVersionRepository extends IContentVersionRepositor
       WHERE topic_id = $1
         AND content_type_id = $2
         ${supportsDeletedAt ? 'AND deleted_at IS NULL' : ''}
-      ORDER BY version_number DESC 
+      ORDER BY updated_at DESC, created_at DESC 
       LIMIT 1
     `;
 
@@ -173,23 +170,10 @@ export class PostgreSQLContentVersionRepository extends IContentVersionRepositor
   }
 
   async getNextVersionNumber(topicId, contentTypeId) {
-    if (!this.db.isConnected()) {
-      throw new Error('Database not connected. Using in-memory repository.');
-    }
-
-    const query = `
-      SELECT MAX(version_number) as max_version 
-      FROM content_history 
-      WHERE topic_id = $1
-        AND content_type_id = $2
-    `;
-    const result = await this.db.query(query, [topicId, contentTypeId]);
-
-    if (result.rows.length === 0 || !result.rows[0].max_version) {
-      return 1;
-    }
-
-    return result.rows[0].max_version + 1;
+    // Deprecated: version_number is no longer used. This method is kept for backward compatibility
+    // but returns null to indicate timestamps should be used instead.
+    console.warn('[PostgreSQLContentVersionRepository] getNextVersionNumber is deprecated. Use timestamps for version tracking.');
+    return null;
   }
 
   async update() {
@@ -234,7 +218,7 @@ export class PostgreSQLContentVersionRepository extends IContentVersionRepositor
   }
 
   async markAllAsNotCurrent() {
-    // No-op: "current" is determined at read time by selecting the highest version number.
+    // No-op: "current" is determined at read time by selecting the most recent timestamp.
   }
 
   /**
@@ -248,13 +232,14 @@ export class PostgreSQLContentVersionRepository extends IContentVersionRepositor
       topic_id: row.topic_id,
       content_type_id: row.content_type_id,
       generation_method_id: row.generation_method_id,
-      version_number: row.version_number,
+      version_number: null, // Deprecated: use timestamps instead
       content_data: typeof row.content_data === 'string' 
         ? JSON.parse(row.content_data) 
         : row.content_data,
       created_by: row.created_by || 'system',
       is_current_version: false, // Will be determined by findCurrentVersion
       created_at: row.created_at,
+      updated_at: row.updated_at || row.created_at,
       deleted_at: row.deleted_at || null,
     });
   }

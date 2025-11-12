@@ -372,33 +372,20 @@ export class PostgreSQLContentRepository extends IContentRepository {
           })()
         : contentRow.content_data;
 
-    const versionQuery = `
-      SELECT COALESCE(MAX(version_number), 0) + 1 AS next_version
-      FROM content_history
-      WHERE topic_id = $1
-        AND content_type_id = $2
-    `;
-    const versionResult = await client.query(versionQuery, [
-      contentRow.topic_id,
-      contentRow.content_type_id,
-    ]);
-    const nextVersionNumber = versionResult.rows?.[0]?.next_version || 1;
-
     const insertQuery = `
       INSERT INTO content_history (
         topic_id,
         content_type_id,
-        version_number,
         content_data,
         generation_method_id,
-        created_at
-      ) VALUES ($1, $2, $3, $4, $5, NOW())
+        created_at,
+        updated_at
+      ) VALUES ($1, $2, $3, $4, NOW(), NOW())
     `;
 
     await client.query(insertQuery, [
       contentRow.topic_id,
       contentRow.content_type_id,
-      nextVersionNumber,
       JSON.stringify(normalizedContentData),
       contentRow.generation_method_id,
     ]);

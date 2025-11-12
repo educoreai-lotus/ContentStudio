@@ -42,11 +42,12 @@ export class RestoreContentVersionUseCase {
     );
 
     // Create a new version from the restored version (preserve history)
+    const restoredDate = version.updated_at || version.created_at;
     await this.createContentVersionUseCase.execute(
       content.content_id,
       version.content_data,
       restoredBy,
-      `Restored from version ${version.version_number}`
+      `Restored from ${restoredDate instanceof Date ? restoredDate.toISOString() : restoredDate}`
     );
 
     return updatedContent;
