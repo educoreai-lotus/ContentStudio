@@ -128,6 +128,28 @@ app.listen(PORT, async () => {
     logLevel: process.env.LOG_LEVEL || 'INFO',
   });
   
+  // Run database migrations automatically
+  if (process.env.SKIP_MIGRATIONS !== 'true') {
+    try {
+      const { migrationRunner } = await import('./src/infrastructure/database/services/MigrationRunner.js');
+      await migrationRunner.runMigrations();
+      logger.info('Database migrations completed');
+    } catch (error) {
+      logger.error('Failed to run database migrations', { error: error.message });
+      // Decide whether to continue or exit based on severity
+      if (process.env.NODE_ENV === 'production') {
+        logger.error('❌ CRITICAL: Migrations failed in production. Server may not function correctly.');
+        // In production, you might want to exit here, but for now we'll continue
+        // Uncomment the next line if you want to exit on migration failure in production:
+        // process.exit(1);
+      } else {
+        logger.warn('⚠️ Continuing without migrations (development mode)');
+      }
+    }
+  } else {
+    logger.info('Database migrations skipped (SKIP_MIGRATIONS=true)');
+  }
+  
   // Start background jobs (if enabled)
   if (process.env.ENABLE_BACKGROUND_JOBS !== 'false') {
     try {
