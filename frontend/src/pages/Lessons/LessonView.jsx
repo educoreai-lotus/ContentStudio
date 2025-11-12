@@ -53,8 +53,10 @@ export default function LessonView() {
   };
 
   const renderTextContent = contentData => {
-    // Handle case where contentData might be a JSON string
+    // Handle case where contentData might be a JSON string or already an object
     let parsedData = contentData;
+    
+    // If contentData is a string, try to parse it as JSON
     if (typeof contentData === 'string') {
       try {
         parsedData = JSON.parse(contentData);
@@ -63,11 +65,16 @@ export default function LessonView() {
         parsedData = { text: contentData };
       }
     }
+    
+    // Ensure parsedData is an object
+    if (!parsedData || typeof parsedData !== 'object') {
+      parsedData = { text: String(contentData || '') };
+    }
 
-    // Extract text value
-    const textValue = parsedData?.text || (typeof parsedData === 'string' ? parsedData : '');
+    // Extract text value - check multiple possible locations
+    const textValue = parsedData?.text || parsedData?.content || '';
 
-    if (!textValue) {
+    if (!textValue || textValue.trim() === '') {
       return (
         <div
           className={`p-4 rounded-lg ${
@@ -487,6 +494,15 @@ export default function LessonView() {
     // Extract content_data, handling both object and string formats
     let contentData = contentItem.content_data || contentItem;
     
+    // Debug logging
+    console.log('[LessonView] renderContentItem:', {
+      formatType,
+      contentItemType: typeof contentItem,
+      contentDataType: typeof contentData,
+      hasContentData: !!contentItem.content_data,
+      contentDataKeys: contentData && typeof contentData === 'object' ? Object.keys(contentData) : null,
+    });
+    
     // If content_data is a JSON string, parse it
     if (typeof contentData === 'string') {
       try {
@@ -496,9 +512,16 @@ export default function LessonView() {
         console.warn('Failed to parse content_data:', e);
       }
     }
+    
+    // Ensure contentData is an object
+    if (!contentData || typeof contentData !== 'object') {
+      console.warn('[LessonView] contentData is not an object:', contentData);
+      contentData = {};
+    }
 
     switch (formatType) {
       case 'text':
+      case 'text_audio':
         return (
           <div key={contentItem.content_id || `text-${index}`} className="space-y-4">
             {renderTextContent(contentData)}
@@ -541,6 +564,15 @@ export default function LessonView() {
           </div>
         );
       default:
+        // For unknown types, try to render as text if it has text field
+        if (contentData && typeof contentData === 'object' && contentData.text) {
+          return (
+            <div key={contentItem.content_id || `unknown-${index}`} className="space-y-4">
+              {renderTextContent(contentData)}
+            </div>
+          );
+        }
+        // Otherwise show as JSON
         return (
           <pre
             key={contentItem.content_id || `unknown-${index}`}
