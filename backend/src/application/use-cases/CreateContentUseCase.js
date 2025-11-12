@@ -1,4 +1,5 @@
 import { Content } from '../../domain/entities/Content.js';
+import { ContentDataCleaner } from '../utils/ContentDataCleaner.js';
 
 /**
  * Create Content Use Case
@@ -258,20 +259,20 @@ export class CreateContentUseCase {
         return;
       }
 
-      const metadata = {
-        ...(contentData.content_data?.metadata || {}),
-        audioGeneratedAt: new Date().toISOString(),
-      };
-
-      contentData.content_data = {
+      // Build raw content data with audio
+      const rawContentData = {
         ...contentData.content_data,
+        text: contentData.content_data?.text || text,
         audioUrl: audioResult.audioUrl || contentData.content_data.audioUrl,
         audioFormat: audioResult.format || contentData.content_data.audioFormat,
         audioDuration: audioResult.duration || contentData.content_data.audioDuration,
         audioVoice: audioResult.voice || contentData.content_data.audioVoice,
-        audioText: audioResult.text || text,
-        metadata,
       };
+
+      // Clean content data: remove audioText (duplicate) and redundant metadata
+      // Determine content type (default to 1 for text+audio)
+      const contentTypeId = contentData.content_type_id || 1;
+      contentData.content_data = ContentDataCleaner.clean(rawContentData, contentTypeId);
     } catch (error) {
       console.warn('[CreateContentUseCase] Failed to auto-generate audio for manual text:', error.message);
     }

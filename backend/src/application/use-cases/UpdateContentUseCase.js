@@ -1,3 +1,5 @@
+import { ContentDataCleaner } from '../utils/ContentDataCleaner.js';
+
 /**
  * Update Content Use Case
  * Updates content and automatically creates a version
@@ -29,6 +31,18 @@ export class UpdateContentUseCase {
       } catch (error) {
         console.error('Failed to store content history before update:', error);
       }
+    }
+
+    // Clean content_data before updating if it's being updated
+    if (updates.content_data) {
+      const cleanedContentData = ContentDataCleaner.clean(
+        updates.content_data,
+        existingContent.content_type_id
+      );
+      updates = {
+        ...updates,
+        content_data: cleanedContentData,
+      };
     }
 
     // Update content

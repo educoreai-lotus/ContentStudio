@@ -295,34 +295,15 @@ export const ContentViewer = () => {
                     <i className="fas fa-info-circle mr-2 text-blue-600"></i>
                     Lesson Information
                   </h4>
+                  {/* Metadata removed - topic, language, and skills are stored in topics table, not in content_data */}
                   <div className="space-y-2">
-                    {content.content_data.metadata.lessonTopic && (
-                      <p
-                        className={`text-sm ${
-                          theme === 'day-mode' ? 'text-gray-700' : 'text-gray-300'
-                        }`}
-                      >
-                        <strong>Topic:</strong> {content.content_data.metadata.lessonTopic}
-                      </p>
-                    )}
-                    {content.content_data.metadata.language && (
-                      <p
-                        className={`text-sm ${
-                          theme === 'day-mode' ? 'text-gray-700' : 'text-gray-300'
-                        }`}
-                      >
-                        <strong>Language:</strong> {content.content_data.metadata.language}
-                      </p>
-                    )}
-                    {content.content_data.metadata.skillsList && (
-                      <p
-                        className={`text-sm ${
-                          theme === 'day-mode' ? 'text-gray-700' : 'text-gray-300'
-                        }`}
-                      >
-                        <strong>Skills:</strong> {content.content_data.metadata.skillsList.join(', ')}
-                      </p>
-                    )}
+                    <p
+                      className={`text-sm ${
+                        theme === 'day-mode' ? 'text-gray-500 italic' : 'text-gray-400 italic'
+                      }`}
+                    >
+                      Topic information is available in the topic details.
+                    </p>
                   </div>
                 </div>
               )}
@@ -408,46 +389,8 @@ export const ContentViewer = () => {
             </div>
           )}
 
-          {/* Metadata */}
-          {content.content_data?.metadata && (
-            <div
-              className={`mt-6 p-4 rounded-lg border ${
-                theme === 'day-mode'
-                  ? 'bg-blue-50 border-blue-200'
-                  : 'bg-blue-900/20 border-blue-500/30'
-              }`}
-            >
-              <h3
-                className={`font-semibold mb-2 ${
-                  theme === 'day-mode' ? 'text-blue-900' : 'text-blue-300'
-                }`}
-              >
-                Metadata
-              </h3>
-              <div
-                className={`text-sm ${
-                  theme === 'day-mode' ? 'text-blue-800' : 'text-blue-200'
-                }`}
-              >
-                {content.content_data.metadata.lessonTopic && (
-                  <p>
-                    <strong>Topic:</strong> {content.content_data.metadata.lessonTopic}
-                  </p>
-                )}
-                {content.content_data.metadata.language && (
-                  <p>
-                    <strong>Language:</strong> {content.content_data.metadata.language}
-                  </p>
-                )}
-                {content.content_data.metadata.skillsList && (
-                  <p>
-                    <strong>Skills:</strong>{' '}
-                    {content.content_data.metadata.skillsList.join(', ')}
-                  </p>
-                )}
-              </div>
-            </div>
-          )}
+          {/* Metadata section removed - redundant metadata (topic, language, skills) is stored in topics table */}
+          {/* Only essential metadata (like style, generated_at) is kept in content_data.metadata */}
         </div>
       </div>
     </div>

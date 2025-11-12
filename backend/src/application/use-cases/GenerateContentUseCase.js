@@ -1,4 +1,5 @@
 import { Content } from '../../domain/entities/Content.js';
+import { ContentDataCleaner } from '../utils/ContentDataCleaner.js';
 
 const PROMPT_BUILDERS = {
   text: ({ lessonTopic, lessonDescription, language, skillsList }) => `You are an expert educational content creator in EduCore Content Studio.
@@ -204,13 +205,6 @@ export class GenerateContentUseCase {
       prompt = this.buildPrompt(generationRequest.content_type_id, promptVariables);
     }
 
-    const metadata = {
-      lessonTopic: promptVariables.lessonTopic,
-      lessonDescription: promptVariables.lessonDescription,
-      language: promptVariables.language,
-      skillsList: promptVariables.skillsListArray,
-    };
-
     // Generate content based on type
     let contentData = {};
     try {
@@ -239,15 +233,17 @@ export class GenerateContentUseCase {
             console.warn('[AI Generation] Failed to generate audio, continuing without it:', audioError.message);
           }
           
-          contentData = {
+          // Build raw content data
+          const rawContentData = {
             text,
             audioUrl: audioData?.audioUrl, // URL for playback
             audioFormat: audioData?.format,
             audioDuration: audioData?.duration,
             audioVoice: audioData?.voice,
-            audioText: audioData?.text, // The text that was converted to audio
-            metadata,
           };
+          
+          // Clean content data: remove audioText (duplicate) and metadata (redundant)
+          contentData = ContentDataCleaner.cleanTextAudioData(rawContentData);
           break;
         }
 
@@ -257,13 +253,17 @@ export class GenerateContentUseCase {
           const codeResult = await this.aiGenerationService.generateCode(prompt, language, {
             include_comments: generationRequest.include_comments !== false,
           });
-          contentData = {
+          
+          // Build raw content data
+          const rawContentData = {
             ...codeResult,
             metadata: {
-              ...metadata,
               programming_language: language,
             },
           };
+          
+          // Clean content data: remove redundant topic/skills metadata
+          contentData = ContentDataCleaner.cleanCodeData(rawContentData);
           break;
         }
 
@@ -276,18 +276,20 @@ export class GenerateContentUseCase {
             language: promptVariables.language,
             skillsList: promptVariables.skillsListArray,
           });
-          contentData = {
+          
+          // Build raw content data
+          const rawContentData = {
             ...presentation,
-            storageUrl: presentation.googleSlidesUrl,
+            googleSlidesUrl: presentation.googleSlidesUrl,
             metadata: {
-              ...metadata,
+              style: presentation.metadata?.style,
+              generated_at: presentation.metadata?.generated_at,
               googleSlidesUrl: presentation.googleSlidesUrl,
-              lessonTopic: promptVariables.lessonTopic,
-              lessonDescription: promptVariables.lessonDescription,
-              language: promptVariables.language,
-              skillsList: promptVariables.skillsListArray,
             },
           };
+          
+          // Clean content data: remove redundant topic/skills metadata
+          contentData = ContentDataCleaner.cleanPresentationData(rawContentData);
           break;
         }
 
@@ -298,10 +300,17 @@ export class GenerateContentUseCase {
             format: generationRequest.audio_format || 'mp3',
             language: promptVariables.language,
           });
-          contentData = {
-            ...audio,
-            metadata,
+          
+          // Build raw content data
+          const rawContentData = {
+            audioUrl: audio.audioUrl,
+            audioFormat: audio.format,
+            audioDuration: audio.duration,
+            audioVoice: audio.voice,
           };
+          
+          // Clean content data: remove redundant metadata
+          contentData = ContentDataCleaner.cleanAudioData(rawContentData);
           break;
         }
 
@@ -309,10 +318,9 @@ export class GenerateContentUseCase {
           const mindMap = await this.aiGenerationService.generateMindMap(prompt, {
             language: promptVariables.language,
           });
-          contentData = {
-            ...mindMap,
-            metadata,
-          };
+          
+          // Clean content data: remove redundant metadata
+          contentData = ContentDataCleaner.cleanMindMapData(mindMap);
           break;
         }
 
@@ -320,10 +328,9 @@ export class GenerateContentUseCase {
           const avatarScript = await this.aiGenerationService.generateAvatarScript(prompt, {
             language: promptVariables.language,
           });
-          contentData = {
-            ...avatarScript,
-            metadata,
-          };
+          
+          // Clean content data: remove redundant topic/skills metadata
+          contentData = ContentDataCleaner.cleanAvatarVideoData(avatarScript);
           break;
         }
 
@@ -336,11 +343,14 @@ export class GenerateContentUseCase {
       throw new Error(`AI generation failed: ${error.message}`);
     }
 
+    // Ensure content_data is cleaned before creating entity
+    const cleanedContentData = ContentDataCleaner.clean(contentData, generationRequest.content_type_id);
+
     // Create content entity (but don't save yet - trainer needs to approve)
     const content = new Content({
       topic_id: generationRequest.topic_id,
       content_type_id: generationRequest.content_type_id,
-      content_data: contentData,
+      content_data: cleanedContentData,
       generation_method_id: 'ai_assisted',
     });
 

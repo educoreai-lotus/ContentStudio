@@ -411,7 +411,6 @@ function renderPreviewContent(sectionId, version, theme) {
     case 'slides': {
       const title =
         data.presentation?.title ||
-        data.metadata?.lessonTopic ||
         data.title ||
         data.fileName ||
         'Presentation Deck';
@@ -426,8 +425,8 @@ function renderPreviewContent(sectionId, version, theme) {
       const summaryItems = [
         data.slide_count ? `${data.slide_count} total slides` : null,
         data.presentation?.createdBy ? `Author: ${data.presentation.createdBy}` : null,
-        data.presentation?.language ? `Language: ${data.presentation.language}` : null,
         data.presentation?.subject ? `Subject: ${data.presentation.subject}` : null,
+        // Language removed - stored in topics table, not in content_data
       ].filter(Boolean);
 
       return (

@@ -489,18 +489,10 @@ export const AIContentPreview = () => {
                   theme === 'day-mode' ? 'text-blue-800' : 'text-blue-200'
                 }`}
               >
-                <p>
-                  <strong>Topic:</strong> {content.content_data.metadata.lessonTopic}
+                {/* Metadata removed - topic, language, and skills are stored in topics table, not in content_data */}
+                <p className="text-sm italic opacity-70">
+                  Topic information is available in the topic details.
                 </p>
-                <p>
-                  <strong>Language:</strong> {content.content_data.metadata.language}
-                </p>
-                {content.content_data.metadata.skillsList && (
-                  <p>
-                    <strong>Skills:</strong>{' '}
-                    {content.content_data.metadata.skillsList.join(', ')}
-                  </p>
-                )}
               </div>
             </div>
           )}

@@ -260,22 +260,11 @@ export default function LessonView() {
             <i className="fas fa-info-circle mr-2 text-blue-600"></i>
             Lesson Information
           </h4>
+          {/* Metadata removed - topic, language, and skills are stored in topics table, not in content_data */}
           <div className="space-y-2 text-sm">
-            {contentData.metadata.lessonTopic && (
-              <p>
-                <strong>Topic:</strong> {contentData.metadata.lessonTopic}
-              </p>
-            )}
-            {contentData.metadata.language && (
-              <p>
-                <strong>Language:</strong> {contentData.metadata.language}
-              </p>
-            )}
-            {contentData.metadata.skillsList && (
-              <p>
-                <strong>Skills:</strong> {contentData.metadata.skillsList.join(', ')}
-              </p>
-            )}
+            <p className="text-gray-500 italic">
+              Topic information is available in the lesson details.
+            </p>
           </div>
         </div>
       )}
@@ -357,38 +346,9 @@ export default function LessonView() {
   );
 
   const renderMetadataFooter = contentData => {
-    if (!contentData?.metadata) {
-      return null;
-    }
-
-    const { metadata } = contentData;
-    return (
-      <div
-        className={`mt-4 p-3 rounded-lg border ${
-          theme === 'day-mode'
-            ? 'bg-blue-50 border-blue-200 text-blue-700'
-            : 'bg-blue-900/20 border-blue-600/40 text-blue-200'
-        }`}
-      >
-        <div className="text-xs space-y-1">
-          {metadata.lessonTopic && (
-            <p>
-              <strong>Topic:</strong> {metadata.lessonTopic}
-            </p>
-          )}
-          {metadata.lessonDescription && (
-            <p>
-              <strong>Description:</strong> {metadata.lessonDescription}
-            </p>
-          )}
-          {metadata.skillsList && (
-            <p>
-              <strong>Skills:</strong> {metadata.skillsList.join(', ')}
-            </p>
-          )}
-        </div>
-      </div>
-    );
+    // Metadata footer removed - redundant metadata (topic, language, skills) is stored in topics table
+    // Only essential metadata (like style, generated_at) is kept in content_data.metadata
+    return null;
   };
 
   const renderContentItem = (formatType, contentItem, index) => {

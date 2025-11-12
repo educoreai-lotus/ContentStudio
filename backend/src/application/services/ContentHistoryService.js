@@ -1,4 +1,5 @@
 import { ContentDTO } from '../dtos/ContentDTO.js';
+import { ContentDataCleaner } from '../utils/ContentDataCleaner.js';
 
 const CONTENT_TYPE_MAP = {
   1: 'text_audio',
@@ -44,12 +45,18 @@ export class ContentHistoryService {
           })()
         : rawContentData;
 
+    // Clean content_data before saving to history to remove duplicates and redundant fields
+    const cleanedContentData = ContentDataCleaner.clean(
+      normalizedContentData,
+      content.content_type_id
+    );
+
     const now = new Date();
     const payload = {
       topic_id: content.topic_id,
       content_type_id: content.content_type_id,
       generation_method_id: content.generation_method_id,
-      content_data: normalizedContentData,
+      content_data: cleanedContentData,
       created_at: now,
       updated_at: now,
     };
