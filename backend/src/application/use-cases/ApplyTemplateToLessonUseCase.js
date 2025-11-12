@@ -73,9 +73,10 @@ export class ApplyTemplateToLessonUseCase {
     
     // Also create reverse lookup for finding content
     // Try multiple variations to handle database inconsistencies (spaces, different names)
+    // Database uses: 'text_audio' for text+audio content
     const possibleDbNames = {
-      'text': ['text_audio', 'text', 'text '], // Try text_audio first, then text variations
-      'audio': ['text_audio', 'audio', 'audio '], // Audio might be in text_audio
+      'text': ['text_audio', 'text', 'text '], // Try text_audio first (correct DB name), then text variations
+      'audio': ['text_audio', 'audio', 'audio '], // Audio is usually part of text_audio content
       'code': ['code', 'code '],
       'presentation': ['presentation', 'presentation '],
       'mind_map': ['mind_map', 'mind_map '],
