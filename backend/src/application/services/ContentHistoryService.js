@@ -155,16 +155,11 @@ export class ContentHistoryService {
       throw new Error('History entry not found');
     }
 
-    const content =
-      (typeof this.contentRepository.findLatestByTopicAndType === 'function'
-        ? await this.contentRepository.findLatestByTopicAndType(
-            historyEntry.topic_id,
-            historyEntry.content_type_id
-          )
-        : null) ||
-      (typeof this.contentRepository.findById === 'function'
-        ? await this.contentRepository.findById(historyEntry.source_content_id)
-        : null);
+    const content = await this.contentRepository.findLatestByTopicAndType(
+      historyEntry.topic_id,
+      historyEntry.content_type_id
+    );
+    
     if (!content) {
       throw new Error('Content not found for history entry');
     }
@@ -172,24 +167,6 @@ export class ContentHistoryService {
     await this.saveVersion(content, { force: true });
 
     const updatedContent = await this.contentRepository.update(content.content_id, {
-      content_data: historyEntry.content_data,
-    });
-
-    try {
-      await this.contentHistoryRepository.softDelete(historyId);
-    } catch (error) {
-      console.warn('[ContentHistoryService] Failed to archive restored history entry:', error.message);
-    }
-
-    return ContentDTO.toContentResponse(updatedContent);
-  }
-    if (!content) {
-      throw new Error('Content not found for history entry');
-    }
-
-    await this.saveVersion(content, { force: true });
-
-    const updatedContent = await this.contentRepository.update(historyEntry.content_id, {
       content_data: historyEntry.content_data,
     });
 

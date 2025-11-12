@@ -24,15 +24,18 @@ export class RestoreContentVersionUseCase {
       throw new Error('Version not found');
     }
 
-    // Get the content
-    const content = await this.contentRepository.findById(version.content_id);
+    // Get the content by topic_id and content_type_id (not content_id)
+    const content = await this.contentRepository.findLatestByTopicAndType(
+      version.topic_id,
+      version.content_type_id
+    );
     if (!content) {
       throw new Error('Content not found');
     }
 
     // Update content with version data
     const updatedContent = await this.contentRepository.update(
-      version.content_id,
+      content.content_id,
       {
         content_data: version.content_data,
       }
@@ -40,7 +43,7 @@ export class RestoreContentVersionUseCase {
 
     // Create a new version from the restored version (preserve history)
     await this.createContentVersionUseCase.execute(
-      version.content_id,
+      content.content_id,
       version.content_data,
       restoredBy,
       `Restored from version ${version.version_number}`
