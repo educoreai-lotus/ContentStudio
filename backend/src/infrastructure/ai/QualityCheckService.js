@@ -4,7 +4,7 @@ import { OpenAIClient } from '../external-apis/openai/OpenAIClient.js';
 
 /**
  * Quality Check Service Implementation
- * Uses OpenAI GPT-4o-mini for quality checks
+ * Uses OpenAI GPT-4o for quality checks (more accurate plagiarism detection)
  */
 export class QualityCheckService extends IQualityCheckService {
   constructor({ openaiApiKey, qualityCheckRepository, contentRepository, topicRepository, courseRepository }) {
@@ -217,6 +217,7 @@ Rules:
     try {
       const response = await this.openaiClient.generateText(userPrompt, {
         systemPrompt,
+        model: 'gpt-4o', // Use GPT-4o for better plagiarism detection accuracy
         temperature: 0.25,
         max_tokens: 350,
       });

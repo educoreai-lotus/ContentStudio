@@ -13,15 +13,16 @@ export class OpenAIClient {
   }
 
   /**
-   * Generate text using GPT-4o-mini
+   * Generate text using OpenAI models (default: gpt-4o-mini)
    * @param {string} prompt - Generation prompt
    * @param {Object} options - Generation options
+   * @param {string} options.model - Model to use (default: 'gpt-4o-mini')
    * @returns {Promise<string>} Generated text
    */
   async generateText(prompt, options = {}) {
     try {
       const response = await this.client.chat.completions.create({
-        model: 'gpt-4o-mini',
+        model: options.model || 'gpt-4o-mini',
         messages: [
           {
             role: 'system',
