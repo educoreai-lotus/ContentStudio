@@ -21,8 +21,21 @@ export class OpenAIClient {
    */
   async generateText(prompt, options = {}) {
     try {
+      const model = options.model || 'gpt-4o-mini';
+      const temperature = options.temperature || 0.7;
+      const max_tokens = options.max_tokens || 2000;
+
+      console.log('🔥 [OpenAIClient] Calling OpenAI with model:', model);
+      console.log('🔥 [OpenAIClient] Request params:', {
+        model,
+        temperature,
+        max_tokens,
+        promptLength: prompt?.length || 0,
+        systemPromptLength: options.systemPrompt?.length || 0,
+      });
+
       const response = await this.client.chat.completions.create({
-        model: options.model || 'gpt-4o-mini',
+        model,
         messages: [
           {
             role: 'system',
@@ -35,12 +48,28 @@ export class OpenAIClient {
             content: prompt,
           },
         ],
-        temperature: options.temperature || 0.7,
-        max_tokens: options.max_tokens || 2000,
+        temperature,
+        max_tokens,
       });
 
-      return response.choices[0]?.message?.content || '';
+      const content = response.choices[0]?.message?.content || '';
+      console.log('✅ [OpenAIClient] OpenAI response received:', {
+        model,
+        responseLength: content.length,
+        usage: response.usage ? {
+          prompt_tokens: response.usage.prompt_tokens,
+          completion_tokens: response.usage.completion_tokens,
+          total_tokens: response.usage.total_tokens,
+        } : null,
+      });
+
+      return content;
     } catch (error) {
+      console.error('❌ [OpenAIClient] OpenAI error:', {
+        message: error.message,
+        model: options.model || 'gpt-4o-mini',
+        error: error,
+      });
       throw new Error(`Failed to generate text: ${error.message}`);
     }
   }

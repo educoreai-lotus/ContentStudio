@@ -5,8 +5,16 @@ import { OpenAIClient } from '../external-apis/openai/OpenAIClient.js';
 /**
  * Quality Check Service Implementation
  * Uses OpenAI GPT-4o for quality checks (more accurate plagiarism detection)
+ * 
+ * IMPORTANT: Always uses GPT-4o for manual content quality checks to ensure:
+ * - Accurate plagiarism detection from official documentation
+ * - Better understanding of technical content
+ * - Reliable JSON response parsing
  */
 export class QualityCheckService extends IQualityCheckService {
+  // Always use GPT-4o for quality checks - required for accurate plagiarism detection
+  static QUALITY_CHECK_MODEL = 'gpt-4o';
+  
   constructor({ openaiApiKey, qualityCheckRepository, contentRepository, topicRepository, courseRepository }) {
     super();
     this.openaiClient = openaiApiKey ? new OpenAIClient({ apiKey: openaiApiKey }) : null;
@@ -17,9 +25,14 @@ export class QualityCheckService extends IQualityCheckService {
   }
 
   async triggerQualityCheck(contentId, checkType = 'full') {
+    console.log(`[QualityCheckService] 🔍 Triggering quality check for content: ${contentId}, type: ${checkType}`);
+    
     if (!this.openaiClient) {
+      console.error('[QualityCheckService] ❌ OpenAI client not configured');
       throw new Error('OpenAI client not configured');
     }
+
+    console.log('[QualityCheckService] ✅ OpenAI client is configured, proceeding with quality check');
 
     // Create quality check record
     const qualityCheck = new QualityCheck({
@@ -28,7 +41,9 @@ export class QualityCheckService extends IQualityCheckService {
       status: 'processing',
     });
 
+    console.log('[QualityCheckService] 📝 Creating quality check record in database');
     const savedCheck = await this.qualityCheckRepository.create(qualityCheck);
+    console.log('[QualityCheckService] ✅ Quality check record created:', savedCheck.quality_check_id);
 
     try {
       // Get content for checking
@@ -215,31 +230,64 @@ Rules:
 6. Return JSON only.`;
 
     try {
+      console.log('[QualityCheckService] Running quality check evaluation with GPT-4o');
+      console.log('[QualityCheckService] Content preview:', {
+        topicName,
+        courseName,
+        contentLength: contentText.length,
+        skillsCount: skills?.length || 0,
+      });
+
+      // Always use GPT-4o for quality checks - required for accurate plagiarism detection
+      const model = QualityCheckService.QUALITY_CHECK_MODEL;
+      console.log(`[QualityCheckService] Using model: ${model} for quality check (required for manual content)`);
+      
       const response = await this.openaiClient.generateText(userPrompt, {
         systemPrompt,
-        model: 'gpt-4o', // Use GPT-4o for better plagiarism detection accuracy
+        model, // Always GPT-4o - required for accurate plagiarism detection
         temperature: 0.25,
         max_tokens: 350,
       });
+
+      console.log('🔥 [QualityCheckService] OpenAI RAW RESPONSE:', response);
+      console.log('🔥 [QualityCheckService] Response length:', response?.length || 0);
 
       const cleaned = response.trim();
       const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
 
       if (!jsonMatch) {
+        console.error('❌ [QualityCheckService] No JSON match found in response:', cleaned);
         throw new Error("Invalid JSON returned by OpenAI");
       }
 
+      console.log('✅ [QualityCheckService] JSON match found, length:', jsonMatch[0].length);
+
       const result = JSON.parse(jsonMatch[0]);
 
-      return {
+      console.log('✅ [QualityCheckService] Parsed evaluation result:', {
+        relevance_score: result.relevance_score || result.relevance,
+        originality_score: result.originality_score,
+        difficulty_alignment_score: result.difficulty_alignment_score,
+        consistency_score: result.consistency_score,
+        hasFeedback: !!result.feedback_summary,
+      });
+
+      const evaluationResult = {
         relevance_score: Math.max(0, Math.min(100, result.relevance_score || result.relevance || 100)),
         originality_score: Math.max(0, Math.min(100, result.originality_score || 75)),
         difficulty_alignment_score: Math.max(0, Math.min(100, result.difficulty_alignment_score || 75)),
         consistency_score: Math.max(0, Math.min(100, result.consistency_score || 75)),
         feedback_summary: result.feedback_summary || 'Evaluation completed.',
       };
+
+      console.log('✅ [QualityCheckService] Final evaluation result:', evaluationResult);
+
+      return evaluationResult;
     } catch (err) {
-      console.error("[QualityCheck] Evaluation failed:", err);
+      console.error("❌ [QualityCheckService] Evaluation failed:", {
+        error: err.message,
+        stack: err.stack,
+      });
       throw new Error("Evaluation failed: " + err.message);
     }
   }
