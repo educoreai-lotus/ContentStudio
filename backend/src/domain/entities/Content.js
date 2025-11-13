@@ -88,10 +88,11 @@ export class Content {
   /**
    * Check if content needs quality check
    * @returns {boolean}
+   * Content needs quality check if it was created manually (manual or manual_edited)
+   * This does NOT depend on quality_check_status, as the status changes after the check completes
    */
   needsQualityCheck() {
-    // Content needs quality check if status is null or 'pending'
-    return this.quality_check_status === null || this.quality_check_status === 'pending';
+    return this.generation_method_id === 'manual' || this.generation_method_id === 'manual_edited';
   }
 
   /**

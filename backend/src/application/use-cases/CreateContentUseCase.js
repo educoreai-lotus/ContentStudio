@@ -68,6 +68,11 @@ export class CreateContentUseCase {
         try {
           await this.qualityCheckService.triggerQualityCheck(updatedContent.content_id);
           console.log('[CreateContentUseCase] Quality check passed, proceeding with audio generation');
+          // Reload content to get updated quality check status and results
+          const contentAfterQualityCheck = await this.contentRepository.findById(updatedContent.content_id);
+          if (contentAfterQualityCheck) {
+            updatedContent = contentAfterQualityCheck;
+          }
         } catch (error) {
           console.error('[CreateContentUseCase] Quality check failed, rejecting content:', error.message);
           // Re-throw if quality check fails (content should be rejected, no audio generation)
@@ -101,6 +106,11 @@ export class CreateContentUseCase {
       try {
         await this.qualityCheckService.triggerQualityCheck(createdContent.content_id);
         console.log('[CreateContentUseCase] Quality check passed, proceeding with audio generation');
+        // Reload content to get updated quality check status and results
+        const contentAfterQualityCheck = await this.contentRepository.findById(createdContent.content_id);
+        if (contentAfterQualityCheck) {
+          createdContent = contentAfterQualityCheck;
+        }
       } catch (error) {
         // Re-throw if quality check fails (content should be rejected, no audio generation)
         console.error('[CreateContentUseCase] Quality check failed, rejecting content:', error.message);
