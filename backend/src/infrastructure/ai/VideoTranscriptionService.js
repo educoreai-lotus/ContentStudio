@@ -79,6 +79,7 @@ export class VideoTranscriptionService {
 
       logger.info('[VideoTranscriptionService] YouTube captions extracted successfully', {
         videoId,
+        lang,
         length: transcript.length,
       });
 
@@ -91,6 +92,70 @@ export class VideoTranscriptionService {
       });
       return null;
     }
+  }
+
+  /**
+   * Try to fetch YouTube captions in multiple languages
+   * @param {string} videoId - YouTube video ID
+   * @returns {Promise<{transcript: string, lang: string}|null>} Transcript with language or null
+   */
+  async fetchYouTubeCaptionsMultiLang(videoId) {
+    // Try multiple languages in order of preference
+    const languagesToTry = ['en', 'he', 'ar', 'auto', 'en-US', 'en-GB'];
+    
+    for (const lang of languagesToTry) {
+      try {
+        logger.info('[VideoTranscriptionService] Trying to fetch captions', { videoId, lang });
+        const transcript = await this.fetchYouTubeCaptions(videoId, lang);
+        if (transcript && transcript.length > 0) {
+          return { transcript, lang };
+        }
+      } catch (error) {
+        logger.debug('[VideoTranscriptionService] Failed to fetch captions for language', {
+          videoId,
+          lang,
+          error: error.message,
+        });
+        // Continue to next language
+      }
+    }
+
+    // Try without specifying language (auto-detect)
+    try {
+      logger.info('[VideoTranscriptionService] Trying auto-detect captions', { videoId });
+      const subtitles = await getSubtitles({
+        videoID: videoId,
+      });
+      
+      if (subtitles && subtitles.length > 0) {
+        let transcript = '';
+        for (const subtitle of subtitles) {
+          if (subtitle.text) {
+            transcript += subtitle.text + ' ';
+          }
+        }
+        transcript = transcript
+          .replace(/\n/g, ' ')
+          .replace(/\s+/g, ' ')
+          .replace(/[^\w\s.,!?;:()\-'"]/g, '')
+          .trim();
+        
+        if (transcript && transcript.length > 0) {
+          logger.info('[VideoTranscriptionService] Auto-detect captions found', {
+            videoId,
+            length: transcript.length,
+          });
+          return { transcript, lang: 'auto' };
+        }
+      }
+    } catch (error) {
+      logger.debug('[VideoTranscriptionService] Auto-detect failed', {
+        videoId,
+        error: error.message,
+      });
+    }
+
+    return null;
   }
 
   /**
@@ -149,7 +214,7 @@ export class VideoTranscriptionService {
 
   /**
    * Transcribe video from YouTube URL
-   * Tries captions first, falls back to Whisper if captions unavailable
+   * Tries captions first in multiple languages, falls back to Whisper if captions unavailable
    * @param {string} youtubeUrl - YouTube URL
    * @param {Object} options - Options
    * @returns {Promise<Object>} { transcript, source, videoType }
@@ -162,26 +227,44 @@ export class VideoTranscriptionService {
 
     logger.info('[VideoTranscriptionService] Processing YouTube URL', { youtubeUrl, videoId });
 
-    // Try YouTube captions first
-    const captions = await this.fetchYouTubeCaptions(videoId, options.lang || 'en');
-    if (captions && captions.length > 0) {
+    // Try YouTube captions first - try multiple languages
+    let captionsResult = null;
+    
+    // If specific language requested, try it first
+    if (options.lang) {
+      const captions = await this.fetchYouTubeCaptions(videoId, options.lang);
+      if (captions && captions.length > 0) {
+        captionsResult = { transcript: captions, lang: options.lang };
+      }
+    }
+    
+    // If not found, try multiple languages
+    if (!captionsResult) {
+      captionsResult = await this.fetchYouTubeCaptionsMultiLang(videoId);
+    }
+
+    if (captionsResult && captionsResult.transcript && captionsResult.transcript.length > 0) {
+      logger.info('[VideoTranscriptionService] YouTube captions found', {
+        videoId,
+        lang: captionsResult.lang,
+        length: captionsResult.transcript.length,
+      });
       return {
-        transcript: captions,
+        transcript: captionsResult.transcript,
         source: 'youtube-captions',
         videoType: 'youtube',
         videoId,
       };
     }
 
-    // Fallback to Whisper (would need to download video/audio first)
-    // For now, we'll throw an error and let the caller handle it
-    // In production, you might want to download the audio and use Whisper
-    logger.warn('[VideoTranscriptionService] No captions found, Whisper fallback not implemented for YouTube', {
+    // No captions found - inform user but don't throw error
+    // The frontend will handle this gracefully
+    logger.warn('[VideoTranscriptionService] No captions found after trying multiple languages', {
       videoId,
     });
 
     throw new Error(
-      'No captions available for this YouTube video. Please upload the video file directly or ensure the video has captions enabled.'
+      'No captions available for this YouTube video. The video may not have captions enabled, or they may be in a language we cannot detect. Please try uploading the video file directly, or ensure the video has captions enabled on YouTube.'
     );
   }
 
