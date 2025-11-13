@@ -15,8 +15,7 @@
     "format": "prettier --write \"src/**/*.js\" \"tests/**/*.js\"",
     "format:check": "prettier --check \"src/**/*.js\" \"tests/**/*.js\"",
     "migrate": "node scripts/run-migrations.js",
-    "migrate:custom": "node scripts/run-migrations.js",
-    "postinstall": "node scripts/download-yt-dlp.js"
+    "migrate:custom": "node scripts/run-migrations.js"
   },
   "keywords": [
     "content-studio",

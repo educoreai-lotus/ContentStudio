@@ -4,10 +4,7 @@ import { logger } from '../logging/Logger.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
-
-const execFileAsync = promisify(execFile);
+import axios from 'axios';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -19,37 +16,8 @@ const __dirname = path.dirname(__filename);
 export class VideoTranscriptionService {
   constructor({ openaiApiKey }) {
     this.openaiClient = openaiApiKey ? new OpenAIClient({ apiKey: openaiApiKey }) : null;
-    // yt-dlp binary path (bundled with the project)
-    this.ytDlpPath = path.join(process.cwd(), 'bin', 'yt-dlp');
-  }
-
-  /**
-   * Get yt-dlp binary path
-   * @returns {string} Path to yt-dlp binary
-   * @throws {Error} If binary doesn't exist
-   */
-  getYtDlpPath() {
-    // Check if binary exists
-    if (!fs.existsSync(this.ytDlpPath)) {
-      throw new Error(
-        `yt-dlp binary not found at ${this.ytDlpPath}. ` +
-        'Please download it from https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp ' +
-        'and place it in the bin/ directory.'
-      );
-    }
-
-    // Make sure it's executable (Unix/Linux)
-    if (process.platform !== 'win32') {
-      try {
-        fs.chmodSync(this.ytDlpPath, 0o755);
-      } catch (error) {
-        logger.warn('[VideoTranscriptionService] Failed to set executable permissions', {
-          error: error.message,
-        });
-      }
-    }
-
-    return this.ytDlpPath;
+    // Piped.video API base URL
+    this.pipedApiUrl = 'https://piped.video';
   }
 
   /**
@@ -319,7 +287,7 @@ export class VideoTranscriptionService {
 
   /**
    * Download YouTube audio and transcribe with Whisper (fallback method)
-   * Uses youtubei.js to download audio (works on Railway without binary)
+   * Uses Piped.video API to get audio stream URL and download directly
    * @param {string} youtubeUrl - YouTube URL
    * @param {string} videoId - YouTube video ID
    * @returns {Promise<Object>} { transcript, source, videoType }
@@ -340,111 +308,140 @@ export class VideoTranscriptionService {
       fs.mkdirSync(tempDir, { recursive: true });
     }
 
-    // Use output template to ensure correct filename
-    const outputTemplate = path.join(tempDir, `youtube_${videoId}_%(id)s.%(ext)s`);
-    const audioPath = path.join(tempDir, `youtube_${videoId}_${videoId}.mp3`);
+    const audioPath = path.join(tempDir, `${videoId}.mp3`);
 
     try {
-      // Get yt-dlp binary path
-      const ytDlpBinary = this.getYtDlpPath();
-
-      logger.info('[VideoTranscriptionService] Downloading YouTube audio with yt-dlp...', {
+      // Step 1: Get video streams from Piped.video API
+      logger.info('[VideoTranscriptionService] Fetching video streams from Piped.video API...', {
         videoId,
-        youtubeUrl,
-        ytDlpPath: ytDlpBinary,
+        apiUrl: `${this.pipedApiUrl}/streams/${videoId}`,
       });
 
-      // Download audio using yt-dlp
+      let streamsData;
       try {
-        await execFileAsync(ytDlpBinary, [
-          '--extract-audio',
-          '--audio-format', 'mp3',
-          '--audio-quality', '0', // Best quality
-          '--no-playlist',
-          '--quiet',
-          '--no-warnings',
-          '-o', outputTemplate,
-          youtubeUrl,
-        ]);
-      } catch (execError) {
-        logger.error('[VideoTranscriptionService] yt-dlp exec failed', {
-          videoId,
-          error: execError.message,
-          stderr: execError.stderr?.toString(),
-          stdout: execError.stdout?.toString(),
+        const response = await axios.get(`${this.pipedApiUrl}/streams/${videoId}`, {
+          timeout: 30000, // 30 seconds timeout
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          },
         });
-        throw new Error(`Failed to download YouTube audio: ${execError.message}`);
+        streamsData = response.data;
+      } catch (apiError) {
+        logger.error('[VideoTranscriptionService] Piped.video API request failed', {
+          videoId,
+          error: apiError.message,
+          status: apiError.response?.status,
+          statusText: apiError.response?.statusText,
+        });
+        throw new Error(`Failed to fetch video streams from Piped.video: ${apiError.message}`);
       }
 
-      // Wait a bit for file to be written
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Step 2: Find the best audio stream
+      if (!streamsData || !streamsData.audioStreams || !Array.isArray(streamsData.audioStreams)) {
+        logger.error('[VideoTranscriptionService] No audio streams found in Piped.video response', {
+          videoId,
+          responseKeys: streamsData ? Object.keys(streamsData) : null,
+        });
+        throw new Error('No audio streams available for this video');
+      }
 
-      // Verify file was written
-      if (!fs.existsSync(audioPath)) {
-        // Try to find the file with different naming
-        const files = fs.readdirSync(tempDir).filter(f => f.startsWith(`youtube_${videoId}_`));
-        if (files.length > 0) {
-          const foundFile = path.join(tempDir, files[0]);
-          logger.info('[VideoTranscriptionService] Found audio file with different name', {
-            expected: audioPath,
-            found: foundFile,
-          });
-          // Use the found file
-          const actualAudioPath = foundFile;
-          const fileSize = fs.statSync(actualAudioPath).size;
-          if (fileSize === 0) {
-            throw new Error('Downloaded audio file is empty');
-          }
+      // Find best quality audio stream (highest bitrate)
+      const audioStreams = streamsData.audioStreams.filter(stream => 
+        stream.mimeType && stream.mimeType.includes('audio')
+      );
 
-          logger.info('[VideoTranscriptionService] Audio downloaded successfully', {
-            videoId,
-            audioPath: actualAudioPath,
-            fileSize,
-          });
+      if (audioStreams.length === 0) {
+        logger.error('[VideoTranscriptionService] No audio streams with audio mimeType found', {
+          videoId,
+          availableStreams: streamsData.audioStreams.map(s => ({
+            mimeType: s.mimeType,
+            quality: s.quality,
+          })),
+        });
+        throw new Error('No audio streams available for this video');
+      }
 
-          // Transcribe with Whisper
-          logger.info('[VideoTranscriptionService] Transcribing with Whisper...', {
-            videoId,
-          });
+      // Sort by bitrate (highest first) and take the best one
+      const bestAudioStream = audioStreams.sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0))[0];
 
-          const transcript = await this.transcribeWithWhisper(actualAudioPath, { language: 'en' });
+      if (!bestAudioStream.url) {
+        logger.error('[VideoTranscriptionService] Audio stream has no URL', {
+          videoId,
+          stream: bestAudioStream,
+        });
+        throw new Error('Audio stream URL is missing');
+      }
 
-          if (!transcript || transcript.trim().length === 0) {
-            throw new Error('Whisper transcription returned empty result');
-          }
+      logger.info('[VideoTranscriptionService] Found best audio stream', {
+        videoId,
+        mimeType: bestAudioStream.mimeType,
+        bitrate: bestAudioStream.bitrate,
+        quality: bestAudioStream.quality,
+        url: bestAudioStream.url.substring(0, 100) + '...',
+      });
 
-          // Clean up downloaded file
-          try {
-            if (fs.existsSync(actualAudioPath)) {
-              fs.unlinkSync(actualAudioPath);
-              logger.debug('[VideoTranscriptionService] Temporary audio file deleted', { audioPath: actualAudioPath });
+      // Step 3: Download audio from the stream URL
+      logger.info('[VideoTranscriptionService] Downloading audio from stream URL...', {
+        videoId,
+        audioPath,
+      });
+
+      try {
+        const audioResponse = await axios({
+          method: 'GET',
+          url: bestAudioStream.url,
+          responseType: 'stream',
+          timeout: 300000, // 5 minutes timeout for large files
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          },
+        });
+
+        // Write stream to file
+        const writeStream = fs.createWriteStream(audioPath);
+        audioResponse.data.pipe(writeStream);
+
+        await new Promise((resolve, reject) => {
+          writeStream.on('finish', resolve);
+          writeStream.on('error', (error) => {
+            try {
+              if (fs.existsSync(audioPath)) {
+                fs.unlinkSync(audioPath);
+              }
+            } catch (unlinkError) {
+              // Ignore cleanup errors
             }
-          } catch (cleanupError) {
-            logger.warn('[VideoTranscriptionService] Failed to cleanup downloaded audio', {
-              audioPath: actualAudioPath,
-              error: cleanupError.message,
-            });
-          }
-
-          logger.info('[VideoTranscriptionService] Transcript ready', {
-            videoId,
-            transcriptLength: transcript.length,
-            source: 'whisper',
+            reject(error);
           });
-
-          return {
-            transcript,
-            source: 'whisper',
-            videoType: 'youtube',
-            videoId,
-          };
-        }
-        throw new Error('Audio file was not downloaded from YouTube. The download may have failed or the file path is incorrect.');
+          audioResponse.data.on('error', (error) => {
+            writeStream.destroy();
+            try {
+              if (fs.existsSync(audioPath)) {
+                fs.unlinkSync(audioPath);
+              }
+            } catch (unlinkError) {
+              // Ignore cleanup errors
+            }
+            reject(error);
+          });
+        });
+      } catch (downloadError) {
+        logger.error('[VideoTranscriptionService] Audio download failed', {
+          videoId,
+          error: downloadError.message,
+          url: bestAudioStream.url.substring(0, 100) + '...',
+        });
+        throw new Error(`Failed to download audio stream: ${downloadError.message}`);
       }
 
-      // File found with expected name
+      // Step 4: Verify file was downloaded
+      if (!fs.existsSync(audioPath)) {
+        throw new Error('Audio file was not downloaded. The download may have failed.');
+      }
+
       const fileSize = fs.statSync(audioPath).size;
       if (fileSize === 0) {
+        fs.unlinkSync(audioPath);
         throw new Error('Downloaded audio file is empty');
       }
 
@@ -454,7 +451,7 @@ export class VideoTranscriptionService {
         fileSize,
       });
 
-      // Transcribe with Whisper
+      // Step 5: Transcribe with Whisper
       logger.info('[VideoTranscriptionService] Transcribing with Whisper...', {
         videoId,
       });
@@ -465,7 +462,7 @@ export class VideoTranscriptionService {
         throw new Error('Whisper transcription returned empty result');
       }
 
-      // Clean up downloaded file
+      // Step 6: Clean up downloaded file
       try {
         if (fs.existsSync(audioPath)) {
           fs.unlinkSync(audioPath);
