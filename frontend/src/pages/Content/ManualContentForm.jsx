@@ -3,6 +3,9 @@ import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import { contentService } from '../../services/content.js';
 import { useApp } from '../../context/AppContext.jsx';
 import { StatusStream } from '../../components/StatusStream.jsx';
+import { PopupModal } from '../../components/PopupModal.jsx';
+import { usePopup } from '../../hooks/usePopup.js';
+import { useStatusStream, isImportant } from '../../hooks/useStatusStream.js';
 
 const MAX_TEXT_LENGTH = 4000;
 
@@ -50,7 +53,10 @@ export const ManualContentForm = () => {
   }, [initialFormData]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [statusMessages, setStatusMessages] = useState([]);
+  
+  // Use hooks for popup and status stream
+  const { showPopup, hidePopup, popupData } = usePopup();
+  const { messages, addMessage, clearMessages } = useStatusStream();
 
   const handleInputChange = (field, value) => {
     if (field === 'text') {
@@ -91,6 +97,10 @@ export const ManualContentForm = () => {
     try {
       setLoading(true);
       setError(null);
+      clearMessages(); // Clear previous messages
+      
+      // Add initial status message
+      addMessage({ message: 'Starting content creation...', timestamp: new Date().toISOString() });
 
       let content_data = {};
 
@@ -159,6 +169,9 @@ export const ManualContentForm = () => {
         };
       }
 
+      // Add message before API call
+      addMessage({ message: 'Saving content...', timestamp: new Date().toISOString() });
+
       // Save to database
       const response = await contentService.approve({
         topic_id: parseInt(topicId),
@@ -172,11 +185,88 @@ export const ManualContentForm = () => {
       // Build message with quality check results
       let message = response.message || 'Content created successfully!';
       let qualityCheckInfo = response.qualityCheck || null;
-      const messages = response.status_messages || [];
+      const statusMessagesFromBackend = response.status_messages || [];
 
-      // Update status messages if available
-      if (messages.length > 0) {
-        setStatusMessages(messages);
+      // Process status messages: show popups for important events, add others to stream
+      statusMessagesFromBackend.forEach((msg) => {
+        const messageText = typeof msg === 'string' ? msg : (msg.message || '');
+        const timestamp = typeof msg === 'object' ? msg.timestamp : new Date().toISOString();
+        
+        if (isImportant(messageText)) {
+          // Show popup for important events
+          const lowerMessage = messageText.toLowerCase();
+          let popupType = 'info';
+          let popupTitle = '';
+          let popupMessage = '';
+          let popupDetails = '';
+          let popupReason = '';
+
+          if ((lowerMessage.includes('quality check') && lowerMessage.includes('completed successfully')) || 
+              (lowerMessage.includes('quality check') && lowerMessage.includes('passed'))) {
+            popupType = 'success';
+            popupTitle = 'Quality Check Passed';
+            popupMessage = 'Quality Check Completed Successfully!';
+            popupDetails = 'Your content has passed all evaluation steps. Audio is being generated now...';
+          } else if (lowerMessage.includes('quality check') && lowerMessage.includes('failed')) {
+            popupType = 'error';
+            popupTitle = 'Quality Check Failed';
+            popupMessage = 'Quality Check Failed';
+            // Extract reason from message
+            const reasonMatch = messageText.match(/Quality check failed: (.+)/i);
+            if (reasonMatch) {
+              popupReason = reasonMatch[1];
+            } else {
+              popupReason = messageText.replace(/Quality check failed:?/i, '').trim();
+            }
+            popupDetails = 'Please rewrite the content in your own words.';
+          } else if (lowerMessage.includes('audio generation') && lowerMessage.includes('failed')) {
+            popupType = 'error';
+            popupTitle = 'Audio Generation Failed';
+            popupMessage = 'Audio Generation Failed';
+            const reasonMatch = messageText.match(/Audio generation failed: (.+)/i);
+            if (reasonMatch) {
+              popupReason = reasonMatch[1];
+            } else {
+              popupReason = messageText.replace(/Audio generation failed:?/i, '').trim();
+            }
+          } else if (lowerMessage.includes('audio generation') && lowerMessage.includes('completed')) {
+            popupType = 'success';
+            popupTitle = 'Audio Generated';
+            popupMessage = 'Audio Generation Completed Successfully!';
+            popupDetails = 'Your audio is ready.';
+          } else if (lowerMessage.includes('content saved') || lowerMessage.includes('successfully')) {
+            popupType = 'success';
+            popupTitle = 'Content Saved Successfully';
+            popupMessage = 'Content Saved Successfully!';
+            popupDetails = 'Your text and audio are now ready.';
+          } else if (lowerMessage.includes('rejected')) {
+            popupType = 'error';
+            popupTitle = 'Content Rejected';
+            popupMessage = 'Content Rejected';
+            popupReason = messageText.replace(/Content rejected:?/i, '').trim();
+          }
+
+          showPopup({
+            type: popupType,
+            title: popupTitle || messageText,
+            message: popupMessage || messageText,
+            details: popupDetails,
+            reason: popupReason,
+          });
+        } else {
+          // Add to status stream for non-important messages
+          addMessage({ message: messageText, timestamp });
+        }
+      });
+
+      // If no status messages but we have a success message, show popup
+      if (statusMessagesFromBackend.length === 0 && message.includes('successfully')) {
+        showPopup({
+          type: 'success',
+          title: 'Content Saved Successfully',
+          message: 'Content Saved Successfully!',
+          details: 'Your text and audio are now ready.',
+        });
       }
 
       // Navigate back to content manager with quality check info
@@ -184,11 +274,23 @@ export const ManualContentForm = () => {
         state: { 
           message,
           qualityCheck: qualityCheckInfo,
-          statusMessages: messages,
+          statusMessages: statusMessagesFromBackend,
         },
       });
     } catch (err) {
-      setError(err.message || 'Failed to create content');
+      const errorMessage = err.message || 'Failed to create content';
+      setError(errorMessage);
+      
+      // Show error popup
+      showPopup({
+        type: 'error',
+        title: 'Error',
+        message: 'Content Creation Failed',
+        reason: errorMessage,
+      });
+      
+      // Add error to status stream
+      addMessage({ message: errorMessage, timestamp: new Date().toISOString() });
     } finally {
       setLoading(false);
     }
@@ -322,9 +424,17 @@ export const ManualContentForm = () => {
         )}
 
         {/* Status Messages Stream */}
-        {statusMessages.length > 0 && (
-          <StatusStream messages={statusMessages} theme={theme} />
+        {messages.length > 0 && (
+          <StatusStream messages={messages} theme={theme} />
         )}
+
+        {/* Popup Modal */}
+        <PopupModal
+          popupData={popupData}
+          onClose={hidePopup}
+          theme={theme}
+          autoClose={popupData?.type === 'success'}
+        />
 
         <form onSubmit={handleSubmit}>
           <div

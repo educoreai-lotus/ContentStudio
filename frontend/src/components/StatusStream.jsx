@@ -75,25 +75,27 @@ export const StatusStream = ({ messages = [], theme = 'day-mode' }) => {
   };
 
   return (
-    <div className={`mt-4 space-y-2 max-h-64 overflow-y-auto ${theme === 'day-mode' ? 'bg-white' : 'bg-gray-800/30'} rounded-lg p-3`}>
-      <div className={`text-xs font-semibold mb-2 ${theme === 'day-mode' ? 'text-gray-600' : 'text-gray-400'}`}>
+    <div className={`mt-4 space-y-1.5 max-h-[250px] overflow-y-auto ${theme === 'day-mode' ? 'bg-white border border-gray-200' : 'bg-gray-800/30 border border-gray-700'} rounded-lg p-3`}>
+      <div className={`text-xs font-semibold mb-2 sticky top-0 ${theme === 'day-mode' ? 'bg-white text-gray-600' : 'bg-gray-800/30 text-gray-400'} pb-1`}>
         Status Updates
       </div>
       {messages.map((msg, index) => {
-        const type = getMessageType(msg.message);
+        const messageText = typeof msg === 'string' ? msg : msg.message;
+        const timestamp = typeof msg === 'object' ? msg.timestamp : null;
+        const type = getMessageType(messageText);
         const icon = getMessageIcon(type);
         const colorClass = getMessageColor(type);
         
         return (
           <div
             key={index}
-            className={`text-xs px-3 py-2 rounded border ${colorClass} flex items-start gap-2`}
+            className={`text-xs px-2.5 py-1.5 rounded border ${colorClass} flex items-center gap-2`}
           >
-            <span className="font-semibold flex-shrink-0">{icon}</span>
-            <span className="flex-1">{msg.message}</span>
-            {msg.timestamp && (
+            <span className="font-semibold flex-shrink-0 text-xs">{icon}</span>
+            <span className="flex-1 text-xs">{messageText}</span>
+            {timestamp && (
               <span className={`text-xs flex-shrink-0 ${theme === 'day-mode' ? 'text-gray-500' : 'text-gray-400'}`}>
-                {new Date(msg.timestamp).toLocaleTimeString()}
+                {new Date(timestamp).toLocaleTimeString()}
               </span>
             )}
           </div>
