@@ -122,10 +122,23 @@ export function extractErrorReason(errorMessage) {
     return match[1].trim();
   }
 
-  // Pattern: "Content failed quality check: reason"
+  // Pattern: "Content failed quality check: reason (Score: X/100). feedback_summary"
   match = errorMessage.match(/quality check[^:]*:\s*(.+?)(?:\.|$)/i);
   if (match && match[1]) {
-    return match[1].trim();
+    // Extract the reason and feedback, but remove scores
+    const fullReason = match[1].trim();
+    // If it contains scores, extract main reason and feedback
+    const scoreMatch = fullReason.match(/(.+?)\s*\([^)]+\)\s*(.+)?/);
+    if (scoreMatch) {
+      const mainReason = scoreMatch[1].trim();
+      const feedback = scoreMatch[2] ? scoreMatch[2].trim() : '';
+      if (feedback) {
+        return `${mainReason}. ${feedback}`;
+      }
+      return mainReason;
+    }
+    // Remove any score patterns
+    return fullReason.replace(/\s*\([^)]*score[^)]*\)/gi, '').trim();
   }
 
   // Pattern: "reason (Score: X/100)"

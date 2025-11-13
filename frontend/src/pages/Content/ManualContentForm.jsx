@@ -191,7 +191,7 @@ export const ManualContentForm = () => {
       const statusMessagesFromBackend = response.status_messages || [];
 
       // Process status messages: normalize and route to popup or stream
-      statusMessagesFromBackend.forEach((msg) => {
+      for (const msg of statusMessagesFromBackend) {
         const rawMessage = typeof msg === 'string' ? msg : (msg.message || '');
         const normalizedMessage = normalizeStatusMessage(rawMessage);
         const timestamp = typeof msg === 'object' ? msg.timestamp : new Date().toISOString();
@@ -209,6 +209,8 @@ export const ManualContentForm = () => {
           let popupMessage = '';
           let popupReason = '';
           let popupGuidance = '';
+          let popupFeedback = null;
+          let shouldShowPopupNow = true;
 
           if (lowerMessage.includes('quality check passed') || 
               lowerMessage.includes('quality check') && lowerMessage.includes('passed')) {
@@ -219,10 +221,41 @@ export const ManualContentForm = () => {
             popupType = 'error';
             popupTitle = 'Quality Check Failed';
             popupMessage = 'Quality check failed';
-            // Extract reason - always show it
-            const extractedReason = extractErrorReason(rawMessage);
-            popupReason = extractedReason || rawMessage.replace(/quality check failed:?/i, '').trim() || 'Content did not meet quality standards';
-            popupGuidance = getFriendlyGuidance(rawMessage);
+            
+            // Extract detailed reason and feedback from error message
+            // Format: "Content failed quality check: reason (Score: X/100). feedback_summary"
+            const reasonMatch = rawMessage.match(/Content failed quality check:\s*(.+)/i);
+            if (reasonMatch) {
+              const fullReason = reasonMatch[1].trim();
+              // Try to extract main reason and feedback (remove scores)
+              const scoreMatch = fullReason.match(/(.+?)\s*\([^)]+\)\s*(.+)?/);
+              if (scoreMatch) {
+                const mainReason = scoreMatch[1].trim();
+                const feedback = scoreMatch[2] ? scoreMatch[2].trim() : '';
+                // Remove score from reason - just show the main reason
+                popupReason = mainReason;
+                // Use feedback as detailed feedback if it's long enough, otherwise as guidance
+                if (feedback && feedback.length > 100) {
+                  popupFeedback = feedback;
+                  popupGuidance = getFriendlyGuidance(rawMessage);
+                } else if (feedback) {
+                  popupGuidance = feedback;
+                } else {
+                  popupGuidance = getFriendlyGuidance(rawMessage);
+                }
+              } else {
+                // No scores found, use full reason but remove any score patterns
+                popupReason = fullReason.replace(/\s*\([^)]*score[^)]*\)/gi, '').trim();
+                popupGuidance = getFriendlyGuidance(rawMessage);
+              }
+            } else {
+              // Fallback if pattern doesn't match
+              const extractedReason = extractErrorReason(rawMessage);
+              // Remove scores from extracted reason
+              popupReason = (extractedReason || rawMessage.replace(/quality check failed:?/i, '').trim() || 'Content did not meet quality standards')
+                .replace(/\s*\([^)]*score[^)]*\)/gi, '').trim();
+              popupGuidance = getFriendlyGuidance(rawMessage);
+            }
           } else if (lowerMessage.includes('audio generated successfully') || 
                      lowerMessage.includes('audio generation completed')) {
             popupType = 'success';
@@ -258,18 +291,21 @@ export const ManualContentForm = () => {
             }
           }
 
-          showPopup({
-            type: popupType,
-            title: popupTitle,
-            message: popupMessage,
-            reason: popupReason,
-            guidance: popupGuidance,
-          });
+          if (shouldShowPopupNow) {
+            showPopup({
+              type: popupType,
+              title: popupTitle,
+              message: popupMessage,
+              reason: popupReason,
+              guidance: popupGuidance,
+              feedback: popupFeedback,
+            });
+          }
         } else {
           // Add to status stream for non-important messages (already normalized)
           addMessage({ message: normalizedMessage, timestamp });
         }
-      });
+      }
 
       // If no status messages but we have a success message, show popup
       if (statusMessagesFromBackend.length === 0 && message.includes('successfully')) {
@@ -309,19 +345,47 @@ export const ManualContentForm = () => {
       setError(errorMessage);
       
       // Extract user-friendly error info
-      const reason = extractErrorReason(errorMessage);
-      const guidance = getFriendlyGuidance(errorMessage);
+      let reason = extractErrorReason(errorMessage);
+      let guidance = getFriendlyGuidance(errorMessage);
+      let feedback = null;
       
-      // Always show reason - use full message if extractErrorReason didn't find specific reason
-      const displayReason = reason && reason !== errorMessage ? reason : errorMessage;
+      // If error contains quality check failure, extract detailed info
+      if (errorMessage.includes('quality check')) {
+        const reasonMatch = errorMessage.match(/Content failed quality check:\s*(.+)/i);
+        if (reasonMatch) {
+          const fullReason = reasonMatch[1].trim();
+          const scoreMatch = fullReason.match(/(.+?)\s*\([^)]+\)\s*(.+)?/);
+          if (scoreMatch) {
+            const mainReason = scoreMatch[1].trim();
+            const feedbackText = scoreMatch[2] ? scoreMatch[2].trim() : '';
+            // Remove score from reason - just show the main reason
+            reason = mainReason;
+            if (feedbackText && feedbackText.length > 50) {
+              feedback = feedbackText;
+              guidance = getFriendlyGuidance(errorMessage);
+            } else {
+              guidance = feedbackText || getFriendlyGuidance(errorMessage);
+            }
+          } else {
+            // Remove any score patterns from reason
+            reason = fullReason.replace(/\s*\([^)]*score[^)]*\)/gi, '').trim();
+            guidance = getFriendlyGuidance(errorMessage);
+          }
+        }
+      } else {
+        // Always show reason - use full message if extractErrorReason didn't find specific reason
+        reason = reason && reason !== errorMessage ? reason : errorMessage;
+        guidance = guidance || 'Please review your content and try again.';
+      }
       
       // Show error popup
       showPopup({
         type: 'error',
         title: 'Content Creation Failed',
         message: 'Content creation failed',
-        reason: displayReason,
-        guidance: guidance || 'Please review your content and try again.',
+        reason: reason,
+        guidance: guidance,
+        feedback: feedback,
       });
     } finally {
       setLoading(false);

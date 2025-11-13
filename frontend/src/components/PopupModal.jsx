@@ -99,18 +99,36 @@ export const PopupModal = ({ popupData, onClose, theme = 'day-mode', autoClose =
 
         {/* Reason/Error details - Show short reason */}
         {popupData.reason && (
-          <div className={`px-6 pt-2 pb-3 ${
+          <div className={`px-6 pt-3 pb-3 ${
             theme === 'day-mode' ? 'bg-gray-50' : 'bg-gray-700/50'
           } rounded-lg mx-4 mb-3`}>
-            <p className={`text-xs font-medium mb-1 ${
+            <p className={`text-xs font-semibold mb-2 ${
               theme === 'day-mode' ? 'text-gray-700' : 'text-gray-300'
             }`}>
               Reason:
             </p>
-            <p className={`text-xs ${
+            <p className={`text-xs leading-relaxed ${
               theme === 'day-mode' ? 'text-gray-600' : 'text-gray-400'
             }`}>
               {popupData.reason}
+            </p>
+          </div>
+        )}
+
+        {/* Feedback from AI - Show detailed feedback if available */}
+        {popupData.feedback && (
+          <div className={`px-6 pt-3 pb-3 ${
+            theme === 'day-mode' ? 'bg-blue-50' : 'bg-blue-900/20'
+          } rounded-lg mx-4 mb-3`}>
+            <p className={`text-xs font-semibold mb-2 ${
+              theme === 'day-mode' ? 'text-blue-700' : 'text-blue-300'
+            }`}>
+              Detailed Feedback:
+            </p>
+            <p className={`text-xs leading-relaxed ${
+              theme === 'day-mode' ? 'text-blue-600' : 'text-blue-400'
+            }`}>
+              {popupData.feedback}
             </p>
           </div>
         )}
