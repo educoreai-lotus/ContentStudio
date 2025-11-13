@@ -1,7 +1,7 @@
-import { VideoToLessonUseCase } from '../../application/use-cases/VideoToLessonUseCase.js';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import { logger } from '../../infrastructure/logging/Logger.js';
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -40,8 +40,9 @@ const upload = multer({
  * Video-to-Lesson Controller
  */
 export class VideoToLessonController {
-  constructor({ videoToLessonUseCase }) {
+  constructor({ videoToLessonUseCase, videoTranscriptionService }) {
     this.videoToLessonUseCase = videoToLessonUseCase;
+    this.videoTranscriptionService = videoTranscriptionService;
     this.upload = upload;
   }
 
@@ -95,11 +96,93 @@ export class VideoToLessonController {
   }
 
   /**
+   * Handle video transcription (YouTube URL or file upload)
+   * POST /api/video/transcribe
+   */
+  async transcribe(req, res, next) {
+    try {
+      const { youtubeUrl } = req.body;
+      const uploadedFile = req.file;
+
+      // Validate input
+      if (!youtubeUrl && !uploadedFile) {
+        return res.status(400).json({
+          success: false,
+          error: 'Either youtubeUrl or video file is required',
+        });
+      }
+
+      if (!this.videoTranscriptionService) {
+        return res.status(503).json({
+          success: false,
+          error: 'Video transcription service is not available',
+        });
+      }
+
+      let result;
+
+      if (youtubeUrl) {
+        // Handle YouTube URL
+        logger.info('[VideoToLessonController] Transcribing YouTube URL', { youtubeUrl });
+        result = await this.videoTranscriptionService.transcribeYouTube(youtubeUrl);
+      } else if (uploadedFile) {
+        // Handle file upload
+        logger.info('[VideoToLessonController] Transcribing uploaded file', {
+          filename: uploadedFile.originalname,
+          path: uploadedFile.path,
+        });
+        result = await this.videoTranscriptionService.transcribeUploadedFile(uploadedFile.path);
+
+        // Clean up uploaded file after processing
+        try {
+          if (fs.existsSync(uploadedFile.path)) {
+            fs.unlinkSync(uploadedFile.path);
+          }
+        } catch (cleanupError) {
+          logger.warn('[VideoToLessonController] Failed to cleanup uploaded file', {
+            path: uploadedFile.path,
+            error: cleanupError.message,
+          });
+        }
+      }
+
+      res.status(200).json({
+        success: true,
+        data: {
+          transcript: result.transcript,
+          source: result.source,
+          videoType: result.videoType,
+          videoId: result.videoId || null,
+        },
+        message: 'Video transcribed successfully',
+      });
+    } catch (error) {
+      // Clean up file on error
+      if (req.file && fs.existsSync(req.file.path)) {
+        try {
+          fs.unlinkSync(req.file.path);
+        } catch (cleanupError) {
+          logger.warn('[VideoToLessonController] Failed to cleanup file on error', {
+            error: cleanupError.message,
+          });
+        }
+      }
+
+      logger.error('[VideoToLessonController] Transcription failed', {
+        error: error.message,
+        stack: error.stack,
+      });
+
+      next(error);
+    }
+  }
+
+  /**
    * Get multer middleware for file upload
    * @returns {Function} Multer middleware
    */
   getUploadMiddleware() {
-    return this.upload.single('video');
+    return this.upload.single('file');
   }
 }
 

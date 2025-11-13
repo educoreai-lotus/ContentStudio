@@ -1,6 +1,7 @@
 import express from 'express';
 import { VideoToLessonController } from '../controllers/VideoToLessonController.js';
 import { VideoToLessonUseCase } from '../../application/use-cases/VideoToLessonUseCase.js';
+import { VideoTranscriptionService } from '../../infrastructure/ai/VideoTranscriptionService.js';
 import { WhisperClient } from '../../infrastructure/external-apis/openai/WhisperClient.js';
 import { OpenAIClient } from '../../infrastructure/external-apis/openai/OpenAIClient.js';
 import { GeminiClient } from '../../infrastructure/external-apis/gemini/GeminiClient.js';
@@ -44,16 +45,29 @@ const videoToLessonUseCase = new VideoToLessonUseCase({
   aiGenerationService,
 });
 
+// Initialize video transcription service
+const videoTranscriptionService = openaiApiKey
+  ? new VideoTranscriptionService({ openaiApiKey })
+  : null;
+
 // Initialize controller
 const videoToLessonController = new VideoToLessonController({
   videoToLessonUseCase,
+  videoTranscriptionService,
 });
 
-// Route
+// Routes
 router.post(
   '/',
   videoToLessonController.getUploadMiddleware(),
   (req, res, next) => videoToLessonController.transform(req, res, next)
+);
+
+// New transcription endpoint
+router.post(
+  '/transcribe',
+  videoToLessonController.getUploadMiddleware(),
+  (req, res, next) => videoToLessonController.transcribe(req, res, next)
 );
 
 export default router;

@@ -6,6 +6,7 @@ import { useApp } from '../../context/AppContext';
 import { TemplateSelectionModal } from '../../components/Templates/TemplateSelectionModal.jsx';
 import { RegenerateOptionsModal } from '../../components/Content/RegenerateOptionsModal.jsx';
 import { ContentHistorySidebar } from '../../components/Content/ContentHistorySidebar.jsx';
+import { VideoUploadModal } from '../../components/VideoUploadModal.jsx';
 
 const CONTENT_TYPES = [
   { id: 'text', name: 'Text & Audio', icon: 'fa-file-alt', color: 'blue', dbId: 1, allowManual: true },
@@ -33,6 +34,7 @@ export default function TopicContentManager() {
   const [templateAppliedMessage, setTemplateAppliedMessage] = useState(null);
   const [regenerateTarget, setRegenerateTarget] = useState(null);
   const [qualityCheckInfo, setQualityCheckInfo] = useState(null);
+  const [videoUploadModalOpen, setVideoUploadModalOpen] = useState(false);
 
   useEffect(() => {
     fetchContent();
@@ -187,6 +189,25 @@ export default function TopicContentManager() {
   const hasAvatarVideo = existingContent.some(
     content => content.content_type_id === CONTENT_TYPES.find(t => t.id === 'avatar_video')?.dbId
   );
+
+  const handleVideoTranscriptionComplete = async ({ transcript, source, videoType }) => {
+    // After transcription, generate all content formats using the transcript
+    // This will trigger the multi-format generation pipeline
+    try {
+      // Navigate to AI generation page with the transcript as prompt
+      navigate(`/topics/${topicId}/content/ai-generate`, {
+        state: {
+          transcript,
+          source,
+          videoType,
+          autoGenerate: true, // Flag to trigger automatic generation
+        },
+      });
+    } catch (error) {
+      console.error('Failed to process transcription:', error);
+      alert('Failed to process transcription. Please try again.');
+    }
+  };
 
   const handleTemplateApplied = async (templateId, templateData) => {
     await fetchTopicDetails();
@@ -502,6 +523,61 @@ export default function TopicContentManager() {
               ) : null}
             </div>
 
+            {/* Video Upload Banner */}
+            <div
+              className={`mb-8 p-6 rounded-2xl border-2 ${
+                theme === 'day-mode'
+                  ? 'bg-blue-50 border-blue-200'
+                  : 'bg-blue-900/20 border-blue-500/40'
+              }`}
+            >
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <div className="flex items-center mb-3">
+                    <i className="fas fa-video text-2xl mr-3 text-blue-600 dark:text-blue-400"></i>
+                    <h3
+                      className={`text-xl font-semibold ${
+                        theme === 'day-mode' ? 'text-gray-900' : 'text-white'
+                      }`}
+                    >
+                      🎥 Upload a Lesson Video (Optional)
+                    </h3>
+                  </div>
+                  <p
+                    className={`text-sm leading-relaxed mb-4 ${
+                      theme === 'day-mode' ? 'text-gray-700' : 'text-gray-300'
+                    }`}
+                  >
+                    You can upload your lesson video (from your computer or a YouTube link), and
+                    Content Studio will automatically transcribe it and generate all six lesson
+                    formats for you — Text, Audio, Slides, Mind-Map, Code Examples, and Avatar
+                    Video.
+                  </p>
+                  <p
+                    className={`text-xs italic ${
+                      theme === 'day-mode' ? 'text-gray-600' : 'text-gray-400'
+                    }`}
+                  >
+                    This step is completely optional. You can still create each content format
+                    manually or using AI, just like before.
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4">
+                <button
+                  onClick={() => setVideoUploadModalOpen(true)}
+                  className={`px-6 py-3 rounded-lg font-medium transition-colors ${
+                    theme === 'day-mode'
+                      ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                      : 'bg-blue-600 hover:bg-blue-700 text-white'
+                  }`}
+                >
+                  <i className="fas fa-upload mr-2"></i>
+                  Upload Video
+                </button>
+              </div>
+            </div>
+
             {/* Content Types Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {CONTENT_TYPES.map(type => {
@@ -653,6 +729,14 @@ export default function TopicContentManager() {
           onClose={() => setRegenerateTarget(null)}
           onSelect={handleRegenerateSelection}
           contentType={regenerateTarget?.type}
+        />
+
+        <VideoUploadModal
+          open={videoUploadModalOpen}
+          onClose={() => setVideoUploadModalOpen(false)}
+          topicId={parseInt(topicId)}
+          theme={theme}
+          onTranscriptionComplete={handleVideoTranscriptionComplete}
         />
       </div>
     </div>
