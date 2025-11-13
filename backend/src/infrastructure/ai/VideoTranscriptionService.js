@@ -4,7 +4,7 @@ import { logger } from '../logging/Logger.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import YTDlpWrap from 'yt-dlp-wrap';
+import { Innertube } from 'youtubei.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -16,15 +16,29 @@ const __dirname = path.dirname(__filename);
 export class VideoTranscriptionService {
   constructor({ openaiApiKey }) {
     this.openaiClient = openaiApiKey ? new OpenAIClient({ apiKey: openaiApiKey }) : null;
-    // Initialize yt-dlp wrapper (will download yt-dlp binary if needed)
-    try {
-      this.ytDlp = new YTDlpWrap();
-    } catch (error) {
-      logger.warn('[VideoTranscriptionService] yt-dlp-wrap initialization failed, Whisper fallback may not work', {
-        error: error.message,
-      });
-      this.ytDlp = null;
+    // youtubei.js doesn't require binary download - works directly in Node.js
+    this.youtubeClient = null;
+  }
+
+  /**
+   * Initialize YouTube client (lazy initialization)
+   * @returns {Promise<Innertube>} YouTube client instance
+   */
+  async getYouTubeClient() {
+    if (!this.youtubeClient) {
+      logger.info('[VideoTranscriptionService] Initializing YouTube client (youtubei.js)...');
+      try {
+        this.youtubeClient = await Innertube.create();
+        logger.info('[VideoTranscriptionService] YouTube client initialized successfully');
+      } catch (error) {
+        logger.error('[VideoTranscriptionService] YouTube client initialization failed', {
+          error: error.message,
+          stack: error.stack,
+        });
+        throw new Error(`Failed to initialize YouTube client: ${error.message}`);
+      }
     }
+    return this.youtubeClient;
   }
 
   /**
@@ -294,16 +308,13 @@ export class VideoTranscriptionService {
 
   /**
    * Download YouTube audio and transcribe with Whisper (fallback method)
+   * Uses youtubei.js to download audio (works on Railway without binary)
    * @param {string} youtubeUrl - YouTube URL
    * @param {string} videoId - YouTube video ID
    * @returns {Promise<Object>} { transcript, source, videoType }
    * @throws {Error} If download or transcription fails
    */
   async transcribeYouTubeWithWhisper(youtubeUrl, videoId) {
-    if (!this.ytDlp) {
-      throw new Error('yt-dlp not available. Please ensure yt-dlp-wrap is properly installed.');
-    }
-
     if (!this.openaiClient) {
       throw new Error('OpenAI client not available. Please configure OpenAI API key.');
     }
@@ -318,29 +329,62 @@ export class VideoTranscriptionService {
       fs.mkdirSync(tempDir, { recursive: true });
     }
 
-    const audioPath = path.join(tempDir, `youtube_${videoId}_${Date.now()}.m4a`);
+    const audioPath = path.join(tempDir, `youtube_${videoId}_${Date.now()}.mp3`);
 
     try {
-      // Download audio only (best quality, m4a format)
-      logger.info('[VideoTranscriptionService] Downloading YouTube audio...', {
+      // Initialize YouTube client
+      const yt = await this.getYouTubeClient();
+
+      // Get video info
+      logger.info('[VideoTranscriptionService] Fetching video info...', { videoId });
+      const info = await yt.getInfo(videoId);
+
+      // Find best audio format
+      const audioFormat = info.chooseFormat({ type: 'audio', quality: 'best' });
+      if (!audioFormat) {
+        throw new Error('No audio format available for this video');
+      }
+
+      logger.info('[VideoTranscriptionService] Found audio format', {
+        videoId,
+        format: audioFormat.itag,
+        mimeType: audioFormat.mime_type,
+      });
+
+      // Download audio stream
+      logger.info('[VideoTranscriptionService] Downloading YouTube audio stream...', {
         videoId,
         audioPath,
       });
 
-      await this.ytDlp.exec([
-        youtubeUrl,
-        '-f', 'bestaudio[ext=m4a]/bestaudio',
-        '-o', audioPath,
-        '--no-playlist',
-        '--quiet',
-        '--no-warnings',
-      ]);
+      const stream = await audioFormat.download();
 
+      // Write stream to file
+      const writeStream = fs.createWriteStream(audioPath);
+
+      await new Promise((resolve, reject) => {
+        stream.pipe(writeStream);
+        stream.on('end', () => {
+          writeStream.end();
+          resolve();
+        });
+        stream.on('error', (error) => {
+          writeStream.destroy();
+          reject(error);
+        });
+        writeStream.on('error', reject);
+      });
+
+      // Verify file was written
       if (!fs.existsSync(audioPath)) {
-        throw new Error('Audio file was not downloaded from YouTube');
+        throw new Error('Audio file was not downloaded from YouTube. The download may have failed or the file path is incorrect.');
       }
 
       const fileSize = fs.statSync(audioPath).size;
+      if (fileSize === 0) {
+        throw new Error('Downloaded audio file is empty');
+      }
+
       logger.info('[VideoTranscriptionService] Audio downloaded successfully', {
         videoId,
         audioPath,
