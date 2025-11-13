@@ -123,21 +123,31 @@ export function extractErrorReason(errorMessage) {
   }
 
   // Pattern: "Content failed quality check: reason (Score: X/100). feedback_summary"
-  match = errorMessage.match(/quality check[^:]*:\s*(.+?)(?:\.|$)/i);
+  match = errorMessage.match(/Content failed quality check:\s*(.+)/i);
   if (match && match[1]) {
     // Extract the reason and feedback, but remove scores
     const fullReason = match[1].trim();
     // If it contains scores, extract main reason and feedback
+    // Pattern: "reason (Score: X/100). feedback" or "reason (Score: X/100) feedback"
     const scoreMatch = fullReason.match(/(.+?)\s*\([^)]+\)\s*(.+)?/);
     if (scoreMatch) {
       const mainReason = scoreMatch[1].trim();
       const feedback = scoreMatch[2] ? scoreMatch[2].trim() : '';
-      if (feedback) {
-        return `${mainReason}. ${feedback}`;
-      }
+      // Return just the main reason (without score), feedback will be shown separately
       return mainReason;
     }
     // Remove any score patterns
+    return fullReason.replace(/\s*\([^)]*score[^)]*\)/gi, '').trim();
+  }
+  
+  // Also check for "quality check" without "Content failed" prefix
+  match = errorMessage.match(/quality check[^:]*:\s*(.+?)(?:\.|$)/i);
+  if (match && match[1]) {
+    const fullReason = match[1].trim();
+    const scoreMatch = fullReason.match(/(.+?)\s*\([^)]+\)\s*(.+)?/);
+    if (scoreMatch) {
+      return scoreMatch[1].trim(); // Just the main reason
+    }
     return fullReason.replace(/\s*\([^)]*score[^)]*\)/gi, '').trim();
   }
 

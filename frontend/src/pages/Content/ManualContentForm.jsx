@@ -331,15 +331,45 @@ export const ManualContentForm = () => {
       // Clear status on error
       setCurrentStatus(null);
       
-      // Get full error message - check multiple sources
-      let errorMessage = err.message || err.response?.data?.error || err.response?.data?.message || 'Failed to create content';
+      // Check if error has status_messages from backend (quality check errors)
+      // Note: apiClient interceptor returns error.response.data directly, so err is already the response data
+      let errorMessage = 'Failed to create content';
+      let statusMessagesFromError = null;
       
-      // If error has response data, try to get more details
-      if (err.response?.data) {
-        const data = err.response.data;
-        if (data.error) errorMessage = data.error;
-        else if (data.message) errorMessage = data.message;
-        else if (typeof data === 'string') errorMessage = data;
+      // Handle axios error response structure
+      // apiClient interceptor returns error.response.data, so err is already the backend response
+      if (err && typeof err === 'object') {
+        // Backend error structure: { success: false, error: { message: "...", code: "..." } }
+        if (err.error && err.error.message) {
+          errorMessage = err.error.message;
+        }
+        // Check for status_messages first (contains detailed error info)
+        else if (err.status_messages && Array.isArray(err.status_messages) && err.status_messages.length > 0) {
+          statusMessagesFromError = err.status_messages;
+          // Find the failed message
+          const failedMessage = err.status_messages.find(msg => {
+            const msgText = typeof msg === 'string' ? msg : (msg.message || '');
+            return msgText.toLowerCase().includes('failed') || msgText.toLowerCase().includes('error');
+          });
+          if (failedMessage) {
+            errorMessage = typeof failedMessage === 'string' ? failedMessage : (failedMessage.message || errorMessage);
+          }
+        }
+        // Fallback to other error fields
+        else if (err.error && typeof err.error === 'string') {
+          errorMessage = err.error;
+        }
+        else if (err.message) {
+          errorMessage = err.message;
+        }
+      }
+      // If error is thrown directly (not axios error) or has .message property
+      else if (err && err.message) {
+        errorMessage = err.message;
+      }
+      // If error is a string
+      else if (typeof err === 'string') {
+        errorMessage = err;
       }
       
       setError(errorMessage);
@@ -350,31 +380,52 @@ export const ManualContentForm = () => {
       let feedback = null;
       
       // If error contains quality check failure, extract detailed info
-      if (errorMessage.includes('quality check')) {
+      if (errorMessage.includes('quality check') && errorMessage.includes('failed')) {
         const reasonMatch = errorMessage.match(/Content failed quality check:\s*(.+)/i);
         if (reasonMatch) {
           const fullReason = reasonMatch[1].trim();
+          // Pattern: "reason (Score: X/100). feedback" or "reason (Score: X/100) feedback"
           const scoreMatch = fullReason.match(/(.+?)\s*\([^)]+\)\s*(.+)?/);
           if (scoreMatch) {
             const mainReason = scoreMatch[1].trim();
             const feedbackText = scoreMatch[2] ? scoreMatch[2].trim() : '';
             // Remove score from reason - just show the main reason
             reason = mainReason;
+            // If feedback is long, show it as detailed feedback
             if (feedbackText && feedbackText.length > 50) {
               feedback = feedbackText;
               guidance = getFriendlyGuidance(errorMessage);
+            } else if (feedbackText) {
+              guidance = feedbackText;
             } else {
-              guidance = feedbackText || getFriendlyGuidance(errorMessage);
+              guidance = getFriendlyGuidance(errorMessage);
             }
           } else {
             // Remove any score patterns from reason
             reason = fullReason.replace(/\s*\([^)]*score[^)]*\)/gi, '').trim();
             guidance = getFriendlyGuidance(errorMessage);
           }
+        } else {
+          // Try extractErrorReason which should handle it
+          reason = extractErrorReason(errorMessage);
+          if (!reason || reason === errorMessage) {
+            reason = 'Content did not meet quality standards';
+          }
+          guidance = getFriendlyGuidance(errorMessage);
         }
       } else {
-        // Always show reason - use full message if extractErrorReason didn't find specific reason
-        reason = reason && reason !== errorMessage ? reason : errorMessage;
+        // If extractErrorReason didn't find specific reason, try to extract from generic message
+        if (!reason || reason === errorMessage || reason === 'Failed to create content') {
+          // Try to extract meaningful part
+          const colonMatch = errorMessage.match(/:\s*(.+)/);
+          if (colonMatch && colonMatch[1]) {
+            reason = colonMatch[1].trim();
+          } else if (errorMessage !== 'Failed to create content') {
+            reason = errorMessage;
+          } else {
+            reason = 'An error occurred while creating content';
+          }
+        }
         guidance = guidance || 'Please review your content and try again.';
       }
       
