@@ -44,6 +44,13 @@ export class CreateContentUseCase {
     // Check if this is manual content that needs quality check BEFORE audio generation
     const isManualContent = content.generation_method_id === 'manual' || content.generation_method_id === 'manual_edited';
     const needsQualityCheck = isManualContent && this.qualityCheckService;
+    
+    console.log('[CreateContentUseCase] Quality check evaluation:', {
+      generation_method_id: content.generation_method_id,
+      isManualContent,
+      hasQualityCheckService: !!this.qualityCheckService,
+      needsQualityCheck,
+    });
 
     if (existingContent) {
       if (this.contentHistoryService?.saveVersion) {
@@ -63,21 +70,34 @@ export class CreateContentUseCase {
       });
 
       // Trigger quality check BEFORE audio generation for manual content
+      console.log('[CreateContentUseCase] Checking if quality check should run:', {
+        needsQualityCheck,
+        updatedContentNeedsQualityCheck: updatedContent.needsQualityCheck(),
+        updatedContentGenerationMethod: updatedContent.generation_method_id,
+        updatedContentId: updatedContent.content_id,
+      });
+      
       if (needsQualityCheck && updatedContent.needsQualityCheck()) {
-        console.log('[CreateContentUseCase] Triggering quality check BEFORE audio generation for manual content:', updatedContent.content_id);
+        console.log('[CreateContentUseCase] ✅ Triggering quality check BEFORE audio generation for manual content:', updatedContent.content_id);
         try {
           await this.qualityCheckService.triggerQualityCheck(updatedContent.content_id);
-          console.log('[CreateContentUseCase] Quality check passed, proceeding with audio generation');
+          console.log('[CreateContentUseCase] ✅ Quality check passed, proceeding with audio generation');
           // Reload content to get updated quality check status and results
           const contentAfterQualityCheck = await this.contentRepository.findById(updatedContent.content_id);
           if (contentAfterQualityCheck) {
             updatedContent = contentAfterQualityCheck;
           }
         } catch (error) {
-          console.error('[CreateContentUseCase] Quality check failed, rejecting content:', error.message);
+          console.error('[CreateContentUseCase] ❌ Quality check failed, rejecting content:', error.message);
           // Re-throw if quality check fails (content should be rejected, no audio generation)
           throw error;
         }
+      } else {
+        console.log('[CreateContentUseCase] ⚠️ Quality check NOT triggered:', {
+          reason: !needsQualityCheck ? 'needsQualityCheck is false' : 'updatedContent.needsQualityCheck() returned false',
+          needsQualityCheck,
+          updatedContentNeedsQualityCheck: updatedContent?.needsQualityCheck(),
+        });
       }
 
       // Generate audio ONLY if quality check passed (or if not needed)
@@ -101,11 +121,18 @@ export class CreateContentUseCase {
     const createdContent = await this.contentRepository.create(content);
 
     // Trigger quality check BEFORE audio generation for manual content
+    console.log('[CreateContentUseCase] Checking if quality check should run (new content):', {
+      needsQualityCheck,
+      createdContentNeedsQualityCheck: createdContent.needsQualityCheck(),
+      createdContentGenerationMethod: createdContent.generation_method_id,
+      createdContentId: createdContent.content_id,
+    });
+    
     if (needsQualityCheck && createdContent.needsQualityCheck()) {
-      console.log('[CreateContentUseCase] Triggering quality check BEFORE audio generation for manual content:', createdContent.content_id);
+      console.log('[CreateContentUseCase] ✅ Triggering quality check BEFORE audio generation for manual content:', createdContent.content_id);
       try {
         await this.qualityCheckService.triggerQualityCheck(createdContent.content_id);
-        console.log('[CreateContentUseCase] Quality check passed, proceeding with audio generation');
+        console.log('[CreateContentUseCase] ✅ Quality check passed, proceeding with audio generation');
         // Reload content to get updated quality check status and results
         const contentAfterQualityCheck = await this.contentRepository.findById(createdContent.content_id);
         if (contentAfterQualityCheck) {
@@ -113,13 +140,15 @@ export class CreateContentUseCase {
         }
       } catch (error) {
         // Re-throw if quality check fails (content should be rejected, no audio generation)
-        console.error('[CreateContentUseCase] Quality check failed, rejecting content:', error.message);
+        console.error('[CreateContentUseCase] ❌ Quality check failed, rejecting content:', error.message);
         throw error;
       }
     } else {
-      console.log('[CreateContentUseCase] Skipping quality check:', {
+      console.log('[CreateContentUseCase] ⚠️ Quality check NOT triggered (new content):', {
+        reason: !needsQualityCheck ? 'needsQualityCheck is false' : 'createdContent.needsQualityCheck() returned false',
         isManualContent,
-        needsQualityCheck: createdContent.needsQualityCheck(),
+        needsQualityCheck,
+        createdContentNeedsQualityCheck: createdContent.needsQualityCheck(),
         hasQualityCheckService: !!this.qualityCheckService,
         generation_method_id: content.generation_method_id,
       });

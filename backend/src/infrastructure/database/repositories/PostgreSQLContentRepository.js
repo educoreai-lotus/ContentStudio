@@ -91,6 +91,19 @@ export class PostgreSQLContentRepository extends IContentRepository {
     return result.rows[0].method_id;
   }
 
+  /**
+   * Get method_name from method_id
+   */
+  async getGenerationMethodName(methodId) {
+    const query = 'SELECT method_name FROM generation_methods WHERE method_id = $1';
+    const result = await this.db.query(query, [methodId]);
+    if (result.rows.length === 0) {
+      // If not found, return the ID as-is (might be a string already)
+      return methodId;
+    }
+    return result.rows[0].method_name;
+  }
+
   async create(content) {
     if (!this.db.isConnected()) {
       throw new Error('Database not connected. Using in-memory repository.');
@@ -134,7 +147,7 @@ export class PostgreSQLContentRepository extends IContentRepository {
     const result = await this.db.query(query, values);
     const row = result.rows[0];
 
-    return this.mapRowToContent(row);
+    return await this.mapRowToContent(row);
   }
 
   async findById(contentId) {
@@ -149,7 +162,7 @@ export class PostgreSQLContentRepository extends IContentRepository {
       return null;
     }
 
-    return this.mapRowToContent(result.rows[0]);
+    return await this.mapRowToContent(result.rows[0]);
   }
 
   async findAllByTopicId(topicId, filters = {}) {
@@ -200,7 +213,7 @@ export class PostgreSQLContentRepository extends IContentRepository {
     query += ' ORDER BY created_at DESC';
 
     const result = await this.db.query(query, params);
-    return result.rows.map(row => this.mapRowToContent(row));
+    return await Promise.all(result.rows.map(row => this.mapRowToContent(row)));
   }
 
   async update(contentId, updates) {
@@ -264,7 +277,7 @@ export class PostgreSQLContentRepository extends IContentRepository {
       return null;
     }
 
-    return this.mapRowToContent(result.rows[0]);
+    return await this.mapRowToContent(result.rows[0]);
   }
 
   async findLatestByTopicAndType(topicId, contentTypeIdOrName) {
@@ -297,7 +310,7 @@ export class PostgreSQLContentRepository extends IContentRepository {
     if (result.rows.length === 0) {
       return null;
     }
-    return this.mapRowToContent(result.rows[0]);
+    return await this.mapRowToContent(result.rows[0]);
   }
 
   async delete(contentId) {
@@ -441,7 +454,7 @@ export class PostgreSQLContentRepository extends IContentRepository {
    * @param {Object} row - Database row
    * @returns {Content} Content entity
    */
-  mapRowToContent(row) {
+  async mapRowToContent(row) {
     const qualityCheckData = row.quality_check_data
       ? (typeof row.quality_check_data === 'string'
           ? JSON.parse(row.quality_check_data)
@@ -454,11 +467,22 @@ export class PostgreSQLContentRepository extends IContentRepository {
       qualityCheckData
     );
 
+    // Convert generation_method_id from number to string if needed
+    let generationMethodId = row.generation_method_id;
+    if (typeof generationMethodId === 'number') {
+      try {
+        generationMethodId = await this.getGenerationMethodName(generationMethodId);
+      } catch (error) {
+        console.warn('[PostgreSQLContentRepository] Failed to convert generation_method_id to name:', error.message);
+        // Keep the number if conversion fails
+      }
+    }
+
     return new Content({
       content_id: row.content_id,
       topic_id: row.topic_id,
       content_type_id: row.content_type_id,
-      generation_method_id: row.generation_method_id,
+      generation_method_id: generationMethodId,
       content_data: typeof row.content_data === 'string' 
         ? JSON.parse(row.content_data) 
         : row.content_data,
