@@ -281,6 +281,7 @@ Rules:
       };
 
       console.log('✅ [QualityCheckService] Final evaluation result:', evaluationResult);
+      console.log('[QC] AI RESPONSE:', evaluationResult);
 
       return evaluationResult;
     } catch (err) {
