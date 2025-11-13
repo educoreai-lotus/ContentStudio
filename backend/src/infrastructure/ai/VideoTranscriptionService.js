@@ -57,7 +57,8 @@ export class VideoTranscriptionService {
         lang: lang,
       });
 
-      if (!subtitles || subtitles.length === 0) {
+      // Check if we got valid subtitles array
+      if (!subtitles || !Array.isArray(subtitles) || subtitles.length === 0) {
         logger.warn('[VideoTranscriptionService] No captions found for video', { videoId, lang });
         return null;
       }
@@ -65,7 +66,8 @@ export class VideoTranscriptionService {
       // Merge all caption segments into clean text
       let transcript = '';
       for (const subtitle of subtitles) {
-        if (subtitle.text) {
+        // Handle both formats: {text: "..."} and {text: "...", start: ..., dur: ...}
+        if (subtitle && subtitle.text) {
           transcript += subtitle.text + ' ';
         }
       }
@@ -77,18 +79,30 @@ export class VideoTranscriptionService {
         .replace(/[^\w\s.,!?;:()\-'"]/g, '') // Remove special symbols but keep punctuation
         .trim();
 
+      if (!transcript || transcript.length === 0) {
+        logger.warn('[VideoTranscriptionService] Captions found but transcript is empty', {
+          videoId,
+          lang,
+          subtitlesCount: subtitles.length,
+        });
+        return null;
+      }
+
       logger.info('[VideoTranscriptionService] YouTube captions extracted successfully', {
         videoId,
         lang,
         length: transcript.length,
+        segmentsCount: subtitles.length,
       });
 
       return transcript;
     } catch (error) {
+      // The library throws an error if captions not found, so we catch and return null
       logger.warn('[VideoTranscriptionService] Failed to fetch YouTube captions', {
         videoId,
         lang,
         error: error.message,
+        errorName: error.name,
       });
       return null;
     }
@@ -120,17 +134,18 @@ export class VideoTranscriptionService {
       }
     }
 
-    // Try without specifying language (auto-detect)
+    // Try without specifying language (auto-detect) - gets first available captions
     try {
-      logger.info('[VideoTranscriptionService] Trying auto-detect captions', { videoId });
+      logger.info('[VideoTranscriptionService] Trying auto-detect captions (no lang specified)', { videoId });
       const subtitles = await getSubtitles({
         videoID: videoId,
+        // Don't specify lang - will get first available captions
       });
       
-      if (subtitles && subtitles.length > 0) {
+      if (subtitles && Array.isArray(subtitles) && subtitles.length > 0) {
         let transcript = '';
         for (const subtitle of subtitles) {
-          if (subtitle.text) {
+          if (subtitle && subtitle.text) {
             transcript += subtitle.text + ' ';
           }
         }
@@ -144,6 +159,7 @@ export class VideoTranscriptionService {
           logger.info('[VideoTranscriptionService] Auto-detect captions found', {
             videoId,
             length: transcript.length,
+            captionsCount: subtitles.length,
           });
           return { transcript, lang: 'auto' };
         }
