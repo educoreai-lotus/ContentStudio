@@ -102,6 +102,11 @@ export const PopupModal = ({ popupData, onClose, theme = 'day-mode', autoClose =
           <div className={`px-6 pt-2 pb-3 ${
             theme === 'day-mode' ? 'bg-gray-50' : 'bg-gray-700/50'
           } rounded-lg mx-4 mb-3`}>
+            <p className={`text-xs font-medium mb-1 ${
+              theme === 'day-mode' ? 'text-gray-700' : 'text-gray-300'
+            }`}>
+              Reason:
+            </p>
             <p className={`text-xs ${
               theme === 'day-mode' ? 'text-gray-600' : 'text-gray-400'
             }`}>

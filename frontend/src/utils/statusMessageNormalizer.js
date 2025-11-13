@@ -115,13 +115,37 @@ export function extractErrorReason(errorMessage) {
     return 'Audio generation encountered an error';
   }
 
-  // Generic error - extract the main part
-  const match = errorMessage.match(/: (.+?)(?:\.|$)/);
+  // Try to extract meaningful part from common error patterns
+  // Pattern: "Error: reason" or "Failed: reason"
+  let match = errorMessage.match(/(?:error|failed|failure):\s*(.+?)(?:\.|$)/i);
   if (match && match[1]) {
     return match[1].trim();
   }
 
-  return errorMessage.length > 100 ? errorMessage.substring(0, 100) + '...' : errorMessage;
+  // Pattern: "Content failed quality check: reason"
+  match = errorMessage.match(/quality check[^:]*:\s*(.+?)(?:\.|$)/i);
+  if (match && match[1]) {
+    return match[1].trim();
+  }
+
+  // Pattern: "reason (Score: X/100)"
+  match = errorMessage.match(/^(.+?)\s*\(.*score.*\)/i);
+  if (match && match[1]) {
+    return match[1].trim();
+  }
+
+  // If error message is generic, try to find any meaningful text after colon
+  match = errorMessage.match(/:\s*(.+)/);
+  if (match && match[1] && match[1].length > 10) {
+    return match[1].trim();
+  }
+
+  // Return full message if it's short enough, otherwise truncate
+  if (errorMessage.length <= 150) {
+    return errorMessage;
+  }
+
+  return errorMessage.substring(0, 150) + '...';
 }
 
 /**

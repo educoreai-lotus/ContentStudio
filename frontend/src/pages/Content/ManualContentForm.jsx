@@ -58,6 +58,7 @@ export const ManualContentForm = () => {
   }, [initialFormData]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [currentStatus, setCurrentStatus] = useState(null); // Current status message for spinner
   
   // Use hooks for popup and status stream
   const { showPopup, hidePopup, popupData } = usePopup();
@@ -103,9 +104,7 @@ export const ManualContentForm = () => {
       setLoading(true);
       setError(null);
       clearMessages(); // Clear previous messages
-      
-      // Add initial status message
-      addMessage({ message: 'Saving content…', timestamp: new Date().toISOString() });
+      setCurrentStatus('Saving content…');
 
       let content_data = {};
 
@@ -197,6 +196,11 @@ export const ManualContentForm = () => {
         const normalizedMessage = normalizeStatusMessage(rawMessage);
         const timestamp = typeof msg === 'object' ? msg.timestamp : new Date().toISOString();
         
+        // Update current status for spinner (only for process steps, not results)
+        if (!isImportant(normalizedMessage)) {
+          setCurrentStatus(normalizedMessage);
+        }
+        
         if (isImportant(normalizedMessage)) {
           // Show popup for important events
           const lowerMessage = normalizedMessage.toLowerCase();
@@ -214,8 +218,10 @@ export const ManualContentForm = () => {
           } else if (lowerMessage.includes('quality check failed')) {
             popupType = 'error';
             popupTitle = 'Quality Check Failed';
-            popupMessage = 'Quality check failed — content appears copied';
-            popupReason = extractErrorReason(rawMessage);
+            popupMessage = 'Quality check failed';
+            // Extract reason - always show it
+            const extractedReason = extractErrorReason(rawMessage);
+            popupReason = extractedReason || rawMessage.replace(/quality check failed:?/i, '').trim() || 'Content did not meet quality standards';
             popupGuidance = getFriendlyGuidance(rawMessage);
           } else if (lowerMessage.includes('audio generated successfully') || 
                      lowerMessage.includes('audio generation completed')) {
@@ -225,8 +231,9 @@ export const ManualContentForm = () => {
           } else if (lowerMessage.includes('audio generation failed')) {
             popupType = 'error';
             popupTitle = 'Audio Generation Failed';
-            popupMessage = 'Audio generation failed — please try again';
-            popupReason = extractErrorReason(rawMessage);
+            popupMessage = 'Audio generation failed';
+            const extractedReason = extractErrorReason(rawMessage);
+            popupReason = extractedReason || rawMessage.replace(/audio generation failed:?/i, '').trim() || 'Audio generation encountered an error';
             popupGuidance = getFriendlyGuidance(rawMessage);
           } else if (lowerMessage.includes('content saved successfully')) {
             popupType = 'success';
@@ -236,7 +243,8 @@ export const ManualContentForm = () => {
             popupType = 'error';
             popupTitle = 'Content Rejected';
             popupMessage = 'Content rejected';
-            popupReason = extractErrorReason(rawMessage);
+            const extractedReason = extractErrorReason(rawMessage);
+            popupReason = extractedReason || rawMessage.replace(/content rejected:?/i, '').trim() || 'Content did not meet requirements';
             popupGuidance = getFriendlyGuidance(rawMessage);
           } else {
             // Generic important message
@@ -244,8 +252,9 @@ export const ManualContentForm = () => {
             popupTitle = normalizedMessage;
             popupMessage = normalizedMessage;
             if (popupType === 'error') {
-              popupReason = extractErrorReason(rawMessage);
-              popupGuidance = getFriendlyGuidance(rawMessage);
+              const extractedReason = extractErrorReason(rawMessage);
+              popupReason = extractedReason || rawMessage;
+              popupGuidance = getFriendlyGuidance(rawMessage) || 'Please review and try again.';
             }
           }
 
@@ -271,6 +280,9 @@ export const ManualContentForm = () => {
         });
       }
 
+      // Clear status before navigation
+      setCurrentStatus(null);
+      
       // Navigate back to content manager with quality check info
       navigate(`/topics/${topicId}/content`, {
         state: { 
@@ -280,20 +292,36 @@ export const ManualContentForm = () => {
         },
       });
     } catch (err) {
-      const errorMessage = err.message || 'Failed to create content';
+      // Clear status on error
+      setCurrentStatus(null);
+      
+      // Get full error message - check multiple sources
+      let errorMessage = err.message || err.response?.data?.error || err.response?.data?.message || 'Failed to create content';
+      
+      // If error has response data, try to get more details
+      if (err.response?.data) {
+        const data = err.response.data;
+        if (data.error) errorMessage = data.error;
+        else if (data.message) errorMessage = data.message;
+        else if (typeof data === 'string') errorMessage = data;
+      }
+      
       setError(errorMessage);
       
       // Extract user-friendly error info
       const reason = extractErrorReason(errorMessage);
       const guidance = getFriendlyGuidance(errorMessage);
       
+      // Always show reason - use full message if extractErrorReason didn't find specific reason
+      const displayReason = reason && reason !== errorMessage ? reason : errorMessage;
+      
       // Show error popup
       showPopup({
         type: 'error',
         title: 'Content Creation Failed',
         message: 'Content creation failed',
-        reason: reason || errorMessage,
-        guidance: guidance,
+        reason: displayReason,
+        guidance: guidance || 'Please review your content and try again.',
       });
     } finally {
       setLoading(false);
@@ -427,8 +455,32 @@ export const ManualContentForm = () => {
           </div>
         )}
 
-        {/* Status Messages Stream */}
-        {messages.length > 0 && (
+        {/* Loading Spinner - Centered with status message */}
+        {loading && currentStatus && (
+          <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/20 backdrop-blur-sm">
+            <div className={`rounded-xl shadow-2xl p-8 max-w-sm w-full mx-4 ${
+              theme === 'day-mode'
+                ? 'bg-white border border-gray-200'
+                : 'bg-gray-800 border border-gray-700'
+            }`}>
+              <div className="flex flex-col items-center">
+                {/* Spinner */}
+                <div className="relative w-16 h-16 mb-4">
+                  <div className="absolute inset-0 border-4 border-transparent border-t-emerald-600 rounded-full animate-spin"></div>
+                </div>
+                {/* Status Message */}
+                <p className={`text-center font-medium ${
+                  theme === 'day-mode' ? 'text-gray-700' : 'text-gray-300'
+                }`}>
+                  {currentStatus}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Status Messages Stream - Only show when not loading or when there are completed messages */}
+        {!loading && messages.length > 0 && (
           <StatusStream messages={messages} theme={theme} />
         )}
 
