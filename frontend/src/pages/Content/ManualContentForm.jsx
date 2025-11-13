@@ -6,6 +6,11 @@ import { StatusStream } from '../../components/StatusStream.jsx';
 import { PopupModal } from '../../components/PopupModal.jsx';
 import { usePopup } from '../../hooks/usePopup.js';
 import { useStatusStream, isImportant } from '../../hooks/useStatusStream.js';
+import { 
+  normalizeStatusMessage, 
+  extractErrorReason, 
+  getFriendlyGuidance 
+} from '../../utils/statusMessageNormalizer.js';
 
 const MAX_TEXT_LENGTH = 4000;
 
@@ -100,7 +105,7 @@ export const ManualContentForm = () => {
       clearMessages(); // Clear previous messages
       
       // Add initial status message
-      addMessage({ message: 'Starting content creation...', timestamp: new Date().toISOString() });
+      addMessage({ message: 'Saving content…', timestamp: new Date().toISOString() });
 
       let content_data = {};
 
@@ -169,8 +174,7 @@ export const ManualContentForm = () => {
         };
       }
 
-      // Add message before API call
-      addMessage({ message: 'Saving content...', timestamp: new Date().toISOString() });
+      // Message already added above
 
       // Save to database
       const response = await contentService.approve({
@@ -187,75 +191,74 @@ export const ManualContentForm = () => {
       let qualityCheckInfo = response.qualityCheck || null;
       const statusMessagesFromBackend = response.status_messages || [];
 
-      // Process status messages: show popups for important events, add others to stream
+      // Process status messages: normalize and route to popup or stream
       statusMessagesFromBackend.forEach((msg) => {
-        const messageText = typeof msg === 'string' ? msg : (msg.message || '');
+        const rawMessage = typeof msg === 'string' ? msg : (msg.message || '');
+        const normalizedMessage = normalizeStatusMessage(rawMessage);
         const timestamp = typeof msg === 'object' ? msg.timestamp : new Date().toISOString();
         
-        if (isImportant(messageText)) {
+        if (isImportant(normalizedMessage)) {
           // Show popup for important events
-          const lowerMessage = messageText.toLowerCase();
+          const lowerMessage = normalizedMessage.toLowerCase();
           let popupType = 'info';
           let popupTitle = '';
           let popupMessage = '';
-          let popupDetails = '';
           let popupReason = '';
+          let popupGuidance = '';
 
-          if ((lowerMessage.includes('quality check') && lowerMessage.includes('completed successfully')) || 
-              (lowerMessage.includes('quality check') && lowerMessage.includes('passed'))) {
+          if (lowerMessage.includes('quality check passed') || 
+              lowerMessage.includes('quality check') && lowerMessage.includes('passed')) {
             popupType = 'success';
             popupTitle = 'Quality Check Passed';
-            popupMessage = 'Quality Check Completed Successfully!';
-            popupDetails = 'Your content has passed all evaluation steps. Audio is being generated now...';
-          } else if (lowerMessage.includes('quality check') && lowerMessage.includes('failed')) {
+            popupMessage = 'Quality check passed — generating audio…';
+          } else if (lowerMessage.includes('quality check failed')) {
             popupType = 'error';
             popupTitle = 'Quality Check Failed';
-            popupMessage = 'Quality Check Failed';
-            // Extract reason from message
-            const reasonMatch = messageText.match(/Quality check failed: (.+)/i);
-            if (reasonMatch) {
-              popupReason = reasonMatch[1];
-            } else {
-              popupReason = messageText.replace(/Quality check failed:?/i, '').trim();
-            }
-            popupDetails = 'Please rewrite the content in your own words.';
-          } else if (lowerMessage.includes('audio generation') && lowerMessage.includes('failed')) {
-            popupType = 'error';
-            popupTitle = 'Audio Generation Failed';
-            popupMessage = 'Audio Generation Failed';
-            const reasonMatch = messageText.match(/Audio generation failed: (.+)/i);
-            if (reasonMatch) {
-              popupReason = reasonMatch[1];
-            } else {
-              popupReason = messageText.replace(/Audio generation failed:?/i, '').trim();
-            }
-          } else if (lowerMessage.includes('audio generation') && lowerMessage.includes('completed')) {
+            popupMessage = 'Quality check failed — content appears copied';
+            popupReason = extractErrorReason(rawMessage);
+            popupGuidance = getFriendlyGuidance(rawMessage);
+          } else if (lowerMessage.includes('audio generated successfully') || 
+                     lowerMessage.includes('audio generation completed')) {
             popupType = 'success';
             popupTitle = 'Audio Generated';
-            popupMessage = 'Audio Generation Completed Successfully!';
-            popupDetails = 'Your audio is ready.';
-          } else if (lowerMessage.includes('content saved') || lowerMessage.includes('successfully')) {
+            popupMessage = 'Audio generated successfully';
+          } else if (lowerMessage.includes('audio generation failed')) {
+            popupType = 'error';
+            popupTitle = 'Audio Generation Failed';
+            popupMessage = 'Audio generation failed — please try again';
+            popupReason = extractErrorReason(rawMessage);
+            popupGuidance = getFriendlyGuidance(rawMessage);
+          } else if (lowerMessage.includes('content saved successfully')) {
             popupType = 'success';
-            popupTitle = 'Content Saved Successfully';
-            popupMessage = 'Content Saved Successfully!';
-            popupDetails = 'Your text and audio are now ready.';
-          } else if (lowerMessage.includes('rejected')) {
+            popupTitle = 'Content Saved';
+            popupMessage = 'Content saved successfully';
+          } else if (lowerMessage.includes('content rejected')) {
             popupType = 'error';
             popupTitle = 'Content Rejected';
-            popupMessage = 'Content Rejected';
-            popupReason = messageText.replace(/Content rejected:?/i, '').trim();
+            popupMessage = 'Content rejected';
+            popupReason = extractErrorReason(rawMessage);
+            popupGuidance = getFriendlyGuidance(rawMessage);
+          } else {
+            // Generic important message
+            popupType = lowerMessage.includes('failed') || lowerMessage.includes('error') ? 'error' : 'success';
+            popupTitle = normalizedMessage;
+            popupMessage = normalizedMessage;
+            if (popupType === 'error') {
+              popupReason = extractErrorReason(rawMessage);
+              popupGuidance = getFriendlyGuidance(rawMessage);
+            }
           }
 
           showPopup({
             type: popupType,
-            title: popupTitle || messageText,
-            message: popupMessage || messageText,
-            details: popupDetails,
+            title: popupTitle,
+            message: popupMessage,
             reason: popupReason,
+            guidance: popupGuidance,
           });
         } else {
-          // Add to status stream for non-important messages
-          addMessage({ message: messageText, timestamp });
+          // Add to status stream for non-important messages (already normalized)
+          addMessage({ message: normalizedMessage, timestamp });
         }
       });
 
@@ -263,9 +266,8 @@ export const ManualContentForm = () => {
       if (statusMessagesFromBackend.length === 0 && message.includes('successfully')) {
         showPopup({
           type: 'success',
-          title: 'Content Saved Successfully',
-          message: 'Content Saved Successfully!',
-          details: 'Your text and audio are now ready.',
+          title: 'Content Saved',
+          message: 'Content saved successfully',
         });
       }
 
@@ -281,16 +283,18 @@ export const ManualContentForm = () => {
       const errorMessage = err.message || 'Failed to create content';
       setError(errorMessage);
       
+      // Extract user-friendly error info
+      const reason = extractErrorReason(errorMessage);
+      const guidance = getFriendlyGuidance(errorMessage);
+      
       // Show error popup
       showPopup({
         type: 'error',
-        title: 'Error',
-        message: 'Content Creation Failed',
-        reason: errorMessage,
+        title: 'Content Creation Failed',
+        message: 'Content creation failed',
+        reason: reason || errorMessage,
+        guidance: guidance,
       });
-      
-      // Add error to status stream
-      addMessage({ message: errorMessage, timestamp: new Date().toISOString() });
     } finally {
       setLoading(false);
     }

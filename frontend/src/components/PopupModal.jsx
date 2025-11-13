@@ -94,33 +94,28 @@ export const PopupModal = ({ popupData, onClose, theme = 'day-mode', autoClose =
         <div className={`px-6 pt-3 pb-2 text-center ${
           theme === 'day-mode' ? 'text-gray-700' : 'text-gray-300'
         }`}>
-          <p className="text-sm">{popupData.message}</p>
+          <p className="text-sm font-medium">{popupData.message}</p>
         </div>
 
-        {/* Details */}
-        {popupData.details && (
-          <div className={`px-6 pt-2 pb-4 text-center ${
-            theme === 'day-mode' ? 'text-gray-600' : 'text-gray-400'
-          }`}>
-            <p className="text-xs">{popupData.details}</p>
-          </div>
-        )}
-
-        {/* Reason/Error details */}
+        {/* Reason/Error details - Show short reason */}
         {popupData.reason && (
-          <div className={`px-6 pt-2 pb-4 ${
+          <div className={`px-6 pt-2 pb-3 ${
             theme === 'day-mode' ? 'bg-gray-50' : 'bg-gray-700/50'
-          } rounded-lg mx-4 mb-4`}>
-            <p className={`text-xs font-semibold mb-1 ${
-              theme === 'day-mode' ? 'text-gray-700' : 'text-gray-300'
-            }`}>
-              Reason:
-            </p>
+          } rounded-lg mx-4 mb-3`}>
             <p className={`text-xs ${
               theme === 'day-mode' ? 'text-gray-600' : 'text-gray-400'
             }`}>
               {popupData.reason}
             </p>
+          </div>
+        )}
+
+        {/* Guidance - Friendly one-line help */}
+        {popupData.guidance && (
+          <div className={`px-6 pb-2 text-center ${
+            theme === 'day-mode' ? 'text-gray-600' : 'text-gray-400'
+          }`}>
+            <p className="text-xs italic">{popupData.guidance}</p>
           </div>
         )}
 

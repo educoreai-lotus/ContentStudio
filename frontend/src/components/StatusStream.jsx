@@ -23,13 +23,16 @@ export const StatusStream = ({ messages = [], theme = 'day-mode' }) => {
 
   const getMessageType = (message) => {
     const lowerMessage = message.toLowerCase();
+    // Don't show errors in stream (they go to popup only)
     if (lowerMessage.includes('failed') || lowerMessage.includes('error')) {
-      return 'error';
+      return 'neutral'; // Changed from 'error' - errors don't show in stream
     }
     if (lowerMessage.includes('completed successfully') || lowerMessage.includes('success')) {
       return 'success';
     }
-    if (lowerMessage.includes('starting') || lowerMessage.includes('generating') || lowerMessage.includes('checking') || lowerMessage.includes('examining')) {
+    if (lowerMessage.includes('starting') || lowerMessage.includes('generating') || 
+        lowerMessage.includes('checking') || lowerMessage.includes('running') ||
+        lowerMessage.includes('saving')) {
       return 'info';
     }
     return 'neutral';
