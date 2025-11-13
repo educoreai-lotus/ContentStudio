@@ -15,7 +15,8 @@
     "format": "prettier --write \"src/**/*.js\" \"tests/**/*.js\"",
     "format:check": "prettier --check \"src/**/*.js\" \"tests/**/*.js\"",
     "migrate": "node scripts/run-migrations.js",
-    "migrate:custom": "node scripts/run-migrations.js"
+    "migrate:custom": "node scripts/run-migrations.js",
+    "postinstall": "node scripts/download-yt-dlp.js"
   },
   "keywords": [
     "content-studio",
@@ -42,8 +43,7 @@
     "node-cron": "^4.2.1",
     "openai": "^4.20.1",
     "pg": "^8.16.3",
-    "youtube-captions-scraper": "^2.0.3",
-    "youtubei.js": "^16.0.1"
+    "youtube-captions-scraper": "^2.0.3"
   },
   "devDependencies": {
     "@types/jest": "^29.5.8",

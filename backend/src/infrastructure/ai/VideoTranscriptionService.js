@@ -4,7 +4,10 @@ import { logger } from '../logging/Logger.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { Innertube } from 'youtubei.js';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+
+const execFileAsync = promisify(execFile);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -16,29 +19,37 @@ const __dirname = path.dirname(__filename);
 export class VideoTranscriptionService {
   constructor({ openaiApiKey }) {
     this.openaiClient = openaiApiKey ? new OpenAIClient({ apiKey: openaiApiKey }) : null;
-    // youtubei.js doesn't require binary download - works directly in Node.js
-    this.youtubeClient = null;
+    // yt-dlp binary path (bundled with the project)
+    this.ytDlpPath = path.join(process.cwd(), 'bin', 'yt-dlp');
   }
 
   /**
-   * Initialize YouTube client (lazy initialization)
-   * @returns {Promise<Innertube>} YouTube client instance
+   * Get yt-dlp binary path
+   * @returns {string} Path to yt-dlp binary
+   * @throws {Error} If binary doesn't exist
    */
-  async getYouTubeClient() {
-    if (!this.youtubeClient) {
-      logger.info('[VideoTranscriptionService] Initializing YouTube client (youtubei.js)...');
+  getYtDlpPath() {
+    // Check if binary exists
+    if (!fs.existsSync(this.ytDlpPath)) {
+      throw new Error(
+        `yt-dlp binary not found at ${this.ytDlpPath}. ` +
+        'Please download it from https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp ' +
+        'and place it in the bin/ directory.'
+      );
+    }
+
+    // Make sure it's executable (Unix/Linux)
+    if (process.platform !== 'win32') {
       try {
-        this.youtubeClient = await Innertube.create();
-        logger.info('[VideoTranscriptionService] YouTube client initialized successfully');
+        fs.chmodSync(this.ytDlpPath, 0o755);
       } catch (error) {
-        logger.error('[VideoTranscriptionService] YouTube client initialization failed', {
+        logger.warn('[VideoTranscriptionService] Failed to set executable permissions', {
           error: error.message,
-          stack: error.stack,
         });
-        throw new Error(`Failed to initialize YouTube client: ${error.message}`);
       }
     }
-    return this.youtubeClient;
+
+    return this.ytDlpPath;
   }
 
   /**
@@ -329,57 +340,109 @@ export class VideoTranscriptionService {
       fs.mkdirSync(tempDir, { recursive: true });
     }
 
-    const audioPath = path.join(tempDir, `youtube_${videoId}_${Date.now()}.mp3`);
+    // Use output template to ensure correct filename
+    const outputTemplate = path.join(tempDir, `youtube_${videoId}_%(id)s.%(ext)s`);
+    const audioPath = path.join(tempDir, `youtube_${videoId}_${videoId}.mp3`);
 
     try {
-      // Initialize YouTube client
-      const yt = await this.getYouTubeClient();
+      // Get yt-dlp binary path
+      const ytDlpBinary = this.getYtDlpPath();
 
-      // Get video info
-      logger.info('[VideoTranscriptionService] Fetching video info...', { videoId });
-      const info = await yt.getInfo(videoId);
+      logger.info('[VideoTranscriptionService] Downloading YouTube audio with yt-dlp...', {
+        videoId,
+        youtubeUrl,
+        ytDlpPath: ytDlpBinary,
+      });
 
-      // Find best audio format
-      const audioFormat = info.chooseFormat({ type: 'audio', quality: 'best' });
-      if (!audioFormat) {
-        throw new Error('No audio format available for this video');
+      // Download audio using yt-dlp
+      try {
+        await execFileAsync(ytDlpBinary, [
+          '--extract-audio',
+          '--audio-format', 'mp3',
+          '--audio-quality', '0', // Best quality
+          '--no-playlist',
+          '--quiet',
+          '--no-warnings',
+          '-o', outputTemplate,
+          youtubeUrl,
+        ]);
+      } catch (execError) {
+        logger.error('[VideoTranscriptionService] yt-dlp exec failed', {
+          videoId,
+          error: execError.message,
+          stderr: execError.stderr?.toString(),
+          stdout: execError.stdout?.toString(),
+        });
+        throw new Error(`Failed to download YouTube audio: ${execError.message}`);
       }
 
-      logger.info('[VideoTranscriptionService] Found audio format', {
-        videoId,
-        format: audioFormat.itag,
-        mimeType: audioFormat.mime_type,
-      });
-
-      // Download audio stream
-      logger.info('[VideoTranscriptionService] Downloading YouTube audio stream...', {
-        videoId,
-        audioPath,
-      });
-
-      const stream = await audioFormat.download();
-
-      // Write stream to file
-      const writeStream = fs.createWriteStream(audioPath);
-
-      await new Promise((resolve, reject) => {
-        stream.pipe(writeStream);
-        stream.on('end', () => {
-          writeStream.end();
-          resolve();
-        });
-        stream.on('error', (error) => {
-          writeStream.destroy();
-          reject(error);
-        });
-        writeStream.on('error', reject);
-      });
+      // Wait a bit for file to be written
+      await new Promise(resolve => setTimeout(resolve, 500));
 
       // Verify file was written
       if (!fs.existsSync(audioPath)) {
+        // Try to find the file with different naming
+        const files = fs.readdirSync(tempDir).filter(f => f.startsWith(`youtube_${videoId}_`));
+        if (files.length > 0) {
+          const foundFile = path.join(tempDir, files[0]);
+          logger.info('[VideoTranscriptionService] Found audio file with different name', {
+            expected: audioPath,
+            found: foundFile,
+          });
+          // Use the found file
+          const actualAudioPath = foundFile;
+          const fileSize = fs.statSync(actualAudioPath).size;
+          if (fileSize === 0) {
+            throw new Error('Downloaded audio file is empty');
+          }
+
+          logger.info('[VideoTranscriptionService] Audio downloaded successfully', {
+            videoId,
+            audioPath: actualAudioPath,
+            fileSize,
+          });
+
+          // Transcribe with Whisper
+          logger.info('[VideoTranscriptionService] Transcribing with Whisper...', {
+            videoId,
+          });
+
+          const transcript = await this.transcribeWithWhisper(actualAudioPath, { language: 'en' });
+
+          if (!transcript || transcript.trim().length === 0) {
+            throw new Error('Whisper transcription returned empty result');
+          }
+
+          // Clean up downloaded file
+          try {
+            if (fs.existsSync(actualAudioPath)) {
+              fs.unlinkSync(actualAudioPath);
+              logger.debug('[VideoTranscriptionService] Temporary audio file deleted', { audioPath: actualAudioPath });
+            }
+          } catch (cleanupError) {
+            logger.warn('[VideoTranscriptionService] Failed to cleanup downloaded audio', {
+              audioPath: actualAudioPath,
+              error: cleanupError.message,
+            });
+          }
+
+          logger.info('[VideoTranscriptionService] Transcript ready', {
+            videoId,
+            transcriptLength: transcript.length,
+            source: 'whisper',
+          });
+
+          return {
+            transcript,
+            source: 'whisper',
+            videoType: 'youtube',
+            videoId,
+          };
+        }
         throw new Error('Audio file was not downloaded from YouTube. The download may have failed or the file path is incorrect.');
       }
 
+      // File found with expected name
       const fileSize = fs.statSync(audioPath).size;
       if (fileSize === 0) {
         throw new Error('Downloaded audio file is empty');
