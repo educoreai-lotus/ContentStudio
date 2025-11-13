@@ -2,6 +2,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import { contentService } from '../../services/content.js';
 import { useApp } from '../../context/AppContext.jsx';
+import { StatusStream } from '../../components/StatusStream.jsx';
 
 const MAX_TEXT_LENGTH = 4000;
 
@@ -49,6 +50,7 @@ export const ManualContentForm = () => {
   }, [initialFormData]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [statusMessages, setStatusMessages] = useState([]);
 
   const handleInputChange = (field, value) => {
     if (field === 'text') {
@@ -170,12 +172,19 @@ export const ManualContentForm = () => {
       // Build message with quality check results
       let message = response.message || 'Content created successfully!';
       let qualityCheckInfo = response.qualityCheck || null;
+      const messages = response.status_messages || [];
+
+      // Update status messages if available
+      if (messages.length > 0) {
+        setStatusMessages(messages);
+      }
 
       // Navigate back to content manager with quality check info
       navigate(`/topics/${topicId}/content`, {
         state: { 
           message,
           qualityCheck: qualityCheckInfo,
+          statusMessages: messages,
         },
       });
     } catch (err) {
@@ -310,6 +319,11 @@ export const ManualContentForm = () => {
               </div>
             </div>
           </div>
+        )}
+
+        {/* Status Messages Stream */}
+        {statusMessages.length > 0 && (
+          <StatusStream messages={statusMessages} theme={theme} />
         )}
 
         <form onSubmit={handleSubmit}>

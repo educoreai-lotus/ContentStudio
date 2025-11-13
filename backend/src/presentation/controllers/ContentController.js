@@ -145,6 +145,7 @@ export class ContentController {
         data: ContentDTO.toContentResponse(content),
         message,
         qualityCheck: qualityCheckInfo,
+        status_messages: content.status_messages || [],
       });
     } catch (error) {
       console.error('[Content Approve] Error:', error.message);

@@ -1,6 +1,7 @@
 import { QualityCheckService as IQualityCheckService } from '../../domain/services/QualityCheckService.js';
 import { QualityCheck } from '../../domain/entities/QualityCheck.js';
 import { OpenAIClient } from '../external-apis/openai/OpenAIClient.js';
+import { pushStatus } from '../../application/utils/StatusMessages.js';
 
 /**
  * Quality Check Service Implementation
@@ -24,7 +25,7 @@ export class QualityCheckService extends IQualityCheckService {
     this.courseRepository = courseRepository;
   }
 
-  async triggerQualityCheck(contentId, checkType = 'full') {
+  async triggerQualityCheck(contentId, checkType = 'full', statusMessages = null) {
     console.log(`[QualityCheckService] 🔍 Triggering quality check for content: ${contentId}, type: ${checkType}`);
     
     if (!this.openaiClient) {
@@ -33,6 +34,10 @@ export class QualityCheckService extends IQualityCheckService {
     }
 
     console.log('[QualityCheckService] ✅ OpenAI client is configured, proceeding with quality check');
+    
+    if (statusMessages) {
+      pushStatus(statusMessages, 'Examining content originality...');
+    }
 
     // Create quality check record
     const qualityCheck = new QualityCheck({
@@ -78,33 +83,52 @@ export class QualityCheckService extends IQualityCheckService {
         topicName: topic.topic_name || 'Untitled Topic',
         skills: skills,
         contentText: contentText,
+        statusMessages: statusMessages,
       });
 
-      // Validate scores - reject if any score < 60
+      // Validate scores - reject if relevance/difficulty/consistency < 60, originality < 75
       // CRITICAL: Check relevance first - this is the most important check
+      // IMPORTANT: Originality threshold is 75 (not 60) to catch content that resembles official documentation
       const relevanceScore = evaluationResult.relevance_score || evaluationResult.relevance || 100; // Default to 100 if not provided (backward compatibility)
       if (relevanceScore < 60) {
-        throw new Error(
-          `Content failed quality check: Content is not relevant to the lesson topic (Relevance: ${relevanceScore}/100). ${evaluationResult.feedback_summary || 'The content does not match the lesson topic. Please ensure your content is directly related to the topic.'}`
-        );
+        const errorMsg = `Content failed quality check: Content is not relevant to the lesson topic (Relevance: ${relevanceScore}/100). ${evaluationResult.feedback_summary || 'The content does not match the lesson topic. Please ensure your content is directly related to the topic.'}`;
+        if (statusMessages) {
+          pushStatus(statusMessages, `Quality check failed: ${errorMsg}`);
+        }
+        throw new Error(errorMsg);
       }
 
-      if (evaluationResult.originality_score < 60) {
-        throw new Error(
-          `Content failed quality check: Content appears to be copied or plagiarized (Originality: ${evaluationResult.originality_score}/100). ${evaluationResult.feedback_summary || 'Please rewrite the content in your own words. Copying from official sources or other materials is not allowed.'}`
-        );
+      if (statusMessages) {
+        pushStatus(statusMessages, 'Checking difficulty alignment...');
+      }
+
+      // Reject content if originality score is below 75 (stricter threshold to catch content that resembles official documentation)
+      if (evaluationResult.originality_score < 75) {
+        const errorMsg = `Content failed quality check: Content appears to be copied or plagiarized (Originality: ${evaluationResult.originality_score}/100). ${evaluationResult.feedback_summary || 'Please rewrite the content in your own words. Copying from official sources or other materials is not allowed. Content that closely resembles official documentation will be rejected.'}`;
+        if (statusMessages) {
+          pushStatus(statusMessages, `Quality check failed: ${errorMsg}`);
+        }
+        throw new Error(errorMsg);
       }
 
       if (evaluationResult.difficulty_alignment_score < 60) {
-        throw new Error(
-          `Content failed quality check: Difficulty level mismatch (${evaluationResult.difficulty_alignment_score}/100). ${evaluationResult.feedback_summary || 'Please adjust the difficulty level to match the target skills.'}`
-        );
+        const errorMsg = `Content failed quality check: Difficulty level mismatch (${evaluationResult.difficulty_alignment_score}/100). ${evaluationResult.feedback_summary || 'Please adjust the difficulty level to match the target skills.'}`;
+        if (statusMessages) {
+          pushStatus(statusMessages, `Quality check failed: ${errorMsg}`);
+        }
+        throw new Error(errorMsg);
+      }
+
+      if (statusMessages) {
+        pushStatus(statusMessages, 'Checking structure and consistency...');
       }
 
       if (evaluationResult.consistency_score < 60) {
-        throw new Error(
-          `Content failed quality check: Low consistency score (${evaluationResult.consistency_score}/100). ${evaluationResult.feedback_summary || 'Please improve the structure and coherence of your content.'}`
-        );
+        const errorMsg = `Content failed quality check: Low consistency score (${evaluationResult.consistency_score}/100). ${evaluationResult.feedback_summary || 'Please improve the structure and coherence of your content.'}`;
+        if (statusMessages) {
+          pushStatus(statusMessages, `Quality check failed: ${errorMsg}`);
+        }
+        throw new Error(errorMsg);
       }
 
       // Store results in the format expected by QualityCheck entity
@@ -144,6 +168,9 @@ export class QualityCheckService extends IQualityCheckService {
 
       return savedCheck;
     } catch (error) {
+      if (statusMessages) {
+        pushStatus(statusMessages, `Quality check failed: ${error.message}`);
+      }
       savedCheck.markFailed(error.message);
       await this.qualityCheckRepository.update(savedCheck.quality_check_id, {
         status: savedCheck.status,
@@ -154,7 +181,7 @@ export class QualityCheckService extends IQualityCheckService {
     }
   }
 
-  async evaluateContentWithOpenAI({ courseName, topicName, skills, contentText }) {
+  async evaluateContentWithOpenAI({ courseName, topicName, skills, contentText, statusMessages = null }) {
     const systemPrompt = `You are an educational content quality inspector.
 
 Your evaluation must be STRICT, but ONLY based on the text itself.
@@ -183,11 +210,13 @@ Scoring rules:
 
 - If content is NOT relevant → relevance_score < 60
 
-- If plagiarism is detected → originality_score < 60
+- If plagiarism is detected OR content closely resembles official documentation → originality_score < 75
 
-- If text feels trainer-written → originality_score 70–100
+- If text feels trainer-written → originality_score 75–100
 
 - When unsure → prefer higher originality (avoid false positives)
+
+- Content that closely resembles official documentation should receive originality_score < 75 (reject)
 
 Evaluate four dimensions: relevance, originality, difficulty alignment, consistency.
 

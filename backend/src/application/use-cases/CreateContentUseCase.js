@@ -1,5 +1,6 @@
 import { Content } from '../../domain/entities/Content.js';
 import { ContentDataCleaner } from '../utils/ContentDataCleaner.js';
+import { pushStatus, createStatusMessages } from '../utils/StatusMessages.js';
 
 /**
  * Create Content Use Case
@@ -26,6 +27,10 @@ export class CreateContentUseCase {
     if (!contentData.content_data) {
       throw new Error('content_data is required');
     }
+
+    // Initialize status messages array
+    const statusMessages = contentData.status_messages || createStatusMessages();
+    contentData.status_messages = statusMessages;
 
     const enrichedContentData = {
       ...contentData,
@@ -79,8 +84,10 @@ export class CreateContentUseCase {
       
       if (needsQualityCheck && updatedContent.needsQualityCheck()) {
         console.log('[CreateContentUseCase] ✅ Triggering quality check BEFORE audio generation for manual content:', updatedContent.content_id);
+        pushStatus(statusMessages, 'Starting quality check...');
         try {
-          await this.qualityCheckService.triggerQualityCheck(updatedContent.content_id);
+          await this.qualityCheckService.triggerQualityCheck(updatedContent.content_id, 'full', statusMessages);
+          pushStatus(statusMessages, 'Quality check completed successfully.');
           console.log('[CreateContentUseCase] ✅ Quality check passed, proceeding with audio generation');
           // Reload content to get updated quality check status and results
           const contentAfterQualityCheck = await this.contentRepository.findById(updatedContent.content_id);
@@ -88,6 +95,7 @@ export class CreateContentUseCase {
             updatedContent = contentAfterQualityCheck;
           }
         } catch (error) {
+          pushStatus(statusMessages, `Quality check failed: ${error.message}`);
           console.error('[CreateContentUseCase] ❌ Quality check failed, rejecting content:', error.message);
           // Re-throw if quality check fails (content should be rejected, no audio generation)
           throw error;
@@ -102,19 +110,36 @@ export class CreateContentUseCase {
 
       // Generate audio ONLY if quality check passed (or if not needed)
       if (await this.shouldGenerateAudio(enrichedContentData)) {
-        await this.attachGeneratedAudio(enrichedContentData);
-        // Update content with audio
-        const finalUpdatedContent = await this.contentRepository.update(updatedContent.content_id, {
-          content_data: enrichedContentData.content_data,
-        });
-        // Reload content to get updated quality check results
-        const finalContent = await this.contentRepository.findById(finalUpdatedContent.content_id);
-        return finalContent || finalUpdatedContent;
+        pushStatus(statusMessages, 'Generating audio...');
+        try {
+          await this.attachGeneratedAudio(enrichedContentData);
+          pushStatus(statusMessages, 'Audio generation completed successfully.');
+          // Update content with audio
+          const finalUpdatedContent = await this.contentRepository.update(updatedContent.content_id, {
+            content_data: enrichedContentData.content_data,
+          });
+          // Reload content to get updated quality check results
+          const finalContent = await this.contentRepository.findById(finalUpdatedContent.content_id);
+          if (finalContent) {
+            finalContent.status_messages = statusMessages;
+            return finalContent;
+          }
+          finalUpdatedContent.status_messages = statusMessages;
+          return finalUpdatedContent;
+        } catch (error) {
+          pushStatus(statusMessages, `Audio generation failed: ${error.message}`);
+          throw error;
+        }
       }
 
       // Reload content to get updated quality check results
       const finalContent = await this.contentRepository.findById(updatedContent.content_id);
-      return finalContent || updatedContent;
+      if (finalContent) {
+        finalContent.status_messages = statusMessages;
+        return finalContent;
+      }
+      updatedContent.status_messages = statusMessages;
+      return updatedContent;
     }
 
     // Save content to repository WITHOUT audio first
@@ -130,8 +155,10 @@ export class CreateContentUseCase {
     
     if (needsQualityCheck && createdContent.needsQualityCheck()) {
       console.log('[CreateContentUseCase] ✅ Triggering quality check BEFORE audio generation for manual content:', createdContent.content_id);
+      pushStatus(statusMessages, 'Starting quality check...');
       try {
-        await this.qualityCheckService.triggerQualityCheck(createdContent.content_id);
+        await this.qualityCheckService.triggerQualityCheck(createdContent.content_id, 'full', statusMessages);
+        pushStatus(statusMessages, 'Quality check completed successfully.');
         console.log('[CreateContentUseCase] ✅ Quality check passed, proceeding with audio generation');
         // Reload content to get updated quality check status and results
         const contentAfterQualityCheck = await this.contentRepository.findById(createdContent.content_id);
@@ -139,6 +166,7 @@ export class CreateContentUseCase {
           createdContent = contentAfterQualityCheck;
         }
       } catch (error) {
+        pushStatus(statusMessages, `Quality check failed: ${error.message}`);
         // Re-throw if quality check fails (content should be rejected, no audio generation)
         console.error('[CreateContentUseCase] ❌ Quality check failed, rejecting content:', error.message);
         throw error;
@@ -156,19 +184,36 @@ export class CreateContentUseCase {
 
     // Generate audio ONLY if quality check passed (or if not needed)
     if (await this.shouldGenerateAudio(enrichedContentData)) {
-      await this.attachGeneratedAudio(enrichedContentData);
-      // Update content with audio
-      const finalUpdatedContent = await this.contentRepository.update(createdContent.content_id, {
-        content_data: enrichedContentData.content_data,
-      });
-      // Reload content to get updated quality check results
-      const finalContent = await this.contentRepository.findById(finalUpdatedContent.content_id);
-      return finalContent || finalUpdatedContent;
+      pushStatus(statusMessages, 'Generating audio...');
+      try {
+        await this.attachGeneratedAudio(enrichedContentData);
+        pushStatus(statusMessages, 'Audio generation completed successfully.');
+        // Update content with audio
+        const finalUpdatedContent = await this.contentRepository.update(createdContent.content_id, {
+          content_data: enrichedContentData.content_data,
+        });
+        // Reload content to get updated quality check results
+        const finalContent = await this.contentRepository.findById(finalUpdatedContent.content_id);
+        if (finalContent) {
+          finalContent.status_messages = statusMessages;
+          return finalContent;
+        }
+        finalUpdatedContent.status_messages = statusMessages;
+        return finalUpdatedContent;
+      } catch (error) {
+        pushStatus(statusMessages, `Audio generation failed: ${error.message}`);
+        throw error;
+      }
     }
 
     // Reload content to get updated quality check results
     const finalContent = await this.contentRepository.findById(createdContent.content_id);
-    return finalContent || createdContent;
+    if (finalContent) {
+      finalContent.status_messages = statusMessages;
+      return finalContent;
+    }
+    createdContent.status_messages = statusMessages;
+    return createdContent;
   }
 
   async findExistingContent(topicId, candidates, debugLabel) {
