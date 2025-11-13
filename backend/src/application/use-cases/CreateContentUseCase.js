@@ -62,7 +62,7 @@ export class CreateContentUseCase {
       }
 
       // Save content WITHOUT audio first (if quality check is needed)
-      const updatedContent = await this.contentRepository.update(existingContent.content_id, {
+      let updatedContent = await this.contentRepository.update(existingContent.content_id, {
         content_data: content.content_data,
         quality_check_status: 'pending',
         quality_check_data: null,
@@ -118,7 +118,7 @@ export class CreateContentUseCase {
     }
 
     // Save content to repository WITHOUT audio first
-    const createdContent = await this.contentRepository.create(content);
+    let createdContent = await this.contentRepository.create(content);
 
     // Trigger quality check BEFORE audio generation for manual content
     console.log('[CreateContentUseCase] Checking if quality check should run (new content):', {
