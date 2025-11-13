@@ -4,6 +4,7 @@ import { logger } from '../logging/Logger.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import YTDlpWrap from 'yt-dlp-wrap';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -15,6 +16,15 @@ const __dirname = path.dirname(__filename);
 export class VideoTranscriptionService {
   constructor({ openaiApiKey }) {
     this.openaiClient = openaiApiKey ? new OpenAIClient({ apiKey: openaiApiKey }) : null;
+    // Initialize yt-dlp wrapper (will download yt-dlp binary if needed)
+    try {
+      this.ytDlp = new YTDlpWrap();
+    } catch (error) {
+      logger.warn('[VideoTranscriptionService] yt-dlp-wrap initialization failed, Whisper fallback may not work', {
+        error: error.message,
+      });
+      this.ytDlp = null;
+    }
   }
 
   /**
@@ -119,7 +129,7 @@ export class VideoTranscriptionService {
     
     for (const lang of languagesToTry) {
       try {
-        logger.info('[VideoTranscriptionService] Trying to fetch captions', { videoId, lang });
+        logger.info('[VideoTranscriptionService] Trying to fetch captions...', { videoId, lang });
         const transcript = await this.fetchYouTubeCaptions(videoId, lang);
         if (transcript && transcript.length > 0) {
           return { transcript, lang };
@@ -273,15 +283,124 @@ export class VideoTranscriptionService {
       };
     }
 
-    // No captions found - inform user but don't throw error
-    // The frontend will handle this gracefully
-    logger.warn('[VideoTranscriptionService] No captions found after trying multiple languages', {
+    // No captions found - ALWAYS fallback to Whisper
+    logger.info('[VideoTranscriptionService] No captions found, switching to Whisper...', {
       videoId,
     });
 
-    throw new Error(
-      'No captions available for this YouTube video. The video may not have captions enabled, or they may be in a language we cannot detect. Please try uploading the video file directly, or ensure the video has captions enabled on YouTube.'
-    );
+    // Always try Whisper fallback - don't throw error if captions missing
+    return await this.transcribeYouTubeWithWhisper(youtubeUrl, videoId);
+  }
+
+  /**
+   * Download YouTube audio and transcribe with Whisper (fallback method)
+   * @param {string} youtubeUrl - YouTube URL
+   * @param {string} videoId - YouTube video ID
+   * @returns {Promise<Object>} { transcript, source, videoType }
+   * @throws {Error} If download or transcription fails
+   */
+  async transcribeYouTubeWithWhisper(youtubeUrl, videoId) {
+    if (!this.ytDlp) {
+      throw new Error('yt-dlp not available. Please ensure yt-dlp-wrap is properly installed.');
+    }
+
+    if (!this.openaiClient) {
+      throw new Error('OpenAI client not available. Please configure OpenAI API key.');
+    }
+
+    logger.info('[VideoTranscriptionService] Downloading YouTube audio for Whisper transcription', {
+      videoId,
+      youtubeUrl,
+    });
+
+    const tempDir = path.join(process.cwd(), 'uploads', 'temp');
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true });
+    }
+
+    const audioPath = path.join(tempDir, `youtube_${videoId}_${Date.now()}.m4a`);
+
+    try {
+      // Download audio only (best quality, m4a format)
+      logger.info('[VideoTranscriptionService] Downloading YouTube audio...', {
+        videoId,
+        audioPath,
+      });
+
+      await this.ytDlp.exec([
+        youtubeUrl,
+        '-f', 'bestaudio[ext=m4a]/bestaudio',
+        '-o', audioPath,
+        '--no-playlist',
+        '--quiet',
+        '--no-warnings',
+      ]);
+
+      if (!fs.existsSync(audioPath)) {
+        throw new Error('Audio file was not downloaded from YouTube');
+      }
+
+      const fileSize = fs.statSync(audioPath).size;
+      logger.info('[VideoTranscriptionService] Audio downloaded successfully', {
+        videoId,
+        audioPath,
+        fileSize,
+      });
+
+      // Transcribe with Whisper
+      logger.info('[VideoTranscriptionService] Transcribing with Whisper...', {
+        videoId,
+      });
+
+      const transcript = await this.transcribeWithWhisper(audioPath, { language: 'en' });
+
+      if (!transcript || transcript.trim().length === 0) {
+        throw new Error('Whisper transcription returned empty result');
+      }
+
+      // Clean up downloaded file
+      try {
+        if (fs.existsSync(audioPath)) {
+          fs.unlinkSync(audioPath);
+          logger.debug('[VideoTranscriptionService] Temporary audio file deleted', { audioPath });
+        }
+      } catch (cleanupError) {
+        logger.warn('[VideoTranscriptionService] Failed to cleanup downloaded audio', {
+          audioPath,
+          error: cleanupError.message,
+        });
+      }
+
+      logger.info('[VideoTranscriptionService] Transcript ready', {
+        videoId,
+        transcriptLength: transcript.length,
+        source: 'whisper',
+      });
+
+      return {
+        transcript,
+        source: 'whisper',
+        videoType: 'youtube',
+        videoId,
+      };
+    } catch (error) {
+      // Clean up on error
+      try {
+        if (fs.existsSync(audioPath)) {
+          fs.unlinkSync(audioPath);
+        }
+      } catch (cleanupError) {
+        // Ignore cleanup errors
+      }
+
+      logger.error('[VideoTranscriptionService] Whisper fallback failed', {
+        videoId,
+        error: error.message,
+        stack: error.stack,
+      });
+
+      throw new Error(`Failed to transcribe YouTube video with Whisper: ${error.message}`);
+    }
   }
 
   /**
