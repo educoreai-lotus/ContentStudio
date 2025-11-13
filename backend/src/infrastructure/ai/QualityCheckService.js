@@ -140,115 +140,106 @@ export class QualityCheckService extends IQualityCheckService {
   }
 
   async evaluateContentWithOpenAI({ courseName, topicName, skills, contentText }) {
-    const systemPrompt = `You are an expert educational content evaluator.
-Your job is to check the quality, originality, relevance, and skill alignment of trainer-written lessons.
+    const systemPrompt = `You are an educational content quality inspector.
 
-CRITICAL: You must STRICTLY verify that the content is relevant to the lesson topic. Content that is unrelated to the topic should be REJECTED with a low relevance score.
+Your evaluation must be STRICT, but ONLY based on the text itself.
 
-Analyze the submitted text and evaluate it according to the following dimensions:
+You do NOT search the internet.
 
-1. Relevance to Topic (0–100) - MOST IMPORTANT:
-   - Check if the content is directly related to the lesson topic provided.
-   - Content must teach or explain concepts related to the topic name.
-   - If the content is about a completely different subject, give a score BELOW 60 (reject).
-   - If the content only mentions the topic briefly but focuses on something else, give a score BELOW 60.
-   - Higher score = content is highly relevant and directly addresses the topic.
+Detect plagiarism ONLY when the text contains:
 
-2. Originality (0–100) - CRITICAL FOR PLAGIARISM DETECTION:
-   - Check if the content appears to be DIRECTLY COPIED or plagiarized from official documentation, websites, or other sources.
-   - Look for EXACT or NEAR-EXACT matches of complete sentences, paragraphs, or large text blocks from known sources.
-   - IMPORTANT: Do NOT penalize content just because it uses similar terminology or has a formal writing style. Many educational topics naturally use standard terminology (e.g., "props", "components" in React).
-   - Only flag as plagiarism if you detect:
-     * Exact or near-exact copying of complete sentences or paragraphs
-     * Identical phrasing and structure that suggests direct copying
-     * Large blocks of text that match known documentation word-for-word
-   - If content appears to be DIRECTLY COPIED from official sources (exact or near-exact matches), give a score BELOW 60 (reject).
-   - If content is original but uses standard terminology or formal style (common in educational content), give a score of 70-100 (acceptable).
-   - Higher score = original content, even if it uses standard terminology or formal style.
-   - Lower score = content that appears to be directly copied word-for-word or with minimal changes.
+- Clear copy/paste sentences
 
-3. Difficulty Alignment (0–100):
-   - Check if the text's difficulty level matches the provided skills.
-   - If the skills are beginner-level but the text uses overly advanced terminology, reduce the score.
+- Near-identical structure to known documentation
 
-4. Consistency and Coherence (0–100):
-   - Assess if the text is well-structured, logically consistent, and coherent.
+- Paragraphs that read like official docs word-for-word
 
-5. Feedback Summary:
-   - Write 2–3 short sentences describing:
-     * Whether the content is relevant to the topic (CRITICAL).
-     * Whether the content appears to be copied or plagiarized from official sources (CRITICAL).
-     * Strengths of the content (if original).
-     * Detected weaknesses or issues.
-     * Any plagiarism, copying, mismatch, or irrelevance detected.
-     * If plagiarism is detected, clearly state: "Content appears to be copied from [source type] and should be rewritten in the trainer's own words."
+Do NOT flag plagiarism for:
 
-IMPORTANT RULES:
-1. If the content is not relevant to the topic, you MUST:
-   - Give relevance_score BELOW 60
-   - Clearly state in feedback_summary that the content is not relevant to the topic
-   - Explain what the content is about vs. what the topic should cover
+- Using standard terminology
 
-2. If the content appears to be DIRECTLY COPIED or plagiarized (exact or near-exact matches), you MUST:
-   - Give originality_score BELOW 60 (reject for plagiarism)
-   - Clearly state in feedback_summary that the content appears to be directly copied
-   - Identify the type of source (official documentation, website, etc.) if detectable
-   - Recommend that the trainer rewrite the content in their own words
-   - IMPORTANT: Do NOT flag content as plagiarized just because it uses standard terminology or formal writing style. Only flag if you detect direct copying of sentences or paragraphs.
+- Being correct
 
-Return ONLY a valid JSON object with this exact structure:
+- Having a structured or formal explanation
+
+- Using concepts required for the topic
+
+Scoring rules:
+
+- If content is NOT relevant → relevance_score < 60
+
+- If plagiarism is detected → originality_score < 60
+
+- If text feels trainer-written → originality_score 70–100
+
+- When unsure → prefer higher originality (avoid false positives)
+
+Evaluate four dimensions: relevance, originality, difficulty alignment, consistency.
+
+Return ONLY valid JSON:
+
 {
-  "relevance_score": <number 0-100>,
-  "originality_score": <number 0-100>,
-  "difficulty_alignment_score": <number 0-100>,
-  "consistency_score": <number 0-100>,
-  "feedback_summary": "<2-3 sentences>"
+  "relevance_score": number,
+  "originality_score": number,
+  "difficulty_alignment_score": number,
+  "consistency_score": number,
+  "feedback_summary": "2-3 short sentences"
 }`;
 
-    const userPrompt = JSON.stringify({
-      courseName,
-      topicName,
-      skills,
-      contentText: contentText.substring(0, 4000), // Limit text length for API
-      instruction: `Evaluate the content above. The content MUST be:
-1. Relevant to the topic "${topicName}" in the course "${courseName}". If the content is about something completely different, it should be rejected.
-2. ORIGINAL and written by the trainer in their own words. 
-   - IMPORTANT: Only flag as plagiarism if you detect DIRECT COPYING (exact or near-exact matches of complete sentences or paragraphs).
-   - Do NOT flag content as plagiarized just because it uses standard terminology or formal writing style (this is normal for educational content).
-   - If content appears to be DIRECTLY COPIED from official documentation (like React docs, MDN, W3C, etc.), websites, or any other source, it MUST be rejected for plagiarism.
-   - If content is original but uses standard terminology or formal style, it should be accepted (score 70-100).
-3. Check carefully for EXACT or NEAR-EXACT matches of complete sentences or paragraphs from known sources.
-4. If you detect direct copying or plagiarism, give originality_score BELOW 60 and clearly explain in feedback_summary.`
-    });
+    const userPrompt = `Evaluate the following educational content.
+
+Topic: ${topicName}
+
+Course: ${courseName}
+
+Required skills: ${JSON.stringify(skills)}
+
+Content:
+
+"""
+${contentText.substring(0, 4000)}
+"""
+
+Rules:
+
+1. The content must be directly relevant to the topic.
+
+2. Detect plagiarism ONLY if entire sentences/paragraphs appear copied.
+
+3. Using standard terminology is NOT plagiarism.
+
+4. Score originality high if writing feels original even if technical.
+
+5. Assign difficulty based on skills.
+
+6. Return JSON only.`;
 
     try {
       const response = await this.openaiClient.generateText(userPrompt, {
         systemPrompt,
-        temperature: 0.3,
-        max_tokens: 300,
+        temperature: 0.25,
+        max_tokens: 350,
       });
 
-      // Parse JSON response
-      const cleanedResponse = response.trim();
-      const jsonMatch = cleanedResponse.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const result = JSON.parse(jsonMatch[0]);
-        
-        // Validate and normalize scores
-        return {
-          relevance_score: Math.max(0, Math.min(100, result.relevance_score || result.relevance || 100)), // Default to 100 for backward compatibility
-          originality_score: Math.max(0, Math.min(100, result.originality_score || 75)),
-          difficulty_alignment_score: Math.max(0, Math.min(100, result.difficulty_alignment_score || 75)),
-          consistency_score: Math.max(0, Math.min(100, result.consistency_score || 75)),
-          feedback_summary: result.feedback_summary || 'Evaluation completed.',
-        };
+      const cleaned = response.trim();
+      const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+
+      if (!jsonMatch) {
+        throw new Error("Invalid JSON returned by OpenAI");
       }
 
-      // Fallback if JSON parsing fails
-      throw new Error('Failed to parse OpenAI evaluation response');
-    } catch (error) {
-      console.error('[QualityCheckService] OpenAI evaluation failed:', error);
-      throw new Error(`Quality evaluation failed: ${error.message}`);
+      const result = JSON.parse(jsonMatch[0]);
+
+      return {
+        relevance_score: Math.max(0, Math.min(100, result.relevance_score || result.relevance || 100)),
+        originality_score: Math.max(0, Math.min(100, result.originality_score || 75)),
+        difficulty_alignment_score: Math.max(0, Math.min(100, result.difficulty_alignment_score || 75)),
+        consistency_score: Math.max(0, Math.min(100, result.consistency_score || 75)),
+        feedback_summary: result.feedback_summary || 'Evaluation completed.',
+      };
+    } catch (err) {
+      console.error("[QualityCheck] Evaluation failed:", err);
+      throw new Error("Evaluation failed: " + err.message);
     }
   }
 
