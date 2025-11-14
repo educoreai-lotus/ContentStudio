@@ -2,7 +2,6 @@ import { getSubtitles } from 'youtube-captions-scraper';
 import { OpenAIClient } from '../external-apis/openai/OpenAIClient.js';
 import { logger } from '../logging/Logger.js';
 import { Innertube } from 'youtubei.js';
-import { createFFmpeg, fetchFile } from '@ffmpeg/ffmpeg';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -259,6 +258,9 @@ export class VideoTranscriptionService {
     try {
       logger.info('[FFmpeg] Extracting audio from video...', { videoPath, audioPath });
 
+      // Lazy load ffmpeg to avoid blocking server startup
+      const { createFFmpeg, fetchFile } = await import('@ffmpeg/ffmpeg');
+      
       const ffmpeg = createFFmpeg({ log: false });
       await ffmpeg.load();
 
