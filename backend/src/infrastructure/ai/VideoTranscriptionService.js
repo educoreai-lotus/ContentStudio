@@ -1,12 +1,16 @@
 import { getSubtitles } from 'youtube-captions-scraper';
 import { OpenAIClient } from '../external-apis/openai/OpenAIClient.js';
 import { logger } from '../logging/Logger.js';
-import { Innertube } from 'youtubei.js';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import os from 'os';
+import { detectAudioTrack } from './detectAudioTrack.js';
+import { convertVideoToMp3 } from './convertVideoToMp3.js';
 
+const execAsync = promisify(exec);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -180,18 +184,6 @@ export class VideoTranscriptionService {
     }
   }
 
-  /**
-   * Extract audio from video file (if needed)
-   * For now, we'll pass the video file directly to Whisper
-   * Whisper can handle video files directly
-   * @param {string} videoFilePath - Path to video file
-   * @returns {Promise<string>} Path to audio file (or video file if extraction not needed)
-   */
-  async extractAudioFromVideo(videoFilePath) {
-    // Whisper can handle video files directly, so we can return the video path
-    // If needed in the future, we can use ffmpeg here to extract audio
-    return videoFilePath;
-  }
 
   /**
    * Transcribe video from YouTube URL
@@ -248,297 +240,8 @@ export class VideoTranscriptionService {
   }
 
   /**
-   * Extract audio from muxed video file using ffmpeg.wasm
-   * @param {string} videoPath - Path to video file
-   * @param {string} audioPath - Path to output audio file
-   * @returns {Promise<void>}
-   * @throws {Error} If extraction fails
-   */
-  async extractAudioFromMuxedVideo(videoPath, audioPath) {
-    try {
-      logger.info('[FFmpeg] Extracting audio from video...', { videoPath, audioPath });
-
-      // Lazy load ffmpeg to avoid blocking server startup
-      const { createFFmpeg, fetchFile } = await import('@ffmpeg/ffmpeg');
-      
-      const ffmpeg = createFFmpeg({ log: false });
-      await ffmpeg.load();
-
-      // Determine input file name based on extension
-      const isWebm = videoPath.endsWith('.webm');
-      const inputFileName = isWebm ? 'input.webm' : 'input.mp4';
-
-      // Read video file into FFmpeg's virtual file system
-      const videoData = await fetchFile(videoPath);
-      ffmpeg.FS('writeFile', inputFileName, videoData);
-
-      // Extract audio (no video, audio codec: mp3)
-      // FFmpeg will auto-detect the input format
-      await ffmpeg.run('-i', inputFileName, '-vn', '-acodec', 'libmp3lame', '-q:a', '2', 'output.mp3');
-
-      // Read extracted audio from virtual file system
-      const audioData = ffmpeg.FS('readFile', 'output.mp3');
-
-      // Write to actual file system
-      fs.writeFileSync(audioPath, Buffer.from(audioData));
-
-      // Clean up virtual files
-      try {
-        ffmpeg.FS('unlink', inputFileName);
-        ffmpeg.FS('unlink', 'output.mp3');
-      } catch (cleanupError) {
-        logger.warn('[FFmpeg] Failed to cleanup virtual files', {
-          error: cleanupError.message,
-        });
-      }
-
-      logger.info('[FFmpeg] Audio extracted successfully', {
-        videoPath,
-        audioPath,
-        audioSize: audioData.length,
-        inputFormat: isWebm ? 'webm' : 'mp4',
-      });
-    } catch (error) {
-      logger.error('[VideoTranscriptionService] Audio extraction failed', {
-        videoPath,
-        audioPath,
-        error: error.message,
-        stack: error.stack,
-      });
-      throw new Error(`Failed to extract audio from video: ${error.message}`);
-    }
-  }
-
-  /**
-   * Download YouTube video (muxed stream) using youtubei.js
-   * Falls back to muxed stream if audio-only is not available
-   * @param {string} videoId - YouTube video ID
-   * @returns {Promise<string>} Path to downloaded video/audio file
-   * @throws {Error} If download fails
-   */
-  async downloadYouTubeAudio(videoId) {
-    try {
-      logger.info('[YouTube] Downloading audio...', { videoId });
-
-      // Initialize YouTube client
-      const yt = await Innertube.create();
-
-      // Get video info (this is the correct API for youtubei.js v16)
-      const info = await yt.getInfo(videoId);
-
-      // Check if streaming_data exists
-      if (!info.streaming_data) {
-        logger.error('[YouTube] No streaming_data found', { videoId });
-        throw new Error('No streaming data available for this video');
-      }
-
-      const { adaptive_formats = [], formats = [] } = info.streaming_data;
-
-      logger.info('[YouTube] Available streams', {
-        videoId,
-        adaptiveFormatsCount: adaptive_formats.length,
-        formatsCount: formats.length,
-      });
-
-      let selectedFormat = null;
-      let isMuxed = false;
-
-      // Strategy 1: Try to find audio-only stream (preferred)
-      selectedFormat = adaptive_formats.find(
-        f => f.mime_type && (f.mime_type.includes('audio/mp4') || f.mime_type.includes('audio/webm'))
-      );
-
-      if (selectedFormat) {
-        logger.info('[YouTube] Found audio-only stream', {
-          videoId,
-          mimeType: selectedFormat.mime_type,
-          itag: selectedFormat.itag,
-        });
-        isMuxed = false;
-      } else {
-        // Strategy 2: Try muxed stream from formats (video + audio)
-        logger.info('[YouTube] No audio-only stream found, trying muxed streams', { videoId });
-        
-        // Try formats with audio_quality first
-        selectedFormat = formats.find(
-          f => f.mime_type && f.mime_type.includes('video/mp4') && f.audio_quality
-        );
-
-        // If still not found, try any video/mp4 format (might have audio even without audio_quality flag)
-        if (!selectedFormat) {
-          selectedFormat = formats.find(
-            f => f.mime_type && (f.mime_type.includes('video/mp4') || f.mime_type.includes('video/webm'))
-          );
-        }
-
-        // If still not found, try adaptive_formats with video
-        if (!selectedFormat) {
-          selectedFormat = adaptive_formats.find(
-            f => f.mime_type && (f.mime_type.includes('video/mp4') || f.mime_type.includes('video/webm'))
-          );
-        }
-
-        if (selectedFormat) {
-          logger.info('[YouTube] Found muxed stream', {
-            videoId,
-            mimeType: selectedFormat.mime_type,
-            itag: selectedFormat.itag,
-          });
-          isMuxed = true;
-        }
-      }
-
-      if (!selectedFormat) {
-        // Log available formats for debugging
-        logger.error('[YouTube] No suitable stream found', {
-          videoId,
-          availableAdaptiveFormats: adaptive_formats.map(f => ({
-            mimeType: f.mime_type,
-            itag: f.itag,
-            hasUrl: !!f.url,
-          })),
-          availableFormats: formats.map(f => ({
-            mimeType: f.mime_type,
-            itag: f.itag,
-            hasUrl: !!f.url,
-            hasAudioQuality: !!f.audio_quality,
-          })),
-        });
-        throw new Error('No audio or video stream found for this video');
-      }
-
-      // Create temp directory if it doesn't exist
-      const tempDir = path.join(os.tmpdir(), 'youtube-audio');
-      if (!fs.existsSync(tempDir)) {
-        fs.mkdirSync(tempDir, { recursive: true });
-      }
-
-      // Determine file extension based on mime type
-      const isVideo = selectedFormat.mime_type?.includes('video/');
-      const isWebm = selectedFormat.mime_type?.includes('webm');
-      const fileExtension = isWebm ? '.webm' : '.mp4';
-      
-      const videoPath = path.join(tempDir, `${videoId}${fileExtension}`);
-      const audioPath = path.join(tempDir, `${videoId}.mp3`);
-
-      // Download stream
-      logger.info('[YouTube] Downloading stream...', {
-        videoId,
-        isMuxed,
-        isVideo,
-        mimeType: selectedFormat.mime_type,
-        fileExtension,
-        itag: selectedFormat.itag,
-      });
-
-      // Get the stream URL from selectedFormat
-      // In youtubei.js v16, format objects from getInfo() have a url property
-      // The URL might be a signed URL that requires authentication headers
-      let streamUrl = selectedFormat.url;
-
-      if (!streamUrl) {
-        logger.error('[YouTube] No URL found in format', {
-          videoId,
-          formatKeys: Object.keys(selectedFormat),
-          formatType: typeof selectedFormat,
-          formatConstructor: selectedFormat.constructor?.name,
-        });
-        throw new Error('No URL found in selected format');
-      }
-
-      logger.info('[YouTube] Got stream URL from format', {
-        videoId,
-        hasUrl: !!streamUrl,
-        urlLength: streamUrl.length,
-        urlStart: streamUrl.substring(0, 100),
-      });
-
-      // YouTube requires specific headers to download streams
-      const headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Referer': `https://www.youtube.com/watch?v=${videoId}`,
-        'Accept': '*/*',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Accept-Encoding': 'identity',
-        'Range': 'bytes=0-',
-      };
-
-      const response = await fetch(streamUrl, {
-        headers,
-        redirect: 'follow',
-      });
-
-      if (!response.ok) {
-        logger.error('[YouTube] Stream download failed', {
-          videoId,
-          status: response.status,
-          statusText: response.statusText,
-          headers: Object.fromEntries(response.headers.entries()),
-          streamUrl: streamUrl.substring(0, 100) + '...', // Log partial URL for debugging
-        });
-        throw new Error(`Failed to download stream: ${response.statusText}`);
-      }
-
-      const arrayBuffer = await response.arrayBuffer();
-      const buffer = Buffer.from(arrayBuffer);
-
-      // Write to file
-      fs.writeFileSync(videoPath, buffer);
-
-      logger.info('[YouTube] Stream downloaded successfully', {
-        videoId,
-        filePath: videoPath,
-        fileSize: buffer.length,
-        isMuxed,
-        isVideo,
-      });
-
-      // If it's a video stream (muxed), extract audio
-      if (isMuxed || isVideo) {
-        logger.info('[YouTube] Extracting audio from video stream...', {
-          videoId,
-          videoPath,
-          audioPath,
-        });
-        
-        await this.extractAudioFromMuxedVideo(videoPath, audioPath);
-        
-        // Clean up video file
-        try {
-          if (fs.existsSync(videoPath)) {
-            fs.unlinkSync(videoPath);
-            logger.info('[YouTube] Cleaned up video file', { videoPath });
-          }
-        } catch (cleanupError) {
-          logger.warn('[VideoTranscriptionService] Failed to cleanup video file', {
-            videoPath,
-            error: cleanupError.message,
-          });
-        }
-
-        return audioPath;
-      }
-
-      // If it's audio-only, return the path (but rename to .mp3 for consistency)
-      if (fs.existsSync(videoPath)) {
-        fs.renameSync(videoPath, audioPath);
-        logger.info('[YouTube] Renamed audio file', { videoPath, audioPath });
-      }
-
-      return audioPath;
-    } catch (error) {
-      logger.error('[VideoTranscriptionService] YouTube audio download failed', {
-        videoId,
-        error: error.message,
-        stack: error.stack,
-      });
-      throw new Error(`Failed to download YouTube audio: ${error.message}`);
-    }
-  }
-
-  /**
    * Transcribe YouTube video using Whisper (fallback method)
-   * Downloads audio first, then transcribes with Whisper
+   * Downloads audio using yt-dlp, then transcribes with Whisper
    * @param {string} youtubeUrl - YouTube URL
    * @param {string} videoId - YouTube video ID
    * @returns {Promise<Object>} { transcript, source, videoType }
@@ -549,14 +252,145 @@ export class VideoTranscriptionService {
       throw new Error('OpenAI client not available. Please configure OpenAI API key.');
     }
 
+    // Create temp directory if it doesn't exist
+    // Use /app/uploads/temp for Railway or os.tmpdir() as fallback
+    const tempDir = process.env.UPLOAD_DIR 
+      ? path.join(process.env.UPLOAD_DIR, 'temp')
+      : '/app/uploads/temp'; // Default to /app/uploads/temp for Railway
+    
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true });
+      logger.info('[YouTube] Created temp directory', { tempDir });
+    }
+
+    // Use timestamp to create unique filename
+    const timestamp = Date.now();
+    const outputPath = path.join(tempDir, `yt_audio_${timestamp}.mp3`);
     let audioPath = null;
 
     try {
-      // Step 1: Download audio from YouTube
-      audioPath = await this.downloadYouTubeAudio(videoId);
+      // Step 1: Download audio using yt-dlp
+      logger.info('[YouTube] Using yt-dlp to download audio...', {
+        videoId,
+        youtubeUrl,
+        outputPath,
+      });
+
+      try {
+        // Download MP3 using yt-dlp
+        // -x: extract audio only
+        // --audio-format mp3: convert to MP3
+        // --audio-quality 0: best quality
+        // -o: output path (yt-dlp will create the file at this path)
+        // Escape paths for shell command
+        // Use single quotes for Unix (Railway/Linux) and double quotes for Windows
+        const isWindows = process.platform === 'win32';
+        const escapePathForShell = (filePath) => isWindows 
+          ? filePath.replace(/"/g, '\\"')
+          : filePath.replace(/'/g, "'\"'\"'");
+        const quote = isWindows ? '"' : "'";
+        const escapedOutputPath = escapePathForShell(outputPath);
+        const escapedYoutubeUrl = escapePathForShell(youtubeUrl);
+        const command = `yt-dlp -x --audio-format mp3 --audio-quality 0 -o ${quote}${escapedOutputPath}${quote} ${quote}${escapedYoutubeUrl}${quote}`;
+        
+        logger.info('[YouTube] Executing yt-dlp command...', { 
+          command,
+          outputPath,
+          youtubeUrl,
+          isWindows,
+        });
+        
+        const execOptions = {
+          timeout: 300000, // 5 minutes timeout
+          maxBuffer: 10 * 1024 * 1024, // 10MB buffer for output
+        };
+        
+        // Use bash on Unix for better path handling, default shell on Windows
+        if (!isWindows) {
+          execOptions.shell = '/bin/bash';
+        }
+        
+        const { stdout, stderr } = await execAsync(command, execOptions);
+
+        if (stderr && !stderr.includes('WARNING') && !stderr.includes('ERROR')) {
+          logger.warn('[YouTube] yt-dlp stderr output', { stderr: stderr.substring(0, 500) });
+        }
+
+        if (stdout) {
+          logger.info('[YouTube] yt-dlp stdout output', { stdout: stdout.substring(0, 500) });
+        }
+
+        // Wait a bit for file system to sync
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // Check if file was created at expected path
+        if (fs.existsSync(outputPath)) {
+          audioPath = outputPath;
+        } else {
+          // yt-dlp might have created a file with a different name
+          // Check for the most recently created audio file in the temp directory
+          // Look for files created in the last 2 minutes
+          const minTime = Date.now() - 120000; // 2 minutes ago
+          
+          const audioFiles = fs.readdirSync(tempDir)
+            .map(f => {
+              const filePath = path.join(tempDir, f);
+              try {
+                const stat = fs.statSync(filePath);
+                return {
+                  name: f,
+                  path: filePath,
+                  stat,
+                };
+              } catch (err) {
+                return null;
+              }
+            })
+            .filter(f => 
+              f !== null &&
+              (f.name.endsWith('.mp3') || f.name.endsWith('.m4a') || f.name.endsWith('.webm') || f.name.endsWith('.opus')) &&
+              f.stat.mtime.getTime() > minTime
+            )
+            .sort((a, b) => b.stat.mtime.getTime() - a.stat.mtime.getTime());
+
+          if (audioFiles.length > 0) {
+            audioPath = audioFiles[0].path;
+            logger.info('[YouTube] Found audio file with different name', {
+              audioPath,
+              fileName: audioFiles[0].name,
+              expectedPath: outputPath,
+            });
+          } else {
+            logger.error('[YouTube] No audio file found after yt-dlp execution', {
+              outputPath,
+              tempDir,
+              filesInDir: fs.readdirSync(tempDir),
+            });
+            throw new Error('yt-dlp did not create the audio file. Check if yt-dlp is installed and the video is accessible.');
+          }
+        }
+
+        logger.info('[YouTube] Audio downloaded successfully', {
+          videoId,
+          audioPath,
+          fileSize: fs.existsSync(audioPath) ? fs.statSync(audioPath).size : 0,
+        });
+      } catch (execError) {
+        logger.error('[YouTube] yt-dlp download failed', {
+          videoId,
+          error: execError.message,
+          stdout: execError.stdout,
+          stderr: execError.stderr,
+          code: execError.code,
+        });
+        throw new Error(`Failed to download audio with yt-dlp: ${execError.message}`);
+      }
 
       // Step 2: Transcribe with Whisper
-      logger.info('[Whisper] Transcribing...', { videoId, audioPath });
+      logger.info('[Whisper] Transcribing audio...', {
+        videoId,
+        audioPath,
+      });
 
       const transcript = await this.transcribeWithWhisper(audioPath, {
         language: 'en',
@@ -566,7 +400,7 @@ export class VideoTranscriptionService {
         throw new Error('Whisper transcription returned empty result');
       }
 
-      logger.info('[Whisper] Done.', {
+      logger.info('[Whisper] Transcription completed', {
         videoId,
         transcriptLength: transcript.length,
       });
@@ -590,7 +424,7 @@ export class VideoTranscriptionService {
       if (audioPath && fs.existsSync(audioPath)) {
         try {
           fs.unlinkSync(audioPath);
-          logger.debug('[VideoTranscriptionService] Temporary audio file deleted', { audioPath });
+          logger.info('[VideoTranscriptionService] Temporary audio file deleted', { audioPath });
         } catch (cleanupError) {
           logger.warn('[VideoTranscriptionService] Failed to cleanup audio file', {
             audioPath,
@@ -603,24 +437,117 @@ export class VideoTranscriptionService {
 
   /**
    * Transcribe uploaded video file using Whisper
+   * Detects audio track, converts to MP3, then transcribes with Whisper
    * @param {string} videoFilePath - Path to uploaded video file
    * @param {Object} options - Options
    * @returns {Promise<Object>} { transcript, source, videoType }
+   * @throws {Error} If video has no audio track or transcription fails
    */
   async transcribeUploadedFile(videoFilePath, options = {}) {
-    logger.info('[VideoTranscriptionService] Processing uploaded video file', { videoFilePath });
+    if (!this.openaiClient) {
+      throw new Error('OpenAI client not available. Please configure OpenAI API key.');
+    }
 
-    // Extract audio if needed (for now, Whisper handles video directly)
-    const audioPath = await this.extractAudioFromVideo(videoFilePath);
+    logger.info('[VideoTranscriptionService] Starting video transcription', { videoFilePath });
 
-    // Transcribe with Whisper
-    const transcript = await this.transcribeWithWhisper(audioPath, options);
+    // Check if file exists
+    if (!fs.existsSync(videoFilePath)) {
+      throw new Error(`Video file not found: ${videoFilePath}`);
+    }
 
-    return {
-      transcript,
-      source: 'whisper',
-      videoType: 'upload',
-    };
+    let mp3Path = null;
+    let shouldDeleteOriginal = false;
+
+    try {
+      // Step 1: Detect audio track
+      logger.info('[VideoTranscriptionService] Detecting audio track...', { videoFilePath });
+      
+      const hasAudio = await detectAudioTrack(videoFilePath);
+
+      if (!hasAudio) {
+        logger.error('[VideoTranscriptionService] No audio track found in video', { videoFilePath });
+        throw new Error(
+          'This video does not contain any audio track. Whisper can only transcribe audio.'
+        );
+      }
+
+      logger.info('[VideoTranscriptionService] Audio track detected', { videoFilePath });
+
+      // Step 2: Convert to MP3
+      logger.info('[VideoTranscriptionService] Converting video to MP3...', { videoFilePath });
+      
+      mp3Path = await convertVideoToMp3(videoFilePath);
+      
+      logger.info('[VideoTranscriptionService] Video converted to MP3', {
+        videoFilePath,
+        mp3Path,
+        mp3Size: fs.existsSync(mp3Path) ? fs.statSync(mp3Path).size : 0,
+      });
+
+      // Step 3: Transcribe with Whisper
+      logger.info('[VideoTranscriptionService] Transcribing with Whisper...', {
+        videoFilePath,
+        mp3Path,
+      });
+
+      const transcript = await this.transcribeWithWhisper(mp3Path, {
+        language: options.language || 'en',
+      });
+
+      if (!transcript || transcript.trim().length === 0) {
+        throw new Error('Whisper transcription returned empty result');
+      }
+
+      logger.info('[VideoTranscriptionService] Transcription completed', {
+        videoFilePath,
+        transcriptLength: transcript.length,
+      });
+
+      // Step 4: Determine if we should delete original file
+      // Only delete if it's in a temp directory (uploaded file)
+      const isTempFile = videoFilePath.includes('temp') || videoFilePath.includes('upload');
+      shouldDeleteOriginal = isTempFile;
+
+      return {
+        transcript,
+        source: 'whisper',
+        videoType: 'upload',
+      };
+    } catch (error) {
+      logger.error('[VideoTranscriptionService] Video transcription failed', {
+        videoFilePath,
+        error: error.message,
+        stack: error.stack,
+      });
+
+      throw new Error(`Failed to transcribe video: ${error.message}`);
+    } finally {
+      // Step 5: Cleanup - delete MP3 file
+      if (mp3Path && fs.existsSync(mp3Path)) {
+        try {
+          fs.unlinkSync(mp3Path);
+          logger.info('[VideoTranscriptionService] Temporary MP3 file deleted', { mp3Path });
+        } catch (cleanupError) {
+          logger.warn('[VideoTranscriptionService] Failed to cleanup MP3 file', {
+            mp3Path,
+            error: cleanupError.message,
+          });
+        }
+      }
+
+      // Step 6: Cleanup - delete original video file if it's a temp file
+      if (shouldDeleteOriginal && videoFilePath && fs.existsSync(videoFilePath)) {
+        try {
+          fs.unlinkSync(videoFilePath);
+          logger.info('[VideoTranscriptionService] Original video file deleted', { videoFilePath });
+        } catch (cleanupError) {
+          logger.warn('[VideoTranscriptionService] Failed to cleanup original video file', {
+            videoFilePath,
+            error: cleanupError.message,
+          });
+        }
+      }
+    }
   }
 
   /**
