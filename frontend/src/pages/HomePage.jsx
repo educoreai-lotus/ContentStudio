@@ -8,35 +8,53 @@ const HomePage = () => {
   const isDark = theme !== 'day-mode';
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] dark:bg-[#0f172a] transition-colors duration-300">
+    <div className={`min-h-screen ${isDark ? 'bg-[#0f172a]' : 'bg-gray-50'} transition-colors duration-300`}>
       {/* Hero Section */}
-      <section className="hero py-20 bg-[#e2e8f0] dark:bg-[#1e293b]">
+      <section className={`hero py-20 ${
+        isDark ? 'bg-[#1e293b]' : 'bg-gradient-to-br from-emerald-50 to-teal-50'
+      }`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="hero-content text-center">
-            <h1 className="text-5xl md:text-6xl font-bold mb-6 leading-tight bg-gradient-to-r from-emerald-700 to-emerald-800 dark:from-emerald-600 dark:to-emerald-700 bg-clip-text text-transparent">
+            <h1
+              className="text-5xl md:text-6xl font-bold mb-6 leading-tight"
+              style={{
+                background: 'var(--gradient-primary)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                backgroundClip: 'text',
+              }}
+            >
               Content Studio
             </h1>
-            <p className="subtitle text-xl mb-8 text-gray-600 dark:text-[#cbd5e1]">
+            <p className="subtitle text-xl mb-8" style={{ color: isDark ? 'rgba(226, 232, 240, 0.8)' : 'var(--text-secondary)' }}>
               Create, manage, and publish educational content with AI assistance
             </p>
-            <p className="text-lg mb-8 text-gray-500 dark:text-[#94a3b8]">
+            <p className="text-lg mb-8" style={{ color: isDark ? 'rgba(148, 163, 184, 0.85)' : 'var(--text-muted)' }}>
               Transform your teaching with intelligent content generation,
               interactive lessons, and automated workflows
             </p>
           </div>
 
           {/* Action Buttons */}
-          <div className="hero-actions flex gap-6 justify-center flex-wrap mt-8">
+          <div className="hero-actions flex gap-6 justify-center flex-wrap" style={{ marginTop: 'var(--spacing-xl)' }}>
             <button
               onClick={() => navigate('/courses')}
-              className="btn btn-primary px-6 py-3 rounded-xl text-lg font-semibold text-white border-none cursor-pointer transition-all duration-300 relative overflow-hidden bg-gradient-to-r from-emerald-600 to-emerald-700 dark:from-emerald-600 dark:to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 dark:hover:from-emerald-700 dark:hover:to-emerald-800 hover:shadow-lg hover:-translate-y-0.5 active:scale-95 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
+              className={`btn btn-primary px-6 py-3 rounded-xl text-lg font-semibold text-white border-none cursor-pointer transition-all duration-300 relative overflow-hidden ${
+                isDark 
+                  ? 'bg-gradient-to-r from-emerald-600 to-emerald-700 hover:shadow-lg hover:-translate-y-0.5' 
+                  : 'bg-gradient-to-r from-emerald-700 to-emerald-800 hover:shadow-lg hover:-translate-y-0.5'
+              }`}
             >
               <i className="fas fa-graduation-cap mr-2"></i>
               Browse Courses
             </button>
             <button
               onClick={() => navigate('/topics')}
-              className="btn btn-secondary px-6 py-3 rounded-xl text-lg font-semibold cursor-pointer transition-all duration-300 relative overflow-hidden bg-transparent dark:bg-transparent text-gray-900 dark:text-[#f8fafc] border-2 border-teal-600 dark:border-white/20 hover:bg-gradient-to-r hover:from-emerald-600 hover:to-emerald-700 dark:hover:from-emerald-600 dark:hover:to-emerald-700 hover:text-white hover:border-transparent hover:-translate-y-0.5 hover:shadow-lg active:scale-95 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
+              className={`btn btn-secondary px-6 py-3 rounded-xl text-lg font-semibold cursor-pointer transition-all duration-300 relative overflow-hidden ${
+                isDark 
+                  ? 'bg-transparent text-slate-50 border-2 border-white/20 hover:bg-gradient-to-r hover:from-emerald-600 hover:to-emerald-700 hover:text-white hover:border-transparent hover:-translate-y-0.5 hover:shadow-lg' 
+                  : 'bg-transparent text-gray-900 border-2 border-teal-600 hover:bg-gradient-to-r hover:from-emerald-700 hover:to-emerald-800 hover:text-white hover:border-transparent hover:-translate-y-0.5 hover:shadow-lg'
+              }`}
             >
               <i className="fas fa-book mr-2"></i>
               View Lessons
@@ -46,12 +64,20 @@ const HomePage = () => {
       </section>
 
       {/* Features Section */}
-      <section className="microservices-section py-20 bg-[#e2e8f0] dark:bg-[#1e293b] transition-colors duration-300">
+      <section className={`microservices-section py-20 ${isDark ? 'bg-[#0f172a]' : 'bg-gray-50'} transition-colors duration-300`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="section-title text-center text-4xl font-bold mb-12 bg-gradient-to-r from-emerald-700 to-emerald-800 dark:from-emerald-600 dark:to-emerald-700 bg-clip-text text-transparent">
+          <h2
+            className="section-title text-center text-4xl font-bold mb-12"
+            style={{
+              background: 'var(--gradient-primary)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+            }}
+          >
             Content Studio Features
           </h2>
-          <div className="microservices-grid grid grid-cols-1 md:grid-cols-3 gap-6 mt-12">
+          <div className="microservices-grid grid grid-cols-1 md:grid-cols-3 gap-6" style={{ marginTop: 'var(--spacing-2xl)' }}>
             {[
               {
                 icon: 'fa-robot',
@@ -71,16 +97,93 @@ const HomePage = () => {
             ].map(({ icon, title, text }, i) => (
               <div
                 key={i}
-                className="microservice-card rounded-2xl p-8 text-center cursor-pointer relative overflow-hidden backdrop-blur-sm transition-all duration-300 bg-white dark:bg-gradient-to-br dark:from-[#1e293b] dark:to-[#334155] border border-gray-200 dark:border-white/10 shadow-md dark:shadow-[0_10px_40px_rgba(0,0,0,0.6)] hover:-translate-y-2 hover:shadow-xl dark:hover:shadow-[0_20px_60px_rgba(13,148,136,0.3)] hover:border-emerald-500/50 dark:hover:border-emerald-500/50"
+                className="microservice-card"
+                style={{
+                  background: isDark ? 'rgba(15, 23, 42, 0.85)' : 'var(--gradient-card)',
+                  border: isDark ? '1px solid rgba(45, 212, 191, 0.25)' : '1px solid rgba(255, 255, 255, 0.1)',
+                  borderRadius: '16px',
+                  padding: 'var(--spacing-xl)',
+                  textAlign: 'center',
+                  boxShadow: isDark ? '0 12px 40px rgba(6, 95, 70, 0.18)' : 'var(--shadow-card)',
+                  transition: 'all 0.3s ease',
+                  cursor: 'pointer',
+                  position: 'relative',
+                  overflow: 'hidden',
+                  backdropFilter: 'blur(10px)',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.transform = 'translateY(-8px)';
+                  e.currentTarget.style.boxShadow = isDark
+                    ? '0 18px 45px rgba(6, 95, 70, 0.28)'
+                    : 'var(--shadow-hover)';
+                  e.currentTarget.style.borderColor = 'var(--primary-cyan)';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = isDark
+                    ? '0 12px 40px rgba(6, 95, 70, 0.18)'
+                    : 'var(--shadow-card)';
+                  e.currentTarget.style.borderColor = isDark
+                    ? 'rgba(45, 212, 191, 0.25)'
+                    : 'rgba(255, 255, 255, 0.1)';
+                }}
               >
-                <div className="relative z-10">
-                  <div className="service-icon w-[70px] h-[70px] rounded-2xl flex items-center justify-center mx-auto mb-6 text-3xl text-white bg-gradient-to-r from-emerald-600 to-emerald-700 dark:from-emerald-600 dark:to-emerald-700 shadow-lg">
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    background: isDark ? 'linear-gradient(135deg, rgba(6, 95, 70, 0.55), rgba(15, 118, 110, 0.35))' : 'var(--gradient-primary)',
+                    opacity: 0,
+                    transition: 'opacity 0.3s ease',
+                    borderRadius: '16px',
+                  }}
+                ></div>
+
+                <div style={{ position: 'relative', zIndex: 1 }}>
+                  <div
+                    className="service-icon"
+                    style={{
+                      background: 'var(--gradient-primary)',
+                      width: '70px',
+                      height: '70px',
+                      borderRadius: '16px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      margin: '0 auto var(--spacing-lg)',
+                      fontSize: '1.8rem',
+                      color: 'white',
+                      boxShadow: '0 8px 25px rgba(6, 95, 70, 0.3)',
+                      transition: 'all 0.3s ease',
+                    }}
+                  >
                     <i className={`fas ${icon}`}></i>
                   </div>
-                  <h3 className="text-xl font-bold mb-4 text-gray-900 dark:text-[#f8fafc]">
+                  <h3
+                    className="text-lg font-semibold mb-3"
+                    style={{
+                      color: isDark ? 'rgba(241, 245, 249, 0.95)' : 'var(--text-primary)',
+                      fontSize: '1.2rem',
+                      fontWeight: '700',
+                      marginBottom: 'var(--spacing-md)',
+                      textAlign: 'center',
+                    }}
+                  >
                     {title}
                   </h3>
-                  <p className="text-base leading-relaxed text-gray-600 dark:text-[#cbd5e1]">
+                  <p
+                    className="text-sm"
+                    style={{
+                      color: isDark ? 'rgba(203, 213, 225, 0.85)' : 'var(--text-secondary)',
+                      fontSize: '0.95rem',
+                      lineHeight: '1.6',
+                      fontWeight: '500',
+                      textAlign: 'center',
+                    }}
+                  >
                     {text}
                   </p>
                 </div>
