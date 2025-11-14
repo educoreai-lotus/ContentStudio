@@ -412,13 +412,13 @@
         "body": "#0f172a",
         "appShell": "#1e293b",
         "panel": "#1e293b",
-        "card": "#334155",
+        "card": "#1e293b",
         "section": "#0f172a",
         "overlay": "rgba(0, 0, 0, 0.7)",
         "backdrop": "rgba(0, 0, 0, 0.5)"
       },
       "text": {
-        "primary": "#f1f5f9",
+        "primary": "#f8fafc",
         "secondary": "#cbd5e1",
         "muted": "#94a3b8",
         "inverse": "#0f172a",
@@ -433,17 +433,17 @@
       },
       "header": {
         "height": "64px",
-        "background": "#1e293b",
-        "backgroundTransparent": "rgba(30, 41, 59, 0.95)",
-        "border": "1px solid #334155",
+        "background": "#0f172a",
+        "backgroundTransparent": "rgba(15, 23, 42, 0.95)",
+        "border": "1px solid rgba(255, 255, 255, 0.1)",
         "shadow": "0 1px 3px 0 rgba(0, 0, 0, 0.3), 0 1px 2px 0 rgba(0, 0, 0, 0.2)",
-        "text": "#f1f5f9"
+        "text": "#f8fafc"
       },
       "button": {
         "primary": {
-          "background": "#0d9488",
-          "backgroundHover": "#14b8a6",
-          "backgroundPressed": "#2dd4bf",
+          "background": "linear-gradient(135deg, #0d9488, #059669)",
+          "backgroundHover": "linear-gradient(135deg, #059669, #047857)",
+          "backgroundPressed": "linear-gradient(135deg, #047857, #065f46)",
           "backgroundDisabled": "#475569",
           "text": "#ffffff",
           "textDisabled": "#64748b",
@@ -452,13 +452,14 @@
           "shadowHover": "0 10px 15px -3px rgba(13, 148, 136, 0.4), 0 0 20px rgba(13, 148, 136, 0.3)"
         },
         "secondary": {
-          "background": "#334155",
-          "backgroundHover": "#475569",
-          "backgroundPressed": "#64748b",
-          "backgroundDisabled": "#1e293b",
-          "text": "#f1f5f9",
+          "background": "transparent",
+          "backgroundHover": "linear-gradient(135deg, #0d9488, #059669)",
+          "backgroundPressed": "linear-gradient(135deg, #059669, #047857)",
+          "backgroundDisabled": "transparent",
+          "text": "#f8fafc",
           "textDisabled": "#64748b",
-          "border": "1px solid #475569",
+          "border": "2px solid rgba(255, 255, 255, 0.2)",
+          "borderHover": "transparent",
           "shadow": "none",
           "shadowHover": "0 2px 4px rgba(0, 0, 0, 0.3)"
         },
@@ -491,26 +492,26 @@
           "backgroundHover": "#334155",
           "backgroundPressed": "#475569",
           "backgroundDisabled": "transparent",
-          "text": "#f1f5f9",
-          "textHover": "#2dd4bf",
+          "text": "#cbd5e1",
+          "textHover": "#f8fafc",
           "textDisabled": "#475569",
           "border": "none",
           "shadow": "none"
         }
       },
       "input": {
-        "background": "#334155",
-        "backgroundHover": "#475569",
-        "backgroundFocus": "#475569",
+        "background": "#1e293b",
+        "backgroundHover": "#1e293b",
+        "backgroundFocus": "#1e293b",
         "backgroundFilled": "#1e293b",
         "backgroundDisabled": "#1e293b",
         "backgroundInvalid": "#7f1d1d",
-        "text": "#f1f5f9",
-        "textPlaceholder": "#64748b",
+        "text": "#f8fafc",
+        "textPlaceholder": "#94a3b8",
         "textDisabled": "#64748b",
         "textInvalid": "#fca5a5",
-        "border": "1px solid #475569",
-        "borderHover": "1px solid #64748b",
+        "border": "1px solid #334155",
+        "borderHover": "1px solid #334155",
         "borderFocus": "2px solid #2dd4bf",
         "borderInvalid": "2px solid #ef4444",
         "borderDisabled": "1px solid #334155",
@@ -533,10 +534,10 @@
         "shadow": "0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.3)"
       },
       "gradient": {
-        "primary": "linear-gradient(135deg, #0d9488, #14b8a6)",
-        "secondary": "linear-gradient(135deg, #14b8a6, #2dd4bf)",
-        "accent": "linear-gradient(135deg, #f59e0b, #fbbf24)",
-        "card": "linear-gradient(145deg, #334155, #1e293b)",
+        "primary": "linear-gradient(135deg, #0d9488, #059669)",
+        "secondary": "linear-gradient(135deg, #14b8a6, #10b981)",
+        "accent": "linear-gradient(135deg, #d97706, #f59e0b)",
+        "card": "linear-gradient(145deg, #1e293b, #334155)",
         "subtle": "linear-gradient(180deg, #1e293b, #0f172a)"
       },
       "neon": {
@@ -1034,22 +1035,26 @@
     "card": {
       "surface": {
         "light": "#ffffff",
-        "dark": "#334155"
+        "dark": "#1e293b"
+      },
+      "surfaceGradient": {
+        "light": "linear-gradient(145deg, #ffffff, #f0fdfa)",
+        "dark": "linear-gradient(145deg, #1e293b, #334155)"
       },
       "border": {
         "light": "1px solid #e2e8f0",
-        "dark": "1px solid #475569"
+        "dark": "1px solid rgba(255, 255, 255, 0.1)"
       },
       "radius": "lg",
       "shadow": {
         "light": "0 10px 40px rgba(0, 0, 0, 0.1)",
-        "dark": "0 10px 40px rgba(0, 0, 0, 0.3)"
+        "dark": "0 10px 40px rgba(0, 0, 0, 0.6)"
       },
       "padding": "24px",
       "hover": {
         "shadow": {
           "light": "0 20px 60px rgba(6, 95, 70, 0.2)",
-          "dark": "0 20px 60px rgba(0, 0, 0, 0.4)"
+          "dark": "0 20px 60px rgba(13, 148, 136, 0.3)"
         },
         "transform": "translateY(-2px)"
       },

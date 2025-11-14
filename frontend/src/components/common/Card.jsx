@@ -17,8 +17,8 @@ export const Card = ({
   return (
     <div
       className={`rounded-xl p-6 transition-all duration-300 ${
-        // Background: #1e293b or gradient-card in dark mode
-        'bg-white dark:bg-[#1e293b] dark:bg-gradient-to-br dark:from-[#1e293b] dark:to-[#334155]'
+        // Background: --bg-card (#ffffff day, #1e293b night) or gradient-card
+        'bg-white dark:bg-[#1e293b]'
       } ${
         // Borders: rgba white(0.1) in dark mode
         'border border-gray-200 dark:border-white/10'

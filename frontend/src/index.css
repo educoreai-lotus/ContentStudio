@@ -3,20 +3,31 @@
 @tailwind components;
 @tailwind utilities;
 
-/* CSS Variables for gradients and theme */
+/* CSS Variables for gradients and theme - DAY MODE */
 :root {
+  /* Background System - Day Mode */
+  --bg-primary: #f8fafc;   /* page background */
+  --bg-secondary: #e2e8f0; /* section backgrounds */
+  --bg-tertiary: #cbd5e1;  /* cards / boxes / subtle surfaces */
+  --bg-card: #ffffff;      /* main card surface, white */
+  
+  /* Gradients - Day Mode */
   --gradient-primary: linear-gradient(135deg, #065f46, #047857);
   --gradient-secondary: linear-gradient(135deg, #0f766e, #047857);
   --gradient-accent: linear-gradient(135deg, #d97706, #f59e0b);
   --gradient-card: linear-gradient(145deg, #ffffff, #f0fdfa);
+  
+  /* Shadows */
   --shadow-glow: 0 0 30px rgba(6, 95, 70, 0.3);
   --shadow-card: 0 10px 40px rgba(0, 0, 0, 0.1);
   --shadow-hover: 0 20px 60px rgba(6, 95, 70, 0.2);
-  --primary-cyan: #0f766e;
+  
+  /* Text Colors - Day Mode */
   --text-primary: #1e293b;
   --text-secondary: #475569;
   --text-muted: #64748b;
-  --bg-primary: #f8fafc;
+  
+  /* Spacing */
   --spacing-xs: 0.5rem;
   --spacing-sm: 0.75rem;
   --spacing-md: 1rem;
@@ -25,35 +36,27 @@
   --spacing-2xl: 3rem;
 }
 
-/* Dark mode variables - exact palette */
+/* Dark mode variables - NIGHT MODE */
 .dark {
-  /* Backgrounds */
-  --bg-primary: #0f172a;
-  --bg-secondary: #1e293b;
-  --bg-tertiary: #334155;
-  --bg-card: #1e293b;
+  /* Background System - Night Mode */
+  --bg-primary: #0f172a;   /* deep dark blue/black - page background */
+  --bg-secondary: #1e293b;  /* darker panels & sections */
+  --bg-tertiary: #334155;   /* card surfaces */
+  --bg-card: #1e293b;       /* cards + containers */
   
-  /* Text Colors */
+  /* Text Colors - Night Mode */
   --text-primary: #f8fafc;
   --text-secondary: #cbd5e1;
   --text-muted: #94a3b8;
   --text-accent: #e2e8f0;
   
-  /* Brand / Accent Colors */
-  --primary-blue: #065f46;
-  --primary-purple: #047857;
-  --primary-cyan: #0f766e;
-  --accent-gold: #d97706;
-  --accent-green: #047857;
-  --accent-orange: #f59e0b;
-  
-  /* Gradients */
+  /* Gradients - Night Mode */
   --gradient-primary: linear-gradient(135deg, #0d9488, #059669);
   --gradient-secondary: linear-gradient(135deg, #14b8a6, #10b981);
   --gradient-accent: linear-gradient(135deg, #d97706, #f59e0b);
   --gradient-card: linear-gradient(145deg, #1e293b, #334155);
   
-  /* Shadows */
+  /* Shadows - Night Mode */
   --shadow-glow: 0 0 30px rgba(13, 148, 136, 0.4);
   --shadow-card: 0 10px 40px rgba(0, 0, 0, 0.6);
   --shadow-hover: 0 20px 60px rgba(13, 148, 136, 0.3);

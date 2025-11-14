@@ -65,8 +65,8 @@ export const StatusStream = ({ messages = [], theme = 'day-mode' }) => {
   };
 
   return (
-    <div className="mt-4 space-y-1.5 max-h-[250px] overflow-y-auto bg-white dark:bg-[#1e293b]/30 border border-gray-200 dark:border-white/10 rounded-lg p-3 transition-colors duration-300">
-      <div className="text-xs font-semibold mb-2 sticky top-0 bg-white dark:bg-[#1e293b]/30 text-gray-600 dark:text-[#94a3b8] pb-1 transition-colors duration-300">
+    <div className="mt-4 space-y-1.5 max-h-[250px] overflow-y-auto bg-white dark:bg-[#1e293b] border border-gray-200 dark:border-white/10 rounded-lg p-3 transition-colors duration-300">
+      <div className="text-xs font-semibold mb-2 sticky top-0 bg-white dark:bg-[#1e293b] text-gray-600 dark:text-[#94a3b8] pb-1 transition-colors duration-300">
         Status Updates
       </div>
       {messages.map((msg, index) => {
