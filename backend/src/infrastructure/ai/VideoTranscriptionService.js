@@ -264,12 +264,17 @@ export class VideoTranscriptionService {
       const ffmpeg = createFFmpeg({ log: false });
       await ffmpeg.load();
 
+      // Determine input file name based on extension
+      const isWebm = videoPath.endsWith('.webm');
+      const inputFileName = isWebm ? 'input.webm' : 'input.mp4';
+
       // Read video file into FFmpeg's virtual file system
       const videoData = await fetchFile(videoPath);
-      ffmpeg.FS('writeFile', 'input.mp4', videoData);
+      ffmpeg.FS('writeFile', inputFileName, videoData);
 
       // Extract audio (no video, audio codec: mp3)
-      await ffmpeg.run('-i', 'input.mp4', '-vn', '-acodec', 'libmp3lame', '-q:a', '2', 'output.mp3');
+      // FFmpeg will auto-detect the input format
+      await ffmpeg.run('-i', inputFileName, '-vn', '-acodec', 'libmp3lame', '-q:a', '2', 'output.mp3');
 
       // Read extracted audio from virtual file system
       const audioData = ffmpeg.FS('readFile', 'output.mp3');
@@ -278,13 +283,20 @@ export class VideoTranscriptionService {
       fs.writeFileSync(audioPath, Buffer.from(audioData));
 
       // Clean up virtual files
-      ffmpeg.FS('unlink', 'input.mp4');
-      ffmpeg.FS('unlink', 'output.mp3');
+      try {
+        ffmpeg.FS('unlink', inputFileName);
+        ffmpeg.FS('unlink', 'output.mp3');
+      } catch (cleanupError) {
+        logger.warn('[FFmpeg] Failed to cleanup virtual files', {
+          error: cleanupError.message,
+        });
+      }
 
       logger.info('[FFmpeg] Audio extracted successfully', {
         videoPath,
         audioPath,
         audioSize: audioData.length,
+        inputFormat: isWebm ? 'webm' : 'mp4',
       });
     } catch (error) {
       logger.error('[VideoTranscriptionService] Audio extraction failed', {
@@ -314,20 +326,80 @@ export class VideoTranscriptionService {
       // Get video info and streaming data
       const info = await yt.getBasicInfo(videoId);
 
-      // Try to find audio-only stream first
-      let streamFormat = info.streaming_data?.adaptive_formats?.find(
-        f => f.mime_type && f.mime_type.includes('audio/mp4')
+      // Check if streaming_data exists
+      if (!info.streaming_data) {
+        logger.error('[YouTube] No streaming_data found', { videoId });
+        throw new Error('No streaming data available for this video');
+      }
+
+      const { adaptive_formats = [], formats = [] } = info.streaming_data;
+
+      logger.info('[YouTube] Available streams', {
+        videoId,
+        adaptiveFormatsCount: adaptive_formats.length,
+        formatsCount: formats.length,
+      });
+
+      let streamFormat = null;
+      let isMuxed = false;
+
+      // Strategy 1: Try to find audio-only stream (preferred)
+      streamFormat = adaptive_formats.find(
+        f => f.mime_type && (f.mime_type.includes('audio/mp4') || f.mime_type.includes('audio/webm'))
       );
 
-      // If no audio-only stream, use muxed stream (video + audio)
-      if (!streamFormat || !streamFormat.url) {
-        logger.info('[YouTube] No audio-only stream found, using muxed stream', { videoId });
-        streamFormat = info.streaming_data?.formats?.find(
+      if (streamFormat && streamFormat.url) {
+        logger.info('[YouTube] Found audio-only stream', {
+          videoId,
+          mimeType: streamFormat.mime_type,
+        });
+        isMuxed = false;
+      } else {
+        // Strategy 2: Try muxed stream from formats (video + audio)
+        logger.info('[YouTube] No audio-only stream found, trying muxed streams', { videoId });
+        
+        // Try formats with audio_quality first
+        streamFormat = formats.find(
           f => f.mime_type && f.mime_type.includes('video/mp4') && f.audio_quality
         );
+
+        // If still not found, try any video/mp4 format (might have audio even without audio_quality flag)
+        if (!streamFormat || !streamFormat.url) {
+          streamFormat = formats.find(
+            f => f.mime_type && (f.mime_type.includes('video/mp4') || f.mime_type.includes('video/webm'))
+          );
+        }
+
+        // If still not found, try adaptive_formats with video
+        if (!streamFormat || !streamFormat.url) {
+          streamFormat = adaptive_formats.find(
+            f => f.mime_type && (f.mime_type.includes('video/mp4') || f.mime_type.includes('video/webm'))
+          );
+        }
+
+        if (streamFormat && streamFormat.url) {
+          logger.info('[YouTube] Found muxed stream', {
+            videoId,
+            mimeType: streamFormat.mime_type,
+          });
+          isMuxed = true;
+        }
       }
 
       if (!streamFormat || !streamFormat.url) {
+        // Log available formats for debugging
+        logger.error('[YouTube] No suitable stream found', {
+          videoId,
+          availableAdaptiveFormats: adaptive_formats.map(f => ({
+            mimeType: f.mime_type,
+            hasUrl: !!f.url,
+          })),
+          availableFormats: formats.map(f => ({
+            mimeType: f.mime_type,
+            hasUrl: !!f.url,
+            hasAudioQuality: !!f.audio_quality,
+          })),
+        });
         throw new Error('No audio or video stream found for this video');
       }
 
@@ -337,15 +409,21 @@ export class VideoTranscriptionService {
         fs.mkdirSync(tempDir, { recursive: true });
       }
 
-      const isMuxed = streamFormat.mime_type?.includes('video/mp4');
-      const videoPath = path.join(tempDir, `${videoId}.mp4`);
+      // Determine file extension based on mime type
+      const isVideo = streamFormat.mime_type?.includes('video/');
+      const isWebm = streamFormat.mime_type?.includes('webm');
+      const fileExtension = isWebm ? '.webm' : '.mp4';
+      
+      const videoPath = path.join(tempDir, `${videoId}${fileExtension}`);
       const audioPath = path.join(tempDir, `${videoId}.mp3`);
 
       // Download stream
       logger.info('[YouTube] Downloading stream...', {
         videoId,
         isMuxed,
+        isVideo,
         mimeType: streamFormat.mime_type,
+        fileExtension,
       });
 
       const response = await fetch(streamFormat.url);
@@ -364,16 +442,24 @@ export class VideoTranscriptionService {
         filePath: videoPath,
         fileSize: buffer.length,
         isMuxed,
+        isVideo,
       });
 
-      // If it's a muxed stream, extract audio
-      if (isMuxed) {
+      // If it's a video stream (muxed), extract audio
+      if (isMuxed || isVideo) {
+        logger.info('[YouTube] Extracting audio from video stream...', {
+          videoId,
+          videoPath,
+          audioPath,
+        });
+        
         await this.extractAudioFromMuxedVideo(videoPath, audioPath);
         
         // Clean up video file
         try {
           if (fs.existsSync(videoPath)) {
             fs.unlinkSync(videoPath);
+            logger.info('[YouTube] Cleaned up video file', { videoPath });
           }
         } catch (cleanupError) {
           logger.warn('[VideoTranscriptionService] Failed to cleanup video file', {
@@ -388,6 +474,7 @@ export class VideoTranscriptionService {
       // If it's audio-only, return the path (but rename to .mp3 for consistency)
       if (fs.existsSync(videoPath)) {
         fs.renameSync(videoPath, audioPath);
+        logger.info('[YouTube] Renamed audio file', { videoPath, audioPath });
       }
 
       return audioPath;
