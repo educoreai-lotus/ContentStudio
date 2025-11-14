@@ -323,9 +323,54 @@ export class VideoTranscriptionService {
           timeout: 30000, // 30 seconds timeout
           headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': 'application/json',
           },
+          responseType: 'json', // Explicitly request JSON response
         });
-        streamsData = response.data;
+        // Handle different response types
+        let rawData = response.data;
+        
+        // If response is a Buffer or array of numbers, try to parse as JSON string
+        if (Buffer.isBuffer(rawData)) {
+          try {
+            rawData = JSON.parse(rawData.toString('utf8'));
+          } catch (parseError) {
+            logger.warn('[VideoTranscriptionService] Failed to parse Buffer as JSON', {
+              videoId,
+              error: parseError.message,
+            });
+          }
+        } else if (Array.isArray(rawData) && rawData.length > 0 && typeof rawData[0] === 'number') {
+          // If it's an array of numbers, it might be a Buffer representation
+          // Try to convert to string and parse as JSON
+          try {
+            const buffer = Buffer.from(rawData);
+            rawData = JSON.parse(buffer.toString('utf8'));
+            logger.info('[VideoTranscriptionService] Successfully parsed array of numbers as JSON', {
+              videoId,
+            });
+          } catch (parseError) {
+            logger.warn('[VideoTranscriptionService] Failed to parse array of numbers as JSON', {
+              videoId,
+              error: parseError.message,
+            });
+          }
+        }
+        
+        streamsData = rawData;
+        
+        // Log response structure for debugging
+        logger.info('[VideoTranscriptionService] Piped.video API response structure', {
+          videoId,
+          isArray: Array.isArray(streamsData),
+          isObject: typeof streamsData === 'object' && streamsData !== null && !Array.isArray(streamsData),
+          type: typeof streamsData,
+          hasAudioStreams: streamsData && typeof streamsData === 'object' && !Array.isArray(streamsData) && 'audioStreams' in streamsData,
+          keys: streamsData && typeof streamsData === 'object' && !Array.isArray(streamsData) ? Object.keys(streamsData).slice(0, 10) : 'N/A',
+          arrayLength: Array.isArray(streamsData) ? streamsData.length : 'N/A',
+          firstItemType: Array.isArray(streamsData) && streamsData.length > 0 ? typeof streamsData[0] : 'N/A',
+          firstItemSample: Array.isArray(streamsData) && streamsData.length > 0 && typeof streamsData[0] === 'object' ? Object.keys(streamsData[0]).slice(0, 5) : (Array.isArray(streamsData) && streamsData.length > 0 ? String(streamsData[0]).substring(0, 50) : 'N/A'),
+        });
       } catch (apiError) {
         logger.error('[VideoTranscriptionService] Piped.video API request failed', {
           videoId,
@@ -336,27 +381,59 @@ export class VideoTranscriptionService {
         throw new Error(`Failed to fetch video streams from Piped.video: ${apiError.message}`);
       }
 
-      // Step 2: Find the best audio stream
-      if (!streamsData || !streamsData.audioStreams || !Array.isArray(streamsData.audioStreams)) {
+      // Step 2: Handle different response structures from Piped.video
+      let audioStreams = [];
+      
+      // Case 1: Response is an object with audioStreams property
+      if (streamsData && typeof streamsData === 'object' && !Array.isArray(streamsData) && streamsData.audioStreams) {
+        if (Array.isArray(streamsData.audioStreams)) {
+          audioStreams = streamsData.audioStreams;
+        }
+      }
+      // Case 2: Response is an array of streams (direct array)
+      else if (Array.isArray(streamsData)) {
+        // Filter audio streams from the array
+        audioStreams = streamsData.filter(stream => 
+          stream && typeof stream === 'object' && stream.mimeType && stream.mimeType.includes('audio')
+        );
+      }
+      // Case 3: Response might have different structure - try to find audio streams in nested structure
+      else if (streamsData && typeof streamsData === 'object' && !Array.isArray(streamsData)) {
+        // Try to find audioStreams in nested properties
+        for (const key in streamsData) {
+          if (Array.isArray(streamsData[key])) {
+            const potentialStreams = streamsData[key].filter(item => 
+              item && typeof item === 'object' && item.mimeType && item.mimeType.includes('audio')
+            );
+            if (potentialStreams.length > 0) {
+              audioStreams = potentialStreams;
+              break;
+            }
+          }
+        }
+      }
+
+      // Step 3: Validate we found audio streams
+      if (!audioStreams || audioStreams.length === 0) {
         logger.error('[VideoTranscriptionService] No audio streams found in Piped.video response', {
           videoId,
-          responseKeys: streamsData ? Object.keys(streamsData) : null,
+          responseType: Array.isArray(streamsData) ? 'array' : typeof streamsData,
+          responseKeys: streamsData && typeof streamsData === 'object' && !Array.isArray(streamsData) ? Object.keys(streamsData).slice(0, 20) : 'N/A',
+          arrayLength: Array.isArray(streamsData) ? streamsData.length : 'N/A',
         });
         throw new Error('No audio streams available for this video');
       }
 
-      // Find best quality audio stream (highest bitrate)
-      const audioStreams = streamsData.audioStreams.filter(stream => 
-        stream.mimeType && stream.mimeType.includes('audio')
+      // Filter to ensure all streams have audio mimeType
+      audioStreams = audioStreams.filter(stream => 
+        stream && stream.mimeType && stream.mimeType.includes('audio')
       );
 
       if (audioStreams.length === 0) {
         logger.error('[VideoTranscriptionService] No audio streams with audio mimeType found', {
           videoId,
-          availableStreams: streamsData.audioStreams.map(s => ({
-            mimeType: s.mimeType,
-            quality: s.quality,
-          })),
+          totalStreamsFound: audioStreams.length,
+          responseType: Array.isArray(streamsData) ? 'array' : typeof streamsData,
         });
         throw new Error('No audio streams available for this video');
       }

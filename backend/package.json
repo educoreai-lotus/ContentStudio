@@ -42,6 +42,7 @@
     "node-cron": "^4.2.1",
     "openai": "^4.20.1",
     "pg": "^8.16.3",
+    "qs": "^6.14.0",
     "youtube-captions-scraper": "^2.0.3"
   },
   "devDependencies": {
