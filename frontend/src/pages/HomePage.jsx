@@ -8,7 +8,7 @@ const HomePage = () => {
   const isDark = theme !== 'day-mode';
 
   return (
-    <div className={`min-h-screen ${isDark ? 'bg-[#0f172a]' : 'bg-gray-50'} transition-colors duration-300`}>
+    <div className={`min-h-screen ${isDark ? 'bg-[#1e293b]' : 'bg-gray-50'} transition-colors duration-300`}>
       {/* Hero Section */}
       <section className={`hero py-20 ${
         isDark ? 'bg-[#1e293b]' : 'bg-gradient-to-br from-emerald-50 to-teal-50'
@@ -64,7 +64,7 @@ const HomePage = () => {
       </section>
 
       {/* Features Section */}
-      <section className={`microservices-section py-20 ${isDark ? 'bg-[#0f172a]' : 'bg-gray-50'} transition-colors duration-300`}>
+      <section className={`microservices-section py-20 ${isDark ? 'bg-[#1e293b]' : 'bg-gray-50'} transition-colors duration-300`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <h2
             className="section-title text-center text-4xl font-bold mb-12"

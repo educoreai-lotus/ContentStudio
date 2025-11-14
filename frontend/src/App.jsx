@@ -25,7 +25,7 @@ function AppContent() {
   
   return (
     <Router>
-      <div className="min-h-screen transition-colors duration-300 bg-[#f8fafc] dark:bg-[#0f172a] text-gray-900 dark:text-[#f8fafc]">
+      <div className="min-h-screen transition-colors duration-300 bg-[#f8fafc] dark:bg-[#1e293b] text-gray-900 dark:text-[#f8fafc]">
           <Header />
           <div className="pt-20">
             {/* Routes */}
