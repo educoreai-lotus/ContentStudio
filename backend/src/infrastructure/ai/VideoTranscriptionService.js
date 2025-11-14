@@ -2,6 +2,7 @@ import { getSubtitles } from 'youtube-captions-scraper';
 import { OpenAIClient } from '../external-apis/openai/OpenAIClient.js';
 import { logger } from '../logging/Logger.js';
 import { Innertube } from 'youtubei.js';
+import { createFFmpeg, fetchFile } from '@ffmpeg/ffmpeg';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -248,9 +249,57 @@ export class VideoTranscriptionService {
   }
 
   /**
-   * Download YouTube audio using youtubei.js
+   * Extract audio from muxed video file using ffmpeg.wasm
+   * @param {string} videoPath - Path to video file
+   * @param {string} audioPath - Path to output audio file
+   * @returns {Promise<void>}
+   * @throws {Error} If extraction fails
+   */
+  async extractAudioFromMuxedVideo(videoPath, audioPath) {
+    try {
+      logger.info('[FFmpeg] Extracting audio from video...', { videoPath, audioPath });
+
+      const ffmpeg = createFFmpeg({ log: false });
+      await ffmpeg.load();
+
+      // Read video file into FFmpeg's virtual file system
+      const videoData = await fetchFile(videoPath);
+      ffmpeg.FS('writeFile', 'input.mp4', videoData);
+
+      // Extract audio (no video, audio codec: mp3)
+      await ffmpeg.run('-i', 'input.mp4', '-vn', '-acodec', 'libmp3lame', '-q:a', '2', 'output.mp3');
+
+      // Read extracted audio from virtual file system
+      const audioData = ffmpeg.FS('readFile', 'output.mp3');
+
+      // Write to actual file system
+      fs.writeFileSync(audioPath, Buffer.from(audioData));
+
+      // Clean up virtual files
+      ffmpeg.FS('unlink', 'input.mp4');
+      ffmpeg.FS('unlink', 'output.mp3');
+
+      logger.info('[FFmpeg] Audio extracted successfully', {
+        videoPath,
+        audioPath,
+        audioSize: audioData.length,
+      });
+    } catch (error) {
+      logger.error('[VideoTranscriptionService] Audio extraction failed', {
+        videoPath,
+        audioPath,
+        error: error.message,
+        stack: error.stack,
+      });
+      throw new Error(`Failed to extract audio from video: ${error.message}`);
+    }
+  }
+
+  /**
+   * Download YouTube video (muxed stream) using youtubei.js
+   * Falls back to muxed stream if audio-only is not available
    * @param {string} videoId - YouTube video ID
-   * @returns {Promise<string>} Path to downloaded audio file
+   * @returns {Promise<string>} Path to downloaded video/audio file
    * @throws {Error} If download fails
    */
   async downloadYouTubeAudio(videoId) {
@@ -263,13 +312,21 @@ export class VideoTranscriptionService {
       // Get video info and streaming data
       const info = await yt.getBasicInfo(videoId);
 
-      // Find audio-only stream (m4a format)
-      const audioFormat = info.streaming_data?.adaptive_formats?.find(
+      // Try to find audio-only stream first
+      let streamFormat = info.streaming_data?.adaptive_formats?.find(
         f => f.mime_type && f.mime_type.includes('audio/mp4')
       );
 
-      if (!audioFormat || !audioFormat.url) {
-        throw new Error('No audio stream found for this video');
+      // If no audio-only stream, use muxed stream (video + audio)
+      if (!streamFormat || !streamFormat.url) {
+        logger.info('[YouTube] No audio-only stream found, using muxed stream', { videoId });
+        streamFormat = info.streaming_data?.formats?.find(
+          f => f.mime_type && f.mime_type.includes('video/mp4') && f.audio_quality
+        );
+      }
+
+      if (!streamFormat || !streamFormat.url) {
+        throw new Error('No audio or video stream found for this video');
       }
 
       // Create temp directory if it doesn't exist
@@ -278,27 +335,60 @@ export class VideoTranscriptionService {
         fs.mkdirSync(tempDir, { recursive: true });
       }
 
-      const outputPath = path.join(tempDir, `${videoId}.m4a`);
+      const isMuxed = streamFormat.mime_type?.includes('video/mp4');
+      const videoPath = path.join(tempDir, `${videoId}.mp4`);
+      const audioPath = path.join(tempDir, `${videoId}.mp3`);
 
-      // Download audio stream
-      const response = await fetch(audioFormat.url);
+      // Download stream
+      logger.info('[YouTube] Downloading stream...', {
+        videoId,
+        isMuxed,
+        mimeType: streamFormat.mime_type,
+      });
+
+      const response = await fetch(streamFormat.url);
       if (!response.ok) {
-        throw new Error(`Failed to download audio: ${response.statusText}`);
+        throw new Error(`Failed to download stream: ${response.statusText}`);
       }
 
       const arrayBuffer = await response.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);
 
       // Write to file
-      fs.writeFileSync(outputPath, buffer);
+      fs.writeFileSync(videoPath, buffer);
 
-      logger.info('[YouTube] Audio downloaded successfully', {
+      logger.info('[YouTube] Stream downloaded successfully', {
         videoId,
-        filePath: outputPath,
+        filePath: videoPath,
         fileSize: buffer.length,
+        isMuxed,
       });
 
-      return outputPath;
+      // If it's a muxed stream, extract audio
+      if (isMuxed) {
+        await this.extractAudioFromMuxedVideo(videoPath, audioPath);
+        
+        // Clean up video file
+        try {
+          if (fs.existsSync(videoPath)) {
+            fs.unlinkSync(videoPath);
+          }
+        } catch (cleanupError) {
+          logger.warn('[VideoTranscriptionService] Failed to cleanup video file', {
+            videoPath,
+            error: cleanupError.message,
+          });
+        }
+
+        return audioPath;
+      }
+
+      // If it's audio-only, return the path (but rename to .mp3 for consistency)
+      if (fs.existsSync(videoPath)) {
+        fs.renameSync(videoPath, audioPath);
+      }
+
+      return audioPath;
     } catch (error) {
       logger.error('[VideoTranscriptionService] YouTube audio download failed', {
         videoId,
