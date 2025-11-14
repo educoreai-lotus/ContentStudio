@@ -1,9 +1,11 @@
 import { getSubtitles } from 'youtube-captions-scraper';
 import { OpenAIClient } from '../external-apis/openai/OpenAIClient.js';
 import { logger } from '../logging/Logger.js';
+import { Innertube } from 'youtubei.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import os from 'os';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -236,36 +238,100 @@ export class VideoTranscriptionService {
       };
     }
 
-    // No captions found - fallback to Whisper URL mode
-    logger.info('[VideoTranscriptionService] No captions found, switching to Whisper URL mode...', {
+    // No captions found - fallback to Whisper (download audio first)
+    logger.info('[VideoTranscriptionService] No captions found, switching to Whisper...', {
       videoId,
     });
 
-    // Use Whisper URL mode - no download needed
-    return await this.transcribeYouTubeWithWhisperUrl(youtubeUrl, videoId);
+    // Download audio and transcribe with Whisper
+    return await this.transcribeYouTubeWithWhisper(youtubeUrl, videoId);
   }
 
   /**
-   * Transcribe YouTube video using Whisper API with file_url parameter (fallback method)
-   * No audio download needed - sends YouTube URL directly to Whisper
+   * Download YouTube audio using youtubei.js
+   * @param {string} videoId - YouTube video ID
+   * @returns {Promise<string>} Path to downloaded audio file
+   * @throws {Error} If download fails
+   */
+  async downloadYouTubeAudio(videoId) {
+    try {
+      logger.info('[YouTube] Downloading audio...', { videoId });
+
+      // Initialize YouTube client
+      const yt = await Innertube.create();
+
+      // Get video info and streaming data
+      const info = await yt.getBasicInfo(videoId);
+
+      // Find audio-only stream (m4a format)
+      const audioFormat = info.streaming_data?.adaptive_formats?.find(
+        f => f.mime_type && f.mime_type.includes('audio/mp4')
+      );
+
+      if (!audioFormat || !audioFormat.url) {
+        throw new Error('No audio stream found for this video');
+      }
+
+      // Create temp directory if it doesn't exist
+      const tempDir = path.join(os.tmpdir(), 'youtube-audio');
+      if (!fs.existsSync(tempDir)) {
+        fs.mkdirSync(tempDir, { recursive: true });
+      }
+
+      const outputPath = path.join(tempDir, `${videoId}.m4a`);
+
+      // Download audio stream
+      const response = await fetch(audioFormat.url);
+      if (!response.ok) {
+        throw new Error(`Failed to download audio: ${response.statusText}`);
+      }
+
+      const arrayBuffer = await response.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+
+      // Write to file
+      fs.writeFileSync(outputPath, buffer);
+
+      logger.info('[YouTube] Audio downloaded successfully', {
+        videoId,
+        filePath: outputPath,
+        fileSize: buffer.length,
+      });
+
+      return outputPath;
+    } catch (error) {
+      logger.error('[VideoTranscriptionService] YouTube audio download failed', {
+        videoId,
+        error: error.message,
+        stack: error.stack,
+      });
+      throw new Error(`Failed to download YouTube audio: ${error.message}`);
+    }
+  }
+
+  /**
+   * Transcribe YouTube video using Whisper (fallback method)
+   * Downloads audio first, then transcribes with Whisper
    * @param {string} youtubeUrl - YouTube URL
    * @param {string} videoId - YouTube video ID
    * @returns {Promise<Object>} { transcript, source, videoType }
    * @throws {Error} If transcription fails
    */
-  async transcribeYouTubeWithWhisperUrl(youtubeUrl, videoId) {
+  async transcribeYouTubeWithWhisper(youtubeUrl, videoId) {
     if (!this.openaiClient) {
       throw new Error('OpenAI client not available. Please configure OpenAI API key.');
     }
 
-    try {
-      logger.info('[Whisper-URL] Transcribing directly from YouTube URL...', {
-        videoId,
-        youtubeUrl,
-      });
+    let audioPath = null;
 
-      // Use Whisper API with file_url parameter - no download needed
-      const transcript = await this.openaiClient.transcribeAudioFromUrl(youtubeUrl, {
+    try {
+      // Step 1: Download audio from YouTube
+      audioPath = await this.downloadYouTubeAudio(videoId);
+
+      // Step 2: Transcribe with Whisper
+      logger.info('[Whisper] Transcribing...', { videoId, audioPath });
+
+      const transcript = await this.transcribeWithWhisper(audioPath, {
         language: 'en',
       });
 
@@ -273,7 +339,7 @@ export class VideoTranscriptionService {
         throw new Error('Whisper transcription returned empty result');
       }
 
-      logger.info('[Whisper-URL] Transcription completed successfully.', {
+      logger.info('[Whisper] Done.', {
         videoId,
         transcriptLength: transcript.length,
       });
@@ -285,13 +351,26 @@ export class VideoTranscriptionService {
         videoId,
       };
     } catch (error) {
-      logger.error('[VideoTranscriptionService] Whisper URL transcription failed', {
+      logger.error('[VideoTranscriptionService] Whisper transcription failed', {
         videoId,
         error: error.message,
         stack: error.stack,
       });
 
       throw new Error(`Failed to transcribe YouTube video with Whisper: ${error.message}`);
+    } finally {
+      // Clean up downloaded audio file
+      if (audioPath && fs.existsSync(audioPath)) {
+        try {
+          fs.unlinkSync(audioPath);
+          logger.debug('[VideoTranscriptionService] Temporary audio file deleted', { audioPath });
+        } catch (cleanupError) {
+          logger.warn('[VideoTranscriptionService] Failed to cleanup audio file', {
+            audioPath,
+            error: cleanupError.message,
+          });
+        }
+      }
     }
   }
 

@@ -84,25 +84,5 @@ export class OpenAIClient {
       throw new Error(`Failed to transcribe audio: ${error.message}`);
     }
   }
-
-  /**
-   * Transcribe audio from URL using Whisper
-   * @param {string} fileUrl - URL to audio/video file (e.g., YouTube URL)
-   * @param {Object} options - Transcription options
-   * @returns {Promise<string>} Transcribed text
-   */
-  async transcribeAudioFromUrl(fileUrl, options = {}) {
-    try {
-      const transcription = await this.client.audio.transcriptions.create({
-        file_url: fileUrl,
-        model: 'whisper-1',
-        language: options.language || 'en',
-      });
-
-      return transcription.text || '';
-    } catch (error) {
-      throw new Error(`Failed to transcribe audio from URL: ${error.message}`);
-    }
-  }
 }
 
