@@ -6,10 +6,9 @@ import React, { useEffect } from 'react';
  * 
  * @param {Object} popupData - Popup data with { type, title, message, details }
  * @param {Function} onClose - Close handler
- * @param {string} theme - Theme mode ('day-mode' or 'night-mode')
  * @param {boolean} autoClose - Auto-close after delay (for success messages)
  */
-export const PopupModal = ({ popupData, onClose, theme = 'day-mode', autoClose = false }) => {
+export const PopupModal = ({ popupData, onClose, autoClose = false }) => {
   useEffect(() => {
     if (autoClose && popupData && popupData.type === 'success') {
       const timer = setTimeout(() => {
@@ -39,13 +38,13 @@ export const PopupModal = ({ popupData, onClose, theme = 'day-mode', autoClose =
   const getIconColor = () => {
     switch (popupData.type) {
       case 'success':
-        return theme === 'day-mode' ? 'text-emerald-600' : 'text-emerald-400';
+        return 'text-emerald-600 dark:text-emerald-400';
       case 'error':
-        return theme === 'day-mode' ? 'text-red-600' : 'text-red-400';
+        return 'text-red-600 dark:text-red-400';
       case 'warning':
-        return theme === 'day-mode' ? 'text-yellow-600' : 'text-yellow-400';
+        return 'text-yellow-600 dark:text-yellow-400';
       default:
-        return theme === 'day-mode' ? 'text-blue-600' : 'text-blue-400';
+        return 'text-blue-600 dark:text-blue-400';
     }
   };
 
@@ -71,13 +70,7 @@ export const PopupModal = ({ popupData, onClose, theme = 'day-mode', autoClose =
       />
 
       {/* Modal */}
-      <div
-        className={`relative rounded-xl shadow-2xl max-w-md w-full mx-4 ${
-          theme === 'day-mode'
-            ? 'bg-white border border-gray-200'
-            : 'bg-gray-800 border border-gray-700'
-        }`}
-      >
+      <div className="relative rounded-xl shadow-2xl max-w-md w-full mx-4 bg-white dark:bg-[#1e293b] border border-gray-200 dark:border-white/10 transition-colors duration-300">
         {/* Icon */}
         <div className={`flex justify-center pt-6 ${getIconColor()}`}>
           <div className="text-5xl font-bold">{getIcon()}</div>
@@ -91,25 +84,17 @@ export const PopupModal = ({ popupData, onClose, theme = 'day-mode', autoClose =
         </div>
 
         {/* Message */}
-        <div className={`px-6 pt-3 pb-2 text-center ${
-          theme === 'day-mode' ? 'text-gray-700' : 'text-gray-300'
-        }`}>
+        <div className="px-6 pt-3 pb-2 text-center text-gray-700 dark:text-[#f8fafc] transition-colors duration-300">
           <p className="text-sm font-medium">{popupData.message}</p>
         </div>
 
         {/* Reason/Error details - Show short reason */}
         {popupData.reason && (
-          <div className={`px-6 pt-3 pb-3 ${
-            theme === 'day-mode' ? 'bg-gray-50' : 'bg-gray-700/50'
-          } rounded-lg mx-4 mb-3`}>
-            <p className={`text-xs font-semibold mb-2 ${
-              theme === 'day-mode' ? 'text-gray-700' : 'text-gray-300'
-            }`}>
+          <div className="px-6 pt-3 pb-3 bg-gray-50 dark:bg-[#334155]/50 rounded-lg mx-4 mb-3 transition-colors duration-300">
+            <p className="text-xs font-semibold mb-2 text-gray-700 dark:text-[#f8fafc] transition-colors duration-300">
               Reason:
             </p>
-            <p className={`text-xs leading-relaxed ${
-              theme === 'day-mode' ? 'text-gray-600' : 'text-gray-400'
-            }`}>
+            <p className="text-xs leading-relaxed text-gray-600 dark:text-[#cbd5e1] transition-colors duration-300">
               {popupData.reason}
             </p>
           </div>
@@ -117,17 +102,11 @@ export const PopupModal = ({ popupData, onClose, theme = 'day-mode', autoClose =
 
         {/* Feedback from AI - Show detailed feedback if available */}
         {popupData.feedback && (
-          <div className={`px-6 pt-3 pb-3 ${
-            theme === 'day-mode' ? 'bg-blue-50' : 'bg-blue-900/20'
-          } rounded-lg mx-4 mb-3`}>
-            <p className={`text-xs font-semibold mb-2 ${
-              theme === 'day-mode' ? 'text-blue-700' : 'text-blue-300'
-            }`}>
+          <div className="px-6 pt-3 pb-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg mx-4 mb-3 transition-colors duration-300">
+            <p className="text-xs font-semibold mb-2 text-blue-700 dark:text-blue-300 transition-colors duration-300">
               Detailed Feedback:
             </p>
-            <p className={`text-xs leading-relaxed ${
-              theme === 'day-mode' ? 'text-blue-600' : 'text-blue-400'
-            }`}>
+            <p className="text-xs leading-relaxed text-blue-600 dark:text-blue-400 transition-colors duration-300">
               {popupData.feedback}
             </p>
           </div>
@@ -135,9 +114,7 @@ export const PopupModal = ({ popupData, onClose, theme = 'day-mode', autoClose =
 
         {/* Guidance - Friendly one-line help */}
         {popupData.guidance && (
-          <div className={`px-6 pb-2 text-center ${
-            theme === 'day-mode' ? 'text-gray-600' : 'text-gray-400'
-          }`}>
+          <div className="px-6 pb-2 text-center text-gray-600 dark:text-[#94a3b8] transition-colors duration-300">
             <p className="text-xs italic">{popupData.guidance}</p>
           </div>
         )}

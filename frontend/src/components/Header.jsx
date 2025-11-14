@@ -11,13 +11,7 @@ const Header = () => {
   const logoUrl = `${API_BASE_URL}/api/logo/${theme === 'day-mode' ? 'light' : 'dark'}`;
 
   return (
-    <header
-      className={`fixed top-0 left-0 right-0 z-50 w-full border-b shadow-lg h-20 backdrop-blur-md ${
-        theme === 'day-mode'
-          ? 'bg-white/95 border-gray-200'
-          : 'bg-slate-900/95 border-gray-600'
-      }`}
-    >
+    <header className="fixed top-0 left-0 right-0 z-50 w-full h-20 backdrop-blur-md bg-white/95 dark:bg-[#0f172a]/95 border-b border-gray-200 dark:border-white/10 shadow-lg">
       <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-20">
           {/* EDUCORE AI Logo */}
@@ -42,100 +36,60 @@ const Header = () => {
               onClick={() => navigate('/')}
               className={`transition-all duration-300 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${
                 location.pathname === '/'
-                  ? theme === 'day-mode'
-                    ? 'text-emerald-600 bg-emerald-100'
-                    : 'text-emerald-400 bg-emerald-900/20'
-                  : theme === 'day-mode'
-                  ? 'text-gray-600 hover:text-emerald-600 hover:bg-emerald-50'
-                  : 'text-gray-300 hover:text-emerald-400 hover:bg-emerald-900/20'
+                  ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/20'
+                  : 'text-gray-600 dark:text-[#cbd5e1] hover:text-emerald-600 dark:hover:text-[#f8fafc] hover:bg-emerald-50 dark:hover:bg-[#334155] hover:underline hover:decoration-emerald-400'
               }`}
             >
-              <i
-                className={`fas fa-home w-4 h-4 flex-shrink-0 ${
-                  location.pathname === '/'
-                    ? theme === 'day-mode'
-                      ? 'text-emerald-600'
-                      : 'text-emerald-400'
-                    : theme === 'day-mode'
-                    ? 'text-gray-600'
-                    : 'text-gray-300'
-                }`}
-              ></i>
+              <i className={`fas fa-home w-4 h-4 flex-shrink-0 ${
+                location.pathname === '/'
+                  ? 'text-emerald-600 dark:text-emerald-400'
+                  : 'text-gray-600 dark:text-[#cbd5e1]'
+              }`}></i>
               <span>Home</span>
             </button>
             <button
               onClick={() => navigate('/courses')}
               className={`transition-all duration-300 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${
                 location.pathname.startsWith('/courses')
-                  ? theme === 'day-mode'
-                    ? 'text-emerald-600 bg-emerald-100'
-                    : 'text-emerald-400 bg-emerald-900/20'
-                  : theme === 'day-mode'
-                  ? 'text-gray-600 hover:text-emerald-600 hover:bg-emerald-50'
-                  : 'text-gray-300 hover:text-emerald-400 hover:bg-emerald-900/20'
+                  ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/20'
+                  : 'text-gray-600 dark:text-[#cbd5e1] hover:text-emerald-600 dark:hover:text-[#f8fafc] hover:bg-emerald-50 dark:hover:bg-[#334155] hover:underline hover:decoration-emerald-400'
               }`}
             >
-              <i
-                className={`fas fa-graduation-cap w-4 h-4 flex-shrink-0 ${
-                  location.pathname.startsWith('/courses')
-                    ? theme === 'day-mode'
-                      ? 'text-emerald-600'
-                      : 'text-emerald-400'
-                    : theme === 'day-mode'
-                    ? 'text-gray-600'
-                    : 'text-gray-300'
-                }`}
-              ></i>
+              <i className={`fas fa-graduation-cap w-4 h-4 flex-shrink-0 ${
+                location.pathname.startsWith('/courses')
+                  ? 'text-emerald-600 dark:text-emerald-400'
+                  : 'text-gray-600 dark:text-[#cbd5e1]'
+              }`}></i>
               <span>Courses</span>
             </button>
             <button
               onClick={() => navigate('/topics')}
               className={`transition-all duration-300 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${
                 location.pathname === '/topics' || location.pathname === '/lessons'
-                  ? theme === 'day-mode'
-                    ? 'text-emerald-600 bg-emerald-100'
-                    : 'text-emerald-400 bg-emerald-900/20'
-                  : theme === 'day-mode'
-                  ? 'text-gray-600 hover:text-emerald-600 hover:bg-emerald-50'
-                  : 'text-gray-300 hover:text-emerald-400 hover:bg-emerald-900/20'
+                  ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/20'
+                  : 'text-gray-600 dark:text-[#cbd5e1] hover:text-emerald-600 dark:hover:text-[#f8fafc] hover:bg-emerald-50 dark:hover:bg-[#334155] hover:underline hover:decoration-emerald-400'
               }`}
             >
-              <i
-                className={`fas fa-book w-4 h-4 flex-shrink-0 ${
-                  location.pathname === '/topics' || location.pathname === '/lessons'
-                    ? theme === 'day-mode'
-                      ? 'text-emerald-600'
-                      : 'text-emerald-400'
-                    : theme === 'day-mode'
-                    ? 'text-gray-600'
-                    : 'text-gray-300'
-                }`}
-              ></i>
+              <i className={`fas fa-book w-4 h-4 flex-shrink-0 ${
+                location.pathname === '/topics' || location.pathname === '/lessons'
+                  ? 'text-emerald-600 dark:text-emerald-400'
+                  : 'text-gray-600 dark:text-[#cbd5e1]'
+              }`}></i>
               <span>Lessons</span>
             </button>
             <button
               onClick={() => navigate('/languages/stats')}
               className={`transition-all duration-300 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${
                 location.pathname.startsWith('/languages')
-                  ? theme === 'day-mode'
-                    ? 'text-emerald-600 bg-emerald-100'
-                    : 'text-emerald-400 bg-emerald-900/20'
-                  : theme === 'day-mode'
-                  ? 'text-gray-600 hover:text-emerald-600 hover:bg-emerald-50'
-                  : 'text-gray-300 hover:text-emerald-400 hover:bg-emerald-900/20'
+                  ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/20'
+                  : 'text-gray-600 dark:text-[#cbd5e1] hover:text-emerald-600 dark:hover:text-[#f8fafc] hover:bg-emerald-50 dark:hover:bg-[#334155] hover:underline hover:decoration-emerald-400'
               }`}
             >
-              <i
-                className={`fas fa-globe w-4 h-4 flex-shrink-0 ${
-                  location.pathname.startsWith('/languages')
-                    ? theme === 'day-mode'
-                      ? 'text-emerald-600'
-                      : 'text-emerald-400'
-                    : theme === 'day-mode'
-                    ? 'text-gray-600'
-                    : 'text-gray-300'
-                }`}
-              ></i>
+              <i className={`fas fa-globe w-4 h-4 flex-shrink-0 ${
+                location.pathname.startsWith('/languages')
+                  ? 'text-emerald-600 dark:text-emerald-400'
+                  : 'text-gray-600 dark:text-[#cbd5e1]'
+              }`}></i>
               <span>Languages</span>
             </button>
           </nav>
@@ -148,11 +102,7 @@ const Header = () => {
           {/* Theme Toggle */}
           <button
             onClick={toggleTheme}
-            className={`w-10 h-10 border rounded-full flex items-center justify-center hover:scale-110 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 ${
-              theme === 'day-mode'
-                ? 'bg-gray-100 border-gray-200 text-gray-600 hover:bg-emerald-100'
-                : 'bg-gray-800 border-gray-700 text-white hover:bg-emerald-900/20'
-            }`}
+            className="w-10 h-10 border rounded-full flex items-center justify-center hover:scale-110 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-gray-100 dark:bg-[#1e293b] border-gray-200 dark:border-white/10 text-gray-600 dark:text-[#f8fafc] hover:bg-emerald-100 dark:hover:bg-[#334155]"
             title="Toggle Theme"
           >
             <i className={`fas ${theme === 'day-mode' ? 'fa-moon' : 'fa-sun'} text-sm`}></i>
@@ -163,11 +113,7 @@ const Header = () => {
             {/* Create Course Button */}
             <button
               onClick={() => navigate('/courses/new')}
-              className={`px-4 py-2 rounded-xl transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm font-medium flex items-center gap-2 ${
-                theme === 'day-mode'
-                  ? 'bg-transparent text-emerald-600 border border-emerald-600 hover:bg-emerald-50 hover:border-emerald-700'
-                  : 'bg-emerald-500 hover:bg-emerald-600 text-white border border-emerald-500 hover:border-emerald-600 shadow-lg'
-              }`}
+              className="px-4 py-2 rounded-xl transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm font-medium flex items-center gap-2 bg-gradient-to-r from-emerald-600 to-emerald-700 dark:from-emerald-600 dark:to-emerald-700 text-white border-none hover:from-emerald-700 hover:to-emerald-800 dark:hover:from-emerald-700 dark:hover:to-emerald-800 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <i className="fas fa-plus w-4 h-4"></i>
               Create Course
@@ -179,11 +125,7 @@ const Header = () => {
                 navigate('/topics/new');
                 handleNewLesson();
               }}
-              className={`px-4 py-2 rounded-xl transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm font-medium flex items-center gap-2 ${
-                theme === 'day-mode'
-                  ? 'bg-transparent text-emerald-600 border border-emerald-600 hover:bg-emerald-50 hover:border-emerald-700'
-                  : 'bg-emerald-500 hover:bg-emerald-600 text-white border border-emerald-500 hover:border-emerald-600 shadow-lg'
-              }`}
+              className="px-4 py-2 rounded-xl transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm font-medium flex items-center gap-2 bg-gradient-to-r from-emerald-600 to-emerald-700 dark:from-emerald-600 dark:to-emerald-700 text-white border-none hover:from-emerald-700 hover:to-emerald-800 dark:hover:from-emerald-700 dark:hover:to-emerald-800 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <i className="fas fa-plus w-4 h-4"></i>
               Create Lesson
