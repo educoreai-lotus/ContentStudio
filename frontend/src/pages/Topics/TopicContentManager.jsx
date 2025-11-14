@@ -218,7 +218,7 @@ export default function TopicContentManager() {
   };
 
   return (
-    <div className={`min-h-screen p-6 lg:p-8 ${theme === 'day-mode' ? 'bg-gray-50' : 'bg-slate-900'}`}>
+    <div className={`min-h-screen p-6 lg:p-8 ${theme === 'day-mode' ? 'bg-gray-50' : 'bg-[#1e293b]'}`}>
       <div className="max-w-7xl mx-auto">
         <div className="mb-8">
           <button
@@ -512,7 +512,7 @@ export default function TopicContentManager() {
                     {(topicDetails.template_format_order || []).map((format, index) => (
                       <span
                         key={`${format}-${index}`}
-                        className="px-3 py-1 rounded-full bg-white/70 text-emerald-700 text-xs font-medium border border-emerald-200 dark:bg-slate-900/60 dark:text-emerald-300"
+                        className="px-3 py-1 rounded-full bg-white/70 text-emerald-700 text-xs font-medium border border-emerald-200 dark:bg-[#334155]/60 dark:text-emerald-300"
                       >
                         <span className="opacity-60 mr-1">{index + 1}.</span>
                         {format.replace('_', ' ')}

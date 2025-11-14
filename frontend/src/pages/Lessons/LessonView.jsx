@@ -79,7 +79,7 @@ export default function LessonView() {
       return (
         <div
           className={`p-4 rounded-lg ${
-            theme === 'day-mode' ? 'bg-gray-50 border border-gray-200' : 'bg-gray-900 border border-gray-700'
+            theme === 'day-mode' ? 'bg-gray-50 border border-gray-200' : 'bg-[#334155] border border-white/10'
           }`}
         >
           <p className={theme === 'day-mode' ? 'text-gray-500' : 'text-gray-400'}>
@@ -185,7 +185,7 @@ export default function LessonView() {
         {codeValue ? (
           <div
             className={`p-4 rounded-lg ${
-              theme === 'day-mode' ? 'bg-gray-900' : 'bg-gray-950'
+              theme === 'day-mode' ? 'bg-gray-900' : 'bg-[#0f172a]'
             }`}
           >
             <pre className="text-green-400 font-mono text-sm overflow-x-auto">
@@ -195,7 +195,7 @@ export default function LessonView() {
         ) : (
           <div
             className={`p-4 rounded-lg ${
-              theme === 'day-mode' ? 'bg-gray-50' : 'bg-gray-900'
+              theme === 'day-mode' ? 'bg-gray-50' : 'bg-[#334155]'
             }`}
           >
             <p className={theme === 'day-mode' ? 'text-gray-500' : 'text-gray-400'}>
@@ -206,7 +206,7 @@ export default function LessonView() {
         {parsedData?.explanation && (
           <div
             className={`p-4 rounded-lg ${
-              theme === 'day-mode' ? 'bg-gray-50' : 'bg-gray-900'
+              theme === 'day-mode' ? 'bg-gray-50' : 'bg-[#334155]'
             }`}
           >
             <p
@@ -385,7 +385,7 @@ export default function LessonView() {
         ) : (
           <div
             className={`p-4 rounded-lg ${
-              theme === 'day-mode' ? 'bg-gray-50' : 'bg-gray-900'
+              theme === 'day-mode' ? 'bg-gray-50' : 'bg-[#334155]'
             }`}
           >
             <p className={theme === 'day-mode' ? 'text-gray-500' : 'text-gray-400'}>
@@ -422,7 +422,7 @@ export default function LessonView() {
         {parsedData?.script && (
           <div
             className={`p-4 rounded-lg ${
-              theme === 'day-mode' ? 'bg-gray-50' : 'bg-gray-900'
+              theme === 'day-mode' ? 'bg-gray-50' : 'bg-[#334155]'
             }`}
           >
             <h4
@@ -490,7 +490,7 @@ export default function LessonView() {
         ) : (
           <div
             className={`p-4 rounded-lg ${
-              theme === 'day-mode' ? 'bg-gray-50' : 'bg-gray-900'
+              theme === 'day-mode' ? 'bg-gray-50' : 'bg-[#334155]'
             }`}
           >
             <p className={theme === 'day-mode' ? 'text-gray-500' : 'text-gray-400'}>
@@ -693,7 +693,7 @@ export default function LessonView() {
   }
 
   return (
-    <div className={`min-h-screen ${theme === 'day-mode' ? 'bg-gray-50' : 'bg-gray-900'}`}>
+    <div className={`min-h-screen ${theme === 'day-mode' ? 'bg-gray-50' : 'bg-[#1e293b]'}`}>
       <div className="max-w-6xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-8">

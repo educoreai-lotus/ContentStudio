@@ -97,7 +97,7 @@ export const CourseList = () => {
     return (
       <div
         className={`min-h-screen p-8 ${
-          theme === 'day-mode' ? 'bg-gray-50' : 'bg-slate-900'
+          theme === 'day-mode' ? 'bg-gray-50' : 'bg-[#1e293b]'
         }`}
       >
         <div className="max-w-7xl mx-auto">
