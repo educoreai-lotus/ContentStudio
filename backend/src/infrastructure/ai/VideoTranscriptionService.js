@@ -323,63 +323,86 @@ export class VideoTranscriptionService {
       // Initialize YouTube client
       const yt = await Innertube.create();
 
-      // Get streaming info directly (this provides authenticated URLs)
-      const streamingInfo = await yt.getStreamingInfo(videoId);
+      // Get video info (this is the correct API for youtubei.js v16)
+      const info = await yt.getInfo(videoId);
 
-      logger.info('[YouTube] Got streaming info', {
+      // Check if streaming_data exists
+      if (!info.streaming_data) {
+        logger.error('[YouTube] No streaming_data found', { videoId });
+        throw new Error('No streaming data available for this video');
+      }
+
+      const { adaptive_formats = [], formats = [] } = info.streaming_data;
+
+      logger.info('[YouTube] Available streams', {
         videoId,
-        hasAudioStreams: !!streamingInfo.audio_streams,
-        hasVideoStreams: !!streamingInfo.video_streams,
-        audioStreamsCount: streamingInfo.audio_streams?.length || 0,
-        videoStreamsCount: streamingInfo.video_streams?.length || 0,
+        adaptiveFormatsCount: adaptive_formats.length,
+        formatsCount: formats.length,
       });
 
-      let selectedStream = null;
+      let selectedFormat = null;
       let isMuxed = false;
 
       // Strategy 1: Try to find audio-only stream (preferred)
-      if (streamingInfo.audio_streams && streamingInfo.audio_streams.length > 0) {
-        // Try to find best audio stream (usually the first one is the best quality)
-        selectedStream = streamingInfo.audio_streams.find(
-          s => s.mime_type && (s.mime_type.includes('audio/mp4') || s.mime_type.includes('audio/webm'))
-        ) || streamingInfo.audio_streams[0];
+      selectedFormat = adaptive_formats.find(
+        f => f.mime_type && (f.mime_type.includes('audio/mp4') || f.mime_type.includes('audio/webm'))
+      );
 
-        if (selectedStream) {
-          logger.info('[YouTube] Found audio-only stream', {
-            videoId,
-            mimeType: selectedStream.mime_type,
-            itag: selectedStream.itag,
-          });
-          isMuxed = false;
-        }
-      }
-
-      // Strategy 2: If no audio stream, try muxed stream (video + audio)
-      if (!selectedStream && streamingInfo.video_streams && streamingInfo.video_streams.length > 0) {
+      if (selectedFormat) {
+        logger.info('[YouTube] Found audio-only stream', {
+          videoId,
+          mimeType: selectedFormat.mime_type,
+          itag: selectedFormat.itag,
+        });
+        isMuxed = false;
+      } else {
+        // Strategy 2: Try muxed stream from formats (video + audio)
         logger.info('[YouTube] No audio-only stream found, trying muxed streams', { videoId });
         
-        // Try to find a video stream with audio
-        selectedStream = streamingInfo.video_streams.find(
-          s => s.mime_type && (s.mime_type.includes('video/mp4') || s.mime_type.includes('video/webm'))
-        ) || streamingInfo.video_streams[0];
+        // Try formats with audio_quality first
+        selectedFormat = formats.find(
+          f => f.mime_type && f.mime_type.includes('video/mp4') && f.audio_quality
+        );
 
-        if (selectedStream) {
+        // If still not found, try any video/mp4 format (might have audio even without audio_quality flag)
+        if (!selectedFormat) {
+          selectedFormat = formats.find(
+            f => f.mime_type && (f.mime_type.includes('video/mp4') || f.mime_type.includes('video/webm'))
+          );
+        }
+
+        // If still not found, try adaptive_formats with video
+        if (!selectedFormat) {
+          selectedFormat = adaptive_formats.find(
+            f => f.mime_type && (f.mime_type.includes('video/mp4') || f.mime_type.includes('video/webm'))
+          );
+        }
+
+        if (selectedFormat) {
           logger.info('[YouTube] Found muxed stream', {
             videoId,
-            mimeType: selectedStream.mime_type,
-            itag: selectedStream.itag,
+            mimeType: selectedFormat.mime_type,
+            itag: selectedFormat.itag,
           });
           isMuxed = true;
         }
       }
 
-      if (!selectedStream) {
+      if (!selectedFormat) {
+        // Log available formats for debugging
         logger.error('[YouTube] No suitable stream found', {
           videoId,
-          hasAudioStreams: !!streamingInfo.audio_streams,
-          hasVideoStreams: !!streamingInfo.video_streams,
-          audioStreamsCount: streamingInfo.audio_streams?.length || 0,
-          videoStreamsCount: streamingInfo.video_streams?.length || 0,
+          availableAdaptiveFormats: adaptive_formats.map(f => ({
+            mimeType: f.mime_type,
+            itag: f.itag,
+            hasUrl: !!f.url,
+          })),
+          availableFormats: formats.map(f => ({
+            mimeType: f.mime_type,
+            itag: f.itag,
+            hasUrl: !!f.url,
+            hasAudioQuality: !!f.audio_quality,
+          })),
         });
         throw new Error('No audio or video stream found for this video');
       }
@@ -391,8 +414,8 @@ export class VideoTranscriptionService {
       }
 
       // Determine file extension based on mime type
-      const isVideo = selectedStream.mime_type?.includes('video/');
-      const isWebm = selectedStream.mime_type?.includes('webm');
+      const isVideo = selectedFormat.mime_type?.includes('video/');
+      const isWebm = selectedFormat.mime_type?.includes('webm');
       const fileExtension = isWebm ? '.webm' : '.mp4';
       
       const videoPath = path.join(tempDir, `${videoId}${fileExtension}`);
@@ -403,33 +426,31 @@ export class VideoTranscriptionService {
         videoId,
         isMuxed,
         isVideo,
-        mimeType: selectedStream.mime_type,
+        mimeType: selectedFormat.mime_type,
         fileExtension,
-        itag: selectedStream.itag,
+        itag: selectedFormat.itag,
       });
 
-      // Get the stream URL from selectedStream
-      // youtubei.js provides authenticated URLs that should work without additional headers
-      let streamUrl = null;
-      
-      // Try to get URL from stream object
-      if (selectedStream.url) {
-        streamUrl = selectedStream.url;
-      } else if (typeof selectedStream.getStream === 'function') {
-        // Some stream objects have a getStream() method
-        const stream = await selectedStream.getStream();
-        streamUrl = stream.url;
-      } else if (selectedStream.streaming_data?.url) {
-        // Fallback to streaming_data.url
-        streamUrl = selectedStream.streaming_data.url;
-      } else {
-        throw new Error('Could not get stream URL from selected stream');
+      // Get the stream URL from selectedFormat
+      // In youtubei.js v16, format objects from getInfo() have a url property
+      // The URL might be a signed URL that requires authentication headers
+      let streamUrl = selectedFormat.url;
+
+      if (!streamUrl) {
+        logger.error('[YouTube] No URL found in format', {
+          videoId,
+          formatKeys: Object.keys(selectedFormat),
+          formatType: typeof selectedFormat,
+          formatConstructor: selectedFormat.constructor?.name,
+        });
+        throw new Error('No URL found in selected format');
       }
 
-      logger.info('[YouTube] Got stream URL', {
+      logger.info('[YouTube] Got stream URL from format', {
         videoId,
         hasUrl: !!streamUrl,
-        urlLength: streamUrl ? streamUrl.length : 0,
+        urlLength: streamUrl.length,
+        urlStart: streamUrl.substring(0, 100),
       });
 
       // YouTube requires specific headers to download streams
