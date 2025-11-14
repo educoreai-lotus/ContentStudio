@@ -325,24 +325,48 @@ export class VideoTranscriptionService {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             'Accept': 'application/json',
           },
-          responseType: 'json', // Explicitly request JSON response
+          responseType: 'text', // Get as text first, then parse manually
         });
-        // Handle different response types
+        
+        // Handle different response types - Piped.video sometimes returns JSON as string
         let rawData = response.data;
         
-        // If response is a Buffer or array of numbers, try to parse as JSON string
-        if (Buffer.isBuffer(rawData)) {
+        // If response is a string, try to parse it as JSON
+        if (typeof rawData === 'string') {
+          try {
+            rawData = JSON.parse(rawData);
+            logger.info('[VideoTranscriptionService] Successfully parsed JSON string from Piped.video', {
+              videoId,
+              parsedType: typeof rawData,
+              isArray: Array.isArray(rawData),
+              isObject: typeof rawData === 'object' && rawData !== null && !Array.isArray(rawData),
+            });
+          } catch (parseError) {
+            logger.error('[VideoTranscriptionService] Failed to parse JSON string from Piped.video', {
+              videoId,
+              error: parseError.message,
+              stringLength: rawData.length,
+              stringPreview: rawData.substring(0, 200),
+            });
+            throw new Error(`Failed to parse Piped.video response: ${parseError.message}`);
+          }
+        }
+        // If response is a Buffer, try to parse as JSON string
+        else if (Buffer.isBuffer(rawData)) {
           try {
             rawData = JSON.parse(rawData.toString('utf8'));
+            logger.info('[VideoTranscriptionService] Successfully parsed Buffer as JSON', {
+              videoId,
+            });
           } catch (parseError) {
             logger.warn('[VideoTranscriptionService] Failed to parse Buffer as JSON', {
               videoId,
               error: parseError.message,
             });
           }
-        } else if (Array.isArray(rawData) && rawData.length > 0 && typeof rawData[0] === 'number') {
-          // If it's an array of numbers, it might be a Buffer representation
-          // Try to convert to string and parse as JSON
+        }
+        // If it's an array of numbers, it might be a Buffer representation
+        else if (Array.isArray(rawData) && rawData.length > 0 && typeof rawData[0] === 'number') {
           try {
             const buffer = Buffer.from(rawData);
             rawData = JSON.parse(buffer.toString('utf8'));
