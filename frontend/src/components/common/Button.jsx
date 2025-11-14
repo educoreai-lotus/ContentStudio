@@ -1,4 +1,5 @@
 import React from 'react';
+import { useApp } from '../../context/AppContext.jsx';
 
 /**
  * Button Component
@@ -19,13 +20,22 @@ export const Button = ({
   className = '',
   ...props
 }) => {
+  const { theme } = useApp();
+  const isDark = theme === 'night-mode';
+  
   const baseClasses = 'font-medium rounded transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed';
   
   const variantClasses = {
-    primary: 'bg-blue-600 hover:bg-blue-700 text-white',
-    secondary: 'bg-gray-200 hover:bg-gray-300 text-gray-800',
+    primary: isDark 
+      ? 'bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white'
+      : 'bg-blue-600 hover:bg-blue-700 text-white',
+    secondary: isDark
+      ? 'bg-transparent text-slate-50 border-2 border-white/20 hover:bg-gradient-to-r hover:from-emerald-600 hover:to-emerald-700 hover:text-white hover:border-transparent'
+      : 'bg-gray-200 hover:bg-gray-300 text-gray-800',
     danger: 'bg-red-600 hover:bg-red-700 text-white',
-    outline: 'border border-gray-300 hover:border-gray-400 text-gray-700',
+    outline: isDark
+      ? 'border border-white/20 hover:border-white/40 text-slate-50'
+      : 'border border-gray-300 hover:border-gray-400 text-gray-700',
   };
   
   const sizeClasses = {

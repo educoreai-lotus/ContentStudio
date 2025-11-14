@@ -25,7 +25,7 @@ function AppContent() {
   
   return (
     <Router>
-      <div className={`min-h-screen ${theme === 'day-mode' ? 'bg-gray-50' : 'bg-gray-900'}`}>
+      <div className={`min-h-screen transition-colors duration-300 ${theme === 'day-mode' ? 'bg-gray-50' : 'bg-slate-950'}`}>
           <Header />
           <div className="pt-20">
             {/* Routes */}

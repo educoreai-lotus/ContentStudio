@@ -39,61 +39,22 @@ const HomePage = () => {
           <div className="hero-actions flex gap-6 justify-center flex-wrap" style={{ marginTop: 'var(--spacing-xl)' }}>
             <button
               onClick={() => navigate('/courses')}
-              className="btn btn-primary"
-              style={{
-                background: 'var(--gradient-primary)',
-                color: 'white',
-                boxShadow: 'var(--shadow-glow)',
-                padding: 'var(--spacing-md) var(--spacing-xl)',
-                borderRadius: '12px',
-                border: 'none',
-                fontSize: '1.1rem',
-                fontWeight: '600',
-                cursor: 'pointer',
-                transition: 'all 0.3s ease',
-                position: 'relative',
-                overflow: 'hidden',
-              }}
-              onMouseEnter={e => {
-                e.target.style.transform = 'translateY(-2px)';
-                e.target.style.boxShadow = 'var(--shadow-hover)';
-              }}
-              onMouseLeave={e => {
-                e.target.style.transform = 'translateY(0)';
-                e.target.style.boxShadow = 'var(--shadow-glow)';
-              }}
+              className={`btn btn-primary px-6 py-3 rounded-xl text-lg font-semibold text-white border-none cursor-pointer transition-all duration-300 relative overflow-hidden ${
+                isDark 
+                  ? 'bg-gradient-to-r from-emerald-600 to-emerald-700 hover:shadow-lg hover:-translate-y-0.5' 
+                  : 'bg-gradient-to-r from-emerald-700 to-emerald-800 hover:shadow-lg hover:-translate-y-0.5'
+              }`}
             >
               <i className="fas fa-graduation-cap mr-2"></i>
               Browse Courses
             </button>
             <button
               onClick={() => navigate('/topics')}
-              className="btn btn-secondary"
-              style={{
-                background: isDark ? 'rgba(15, 23, 42, 0.6)' : 'transparent',
-                color: isDark ? 'rgba(226, 232, 240, 0.9)' : 'var(--text-primary)',
-                border: '2px solid var(--primary-cyan)',
-                padding: 'var(--spacing-md) var(--spacing-xl)',
-                borderRadius: '12px',
-                fontSize: '1.1rem',
-                fontWeight: '600',
-                cursor: 'pointer',
-                transition: 'all 0.3s ease',
-                position: 'relative',
-                overflow: 'hidden',
-              }}
-              onMouseEnter={e => {
-                e.target.style.background = 'var(--gradient-primary)';
-                e.target.style.color = 'white';
-                e.target.style.transform = 'translateY(-2px)';
-                e.target.style.boxShadow = 'var(--shadow-hover)';
-              }}
-              onMouseLeave={e => {
-                e.target.style.background = isDark ? 'rgba(15, 23, 42, 0.6)' : 'transparent';
-                e.target.style.color = isDark ? 'rgba(226, 232, 240, 0.9)' : 'var(--text-primary)';
-                e.target.style.transform = 'translateY(0)';
-                e.target.style.boxShadow = 'none';
-              }}
+              className={`btn btn-secondary px-6 py-3 rounded-xl text-lg font-semibold cursor-pointer transition-all duration-300 relative overflow-hidden ${
+                isDark 
+                  ? 'bg-transparent text-slate-50 border-2 border-white/20 hover:bg-gradient-to-r hover:from-emerald-600 hover:to-emerald-700 hover:text-white hover:border-transparent hover:-translate-y-0.5 hover:shadow-lg' 
+                  : 'bg-transparent text-gray-900 border-2 border-teal-600 hover:bg-gradient-to-r hover:from-emerald-700 hover:to-emerald-800 hover:text-white hover:border-transparent hover:-translate-y-0.5 hover:shadow-lg'
+              }`}
             >
               <i className="fas fa-book mr-2"></i>
               View Lessons
