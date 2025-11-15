@@ -127,7 +127,7 @@ export class GenerateContentUseCase {
     this.qualityCheckService = qualityCheckService;
   }
 
-  buildPromptVariables({ lessonTopic, lessonDescription, language, skillsList }) {
+  buildPromptVariables({ lessonTopic, lessonDescription, language, skillsList, transcriptText, trainerRequestText }) {
     if (!lessonTopic || !lessonDescription || !language || !skillsList) {
       throw new Error('lessonTopic, lessonDescription, language, and skillsList are required');
     }
@@ -145,6 +145,8 @@ export class GenerateContentUseCase {
       language: language.trim(),
       skillsList: skillsAsArray.join(', '),
       skillsListArray: skillsAsArray,
+      transcriptText: transcriptText || null,
+      trainerRequestText: trainerRequestText || null,
     };
   }
 
@@ -325,27 +327,37 @@ export class GenerateContentUseCase {
         }
 
         case 6: { // avatar_video
-          const avatarScript = await this.aiGenerationService.generateAvatarScript(prompt, {
+          // Build lesson data for avatar text generation (NO GPT)
+          const lessonData = {
+            lessonTopic: promptVariables.lessonTopic,
+            lessonDescription: promptVariables.lessonDescription || prompt, // Use prompt as description if available
+            skillsList: promptVariables.skillsList || [],
+            transcriptText: promptVariables.transcriptText || null,
+            trainerRequestText: promptVariables.trainerRequestText || null,
+          };
+
+          // Generate avatar video - NO GPT, uses buildAvatarText()
+          const avatarResult = await this.aiGenerationService.generateAvatarVideo(lessonData, {
             language: promptVariables.language,
           });
           
           // Handle failed status - save as failed content instead of throwing
-          if (avatarScript.status === 'failed') {
+          if (avatarResult.status === 'failed') {
             // Create failed content data structure
             contentData = {
               status: 'failed',
-              script: avatarScript.script || null,
+              script: avatarResult.script || null,
               videoUrl: null,
-              videoId: avatarScript.videoId || null,
-              error: avatarScript.error || avatarScript.errorMessage || 'Avatar video generation failed',
-              errorCode: avatarScript.errorCode || 'UNKNOWN_ERROR',
-              reason: avatarScript.reason || 'Avatar video failed due to unsupported voice engine. Please choose another voice.',
-              metadata: avatarScript.metadata || {},
+              videoId: avatarResult.videoId || null,
+              error: avatarResult.error || avatarResult.errorMessage || 'Avatar video generation failed',
+              errorCode: avatarResult.errorCode || 'UNKNOWN_ERROR',
+              reason: avatarResult.reason || 'Avatar video failed due to unsupported voice engine. Please choose another voice.',
+              metadata: avatarResult.metadata || {},
             };
             // Don't break - continue to save failed content
           } else {
             // Clean content data: remove redundant topic/skills metadata
-            contentData = ContentDataCleaner.cleanAvatarVideoData(avatarScript);
+            contentData = ContentDataCleaner.cleanAvatarVideoData(avatarResult);
           }
           break;
         }

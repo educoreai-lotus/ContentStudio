@@ -6,9 +6,17 @@
  * - ELEVENLABS: External ElevenLabs voice provider (not supported in this implementation)
  */
 
+// Default lecturer voice for all avatar videos
+export const DEFAULT_VOICE = {
+  lecturer: 'Sarah', // Professional female voice
+};
+
+// Default voice engine (must be HEYGEN)
+export const DEFAULT_VOICE_ENGINE = 'heygen';
+
 export const HEYGEN_CONFIG = {
-  // Default HeyGen voice ID (female voice)
-  DEFAULT_VOICE_ID: '1bd001e7e421d891986aad5158bc8',
+  // Default HeyGen voice ID - use DEFAULT_VOICE.lecturer
+  DEFAULT_VOICE_ID: DEFAULT_VOICE.lecturer,
   
   // Default avatar ID
   DEFAULT_AVATAR_ID: 'Kristin_public_3_20240108',
@@ -17,7 +25,7 @@ export const HEYGEN_CONFIG = {
   SUPPORTED_VOICE_ENGINES: ['heygen'],
   
   // Fallback voice engine (must be HEYGEN)
-  FALLBACK_VOICE_ENGINE: 'heygen',
+  FALLBACK_VOICE_ENGINE: DEFAULT_VOICE_ENGINE,
   
   // Voice provider mapping
   VOICE_PROVIDER: {
@@ -40,18 +48,15 @@ export const HEYGEN_CONFIG = {
     return elevenLabsPattern.test(voiceId) || voiceId.length > 32;
   },
   
-  // Get safe voice ID - override ElevenLabs with HeyGen default
+  // Get safe voice ID - always use DEFAULT_VOICE.lecturer
   getSafeVoiceId(voiceId) {
-    if (!voiceId) {
-      return this.DEFAULT_VOICE_ID;
+    // Always use default lecturer voice
+    if (!voiceId || this.isElevenLabsVoice(voiceId) || voiceId !== DEFAULT_VOICE.lecturer) {
+      console.log(`[HeyGenConfig] Using default lecturer voice: ${DEFAULT_VOICE.lecturer}`);
+      return DEFAULT_VOICE.lecturer;
     }
     
-    if (this.isElevenLabsVoice(voiceId)) {
-      console.warn(`[HeyGenConfig] ElevenLabs voice ID detected (${voiceId}), overriding with HeyGen default voice`);
-      return this.DEFAULT_VOICE_ID;
-    }
-    
-    return voiceId;
+    return DEFAULT_VOICE.lecturer;
   },
   
   // Get voice configuration for API request
@@ -62,6 +67,7 @@ export const HEYGEN_CONFIG = {
       type: 'text',
       input_text: script,
       voice_id: safeVoiceId,
+      voice_engine: DEFAULT_VOICE_ENGINE,
       speed: speed,
     };
   },

@@ -87,6 +87,7 @@ export class ContentGenerationOrchestrator {
       lessonDescription: normalizedTranscript, // TRANSCRIPT REPLACES TRAINER PROMPT
       language: topicMetadata.language || 'English',
       skillsList: topicMetadata.skillsList || [],
+      transcriptText: normalizedTranscript, // Pass transcript text for avatar video generation
     };
 
     // Step 4: Generate all 6 formats in parallel with progress events

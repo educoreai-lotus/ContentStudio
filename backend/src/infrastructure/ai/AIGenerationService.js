@@ -47,7 +47,7 @@ export class AIGenerationService extends IAIGenerationService {
       case 'presentation':
         return this.generatePresentation(prompt, config);
       case 'avatar_video':
-        return this.generateAvatarScript(prompt, config);
+        return this.generateAvatarVideo(prompt, config);
       default:
         throw new Error(`Unsupported content type for AI generation: ${content_type}`);
     }
@@ -354,80 +354,200 @@ Format as JSON with this structure:
     return `${words.slice(0, maxWords).join(' ')}…`;
   }
 
-  async generateAvatarScript(prompt, config = {}) {
-    if (!this.openaiClient) {
-      throw new Error('OpenAI client not configured');
+  /**
+   * Build avatar text from lesson data - NO GPT, pure function
+   * @param {Object} lessonData - Lesson data
+   * @param {string} lessonData.lessonTopic - Topic name
+   * @param {string} lessonData.lessonDescription - Topic description
+   * @param {Array} lessonData.skillsList - Skills list
+   * @param {string} lessonData.trainerRequestText - Optional trainer request
+   * @param {string} lessonData.transcriptText - Optional transcript text
+   * @returns {string} Avatar text
+   */
+  buildAvatarText(lessonData = {}) {
+    const {
+      lessonTopic = '',
+      lessonDescription = '',
+      skillsList = [],
+      trainerRequestText = '',
+      transcriptText = '',
+    } = lessonData;
+
+    // Build text from available data
+    const parts = [];
+
+    if (lessonTopic) {
+      parts.push(`Today we'll learn about ${lessonTopic}.`);
     }
 
+    if (lessonDescription) {
+      parts.push(lessonDescription);
+    }
+
+    if (transcriptText && transcriptText.trim()) {
+      // Use transcript text directly (first 500 chars to keep it concise)
+      const transcriptExcerpt = transcriptText.trim().substring(0, 500);
+      parts.push(transcriptExcerpt);
+    } else if (trainerRequestText && trainerRequestText.trim()) {
+      parts.push(trainerRequestText.trim());
+    }
+
+    if (skillsList && skillsList.length > 0) {
+      const skillsText = skillsList.join(', ');
+      parts.push(`Key skills covered: ${skillsText}.`);
+    }
+
+    // Join all parts with spaces
+    const finalText = parts.filter(p => p && p.trim()).join(' ').trim();
+
+    // Fallback if no text available
+    if (!finalText || finalText.length === 0) {
+      return lessonTopic 
+        ? `Welcome to the lesson about ${lessonTopic}.`
+        : 'Welcome to this lesson.';
+    }
+
+    return finalText;
+  }
+
+  /**
+   * Generate avatar video - NO GPT, uses buildAvatarText()
+   * @param {string|Object} prompt - Prompt or lesson data object
+   * @param {Object} config - Configuration
+   * @returns {Promise<Object>} Avatar video result
+   */
+  async generateAvatarVideo(prompt, config = {}) {
     if (!this.heygenClient) {
-      throw new Error('Heygen client not configured - cannot generate avatar video');
-    }
-
-    // Step 1: Generate script using OpenAI
-    const systemPrompt = 'You are a virtual presenter creating short, engaging video introductions.';
-    const script = await this.openaiClient.generateText(prompt, {
-      systemPrompt,
-      temperature: config.temperature || 0.9,
-      max_tokens: config.max_tokens || 400,
-    });
-
-    console.log('[Avatar Video] Script generated:', script.substring(0, 100) + '...');
-
-    // Step 2: Generate video using Heygen - simple call
-    const videoResult = await this.heygenClient.generateVideo(script, {
-      language: config.language || 'en',
-      avatarId: config.avatarId,
-      voiceId: config.voiceId,
-    });
-
-    // Handle failed status - return partial success instead of throwing
-    if (videoResult.status === 'failed') {
-      console.error('[Avatar Video] Video generation failed:', {
-        errorCode: videoResult.errorCode,
-        errorMessage: videoResult.errorMessage,
-        reason: videoResult.reason,
-      });
-
+      // Don't throw - return failed status
       return {
-        script,
+        script: '',
         videoUrl: null,
-        videoId: videoResult.videoId || null,
+        videoId: null,
         language: config.language || 'en',
         duration_seconds: 0,
         status: 'failed',
         fallback: false,
-        error: videoResult.error || videoResult.errorMessage || 'Avatar video generation failed',
-        errorCode: videoResult.errorCode || 'UNKNOWN_ERROR',
-        reason: videoResult.reason || 'Avatar video failed due to unsupported voice engine. Please choose another voice.',
+        error: 'Heygen client not configured',
+        errorCode: 'CLIENT_NOT_CONFIGURED',
+        reason: 'Avatar video generation is not available. Please configure HeyGen API key.',
         metadata: {
           generation_status: 'failed',
-          error_code: videoResult.errorCode || 'UNKNOWN_ERROR',
-          error_message: videoResult.errorMessage || 'Avatar video generation failed',
-          error_detail: videoResult.errorDetail || null,
+          error_code: 'CLIENT_NOT_CONFIGURED',
+          error_message: 'Heygen client not configured',
         },
       };
     }
 
-    console.log('[Avatar Video] Video generated:', videoResult.videoUrl, {
-      status: videoResult.status,
-      fallback: videoResult.fallback,
-    });
+    // Extract lesson data from prompt (can be object or string)
+    let lessonData = {};
+    if (typeof prompt === 'object' && prompt !== null) {
+      lessonData = prompt;
+    } else if (typeof prompt === 'string') {
+      // If prompt is a string, try to parse it or use as description
+      lessonData = {
+        lessonDescription: prompt,
+        ...config,
+      };
+    }
 
-    return {
-      script,
-      videoUrl: videoResult.videoUrl,
-      videoId: videoResult.videoId,
-      language: config.language || 'en',
-      duration_seconds: videoResult.duration || 15,
-      status: videoResult.status || 'completed',
-      fallback: !!videoResult.fallback,
-      metadata: {
-        heygen_video_url: videoResult.heygenVideoUrl,
-        generation_status: videoResult.status || 'completed',
-        storage_fallback: !!videoResult.fallback,
-        error: videoResult.error || null,
-      },
+    // Merge config into lessonData
+    lessonData = {
+      ...lessonData,
+      lessonTopic: config.lessonTopic || lessonData.lessonTopic,
+      lessonDescription: config.lessonDescription || lessonData.lessonDescription,
+      skillsList: config.skillsList || lessonData.skillsList || [],
+      trainerRequestText: config.trainerRequestText || lessonData.trainerRequestText,
+      transcriptText: config.transcriptText || lessonData.transcriptText,
     };
+
+    // Build avatar text - NO GPT, pure function
+    const avatarText = this.buildAvatarText(lessonData);
+
+    if (!avatarText || avatarText.trim().length === 0) {
+      return {
+        script: '',
+        videoUrl: null,
+        videoId: null,
+        language: config.language || 'en',
+        duration_seconds: 0,
+        status: 'failed',
+        fallback: false,
+        error: 'No text available for avatar video',
+        errorCode: 'NO_TEXT',
+        reason: 'Avatar video requires lesson content. Please provide lesson topic or description.',
+        metadata: {
+          generation_status: 'failed',
+          error_code: 'NO_TEXT',
+          error_message: 'No text available for avatar video',
+        },
+      };
+    }
+
+    // Generate video using Heygen - NO GPT, direct call
+    try {
+      const videoResult = await this.heygenClient.generateVideo(avatarText, {
+        language: config.language || 'en',
+        avatarId: config.avatarId,
+        voiceId: config.voiceId,
+      });
+
+      // Handle failed status - return partial success instead of throwing
+      if (videoResult.status === 'failed') {
+        return {
+          script: avatarText,
+          videoUrl: null,
+          videoId: videoResult.videoId || null,
+          language: config.language || 'en',
+          duration_seconds: 0,
+          status: 'failed',
+          fallback: false,
+          error: videoResult.error || videoResult.errorMessage || 'Avatar video generation failed',
+          errorCode: videoResult.errorCode || 'UNKNOWN_ERROR',
+          reason: videoResult.reason || 'Avatar video failed due to unsupported voice engine. Please choose another voice.',
+          metadata: {
+            generation_status: 'failed',
+            error_code: videoResult.errorCode || 'UNKNOWN_ERROR',
+            error_message: videoResult.errorMessage || 'Avatar video generation failed',
+            error_detail: videoResult.errorDetail || null,
+          },
+        };
+      }
+
+      return {
+        script: avatarText,
+        videoUrl: videoResult.videoUrl,
+        videoId: videoResult.videoId,
+        language: config.language || 'en',
+        duration_seconds: videoResult.duration || 15,
+        status: videoResult.status || 'completed',
+        fallback: !!videoResult.fallback,
+        metadata: {
+          heygen_video_url: videoResult.heygenVideoUrl,
+          generation_status: videoResult.status || 'completed',
+          storage_fallback: !!videoResult.fallback,
+          error: videoResult.error || null,
+        },
+      };
+    } catch (error) {
+      // Never throw - return failed status
+      return {
+        script: avatarText,
+        videoUrl: null,
+        videoId: null,
+        language: config.language || 'en',
+        duration_seconds: 0,
+        status: 'failed',
+        fallback: false,
+        error: error.message || 'Avatar video generation failed',
+        errorCode: 'GENERATION_ERROR',
+        reason: 'Avatar video failed due to an error. Please try again or choose another voice.',
+        metadata: {
+          generation_status: 'failed',
+          error_code: 'GENERATION_ERROR',
+          error_message: error.message || 'Avatar video generation failed',
+        },
+      };
+    }
   }
 }
 

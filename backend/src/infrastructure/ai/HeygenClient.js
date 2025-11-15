@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { createClient } from '@supabase/supabase-js';
-import { HEYGEN_CONFIG } from '../../config/heygen.js';
+import { HEYGEN_CONFIG, DEFAULT_VOICE, DEFAULT_VOICE_ENGINE } from '../../config/heygen.js';
 
 /**
  * Heygen API Client
@@ -50,12 +50,7 @@ export class HeygenClient {
         config.speed || 1.0
       );
       
-      console.log('[HeygenClient] Using voice configuration:', {
-        requestedVoiceId: config.voiceId,
-        actualVoiceId: voiceConfig.voice_id,
-        wasElevenLabs: config.voiceId ? HEYGEN_CONFIG.isElevenLabsVoice(config.voiceId) : false,
-        avatarId,
-      });
+      console.log(`[HeygenClient] Using default lecturer voice: ${DEFAULT_VOICE.lecturer}`);
       
       // Step 1: Create video generation request
       const response = await this.client.post('/v2/video/generate', {
@@ -192,8 +187,28 @@ export class HeygenClient {
       }
 
     } catch (error) {
-      console.error('[HeygenClient] Video generation error:', error.response?.data || error.message);
-      throw new Error(`Failed to generate avatar video: ${error.message}`);
+      // Never throw - return failed status instead
+      const errorDetail = this.sanitizeError(error);
+      const is400Error = error.response?.status === 400 || error.response?.statusCode === 400;
+      
+      console.error('[HeygenClient] Video generation error:', {
+        statusCode: error.response?.status || error.response?.statusCode,
+        errorCode: errorDetail.code,
+        errorMessage: errorDetail.message,
+        errorDetail: errorDetail.detail,
+        is400Error,
+      });
+      
+      // Return failed status - don't throw, allow other formats to continue
+      return {
+        status: 'failed',
+        videoId: null,
+        script,
+        error: errorDetail.message,
+        errorCode: errorDetail.code,
+        errorDetail: errorDetail.detail,
+        reason: this.getTrainerFriendlyError(errorDetail),
+      };
     }
   }
 
@@ -348,9 +363,17 @@ export class HeygenClient {
     }
 
     try {
-      // Use valid Heygen IDs
-      const defaultAvatarId = 'Kristin_public_3_20240108';
-      const defaultVoiceId = '1bd001e7e50f421d891986aad5158bc8';
+      // Use configuration for HeyGen defaults
+      const avatarIdToUse = avatarId || HEYGEN_CONFIG.DEFAULT_AVATAR_ID;
+      
+      // Get safe voice ID - always use DEFAULT_VOICE.lecturer
+      const voiceConfig = HEYGEN_CONFIG.getVoiceConfig(
+        voiceId,
+        script,
+        1.0
+      );
+      
+      console.log(`[HeygenClient] Using default lecturer voice: ${DEFAULT_VOICE.lecturer}`);
       
       const response = await this.client.post('/v2/video/generate', {
         test: true, // Set to true for faster testing (adds watermark)
@@ -360,15 +383,10 @@ export class HeygenClient {
           {
             character: {
               type: 'avatar',
-              avatar_id: avatarId || defaultAvatarId,
+              avatar_id: avatarIdToUse,
               avatar_style: 'normal',
             },
-            voice: {
-              type: 'text',
-              input_text: script,
-              voice_id: voiceId || defaultVoiceId,
-              speed: 1.0,
-            },
+            voice: voiceConfig,
             background: {
               type: 'color',
               value: '#FFFFFF',
@@ -385,8 +403,22 @@ export class HeygenClient {
         videoId: response.data.data.video_id,
       };
     } catch (error) {
-      console.error('[HeygenClient] Create video error:', error.response?.data || error.message);
-      throw new Error(`Failed to create video: ${error.message}`);
+      // Never throw - return failed status
+      const errorDetail = this.sanitizeError(error);
+      console.error('[HeygenClient] Create video error:', {
+        statusCode: error.response?.status || error.response?.statusCode,
+        errorCode: errorDetail.code,
+        errorMessage: errorDetail.message,
+      });
+      
+      // Return failed status instead of throwing
+      return {
+        status: 'failed',
+        videoId: null,
+        error: errorDetail.message,
+        errorCode: errorDetail.code,
+        reason: this.getTrainerFriendlyError(errorDetail),
+      };
     }
   }
 
