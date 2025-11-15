@@ -152,6 +152,8 @@ export class VideoToLessonController {
 
       // Step 2: Generate all lesson formats using ContentGenerationOrchestrator
       let generatedContent = null;
+      const progressEvents = [];
+      
       if (this.contentGenerationOrchestrator && transcriptText) {
         try {
           logger.info('[VideoToLessonController] Starting automatic content generation from transcript', {
@@ -160,26 +162,40 @@ export class VideoToLessonController {
 
           // Get trainer_id from request body or authentication
           const trainer_id = req.body.trainer_id || req.auth?.trainer?.trainer_id || null;
-          const { topic_name, course_id } = req.body;
+          const { topic_id, topic_name, course_id } = req.body;
 
-          // Validate trainer_id before proceeding
-          if (!trainer_id) {
-            logger.warn('[VideoToLessonController] Trainer ID not provided, skipping content generation', {
-              hasBodyTrainerId: !!req.body.trainer_id,
-              hasAuthTrainerId: !!req.auth?.trainer?.trainer_id,
+          // Validate topic_id before proceeding
+          if (!topic_id) {
+            logger.warn('[VideoToLessonController] Topic ID not provided, skipping content generation', {
+              hasTopicId: !!req.body.topic_id,
             });
-            throw new Error('Trainer ID is required for content generation. Please provide trainer_id in request body or ensure authentication is configured.');
+            throw new Error('Topic ID is required for content generation. Please provide topic_id in request body.');
           }
+
+          // Progress callback to collect events
+          const onProgress = (format, status, message) => {
+            const event = {
+              format,
+              status,
+              message,
+              timestamp: new Date().toISOString(),
+            };
+            progressEvents.push(event);
+            logger.info(`[VideoToLessonController] Progress: ${message}`, { format, status });
+          };
           
           generatedContent = await this.contentGenerationOrchestrator.generateAll(transcriptText, {
+            topic_id: parseInt(topic_id),
             trainer_id,
             topic_name,
             course_id: course_id ? parseInt(course_id) : null,
+            onProgress,
           });
 
           logger.info('[VideoToLessonController] All content formats generated successfully', {
             topic_id: generatedContent.topic_id,
             formatsCount: Object.keys(generatedContent.content_formats).length,
+            progressEventsCount: progressEvents.length,
           });
         } catch (orchestratorError) {
           logger.error('[VideoToLessonController] Content generation failed', {
@@ -207,6 +223,8 @@ export class VideoToLessonController {
             metadata: generatedContent.metadata,
             content_formats: generatedContent.content_formats,
           }),
+          // Include progress events
+          progress_events: progressEvents,
         },
         message: generatedContent
           ? 'Video transcribed and all lesson formats generated successfully'

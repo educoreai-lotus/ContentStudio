@@ -1,8 +1,11 @@
 import { logger } from '../../infrastructure/logging/Logger.js';
+import { GenerateContentUseCase } from '../use-cases/GenerateContentUseCase.js';
+import { Content } from '../../domain/entities/Content.js';
 
 /**
  * Content Generation Orchestrator
- * Orchestrates automatic generation of all lesson formats from a transcript
+ * Orchestrates automatic generation of all lesson formats from a video transcript
+ * Uses existing prompt templates and generation logic
  */
 export class ContentGenerationOrchestrator {
   constructor({
@@ -10,27 +13,50 @@ export class ContentGenerationOrchestrator {
     openaiClient,
     contentRepository,
     topicRepository,
+    promptTemplateService,
+    qualityCheckService,
   }) {
     this.aiGenerationService = aiGenerationService;
     this.openaiClient = openaiClient;
     this.contentRepository = contentRepository;
     this.topicRepository = topicRepository;
+    this.promptTemplateService = promptTemplateService;
+    this.qualityCheckService = qualityCheckService;
+
+    // Initialize GenerateContentUseCase with existing dependencies
+    this.generateContentUseCase = new GenerateContentUseCase({
+      contentRepository,
+      aiGenerationService,
+      promptTemplateService,
+      qualityCheckService,
+    });
   }
 
   /**
    * Generate all lesson formats from transcript
    * @param {string} transcript - Video transcript text
    * @param {Object} options - Options
-   * @param {number} options.topic_id - Topic ID (optional, will create topic if not provided)
-   * @param {string} options.trainer_id - Trainer ID
+   * @param {number} options.topic_id - Topic ID (required)
+   * @param {string} options.trainer_id - Trainer ID (optional, for topic creation)
    * @param {string} options.topic_name - Topic name (optional, will extract from transcript if not provided)
+   * @param {string} options.language - Language code (optional, will detect if not provided)
+   * @param {Array} options.skillsList - Skills list (optional, will extract from transcript if not provided)
+   * @param {Function} options.onProgress - Progress callback: (format, status, message) => void
    * @returns {Promise<Object>} Generated content with all formats
    */
   async generateAll(transcript, options = {}) {
     logger.info('[ContentGenerationOrchestrator] Starting content generation from transcript', {
       transcriptLength: transcript.length,
-      options,
+      topic_id: options.topic_id,
     });
+
+    // Validate required fields
+    if (!options.topic_id) {
+      throw new Error('topic_id is required for content generation');
+    }
+
+    const topicId = options.topic_id;
+    const onProgress = options.onProgress || (() => {});
 
     // Step 1: Normalize transcript
     const normalizedTranscript = this.normalizeTranscript(transcript);
@@ -39,54 +65,166 @@ export class ContentGenerationOrchestrator {
       normalizedLength: normalizedTranscript.length,
     });
 
-    // Step 2: Detect language
-    const language = await this.detectLanguage(normalizedTranscript);
-    logger.info('[ContentGenerationOrchestrator] Language detected', { language });
-
-    // Step 3: Extract metadata from transcript
-    const metadata = await this.extractMetadata(normalizedTranscript, options);
-    logger.info('[ContentGenerationOrchestrator] Metadata extracted', {
-      title: metadata.title,
-      difficulty: metadata.difficulty,
-      skillsCount: metadata.skills?.length || 0,
-    });
-
-    // Step 4: Create or get topic
-    let topicId = options.topic_id;
-    if (!topicId) {
-      // Validate trainer_id before creating topic
-      if (!options.trainer_id) {
-        throw new Error('Trainer ID is required to create a topic. Please provide trainer_id in options.');
-      }
-      
-      const topic = await this.createTopic(metadata, options);
-      topicId = topic.topic_id;
-      logger.info('[ContentGenerationOrchestrator] Topic created', { topicId });
+    // Step 2: Get topic metadata or extract from transcript
+    let topicMetadata = await this.getTopicMetadata(topicId);
+    
+    // If topic metadata is missing, extract from transcript
+    if (!topicMetadata.lessonTopic || !topicMetadata.lessonDescription) {
+      const extractedMetadata = await this.extractMetadata(normalizedTranscript, options);
+      topicMetadata = {
+        lessonTopic: topicMetadata.lessonTopic || extractedMetadata.title || options.topic_name || 'Untitled Lesson',
+        lessonDescription: topicMetadata.lessonDescription || normalizedTranscript.substring(0, 500) + '...',
+        language: topicMetadata.language || extractedMetadata.language || options.language || await this.detectLanguage(normalizedTranscript),
+        skillsList: topicMetadata.skillsList || extractedMetadata.skills || options.skillsList || [],
+      };
     }
 
-    // Step 5: Generate all formats using transcript as master prompt
-    const generatedContent = await this.generateAllFormats(
-      normalizedTranscript,
-      metadata,
-      topicId,
-      language,
-      options
-    );
+    // Step 3: Use transcript as lessonDescription (replaces trainer prompt)
+    // The transcript replaces the trainer prompt in all prompt templates
+    const generationRequestBase = {
+      topic_id: topicId,
+      lessonTopic: topicMetadata.lessonTopic,
+      lessonDescription: normalizedTranscript, // TRANSCRIPT REPLACES TRAINER PROMPT
+      language: topicMetadata.language || 'English',
+      skillsList: topicMetadata.skillsList || [],
+    };
 
-    logger.info('[ContentGenerationOrchestrator] All formats generated', {
+    // Step 4: Generate all 6 formats in parallel with progress events
+    const formats = [
+      { id: 1, name: 'text', label: 'Text & Audio', contentType: 'text' },
+      { id: 2, name: 'code', label: 'Code Examples', contentType: 'code' },
+      { id: 3, name: 'presentation', label: 'Presentation Slides', contentType: 'presentation' },
+      { id: 4, name: 'audio', label: 'Audio', contentType: 'audio' },
+      { id: 5, name: 'mind_map', label: 'Mind Map', contentType: 'mind_map' },
+      { id: 6, name: 'avatar_video', label: 'Avatar Video', contentType: 'avatar_video' },
+    ];
+
+    const results = {};
+    const progressPromises = formats.map(async (format) => {
+      try {
+        // Emit progress: starting
+        onProgress(format.name, 'starting', `[AI] Starting: ${format.label}`);
+        logger.info(`[ContentGenerationOrchestrator] Starting generation: ${format.label}`);
+
+        // Build generation request for this format
+        const generationRequest = {
+          ...generationRequestBase,
+          content_type_id: format.id,
+        };
+
+        // Generate content using existing GenerateContentUseCase
+        const generatedContent = await this.generateContentUseCase.execute(generationRequest);
+
+        // Override generation_method_id to 'video_to_lesson' (instead of 'ai_assisted')
+        generatedContent.generation_method_id = 'video_to_lesson';
+
+        // Save to database
+        const savedContent = await this.contentRepository.create(generatedContent);
+
+        // Emit progress: completed
+        onProgress(format.name, 'completed', `[AI] Completed: ${format.label}`);
+        logger.info(`[ContentGenerationOrchestrator] Completed generation: ${format.label}`, {
+          content_id: savedContent.content_id,
+        });
+
+        // Return result
+        results[format.name] = {
+          content_id: savedContent.content_id,
+          format: format.name,
+          content_type_id: format.id,
+          generated: true,
+          content_data: savedContent.content_data,
+        };
+
+        return results[format.name];
+      } catch (error) {
+        // Emit progress: failed
+        onProgress(format.name, 'failed', `[AI] Failed: ${format.label} - ${error.message}`);
+        logger.error(`[ContentGenerationOrchestrator] Failed to generate ${format.label}`, {
+          error: error.message,
+          stack: error.stack,
+        });
+
+        results[format.name] = {
+          format: format.name,
+          content_type_id: format.id,
+          generated: false,
+          error: error.message,
+        };
+
+        return results[format.name];
+      }
+    });
+
+    // Wait for all formats to complete (or fail)
+    await Promise.all(progressPromises);
+
+    logger.info('[ContentGenerationOrchestrator] All formats processed', {
       topicId,
-      formatsGenerated: Object.keys(generatedContent).length,
+      formatsGenerated: Object.keys(results).filter(k => results[k].generated).length,
+      formatsFailed: Object.keys(results).filter(k => !results[k].generated).length,
     });
 
     return {
       topic_id: topicId,
       transcript: {
         text: normalizedTranscript,
-        language,
+        language: topicMetadata.language,
         length: normalizedTranscript.length,
       },
-      metadata,
-      content_formats: generatedContent,
+      metadata: {
+        lessonTopic: topicMetadata.lessonTopic,
+        language: topicMetadata.language,
+        skillsList: topicMetadata.skillsList,
+      },
+      content_formats: {
+        text_audio: results.text,
+        code_examples: results.code,
+        slides: results.presentation,
+        audio: results.audio,
+        mind_map: results.mind_map,
+        avatar_video: results.avatar_video,
+      },
+    };
+  }
+
+  /**
+   * Get topic metadata from database
+   * @param {number} topicId - Topic ID
+   * @returns {Promise<Object>} Topic metadata
+   */
+  async getTopicMetadata(topicId) {
+    if (!this.topicRepository) {
+      return {
+        lessonTopic: null,
+        lessonDescription: null,
+        language: null,
+        skillsList: [],
+      };
+    }
+
+    try {
+      const topic = await this.topicRepository.findById(topicId);
+      if (topic) {
+        return {
+          lessonTopic: topic.topic_name,
+          lessonDescription: topic.description,
+          language: topic.language || 'English',
+          skillsList: Array.isArray(topic.skills) ? topic.skills : (topic.skills ? [topic.skills] : []),
+        };
+      }
+    } catch (error) {
+      logger.warn('[ContentGenerationOrchestrator] Failed to fetch topic metadata', {
+        topicId,
+        error: error.message,
+      });
+    }
+
+    return {
+      lessonTopic: null,
+      lessonDescription: null,
+      language: null,
+      skillsList: [],
     };
   }
 
@@ -179,7 +317,7 @@ Return only the 2-letter language code, nothing else.`;
   }
 
   /**
-   * Extract metadata from transcript
+   * Extract metadata from transcript (fallback if topic metadata is missing)
    * @param {string} transcript - Normalized transcript
    * @param {Object} options - Options
    * @returns {Promise<Object>} Extracted metadata
@@ -193,31 +331,24 @@ Return only the 2-letter language code, nothing else.`;
       const prompt = `Analyze the following video transcript and extract key educational metadata.
 
 Transcript:
-${transcript}
+${transcript.substring(0, 2000)}
 
 Extract the following information:
 1. Lesson title (clear, concise, 5-10 words)
-2. Main subtopics (3-7 key topics covered)
-3. Key concepts (important terms/ideas)
-4. Keywords (relevant search terms)
-5. Difficulty level (beginner, intermediate, advanced)
-6. Skills list (micro-skills and nano-skills that learners will gain)
+2. Key concepts (important terms/ideas)
+3. Skills list (micro-skills and nano-skills that learners will gain)
 
 Return ONLY valid JSON in this format:
 {
   "title": "Lesson Title Here",
-  "subtopics": ["Subtopic 1", "Subtopic 2", ...],
   "concepts": ["Concept 1", "Concept 2", ...],
-  "keywords": ["keyword1", "keyword2", ...],
-  "difficulty": "beginner|intermediate|advanced",
-  "skills": ["skill1", "skill2", ...],
-  "summary": "Brief summary (2-3 sentences)"
+  "skills": ["skill1", "skill2", ...]
 }`;
 
       const response = await this.openaiClient.generateText(prompt, {
         systemPrompt: 'You are an expert educational content analyst. Extract accurate metadata from educational transcripts. Return only valid JSON.',
         temperature: 0.3,
-        max_tokens: 1000,
+        max_tokens: 500,
       });
 
       // Parse JSON from response
@@ -225,15 +356,11 @@ Return ONLY valid JSON in this format:
       if (jsonMatch) {
         const metadata = JSON.parse(jsonMatch[0]);
         
-        // Merge with options (options take precedence)
         return {
-          title: options.topic_name || metadata.title || 'Untitled Lesson',
-          subtopics: metadata.subtopics || [],
+          title: metadata.title || options.topic_name || 'Untitled Lesson',
           concepts: metadata.concepts || [],
-          keywords: metadata.keywords || [],
-          difficulty: metadata.difficulty || 'intermediate',
           skills: metadata.skills || [],
-          summary: metadata.summary || transcript.substring(0, 200) + '...',
+          language: 'en', // Will be detected separately
         };
       }
 
@@ -265,422 +392,9 @@ Return ONLY valid JSON in this format:
 
     return {
       title,
-      subtopics: [],
       concepts: words.slice(0, 5),
-      keywords: words,
-      difficulty: 'intermediate',
       skills: [],
-      summary: transcript.substring(0, 200) + '...',
+      language: 'en',
     };
-  }
-
-  /**
-   * Create topic from metadata
-   * @param {Object} metadata - Extracted metadata
-   * @param {Object} options - Options
-   * @returns {Promise<Object>} Created topic
-   */
-  async createTopic(metadata, options = {}) {
-    if (!this.topicRepository) {
-      throw new Error('Topic repository not available');
-    }
-
-    const { Topic } = await import('../../domain/entities/Topic.js');
-
-    const topic = new Topic({
-      topic_name: metadata.title,
-      trainer_id: options.trainer_id,
-      description: metadata.summary || metadata.title,
-      course_id: options.course_id || null,
-      status: 'draft',
-      skills: metadata.skills || [],
-    });
-
-    return await this.topicRepository.create(topic);
-  }
-
-  /**
-   * Generate all content formats from transcript
-   * @param {string} transcript - Normalized transcript (MASTER PROMPT)
-   * @param {Object} metadata - Extracted metadata
-   * @param {number} topicId - Topic ID
-   * @param {string} language - Detected language
-   * @param {Object} options - Options
-   * @returns {Promise<Object>} Generated content formats
-   */
-  async generateAllFormats(transcript, metadata, topicId, language, options = {}) {
-    const results = {};
-    const { Content } = await import('../../domain/entities/Content.js');
-
-    // Use transcript as MASTER PROMPT for all formats
-    const masterPrompt = transcript;
-
-    // 1. Generate Text format
-    try {
-      logger.info('[ContentGenerationOrchestrator] Generating text format...');
-      const textPrompt = this.buildTextPrompt(masterPrompt, metadata);
-      const textContent = await this.aiGenerationService.generateText(textPrompt, {
-        temperature: 0.7,
-        max_tokens: 3000,
-        language,
-      });
-
-      const textContentEntity = await this.contentRepository.create(
-        new Content({
-          topic_id: topicId,
-          content_type_id: 'text',
-          content_data: {
-            text: textContent,
-            sections: this.splitIntoSections(textContent),
-            metadata,
-          },
-          generation_method_id: 'video_to_lesson',
-        })
-      );
-
-      results.text = {
-        content_id: textContentEntity.content_id,
-        format: 'text',
-        generated: true,
-      };
-
-      logger.info('[ContentGenerationOrchestrator] Text format generated', {
-        content_id: textContentEntity.content_id,
-      });
-    } catch (error) {
-      logger.error('[ContentGenerationOrchestrator] Failed to generate text format', {
-        error: error.message,
-      });
-      results.text = { error: error.message };
-    }
-
-    // 2. Generate Audio format
-    try {
-      logger.info('[ContentGenerationOrchestrator] Generating audio format...');
-      const audioResult = await this.aiGenerationService.generateAudio(masterPrompt, {
-        voice: options.voice || 'alloy',
-        language,
-      });
-
-      const audioContentEntity = await this.contentRepository.create(
-        new Content({
-          topic_id: topicId,
-          content_type_id: 'audio',
-          content_data: {
-            audio_url: audioResult.audioUrl,
-            text: audioResult.text,
-            duration: audioResult.duration,
-            voice: audioResult.voice,
-            metadata: audioResult.metadata,
-          },
-          generation_method_id: 'video_to_lesson',
-        })
-      );
-
-      results.audio = {
-        content_id: audioContentEntity.content_id,
-        format: 'audio',
-        audio_url: audioResult.audioUrl,
-        generated: true,
-      };
-
-      logger.info('[ContentGenerationOrchestrator] Audio format generated', {
-        content_id: audioContentEntity.content_id,
-      });
-    } catch (error) {
-      logger.error('[ContentGenerationOrchestrator] Failed to generate audio format', {
-        error: error.message,
-      });
-      results.audio = { error: error.message };
-    }
-
-    // 3. Generate Slides/Presentation format
-    try {
-      logger.info('[ContentGenerationOrchestrator] Generating presentation format...');
-      const slidesPrompt = this.buildSlidesPrompt(masterPrompt, metadata);
-      const slidesResult = await this.aiGenerationService.generatePresentation(slidesPrompt, {
-        slide_count: 10,
-        style: 'educational',
-        language,
-        lessonTopic: metadata.title,
-      });
-
-      const slidesContentEntity = await this.contentRepository.create(
-        new Content({
-          topic_id: topicId,
-          content_type_id: 'presentation',
-          content_data: slidesResult,
-          generation_method_id: 'video_to_lesson',
-        })
-      );
-
-      results.presentation = {
-        content_id: slidesContentEntity.content_id,
-        format: 'presentation',
-        slide_count: slidesResult.slide_count,
-        google_slides_url: slidesResult.googleSlidesUrl,
-        generated: true,
-      };
-
-      logger.info('[ContentGenerationOrchestrator] Presentation format generated', {
-        content_id: slidesContentEntity.content_id,
-      });
-    } catch (error) {
-      logger.error('[ContentGenerationOrchestrator] Failed to generate presentation format', {
-        error: error.message,
-      });
-      results.presentation = { error: error.message };
-    }
-
-    // 4. Generate Mind Map format
-    try {
-      logger.info('[ContentGenerationOrchestrator] Generating mind map format...');
-      const mindMapPrompt = this.buildMindMapPrompt(masterPrompt, metadata);
-      const mindMapResult = await this.aiGenerationService.generateMindMap(mindMapPrompt, {
-        language,
-      });
-
-      const mindMapContentEntity = await this.contentRepository.create(
-        new Content({
-          topic_id: topicId,
-          content_type_id: 'mind_map',
-          content_data: mindMapResult,
-          generation_method_id: 'video_to_lesson',
-        })
-      );
-
-      results.mind_map = {
-        content_id: mindMapContentEntity.content_id,
-        format: 'mind_map',
-        generated: true,
-      };
-
-      logger.info('[ContentGenerationOrchestrator] Mind map format generated', {
-        content_id: mindMapContentEntity.content_id,
-      });
-    } catch (error) {
-      logger.error('[ContentGenerationOrchestrator] Failed to generate mind map format', {
-        error: error.message,
-      });
-      results.mind_map = { error: error.message };
-    }
-
-    // 5. Generate Code format (if applicable)
-    try {
-      logger.info('[ContentGenerationOrchestrator] Generating code format...');
-      const codePrompt = this.buildCodePrompt(masterPrompt, metadata);
-      const codeResult = await this.aiGenerationService.generateCode(codePrompt, 'javascript', {
-        language,
-        include_explanation: true,
-      });
-
-      const codeContentEntity = await this.contentRepository.create(
-        new Content({
-          topic_id: topicId,
-          content_type_id: 'code',
-          content_data: codeResult,
-          generation_method_id: 'video_to_lesson',
-        })
-      );
-
-      results.code = {
-        content_id: codeContentEntity.content_id,
-        format: 'code',
-        language: codeResult.language,
-        generated: true,
-      };
-
-      logger.info('[ContentGenerationOrchestrator] Code format generated', {
-        content_id: codeContentEntity.content_id,
-      });
-    } catch (error) {
-      logger.warn('[ContentGenerationOrchestrator] Code format not applicable or failed', {
-        error: error.message,
-      });
-      results.code = { skipped: true, reason: 'Not applicable or generation failed' };
-    }
-
-    // 6. Generate Avatar Video format (optional, Post-MVP)
-    try {
-      logger.info('[ContentGenerationOrchestrator] Generating avatar video format...');
-      const avatarPrompt = this.buildAvatarPrompt(masterPrompt, metadata);
-      const avatarResult = await this.aiGenerationService.generateAvatarScript(avatarPrompt, {
-        language,
-        max_tokens: 400,
-      });
-
-      const avatarContentEntity = await this.contentRepository.create(
-        new Content({
-          topic_id: topicId,
-          content_type_id: 'avatar_video',
-          content_data: avatarResult,
-          generation_method_id: 'video_to_lesson',
-        })
-      );
-
-      results.avatar_video = {
-        content_id: avatarContentEntity.content_id,
-        format: 'avatar_video',
-        video_url: avatarResult.videoUrl,
-        generated: true,
-      };
-
-      logger.info('[ContentGenerationOrchestrator] Avatar video format generated', {
-        content_id: avatarContentEntity.content_id,
-      });
-    } catch (error) {
-      logger.warn('[ContentGenerationOrchestrator] Avatar video format skipped', {
-        error: error.message,
-      });
-      results.avatar_video = { skipped: true, reason: 'Not available or generation failed' };
-    }
-
-    return results;
-  }
-
-  /**
-   * Build prompt for text format
-   * @param {string} masterPrompt - Transcript (master prompt)
-   * @param {Object} metadata - Extracted metadata
-   * @returns {string} Text generation prompt
-   */
-  buildTextPrompt(masterPrompt, metadata) {
-    return `Transform the following video transcript into a well-structured educational lesson.
-
-Title: ${metadata.title}
-Difficulty: ${metadata.difficulty}
-
-Video Transcript:
-${masterPrompt}
-
-Create a comprehensive lesson with:
-- Clear introduction
-- Well-organized sections matching the subtopics
-- Key concepts explained in detail
-- Examples and practical applications
-- Summary section
-
-Format as markdown with proper headings, bullet points, and explanations.`;
-  }
-
-  /**
-   * Build prompt for slides format
-   * @param {string} masterPrompt - Transcript (master prompt)
-   * @param {Object} metadata - Extracted metadata
-   * @returns {string} Slides generation prompt
-   */
-  buildSlidesPrompt(masterPrompt, metadata) {
-    return `Create an educational presentation based on this video transcript.
-
-Title: ${metadata.title}
-Subtopics: ${metadata.subtopics.join(', ')}
-
-Video Transcript:
-${masterPrompt}
-
-Generate 10-12 slides covering the main topics, key concepts, and important points from the transcript.
-Each slide should be clear, concise, and suitable for educational purposes.`;
-  }
-
-  /**
-   * Build prompt for mind map format
-   * @param {string} masterPrompt - Transcript (master prompt)
-   * @param {Object} metadata - Extracted metadata
-   * @returns {string} Mind map generation prompt
-   */
-  buildMindMapPrompt(masterPrompt, metadata) {
-    return `Create a mind map structure from this video transcript.
-
-Title: ${metadata.title}
-Key Concepts: ${metadata.concepts.join(', ')}
-
-Video Transcript:
-${masterPrompt}
-
-Create a hierarchical mind map showing:
-- Main topic (center)
-- Major subtopics (first level)
-- Key concepts and details (second level)
-- Related ideas and examples (third level)
-
-Structure the relationships between concepts clearly.`;
-  }
-
-  /**
-   * Build prompt for code format
-   * @param {string} masterPrompt - Transcript (master prompt)
-   * @param {Object} metadata - Extracted metadata
-   * @returns {string} Code generation prompt
-   */
-  buildCodePrompt(masterPrompt, metadata) {
-    return `Based on this video transcript, generate relevant code examples that demonstrate the concepts discussed.
-
-Title: ${metadata.title}
-Key Concepts: ${metadata.concepts.join(', ')}
-
-Video Transcript:
-${masterPrompt}
-
-Generate practical code examples in JavaScript that:
-- Illustrate the main concepts
-- Follow best practices
-- Include comments explaining the logic
-- Provide working examples
-
-If the transcript is not programming-related, skip code generation.`;
-  }
-
-  /**
-   * Build prompt for avatar video format
-   * @param {string} masterPrompt - Transcript (master prompt)
-   * @param {Object} metadata - Extracted metadata
-   * @returns {string} Avatar video generation prompt
-   */
-  buildAvatarPrompt(masterPrompt, metadata) {
-    // Create a short introduction script based on transcript
-    return `Create a short 30-45 second video introduction script based on this lesson.
-
-Title: ${metadata.title}
-
-Video Transcript:
-${masterPrompt.substring(0, 1000)}...
-
-Generate a concise, engaging introduction script that:
-- Introduces the lesson topic
-- Highlights key learning objectives
-- Engages the viewer
-- Is suitable for a virtual presenter avatar`;
-  }
-
-  /**
-   * Split text into sections
-   * @param {string} text - Text content
-   * @returns {Array<Object>} Sections array
-   */
-  splitIntoSections(text) {
-    const sections = [];
-    const lines = text.split('\n');
-    let currentSection = { heading: 'Introduction', content: '' };
-
-    for (const line of lines) {
-      if (line.match(/^#{1,3}\s+.+$/)) {
-        // New heading found
-        if (currentSection.content.trim()) {
-          sections.push(currentSection);
-        }
-        currentSection = {
-          heading: line.replace(/^#{1,3}\s+/, ''),
-          content: '',
-        };
-      } else {
-        currentSection.content += line + '\n';
-      }
-    }
-
-    if (currentSection.content.trim()) {
-      sections.push(currentSection);
-    }
-
-    return sections.length > 0 ? sections : [{ heading: 'Main Content', content: text }];
   }
 }

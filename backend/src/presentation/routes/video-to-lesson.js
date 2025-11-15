@@ -9,6 +9,9 @@ import { TTSClient } from '../../infrastructure/external-apis/openai/TTSClient.j
 import { AIGenerationService } from '../../infrastructure/ai/AIGenerationService.js';
 import { RepositoryFactory } from '../../infrastructure/database/repositories/RepositoryFactory.js';
 import { ContentGenerationOrchestrator } from '../../application/services/ContentGenerationOrchestrator.js';
+import { PromptTemplateService } from '../../infrastructure/services/PromptTemplateService.js';
+import { PromptTemplateRepository } from '../../infrastructure/database/repositories/PromptTemplateRepository.js';
+import { QualityCheckService } from '../../infrastructure/ai/QualityCheckService.js';
 
 const router = express.Router();
 
@@ -37,6 +40,8 @@ let videoToLessonUseCase = null;
 let videoTranscriptionService = null;
 let contentGenerationOrchestrator = null;
 let videoToLessonController = null;
+let promptTemplateService = null;
+let qualityCheckService = null;
 
 // Initialize repositories and services asynchronously
 const initServices = async () => {
@@ -47,6 +52,25 @@ const initServices = async () => {
   try {
     topicRepository = await RepositoryFactory.getTopicRepository();
     contentRepository = await RepositoryFactory.getContentRepository();
+    const courseRepository = await RepositoryFactory.getCourseRepository();
+    const qualityCheckRepository = await RepositoryFactory.getQualityCheckRepository();
+
+    // Initialize PromptTemplateService
+    const promptTemplateRepository = new PromptTemplateRepository();
+    promptTemplateService = new PromptTemplateService({
+      promptTemplateRepository,
+    });
+
+    // Initialize QualityCheckService
+    qualityCheckService = openaiApiKey
+      ? new QualityCheckService({
+          openaiApiKey,
+          qualityCheckRepository,
+          contentRepository,
+          topicRepository,
+          courseRepository,
+        })
+      : null;
 
     // Initialize use case
     videoToLessonUseCase = new VideoToLessonUseCase({
@@ -71,6 +95,8 @@ const initServices = async () => {
           openaiClient,
           contentRepository,
           topicRepository,
+          promptTemplateService,
+          qualityCheckService,
         })
       : null;
 
