@@ -270,10 +270,10 @@ function calculateLayoutIfNeeded(nodes, edges) {
     nodesByLevel[level].push(node.id);
   });
 
-  // Calculate positions with much larger spacing for better readability
-  const levelHeight = 450; // Increased significantly for clear vertical separation
-  const nodeSpacing = 600; // Increased significantly for clear horizontal separation
-  const startY = 250; // Increased for better initial spacing
+  // Calculate positions with balanced spacing - not too close, not too far
+  const levelHeight = 320; // Balanced vertical spacing
+  const nodeSpacing = 420; // Balanced horizontal spacing
+  const startY = 180; // Balanced initial spacing
 
   Object.keys(nodesByLevel).forEach(level => {
     const levelNodes = nodesByLevel[level];
