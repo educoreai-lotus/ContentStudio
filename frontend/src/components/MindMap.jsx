@@ -27,10 +27,17 @@ export const MindMap = ({ data, className = '' }) => {
   );
 
   // Transform backend data to React Flow format
-  const { initialNodes, initialEdges } = useMemo(() => {
+  const transformedData = useMemo(() => {
     if (!data || !data.nodes || !Array.isArray(data.nodes)) {
-      return { initialNodes: [], initialEdges: [] };
+      console.warn('[MindMap] No valid data provided:', { data, hasNodes: !!data?.nodes, isArray: Array.isArray(data?.nodes) });
+      return { nodes: [], edges: [] };
     }
+
+    console.log('[MindMap] Transforming data:', { 
+      nodesCount: data.nodes.length, 
+      edgesCount: data.edges?.length || 0,
+      firstNode: data.nodes[0] 
+    });
 
     // Transform nodes
     const nodes = data.nodes.map((node) => {
@@ -99,22 +106,19 @@ export const MindMap = ({ data, className = '' }) => {
     const nodesWithPositions = calculateLayoutIfNeeded(nodes, edges);
 
     return {
-      initialNodes: nodesWithPositions,
-      initialEdges: edges,
+      nodes: nodesWithPositions,
+      edges: edges,
     };
   }, [data, theme]);
 
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+  const [nodes, setNodes, onNodesChange] = useNodesState(transformedData.nodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(transformedData.edges);
 
   // Update nodes and edges when data changes
   useEffect(() => {
-    setNodes(initialNodes);
-  }, [initialNodes, setNodes]);
-
-  useEffect(() => {
-    setEdges(initialEdges);
-  }, [initialEdges, setEdges]);
+    setNodes(transformedData.nodes);
+    setEdges(transformedData.edges);
+  }, [transformedData, setNodes, setEdges]);
 
   const onConnect = useCallback(
     (params) => setEdges((eds) => addEdge(params, eds)),
@@ -127,9 +131,10 @@ export const MindMap = ({ data, className = '' }) => {
 
   return (
     <div
-      className={`mind-map-container w-full h-full ${className}`}
+      className={`mind-map-container w-full ${className}`}
       style={{
         backgroundColor: bgColor,
+        height: '600px',
         minHeight: '600px',
         borderRadius: '12px',
         border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`,

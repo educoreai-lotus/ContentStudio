@@ -41,6 +41,16 @@ import { useApp } from '../context/AppContext';
 export const MindMapViewer = ({ data }) => {
   const { theme } = useApp();
 
+  // Debug: Log received data
+  console.log('[MindMapViewer] Received data:', { 
+    data, 
+    hasData: !!data, 
+    hasNodes: !!data?.nodes, 
+    nodesCount: data?.nodes?.length,
+    hasEdges: !!data?.edges,
+    edgesCount: data?.edges?.length 
+  });
+
   // Handle missing or invalid data
   if (!data) {
     return (
