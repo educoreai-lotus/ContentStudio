@@ -706,6 +706,44 @@ export default function LessonView() {
             <i className="fas fa-arrow-left"></i>
             Back to Lesson
           </button>
+
+          {/* Topic Information Banner */}
+          {lessonView?.topic && (
+            <div
+              className={`mb-6 p-4 rounded-xl border ${
+                theme === 'day-mode'
+                  ? 'bg-emerald-50 border-emerald-200'
+                  : 'bg-emerald-900/20 border-emerald-500/30'
+              }`}
+            >
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 mt-1">
+                  <i className={`fas fa-book text-xl ${
+                    theme === 'day-mode' ? 'text-emerald-600' : 'text-emerald-400'
+                  }`}></i>
+                </div>
+                <div className="flex-1">
+                  <h2
+                    className={`font-bold text-xl mb-1 ${
+                      theme === 'day-mode' ? 'text-gray-900' : 'text-white'
+                    }`}
+                  >
+                    {lessonView.topic.topic_name || lessonView.topic.name || 'Untitled Topic'}
+                  </h2>
+                  {(lessonView.topic.description || lessonView.topic.topic_description) && (
+                    <p
+                      className={`text-sm ${
+                        theme === 'day-mode' ? 'text-gray-700' : 'text-gray-300'
+                      }`}
+                    >
+                      {lessonView.topic.description || lessonView.topic.topic_description}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           <h1
             className="text-4xl font-bold mb-2"
             style={{

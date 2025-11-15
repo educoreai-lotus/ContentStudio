@@ -290,7 +290,7 @@ export function ContentHistorySidebar({ existingContent = [], onHistoryChanged }
 
   return (
     <aside
-      className={`rounded-3xl border shadow-xl p-6 h-max sticky top-8 ${
+      className={`rounded-2xl border shadow-xl p-4 h-max sticky top-8 ${
         theme === 'day-mode'
           ? 'bg-white border-gray-200 text-gray-900'
           : 'bg-slate-900 border-slate-700 text-slate-200'

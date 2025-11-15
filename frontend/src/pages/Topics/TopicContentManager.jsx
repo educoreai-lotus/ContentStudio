@@ -284,6 +284,43 @@ export default function TopicContentManager() {
             Back to Course
           </button>
 
+          {/* Topic Information Banner */}
+          {topicDetails && (
+            <div
+              className={`mb-6 p-4 rounded-xl border ${
+                theme === 'day-mode'
+                  ? 'bg-emerald-50 border-emerald-200'
+                  : 'bg-emerald-900/20 border-emerald-500/30'
+              }`}
+            >
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 mt-1">
+                  <i className={`fas fa-book text-xl ${
+                    theme === 'day-mode' ? 'text-emerald-600' : 'text-emerald-400'
+                  }`}></i>
+                </div>
+                <div className="flex-1">
+                  <h2
+                    className={`font-bold text-xl mb-1 ${
+                      theme === 'day-mode' ? 'text-gray-900' : 'text-white'
+                    }`}
+                  >
+                    {topicDetails.topic_name || 'Untitled Topic'}
+                  </h2>
+                  {topicDetails.description && (
+                    <p
+                      className={`text-sm ${
+                        theme === 'day-mode' ? 'text-gray-700' : 'text-gray-300'
+                      }`}
+                    >
+                      {topicDetails.description}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           <h1
             className="text-3xl md:text-4xl font-bold mb-2"
             style={{
@@ -375,15 +412,15 @@ export default function TopicContentManager() {
           </div>
         )}
 
-        <div className="lg:flex lg:items-start lg:gap-8 xl:gap-12">
-          <div className="mt-8 lg:mt-0 lg:w-[360px] lg:flex-shrink-0 order-2 lg:order-1">
+        <div className="lg:flex lg:items-start lg:gap-6">
+          <div className="mt-8 lg:mt-0 lg:w-[280px] lg:flex-shrink-0 order-2 lg:order-1 lg:sticky lg:top-8">
             <ContentHistorySidebar
               existingContent={existingContent}
               onHistoryChanged={fetchContent}
             />
           </div>
 
-          <div className="flex-1 min-w-0 order-1 lg:order-2">
+          <div className="flex-1 min-w-0 order-1 lg:order-2 lg:max-w-[calc(100%-304px)]">
             {/* Content Progress */}
             <div
               className={`mb-8 p-6 rounded-2xl shadow-lg ${
