@@ -1,0 +1,275 @@
+import { useCallback, useMemo, useEffect } from 'react';
+import ReactFlow, {
+  Background,
+  Controls,
+  MiniMap,
+  useNodesState,
+  useEdgesState,
+  addEdge,
+} from 'reactflow';
+import 'reactflow/dist/style.css';
+import { ConceptNode } from './ConceptNode';
+import { useApp } from '../context/AppContext';
+
+/**
+ * MindMap Component
+ * Displays mind map using React Flow with custom nodes and edges
+ */
+export const MindMap = ({ data, className = '' }) => {
+  const { theme } = useApp();
+
+  // Define custom node types
+  const nodeTypes = useMemo(
+    () => ({
+      concept: ConceptNode,
+    }),
+    []
+  );
+
+  // Transform backend data to React Flow format
+  const { initialNodes, initialEdges } = useMemo(() => {
+    if (!data || !data.nodes || !Array.isArray(data.nodes)) {
+      return { initialNodes: [], initialEdges: [] };
+    }
+
+    // Transform nodes
+    const nodes = data.nodes.map((node) => {
+      // If node already has position, use it; otherwise calculate one
+      const position = node.position || { x: 0, y: 0 };
+
+      // Determine node type
+      const nodeType = node.type === 'concept' ? 'concept' : 'concept';
+
+      // Prepare data object for the node
+      const nodeData = {
+        label: node.label || node.data?.label || node.id,
+        description: node.description || node.data?.description || '',
+        category: node.category || node.data?.category || 'default',
+        skills: node.skills || node.data?.skills || [],
+        ...(node.data || {}),
+      };
+
+      // Get style from node.style or node.data.style
+      const style = node.style || node.data?.style || {};
+
+      return {
+        id: String(node.id),
+        type: nodeType,
+        position,
+        data: nodeData,
+        style: {
+          backgroundColor: style.backgroundColor || undefined,
+          ...style,
+        },
+      };
+    });
+
+    // Transform edges
+    const edges = (data.edges || []).map((edge, index) => {
+      const edgeId = edge.id || `edge-${edge.source}-${edge.target}-${index}`;
+      
+      return {
+        id: String(edgeId),
+        source: String(edge.source),
+        target: String(edge.target),
+        type: edge.type || 'smoothstep',
+        label: edge.label || '',
+        animated: edge.animated || false,
+        style: {
+          stroke: theme === 'night-mode' ? '#64748b' : '#94a3b8',
+          strokeWidth: 2,
+          ...(edge.style || {}),
+        },
+        labelStyle: {
+          fill: theme === 'night-mode' ? '#cbd5e1' : '#475569',
+          fontWeight: 500,
+          fontSize: '11px',
+        },
+        labelBgStyle: {
+          fill: theme === 'night-mode' ? '#1e293b' : '#ffffff',
+          fillOpacity: 0.9,
+        },
+      };
+    });
+
+    // If nodes have no positions, calculate a simple layout
+    const nodesWithPositions = calculateLayoutIfNeeded(nodes, edges);
+
+    return {
+      initialNodes: nodesWithPositions,
+      initialEdges: edges,
+    };
+  }, [data, theme]);
+
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+
+  // Update nodes and edges when data changes
+  useEffect(() => {
+    setNodes(initialNodes);
+  }, [initialNodes, setNodes]);
+
+  useEffect(() => {
+    setEdges(initialEdges);
+  }, [initialEdges, setEdges]);
+
+  const onConnect = useCallback(
+    (params) => setEdges((eds) => addEdge(params, eds)),
+    [setEdges]
+  );
+
+  const isDark = theme === 'night-mode';
+  const bgColor = isDark ? '#0f172a' : '#f8fafc';
+  const nodeColor = isDark ? '#1e293b' : '#ffffff';
+
+  return (
+    <div
+      className={`mind-map-container w-full h-full ${className}`}
+      style={{
+        backgroundColor: bgColor,
+        minHeight: '600px',
+        borderRadius: '12px',
+        border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`,
+      }}
+    >
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onConnect={onConnect}
+        nodeTypes={nodeTypes}
+        fitView
+        fitViewOptions={{
+          padding: 0.2,
+          maxZoom: 1.5,
+        }}
+        proOptions={{ hideAttribution: true }}
+        defaultEdgeOptions={{
+          type: 'smoothstep',
+          animated: false,
+        }}
+        style={{
+          backgroundColor: bgColor,
+        }}
+      >
+        <Background
+          color={isDark ? '#334155' : '#cbd5e1'}
+          gap={20}
+          size={1}
+          variant="dots"
+        />
+        <Controls
+          style={{
+            button: {
+              backgroundColor: nodeColor,
+              color: isDark ? '#f8fafc' : '#1e293b',
+              border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)'}`,
+            },
+          }}
+        />
+        <MiniMap
+          nodeColor={nodeColor}
+          nodeStrokeColor={isDark ? '#0d9488' : '#059669'}
+          maskColor={isDark ? 'rgba(15, 23, 42, 0.6)' : 'rgba(248, 250, 252, 0.6)'}
+          style={{
+            backgroundColor: bgColor,
+            border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`,
+          }}
+        />
+      </ReactFlow>
+    </div>
+  );
+};
+
+/**
+ * Calculate simple hierarchical layout if nodes don't have positions
+ */
+function calculateLayoutIfNeeded(nodes, edges) {
+  // Check if any node has a position
+  const hasPositions = nodes.some(node => node.position && 
+    (node.position.x !== 0 || node.position.y !== 0));
+
+  if (hasPositions) {
+    return nodes; // Use existing positions
+  }
+
+  // Calculate hierarchical layout
+  const positions = {};
+  const levels = {};
+  const children = {};
+
+  // Build adjacency list
+  edges.forEach(edge => {
+    if (!children[edge.source]) {
+      children[edge.source] = [];
+    }
+    children[edge.source].push(edge.target);
+  });
+
+  // Find root nodes (nodes with no incoming edges)
+  const nodeIds = new Set(nodes.map(n => n.id));
+  const targets = new Set(edges.map(e => e.target));
+  const rootNodes = nodes.filter(n => !targets.has(n.id));
+
+  // If no root nodes, use first node
+  const rootId = rootNodes.length > 0 ? rootNodes[0].id : nodes[0]?.id;
+
+  if (!rootId) return nodes;
+
+  // BFS to assign levels
+  const queue = [{ id: rootId, level: 0 }];
+  const visited = new Set();
+
+  while (queue.length > 0) {
+    const { id, level } = queue.shift();
+    if (visited.has(id)) continue;
+    visited.add(id);
+
+    levels[id] = level;
+
+    if (children[id]) {
+      children[id].forEach(childId => {
+        if (!visited.has(childId)) {
+          queue.push({ id: childId, level: level + 1 });
+        }
+      });
+    }
+  }
+
+  // Group nodes by level
+  const nodesByLevel = {};
+  nodes.forEach(node => {
+    const level = levels[node.id] || 0;
+    if (!nodesByLevel[level]) {
+      nodesByLevel[level] = [];
+    }
+    nodesByLevel[level].push(node.id);
+  });
+
+  // Calculate positions
+  const levelHeight = 200;
+  const nodeSpacing = 250;
+  const startY = 100;
+
+  Object.keys(nodesByLevel).forEach(level => {
+    const levelNodes = nodesByLevel[level];
+    const y = startY + parseInt(level) * levelHeight;
+    const totalWidth = (levelNodes.length - 1) * nodeSpacing;
+    const startX = -totalWidth / 2;
+
+    levelNodes.forEach((nodeId, index) => {
+      positions[nodeId] = {
+        x: startX + index * nodeSpacing,
+        y,
+      };
+    });
+  });
+
+  // Apply positions to nodes
+  return nodes.map(node => ({
+    ...node,
+    position: positions[node.id] || { x: 0, y: 0 },
+  }));
+}
+
