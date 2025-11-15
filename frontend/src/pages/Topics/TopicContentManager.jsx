@@ -271,7 +271,7 @@ export default function TopicContentManager() {
   return (
     <div className={`min-h-screen ${theme === 'day-mode' ? 'bg-gray-50' : 'bg-[#1e293b]'}`}>
       {/* Fixed Left Sidebar */}
-      <div className="hidden lg:block fixed left-0 top-0 h-screen w-[280px] overflow-y-auto z-40">
+      <div className="hidden lg:block fixed left-0 top-0 h-screen w-[320px] overflow-y-auto z-40">
         <div className="h-full pt-20 px-4">
           <ContentHistorySidebar
             existingContent={existingContent}
@@ -280,7 +280,7 @@ export default function TopicContentManager() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto p-6 lg:p-8 lg:pl-[296px]">
+      <div className="max-w-7xl mx-auto p-6 lg:p-8 lg:pl-[336px]">
         <div className="mb-8">
           <button
             onClick={() => {
@@ -309,13 +309,13 @@ export default function TopicContentManager() {
                   : 'bg-emerald-900/20 border-emerald-500/30'
               }`}
             >
-              <div className="flex items-start gap-3">
-                <div className="flex-shrink-0 mt-1">
+              <div className="flex flex-col items-center text-center gap-2">
+                <div className="flex-shrink-0">
                   <i className={`fas fa-book text-xl ${
                     theme === 'day-mode' ? 'text-emerald-600' : 'text-emerald-400'
                   }`}></i>
                 </div>
-                <div className="flex-1">
+                <div className="flex-1 w-full">
                   <h2
                     className={`font-bold text-xl mb-1 ${
                       theme === 'day-mode' ? 'text-gray-900' : 'text-white'

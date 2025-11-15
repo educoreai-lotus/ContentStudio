@@ -128,13 +128,13 @@ export const AIContentForm = () => {
                 : 'bg-emerald-900/20 border-emerald-500/30'
             }`}
           >
-            <div className="flex items-start gap-3">
-              <div className="flex-shrink-0 mt-1">
+            <div className="flex flex-col items-center text-center gap-2">
+              <div className="flex-shrink-0">
                 <i className={`fas fa-book text-xl ${
                   theme === 'day-mode' ? 'text-emerald-600' : 'text-emerald-400'
                 }`}></i>
               </div>
-              <div className="flex-1">
+              <div className="flex-1 w-full">
                 <h3
                   className={`font-bold text-lg mb-1 ${
                     theme === 'day-mode' ? 'text-gray-900' : 'text-white'
