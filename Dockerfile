@@ -13,10 +13,11 @@ RUN apt-get update && \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Install yt-dlp using pip
+# Install yt-dlp using pip with --break-system-packages flag
+# Python 3.11+ in Debian 12 requires this flag for system-wide installation
 # yt-dlp is a YouTube downloader that works better than youtube-dl
 RUN pip3 install --no-cache-dir --upgrade pip && \
-    pip3 install --no-cache-dir yt-dlp
+    pip3 install --no-cache-dir --break-system-packages yt-dlp
 
 # Verify installations
 RUN ffmpeg -version && \
