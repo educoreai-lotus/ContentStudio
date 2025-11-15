@@ -120,7 +120,7 @@ export const TopicList = ({ courseId = null }) => {
                 className={`border rounded-lg p-6 h-32 ${
                   theme === 'day-mode'
                     ? 'bg-white border-gray-200'
-                    : 'bg-gray-800 border-gray-700'
+                    : 'bg-[#1e293b] border-[#334155]'
                 }`}
               ></div>
             ))}
@@ -133,7 +133,7 @@ export const TopicList = ({ courseId = null }) => {
   return (
     <div
       className={`min-h-screen p-8 ${
-        theme === 'day-mode' ? 'bg-gray-50' : 'bg-slate-900'
+        theme === 'day-mode' ? 'bg-gray-50' : 'bg-[#1e293b]'
       }`}
     >
       <div className="max-w-7xl mx-auto">
@@ -160,11 +160,11 @@ export const TopicList = ({ courseId = null }) => {
 
         {/* Filters */}
         <div
-          className={`mb-6 rounded-2xl shadow-lg p-6 ${
-            theme === 'day-mode'
-              ? 'bg-white border border-gray-200'
-              : 'bg-gray-800 border border-gray-700'
-          }`}
+              className={`mb-6 rounded-2xl shadow-lg p-6 ${
+                theme === 'day-mode'
+                  ? 'bg-white border border-gray-200'
+                  : 'bg-[#1e293b] border border-[#334155]'
+              }`}
           style={{
             background: theme === 'day-mode' ? 'var(--gradient-card)' : undefined,
             boxShadow: 'var(--shadow-card)',
@@ -189,7 +189,7 @@ export const TopicList = ({ courseId = null }) => {
                       : 'bg-emerald-500 text-white shadow-lg'
                     : theme === 'day-mode'
                     ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    : 'bg-[#334155] text-[#f8fafc] hover:bg-[#475569]'
                 }`}
               >
                 All
@@ -203,7 +203,7 @@ export const TopicList = ({ courseId = null }) => {
                       : 'bg-emerald-500 text-white shadow-lg'
                     : theme === 'day-mode'
                     ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    : 'bg-[#334155] text-[#f8fafc] hover:bg-[#475569]'
                 }`}
               >
                 Draft
@@ -217,7 +217,7 @@ export const TopicList = ({ courseId = null }) => {
                       : 'bg-emerald-500 text-white shadow-lg'
                     : theme === 'day-mode'
                     ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    : 'bg-[#334155] text-[#f8fafc] hover:bg-[#475569]'
                 }`}
               >
                 Published
@@ -232,7 +232,7 @@ export const TopicList = ({ courseId = null }) => {
                         : 'bg-emerald-500 text-white shadow-lg'
                       : theme === 'day-mode'
                       ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                      : 'bg-[#334155] text-[#f8fafc] hover:bg-[#475569]'
                   }`}
                 >
                   Stand-alone
@@ -278,10 +278,10 @@ export const TopicList = ({ courseId = null }) => {
         {/* Topics List */}
         {topics.length === 0 ? (
           <div
-            className={`rounded-2xl shadow-lg p-8 text-center ${
+                className={`rounded-2xl shadow-lg p-8 text-center ${
               theme === 'day-mode'
                 ? 'bg-white border border-gray-200'
-                : 'bg-gray-800 border border-gray-700'
+                : 'bg-[#1e293b] border border-[#334155]'
             }`}
             style={{
               background: theme === 'day-mode' ? 'var(--gradient-card)' : undefined,
@@ -302,7 +302,7 @@ export const TopicList = ({ courseId = null }) => {
                   className={`rounded-2xl shadow-lg p-6 transition-all cursor-pointer ${
                     theme === 'day-mode'
                       ? 'bg-white border border-gray-200 hover:border-emerald-400'
-                      : 'bg-gray-800 border border-gray-700 hover:border-emerald-500'
+                      : 'bg-[#1e293b] border border-[#334155] hover:border-[#0d9488]'
                   }`}
                   style={{
                     background: theme === 'day-mode' ? 'var(--gradient-card)' : undefined,
@@ -364,7 +364,7 @@ export const TopicList = ({ courseId = null }) => {
                       </div>
                       <div
                         className={`w-full rounded-full h-2 ${
-                          theme === 'day-mode' ? 'bg-gray-200' : 'bg-gray-700'
+                          theme === 'day-mode' ? 'bg-gray-200' : 'bg-[#334155]'
                         }`}
                       >
                         <div
@@ -450,7 +450,7 @@ export const TopicList = ({ courseId = null }) => {
                       className={`px-3 py-1 rounded-lg text-sm font-medium transition-all ${
                         theme === 'day-mode'
                           ? 'bg-gray-200 hover:bg-gray-300 text-gray-700'
-                          : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+                          : 'bg-[#334155] hover:bg-[#475569] text-[#f8fafc]'
                       }`}
                     >
                       Edit
@@ -484,7 +484,7 @@ export const TopicList = ({ courseId = null }) => {
                   ? 'opacity-50 cursor-not-allowed'
                   : theme === 'day-mode'
                   ? 'bg-gray-200 hover:bg-gray-300 text-gray-700'
-                  : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+                  : 'bg-[#334155] hover:bg-[#475569] text-[#f8fafc]'
               }`}
             >
               Previous
@@ -504,7 +504,7 @@ export const TopicList = ({ courseId = null }) => {
                   ? 'opacity-50 cursor-not-allowed'
                   : theme === 'day-mode'
                   ? 'bg-gray-200 hover:bg-gray-300 text-gray-700'
-                  : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+                  : 'bg-[#334155] hover:bg-[#475569] text-[#f8fafc]'
               }`}
             >
               Next
