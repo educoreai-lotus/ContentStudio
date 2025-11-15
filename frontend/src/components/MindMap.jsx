@@ -40,9 +40,10 @@ export const MindMap = ({ data, className = '' }) => {
     });
 
     // Transform nodes
+    // Note: We'll calculate fresh positions with proper spacing even if backend provides positions
     const nodes = data.nodes.map((node) => {
-      // If node already has position, use it; otherwise calculate one
-      const position = node.position || { x: 0, y: 0 };
+      // Position will be recalculated by calculateLayoutIfNeeded for proper spacing
+      const position = { x: 0, y: 0 };
 
       // Determine node type
       const nodeType = node.type === 'concept' ? 'concept' : 'concept';
@@ -165,9 +166,9 @@ export const MindMap = ({ data, className = '' }) => {
         nodeTypes={nodeTypes}
         fitView
         fitViewOptions={{
-          padding: 0.2,
-          maxZoom: 1.5,
-          minZoom: 0.5,
+          padding: 0.3,
+          maxZoom: 1.2,
+          minZoom: 0.3,
         }}
         proOptions={{ hideAttribution: true }}
         defaultEdgeOptions={{
@@ -209,15 +210,12 @@ export const MindMap = ({ data, className = '' }) => {
 
 /**
  * Calculate simple hierarchical layout if nodes don't have positions
+ * For radial mind maps, we always calculate a fresh layout with proper spacing
  */
 function calculateLayoutIfNeeded(nodes, edges) {
-  // Check if any node has a position
-  const hasPositions = nodes.some(node => node.position && 
-    (node.position.x !== 0 || node.position.y !== 0));
-
-  if (hasPositions) {
-    return nodes; // Use existing positions
-  }
+  // For radial mind maps, always calculate fresh layout for better spacing
+  // Existing positions from backend might be too close together
+  // We'll calculate a better layout with larger spacing
 
   // Calculate hierarchical layout
   const positions = {};
@@ -272,10 +270,10 @@ function calculateLayoutIfNeeded(nodes, edges) {
     nodesByLevel[level].push(node.id);
   });
 
-  // Calculate positions with increased spacing for better readability
-  const levelHeight = 280; // Increased from 200 to 280 for more vertical space
-  const nodeSpacing = 350; // Increased from 250 to 350 for more horizontal space
-  const startY = 150; // Increased from 100 to 150
+  // Calculate positions with much larger spacing for better readability
+  const levelHeight = 450; // Increased significantly for clear vertical separation
+  const nodeSpacing = 600; // Increased significantly for clear horizontal separation
+  const startY = 250; // Increased for better initial spacing
 
   Object.keys(nodesByLevel).forEach(level => {
     const levelNodes = nodesByLevel[level];
