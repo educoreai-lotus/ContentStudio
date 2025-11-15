@@ -159,28 +159,28 @@ export default function TopicContentManager() {
     if (!hasContent) {
       return theme === 'day-mode'
         ? 'bg-gray-100 border-gray-300 text-gray-400'
-        : 'bg-gray-800 border-gray-600 text-gray-500';
+        : 'bg-[#1e293b] border-[#334155] text-[#94a3b8]';
     }
 
     const colors = {
       blue: theme === 'day-mode'
         ? 'bg-blue-50 border-blue-300 text-blue-700'
-        : 'bg-blue-900/20 border-blue-500/30 text-blue-300',
+        : 'bg-[#1e293b] border-[#334155] text-[#f8fafc]',
       green: theme === 'day-mode'
         ? 'bg-green-50 border-green-300 text-green-700'
-        : 'bg-green-900/20 border-green-500/30 text-green-300',
+        : 'bg-[#1e293b] border-[#334155] text-[#f8fafc]',
       purple: theme === 'day-mode'
         ? 'bg-purple-50 border-purple-300 text-purple-700'
-        : 'bg-purple-900/20 border-purple-500/30 text-purple-300',
+        : 'bg-[#1e293b] border-[#334155] text-[#f8fafc]',
       red: theme === 'day-mode'
         ? 'bg-red-50 border-red-300 text-red-700'
-        : 'bg-red-900/20 border-red-500/30 text-red-300',
+        : 'bg-[#1e293b] border-[#334155] text-[#f8fafc]',
       yellow: theme === 'day-mode'
         ? 'bg-yellow-50 border-yellow-300 text-yellow-700'
-        : 'bg-yellow-900/20 border-yellow-500/30 text-yellow-300',
+        : 'bg-[#1e293b] border-[#334155] text-[#f8fafc]',
       indigo: theme === 'day-mode'
         ? 'bg-indigo-50 border-indigo-300 text-indigo-700'
-        : 'bg-indigo-900/20 border-indigo-500/30 text-indigo-300',
+        : 'bg-[#1e293b] border-[#334155] text-[#f8fafc]',
     };
 
     return colors[color] || colors.blue;
@@ -672,7 +672,11 @@ export default function TopicContentManager() {
                     </div>
                     <button
                       onClick={() => setTemplateModalOpen(true)}
-                      className="px-3 py-1 text-sm bg-emerald-600 hover:bg-emerald-700 text-white rounded-md"
+                      className={`px-3 py-1 text-sm text-white rounded-md transition-all ${
+                        theme === 'day-mode'
+                          ? 'bg-emerald-600 hover:bg-emerald-700'
+                          : 'bg-gradient-to-r from-[#0d9488] to-[#059669] hover:from-[#14b8a6] hover:to-[#10b981] shadow-lg shadow-[#0d9488]/30'
+                      }`}
                     >
                       Change Template
                     </button>
@@ -735,10 +739,10 @@ export default function TopicContentManager() {
               <div className="mt-4">
                 <button
                   onClick={() => setVideoUploadModalOpen(true)}
-                  className={`px-6 py-3 rounded-lg font-medium transition-colors ${
+                  className={`px-6 py-3 rounded-lg font-medium text-white transition-all ${
                     theme === 'day-mode'
-                      ? 'bg-blue-600 hover:bg-blue-700 text-white'
-                      : 'bg-blue-600 hover:bg-blue-700 text-white'
+                      ? 'bg-blue-600 hover:bg-blue-700'
+                      : 'bg-gradient-to-r from-[#0d9488] to-[#059669] hover:from-[#14b8a6] hover:to-[#10b981] shadow-lg shadow-[#0d9488]/30'
                   }`}
                 >
                   <i className="fas fa-upload mr-2"></i>
@@ -767,7 +771,11 @@ export default function TopicContentManager() {
                         <h3 className="text-lg font-semibold">{type.name}</h3>
                       </div>
                       {hasContent && (
-                        <span className="px-2 py-1 bg-emerald-600 text-white text-xs rounded-full">
+                        <span className={`px-2 py-1 text-white text-xs rounded-full ${
+                          theme === 'day-mode'
+                            ? 'bg-emerald-600'
+                            : 'bg-gradient-to-r from-[#0d9488] to-[#059669]'
+                        }`}>
                           Created
                         </span>
                       )}
@@ -783,21 +791,33 @@ export default function TopicContentManager() {
                             onClick={() => navigate(`/topics/${topicId}/content/view`, {
                               state: { content }
                             })}
-                            className="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm"
+                            className={`flex-1 px-3 py-2 rounded-lg text-sm text-white transition-all ${
+                              theme === 'day-mode'
+                                ? 'bg-blue-600 hover:bg-blue-700'
+                                : 'bg-gradient-to-r from-[#0d9488] to-[#059669] hover:from-[#14b8a6] hover:to-[#10b981] shadow-lg shadow-[#0d9488]/30'
+                            }`}
                           >
                             <i className="fas fa-eye mr-1"></i>
                             View
                           </button>
                           <button
                             onClick={() => handleRegenerate(type, content)}
-                            className="flex-1 px-3 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg text-sm"
+                            className={`flex-1 px-3 py-2 rounded-lg text-sm text-white transition-all ${
+                              theme === 'day-mode'
+                                ? 'bg-yellow-600 hover:bg-yellow-700'
+                                : 'bg-gradient-to-r from-[#0d9488] to-[#059669] hover:from-[#14b8a6] hover:to-[#10b981] shadow-lg shadow-[#0d9488]/30'
+                            }`}
                           >
                             <i className="fas fa-sync mr-1"></i>
                             Regenerate
                           </button>
                           <button
                             onClick={() => handleDelete(content.content_id)}
-                            className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm"
+                            className={`px-3 py-2 rounded-lg text-sm text-white transition-all ${
+                              theme === 'day-mode'
+                                ? 'bg-red-600 hover:bg-red-700'
+                                : 'bg-[#334155] hover:bg-[#475569] border border-[#475569]'
+                            }`}
                           >
                             <i className="fas fa-trash"></i>
                           </button>
@@ -814,7 +834,11 @@ export default function TopicContentManager() {
                               onClick={() => navigate(`/topics/${topicId}/content/ai-generate`, {
                                 state: { contentType: type.id }
                               })}
-                              className="flex-1 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm"
+                              className={`flex-1 px-3 py-2 text-white rounded-lg text-sm transition-all ${
+                                theme === 'day-mode'
+                                  ? 'bg-emerald-600 hover:bg-emerald-700'
+                                  : 'bg-gradient-to-r from-[#0d9488] to-[#059669] hover:from-[#14b8a6] hover:to-[#10b981] shadow-lg shadow-[#0d9488]/30'
+                              }`}
                             >
                               <i className="fas fa-robot mr-1"></i>
                               AI
@@ -823,7 +847,11 @@ export default function TopicContentManager() {
                               onClick={() => navigate(`/topics/${topicId}/content/manual-create`, {
                                 state: { contentType: type.id, contentTypeId: type.dbId }
                               })}
-                              className="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm"
+                              className={`flex-1 px-3 py-2 text-white rounded-lg text-sm transition-all ${
+                                theme === 'day-mode'
+                                  ? 'bg-blue-600 hover:bg-blue-700'
+                                  : 'bg-gradient-to-r from-[#0d9488] to-[#059669] hover:from-[#14b8a6] hover:to-[#10b981] shadow-lg shadow-[#0d9488]/30'
+                              }`}
                             >
                               <i className="fas fa-edit mr-1"></i>
                               Manual
@@ -834,7 +862,11 @@ export default function TopicContentManager() {
                             onClick={() => navigate(`/topics/${topicId}/content/ai-generate`, {
                               state: { contentType: type.id }
                             })}
-                            className="w-full px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm"
+                            className={`w-full px-3 py-2 text-white rounded-lg text-sm transition-all ${
+                              theme === 'day-mode'
+                                ? 'bg-emerald-600 hover:bg-emerald-700'
+                                : 'bg-gradient-to-r from-[#0d9488] to-[#059669] hover:from-[#14b8a6] hover:to-[#10b981] shadow-lg shadow-[#0d9488]/30'
+                            }`}
                           >
                             <i className="fas fa-robot mr-1"></i>
                             Create with AI
@@ -854,7 +886,11 @@ export default function TopicContentManager() {
                     setTemplateAppliedMessage(null);
                     setTemplateModalOpen(true);
                   }}
-                  className="px-8 py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-lg font-semibold shadow-lg"
+                  className={`px-8 py-4 text-white rounded-lg text-lg font-semibold transition-all ${
+                    theme === 'day-mode'
+                      ? 'bg-emerald-600 hover:bg-emerald-700 shadow-lg'
+                      : 'bg-gradient-to-r from-[#0d9488] to-[#059669] hover:from-[#14b8a6] hover:to-[#10b981] shadow-lg shadow-[#0d9488]/40'
+                  }`}
                 >
                   <i className="fas fa-layer-group mr-2"></i>
                   Choose Template
@@ -867,7 +903,11 @@ export default function TopicContentManager() {
               <div className="mt-8 text-center">
                 <button
                   onClick={() => navigate(`/lessons/${topicId}/view`)}
-                  className="px-8 py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-lg font-semibold shadow-lg"
+                  className={`px-8 py-4 text-white rounded-lg text-lg font-semibold transition-all ${
+                    theme === 'day-mode'
+                      ? 'bg-emerald-600 hover:bg-emerald-700 shadow-lg'
+                      : 'bg-gradient-to-r from-[#0d9488] to-[#059669] hover:from-[#14b8a6] hover:to-[#10b981] shadow-lg shadow-[#0d9488]/40'
+                  }`}
                 >
                   <i className="fas fa-eye mr-2"></i>
                   View Complete Lesson
