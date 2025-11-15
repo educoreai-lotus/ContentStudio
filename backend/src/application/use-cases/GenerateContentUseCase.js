@@ -329,8 +329,24 @@ export class GenerateContentUseCase {
             language: promptVariables.language,
           });
           
-          // Clean content data: remove redundant topic/skills metadata
-          contentData = ContentDataCleaner.cleanAvatarVideoData(avatarScript);
+          // Handle failed status - save as failed content instead of throwing
+          if (avatarScript.status === 'failed') {
+            // Create failed content data structure
+            contentData = {
+              status: 'failed',
+              script: avatarScript.script || null,
+              videoUrl: null,
+              videoId: avatarScript.videoId || null,
+              error: avatarScript.error || avatarScript.errorMessage || 'Avatar video generation failed',
+              errorCode: avatarScript.errorCode || 'UNKNOWN_ERROR',
+              reason: avatarScript.reason || 'Avatar video failed due to unsupported voice engine. Please choose another voice.',
+              metadata: avatarScript.metadata || {},
+            };
+            // Don't break - continue to save failed content
+          } else {
+            // Clean content data: remove redundant topic/skills metadata
+            contentData = ContentDataCleaner.cleanAvatarVideoData(avatarScript);
+          }
           break;
         }
 

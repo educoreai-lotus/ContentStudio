@@ -380,6 +380,34 @@ Format as JSON with this structure:
       voiceId: config.voiceId,
     });
 
+    // Handle failed status - return partial success instead of throwing
+    if (videoResult.status === 'failed') {
+      console.error('[Avatar Video] Video generation failed:', {
+        errorCode: videoResult.errorCode,
+        errorMessage: videoResult.errorMessage,
+        reason: videoResult.reason,
+      });
+
+      return {
+        script,
+        videoUrl: null,
+        videoId: videoResult.videoId || null,
+        language: config.language || 'en',
+        duration_seconds: 0,
+        status: 'failed',
+        fallback: false,
+        error: videoResult.error || videoResult.errorMessage || 'Avatar video generation failed',
+        errorCode: videoResult.errorCode || 'UNKNOWN_ERROR',
+        reason: videoResult.reason || 'Avatar video failed due to unsupported voice engine. Please choose another voice.',
+        metadata: {
+          generation_status: 'failed',
+          error_code: videoResult.errorCode || 'UNKNOWN_ERROR',
+          error_message: videoResult.errorMessage || 'Avatar video generation failed',
+          error_detail: videoResult.errorDetail || null,
+        },
+      };
+    }
+
     console.log('[Avatar Video] Video generated:', videoResult.videoUrl, {
       status: videoResult.status,
       fallback: videoResult.fallback,

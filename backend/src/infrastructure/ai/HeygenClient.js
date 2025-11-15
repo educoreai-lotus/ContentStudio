@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { createClient } from '@supabase/supabase-js';
+import { HEYGEN_CONFIG } from '../../config/heygen.js';
 
 /**
  * Heygen API Client
@@ -39,9 +40,22 @@ export class HeygenClient {
     }
 
     try {
-      // Use valid Heygen avatar ID and voice ID
-      const defaultAvatarId = 'Kristin_public_3_20240108';
-      const defaultVoiceId = '1bd001e7e50f421d891986aad5158bc8'; // Heygen female voice
+      // Use configuration for HeyGen defaults
+      const avatarId = config.avatarId || HEYGEN_CONFIG.DEFAULT_AVATAR_ID;
+      
+      // Get safe voice ID - override ElevenLabs voices with HeyGen default
+      const voiceConfig = HEYGEN_CONFIG.getVoiceConfig(
+        config.voiceId,
+        script,
+        config.speed || 1.0
+      );
+      
+      console.log('[HeygenClient] Using voice configuration:', {
+        requestedVoiceId: config.voiceId,
+        actualVoiceId: voiceConfig.voice_id,
+        wasElevenLabs: config.voiceId ? HEYGEN_CONFIG.isElevenLabsVoice(config.voiceId) : false,
+        avatarId,
+      });
       
       // Step 1: Create video generation request
       const response = await this.client.post('/v2/video/generate', {
@@ -52,15 +66,10 @@ export class HeygenClient {
           {
             character: {
               type: 'avatar',
-              avatar_id: config.avatarId || defaultAvatarId,
+              avatar_id: avatarId,
               avatar_style: config.avatarStyle || 'normal',
             },
-            voice: {
-              type: 'text',
-              input_text: script,
-              voice_id: config.voiceId || defaultVoiceId,
-              speed: config.speed || 1.0,
-            },
+            voice: voiceConfig,
             background: {
               type: 'color',
               value: config.backgroundColor || '#FFFFFF',
@@ -86,10 +95,26 @@ export class HeygenClient {
           config.pollInterval || 5000,
         );
       } catch (pollError) {
-        // If video generation failed permanently, don't return fallback - throw error
+        // If video generation failed permanently, return failed status instead of throwing
         if (pollError.status === 'failed' || (pollError.message && pollError.message.includes('Video generation failed'))) {
-          console.error('[HeygenClient] Video generation failed permanently:', pollError.errorMessage || pollError.message);
-          throw new Error(`Avatar video generation failed: ${pollError.errorMessage || pollError.message || 'Unknown error'}`);
+          const errorDetail = this.sanitizeError(pollError);
+          console.error('[HeygenClient] Video generation failed permanently:', {
+            videoId,
+            errorCode: errorDetail.code,
+            errorMessage: errorDetail.message,
+            errorDetail: errorDetail.detail,
+          });
+          
+          // Return failed status instead of throwing - this allows other formats to continue
+          return {
+            status: 'failed',
+            videoId,
+            script,
+            error: errorDetail.message,
+            errorCode: errorDetail.code,
+            errorDetail: errorDetail.detail,
+            reason: this.getTrainerFriendlyError(errorDetail),
+          };
         }
         
         // If polling timeout/error but not a permanent failure, return fallback URL
@@ -194,18 +219,28 @@ export class HeygenClient {
           return { status, videoUrl };
         } else if (status === 'failed') {
           // Get error message from response if available
-          const errorMessage = response.data.data.error_message || response.data.data.error || 'Video generation failed';
+          const errorData = response.data.data || {};
+          const errorMessage = errorData.error_message || errorData.error || 'Video generation failed';
+          const errorCode = errorData.error_code || 'UNKNOWN_ERROR';
+          const errorDetail = errorData.error_detail || errorMessage;
+          
           console.error(`[HeygenClient] Video generation failed: ${errorMessage}`, {
             videoId,
             attempt: attempt + 1,
-            responseData: response.data.data,
+            errorCode,
+            errorDetail,
+            responseData: errorData,
           });
-          // Throw error immediately - don't continue polling if video failed
-          const failedError = new Error(`Video generation failed: ${errorMessage}`);
-          failedError.status = 'failed';
-          failedError.videoId = videoId;
-          failedError.errorMessage = errorMessage;
-          throw failedError;
+          
+          // Return failed status instead of throwing - this allows other formats to continue
+          // Don't throw - return failed status so caller can handle gracefully
+          return {
+            status: 'failed',
+            videoUrl: null,
+            errorMessage,
+            errorCode,
+            errorDetail,
+          };
         }
 
         // Wait before next poll (only if status is 'processing' or other non-final status)
@@ -389,6 +424,94 @@ export class HeygenClient {
       console.error('[HeygenClient] Download video error:', error.message);
       throw new Error(`Failed to download video: ${error.message}`);
     }
+  }
+
+  /**
+   * Sanitize error object to extract safe error information
+   * @param {Error|Object} error - Error object
+   * @returns {Object} Sanitized error information
+   */
+  sanitizeError(error) {
+    if (!error) {
+      return {
+        code: 'UNKNOWN_ERROR',
+        message: 'Unknown error occurred',
+        detail: 'Unknown error occurred',
+      };
+    }
+
+    // Extract error code
+    const code = error.errorCode || error.code || error.response?.data?.error_code || 'UNKNOWN_ERROR';
+
+    // Extract error message
+    let message = 'Video generation failed';
+    if (error.errorMessage) {
+      message = String(error.errorMessage);
+    } else if (error.message) {
+      message = String(error.message);
+    } else if (error.response?.data?.error_message) {
+      message = String(error.response.data.error_message);
+    } else if (error.response?.data?.error) {
+      message = String(error.response.data.error);
+    }
+
+    // Extract error detail
+    let detail = message;
+    if (error.errorDetail) {
+      detail = String(error.errorDetail);
+    } else if (error.response?.data?.error_detail) {
+      detail = String(error.response.data.error_detail);
+    } else if (error.response?.data?.data?.error_detail) {
+      detail = String(error.response.data.data.error_detail);
+    }
+
+    // Ensure we never return [object Object]
+    if (message === '[object Object]') {
+      message = 'Video generation failed';
+    }
+    if (detail === '[object Object]') {
+      detail = message;
+    }
+
+    return {
+      code,
+      message: message.substring(0, 500), // Limit message length
+      detail: detail.substring(0, 1000), // Limit detail length
+    };
+  }
+
+  /**
+   * Get trainer-friendly error message
+   * @param {Object} errorDetail - Sanitized error information
+   * @returns {string} Trainer-friendly error message
+   */
+  getTrainerFriendlyError(errorDetail) {
+    if (!errorDetail) {
+      return 'Avatar video failed due to unsupported voice engine. Please choose another voice.';
+    }
+
+    const { code, message, detail } = errorDetail;
+
+    // Check for common error patterns and provide friendly messages
+    if (code && code.includes('VOICE') || message.toLowerCase().includes('voice')) {
+      return 'Avatar video failed due to unsupported voice engine. Please choose another voice.';
+    }
+
+    if (code && code.includes('ELEVENLABS') || message.toLowerCase().includes('elevenlabs')) {
+      return 'Avatar video failed due to unsupported voice engine. Please choose another voice.';
+    }
+
+    if (code && code.includes('PROVIDER') || message.toLowerCase().includes('provider')) {
+      return 'Avatar video failed due to unsupported voice engine. Please choose another voice.';
+    }
+
+    // Use sanitized message if it's short and clear
+    if (message && message.length < 200 && !message.includes('[object')) {
+      return message;
+    }
+
+    // Default friendly message
+    return 'Avatar video failed due to unsupported voice engine. Please choose another voice.';
   }
 }
 

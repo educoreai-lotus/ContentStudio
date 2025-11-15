@@ -141,40 +141,70 @@ export class ContentGenerationOrchestrator {
           format: format.name,
           hasContentData: !!generatedContent.content_data,
           contentDataKeys: generatedContent.content_data ? Object.keys(generatedContent.content_data) : [],
+          status: generatedContent.content_data?.status || 'success',
         });
+
+        // Check if avatar_video failed
+        const isFailed = format.name === 'avatar_video' && generatedContent.content_data?.status === 'failed';
 
         // Override generation_method_id to 'video_to_lesson' (instead of 'ai_assisted')
         generatedContent.generation_method_id = 'video_to_lesson';
 
-        // Save to database
+        // Save to database (even if failed, save it with failed status)
         logger.info(`[ContentGenerationOrchestrator] Saving ${format.label} to database...`, {
           format: format.name,
+          isFailed,
         });
 
         const savedContent = await this.contentRepository.create(generatedContent);
 
         const formatDuration = Date.now() - formatStartTime;
-        logger.info(`[ContentGenerationOrchestrator] Saved ${format.label} to database`, {
-          format: format.name,
-          content_id: savedContent.content_id,
-          duration: `${formatDuration}ms`,
-        });
 
-        // Emit progress: completed
-        onProgress(format.name, 'completed', `[AI] Completed: ${format.label}`);
-        logger.info(`[ContentGenerationOrchestrator] ✅ Completed generation: ${format.label}`, {
-          content_id: savedContent.content_id,
-          duration: `${formatDuration}ms`,
-        });
+        if (isFailed) {
+          // Emit progress: failed
+          const reason = generatedContent.content_data?.reason || 'Avatar video generation failed';
+          onProgress(format.name, 'failed', `[AI] Failed: ${format.label} - ${reason}`);
+          logger.warn(`[ContentGenerationOrchestrator] ⚠️ Avatar video failed but saved to database`, {
+            format: format.name,
+            content_id: savedContent.content_id,
+            reason,
+            duration: `${formatDuration}ms`,
+          });
 
-        // Return result
-        results[format.name] = {
-          content_id: savedContent.content_id,
-          format: format.name,
-          content_type_id: format.id,
-          generated: true,
-          content_data: savedContent.content_data,
-        };
+          // Return failed result - but don't throw, allow other formats to continue
+          results[format.name] = {
+            content_id: savedContent.content_id,
+            format: format.name,
+            content_type_id: format.id,
+            generated: false,
+            status: 'failed',
+            reason,
+            error: generatedContent.content_data?.error || 'Avatar video generation failed',
+            content_data: savedContent.content_data,
+          };
+        } else {
+          logger.info(`[ContentGenerationOrchestrator] Saved ${format.label} to database`, {
+            format: format.name,
+            content_id: savedContent.content_id,
+            duration: `${formatDuration}ms`,
+          });
+
+          // Emit progress: completed
+          onProgress(format.name, 'completed', `[AI] Completed: ${format.label}`);
+          logger.info(`[ContentGenerationOrchestrator] ✅ Completed generation: ${format.label}`, {
+            content_id: savedContent.content_id,
+            duration: `${formatDuration}ms`,
+          });
+
+          // Return result
+          results[format.name] = {
+            content_id: savedContent.content_id,
+            format: format.name,
+            content_type_id: format.id,
+            generated: true,
+            content_data: savedContent.content_data,
+          };
+        }
 
         return results[format.name];
       } catch (error) {
@@ -237,6 +267,9 @@ export class ContentGenerationOrchestrator {
       }
     });
 
+    // Check if avatar_video failed
+    const avatarVideoFailed = results.avatar_video && results.avatar_video.status === 'failed';
+
     return {
       topic_id: topicId,
       transcript: {
@@ -257,6 +290,14 @@ export class ContentGenerationOrchestrator {
         mind_map: results.mind_map,
         avatar_video: results.avatar_video,
       },
+      // Add continue_generation flag if avatar_video failed
+      ...(avatarVideoFailed && {
+        continue_generation: true,
+        avatar_video: {
+          status: 'failed',
+          reason: results.avatar_video.reason || 'Avatar video failed due to unsupported voice engine. Please choose another voice.',
+        },
+      }),
     };
   }
 
