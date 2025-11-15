@@ -328,10 +328,19 @@ export class GenerateContentUseCase {
 
         case 6: { // avatar_video
           // Build lesson data for avatar text generation (NO GPT)
+          // Ensure skillsList is an array
+          const skillsListArray = Array.isArray(promptVariables.skillsListArray)
+            ? promptVariables.skillsListArray
+            : Array.isArray(promptVariables.skillsList)
+            ? promptVariables.skillsList
+            : typeof promptVariables.skillsList === 'string'
+            ? promptVariables.skillsList.split(',').map(s => s.trim()).filter(Boolean)
+            : [];
+          
           const lessonData = {
             lessonTopic: promptVariables.lessonTopic,
             lessonDescription: promptVariables.lessonDescription || prompt, // Use prompt as description if available
-            skillsList: promptVariables.skillsList || [],
+            skillsList: skillsListArray, // Use array, not string
             transcriptText: promptVariables.transcriptText || null,
             trainerRequestText: promptVariables.trainerRequestText || null,
           };

@@ -373,6 +373,14 @@ Format as JSON with this structure:
       transcriptText = '',
     } = lessonData;
 
+    // Ensure skillsList is an array
+    let skillsArray = [];
+    if (Array.isArray(skillsList)) {
+      skillsArray = skillsList;
+    } else if (typeof skillsList === 'string') {
+      skillsArray = skillsList.split(',').map(s => s.trim()).filter(Boolean);
+    }
+
     // Build text from available data
     const parts = [];
 
@@ -392,8 +400,8 @@ Format as JSON with this structure:
       parts.push(trainerRequestText.trim());
     }
 
-    if (skillsList && skillsList.length > 0) {
-      const skillsText = skillsList.join(', ');
+    if (skillsArray && skillsArray.length > 0) {
+      const skillsText = skillsArray.join(', ');
       parts.push(`Key skills covered: ${skillsText}.`);
     }
 
