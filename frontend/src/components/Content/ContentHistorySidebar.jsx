@@ -293,7 +293,7 @@ export function ContentHistorySidebar({ existingContent = [], onHistoryChanged }
       className={`pr-4 py-4 pl-0 h-full overflow-y-auto ${
         theme === 'day-mode'
           ? 'bg-white text-gray-900'
-          : 'bg-[#1e293b] text-[#f8fafc]'
+          : 'bg-slate-900 text-slate-200'
       }`}
     >
       <div className="flex items-center justify-between mb-6">
