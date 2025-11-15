@@ -82,10 +82,16 @@ export default function TopicContentManager() {
 
   const fetchTopicDetails = async () => {
     try {
-      const topic = await topicsService.getById(parseInt(topicId));
-      // API returns {success?, data?}. ensure compatibility
-      const topicData = topic.topic || topic.data || topic;
-      setTopicDetails(topicData);
+      const response = await topicsService.getById(parseInt(topicId));
+      // API returns TopicResponseDTO directly, or wrapped in {data: ...} or {topic: ...}
+      const topicData = response.topic || response.data || response;
+      console.log('[TopicContentManager] Fetched topic data:', topicData);
+      // Ensure we have the correct structure
+      if (topicData && topicData.topic_name) {
+        setTopicDetails(topicData);
+      } else {
+        console.warn('[TopicContentManager] Invalid topic data structure:', topicData);
+      }
     } catch (err) {
       console.warn('Failed to fetch topic details', err);
     }
@@ -263,8 +269,23 @@ export default function TopicContentManager() {
   };
 
   return (
-    <div className={`min-h-screen p-6 lg:p-8 ${theme === 'day-mode' ? 'bg-gray-50' : 'bg-[#1e293b]'}`}>
-      <div className="max-w-7xl mx-auto">
+    <div className={`min-h-screen ${theme === 'day-mode' ? 'bg-gray-50' : 'bg-[#1e293b]'}`}>
+      {/* Fixed Left Sidebar */}
+      <div className="hidden lg:block fixed left-0 top-0 h-screen w-[280px] overflow-y-auto z-40 border-r"
+        style={{
+          backgroundColor: theme === 'day-mode' ? '#ffffff' : '#0f172a',
+          borderColor: theme === 'day-mode' ? '#e5e7eb' : '#334155'
+        }}
+      >
+        <div className="h-full pt-20 px-4">
+          <ContentHistorySidebar
+            existingContent={existingContent}
+            onHistoryChanged={fetchContent}
+          />
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto p-6 lg:p-8 lg:pl-[296px]">
         <div className="mb-8">
           <button
             onClick={() => {
@@ -412,15 +433,16 @@ export default function TopicContentManager() {
           </div>
         )}
 
-        <div className="lg:flex lg:items-start lg:gap-6">
-          <div className="mt-8 lg:mt-0 lg:w-[280px] lg:flex-shrink-0 order-2 lg:order-1 lg:sticky lg:top-8">
-            <ContentHistorySidebar
-              existingContent={existingContent}
-              onHistoryChanged={fetchContent}
-            />
-          </div>
+        {/* Mobile Sidebar */}
+        <div className="mt-8 lg:hidden">
+          <ContentHistorySidebar
+            existingContent={existingContent}
+            onHistoryChanged={fetchContent}
+          />
+        </div>
 
-          <div className="flex-1 min-w-0 order-1 lg:order-2 lg:max-w-[calc(100%-304px)]">
+        <div className="lg:flex lg:items-start lg:gap-6">
+          <div className="flex-1 min-w-0">
             {/* Content Progress */}
             <div
               className={`mb-8 p-6 rounded-2xl shadow-lg ${
