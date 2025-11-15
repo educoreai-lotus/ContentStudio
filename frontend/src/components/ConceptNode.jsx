@@ -99,12 +99,14 @@ export const ConceptNode = ({ data, selected, style: nodeStyle }) => {
       {/* Tooltip */}
       {showTooltip && (description || skills.length > 0) && (
         <div
-          className="tooltip absolute z-50 p-3 rounded-lg shadow-xl max-w-xs"
+          className="tooltip absolute z-50 p-4 rounded-lg shadow-xl"
           style={{
             bottom: '100%',
             left: '50%',
             transform: 'translateX(-50%)',
             marginBottom: '8px',
+            width: '400px',
+            maxWidth: '90vw',
             backgroundColor: isDark ? '#1e293b' : '#ffffff',
             color: isDark ? '#f8fafc' : '#1e293b',
             border: `1px solid ${borderColor}`,
@@ -112,7 +114,13 @@ export const ConceptNode = ({ data, selected, style: nodeStyle }) => {
           }}
         >
           {description && (
-            <div className="tooltip-description mb-2 text-sm">
+            <div 
+              className="tooltip-description mb-3 text-sm leading-relaxed"
+              style={{
+                wordWrap: 'break-word',
+                lineHeight: '1.6',
+              }}
+            >
               {description}
             </div>
           )}

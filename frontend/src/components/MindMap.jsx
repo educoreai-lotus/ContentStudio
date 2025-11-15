@@ -272,10 +272,10 @@ function calculateLayoutIfNeeded(nodes, edges) {
     nodesByLevel[level].push(node.id);
   });
 
-  // Calculate positions
-  const levelHeight = 200;
-  const nodeSpacing = 250;
-  const startY = 100;
+  // Calculate positions with increased spacing for better readability
+  const levelHeight = 280; // Increased from 200 to 280 for more vertical space
+  const nodeSpacing = 350; // Increased from 250 to 350 for more horizontal space
+  const startY = 150; // Increased from 100 to 150
 
   Object.keys(nodesByLevel).forEach(level => {
     const levelNodes = nodesByLevel[level];
