@@ -4,21 +4,23 @@ FROM node:18-slim
 # Install system dependencies
 # ffmpeg includes ffprobe
 # python3 and pip3 are needed for yt-dlp
+# pipx is used to install yt-dlp in an isolated environment
 RUN apt-get update && \
     apt-get install -y \
     ffmpeg \
     python3 \
     python3-pip \
+    python3-venv \
+    pipx \
     curl \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Install yt-dlp using pip with --break-system-packages flag
-# Python 3.11+ in Debian 12 requires this flag for system-wide installation
-# yt-dlp is a YouTube downloader that works better than youtube-dl
-# Using --break-system-packages is safe in Docker containers
-RUN pip3 install --no-cache-dir --upgrade pip --break-system-packages && \
-    pip3 install --no-cache-dir --break-system-packages yt-dlp
+# Install yt-dlp using pipx (recommended for system-wide Python apps)
+# pipx creates an isolated virtual environment for yt-dlp
+# This avoids the externally-managed-environment error
+RUN pipx ensurepath && \
+    pipx install yt-dlp
 
 # Verify installations
 RUN ffmpeg -version && \
