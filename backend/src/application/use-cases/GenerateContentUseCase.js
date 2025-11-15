@@ -318,7 +318,11 @@ export class GenerateContentUseCase {
 
         case 5: { // mind_map
           const mindMap = await this.aiGenerationService.generateMindMap(prompt, {
+            topic_title: promptVariables.lessonTopic,
+            skills: promptVariables.skillsListArray,
+            trainer_prompt: promptVariables.trainerRequestText || promptVariables.lessonDescription,
             language: promptVariables.language,
+            lessonDescription: promptVariables.lessonDescription,
           });
           
           // Clean content data: remove redundant metadata

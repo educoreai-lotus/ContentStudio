@@ -6,18 +6,19 @@ import { useState } from 'react';
  * ConceptNode Component
  * Custom node component for React Flow displaying concepts with tooltip
  */
-export const ConceptNode = ({ data, selected }) => {
+export const ConceptNode = ({ data, selected, style: nodeStyle }) => {
   const { theme } = useApp();
   const [showTooltip, setShowTooltip] = useState(false);
 
   // Extract node properties with fallbacks
   const label = data?.label || data?.text || 'Untitled';
   const description = data?.description || '';
-  const category = data?.category || 'default';
+  // Support both 'category' (legacy) and 'group' (new format)
+  const category = data?.category || data?.group || 'default';
   const skills = Array.isArray(data?.skills) ? data.skills : [];
   
-  // Get background color from style or use default based on category
-  const backgroundColor = data?.style?.backgroundColor || 
+  // Get background color from node style (React Flow passes it directly) or use default based on category/group
+  const backgroundColor = nodeStyle?.backgroundColor || 
     (theme === 'day-mode' 
       ? getDefaultColor(category, 'day')
       : getDefaultColor(category, 'dark'));
@@ -141,11 +142,18 @@ export const ConceptNode = ({ data, selected }) => {
 };
 
 /**
- * Get default color based on category and theme
+ * Get default color based on category/group and theme
+ * Supports both legacy categories and new group format
  */
-function getDefaultColor(category, theme) {
+function getDefaultColor(categoryOrGroup, theme) {
+  // New format colors (from prompt specification)
   const dayColors = {
     core: '#E3F2FD', // Light blue
+    primary: '#FFF3E0', // Light orange
+    secondary: '#E8F5E9', // Light green
+    related: '#F3E5F5', // Light purple
+    advanced: '#FCE4EC', // Light pink
+    // Legacy support
     topic: '#F3E5F5', // Light purple
     subtopic: '#E8F5E9', // Light green
     detail: '#FFF3E0', // Light orange
@@ -154,6 +162,11 @@ function getDefaultColor(category, theme) {
 
   const darkColors = {
     core: '#1e3a5f', // Dark blue
+    primary: '#4a3a1a', // Dark orange
+    secondary: '#1a4a1a', // Dark green
+    related: '#4a1a4a', // Dark purple
+    advanced: '#4a1a2a', // Dark pink
+    // Legacy support
     topic: '#4a1a4a', // Dark purple
     subtopic: '#1a4a1a', // Dark green
     detail: '#4a3a1a', // Dark orange
@@ -161,7 +174,7 @@ function getDefaultColor(category, theme) {
   };
 
   return theme === 'dark' 
-    ? (darkColors[category] || darkColors.default)
-    : (dayColors[category] || dayColors.default);
+    ? (darkColors[categoryOrGroup] || darkColors.default)
+    : (dayColors[categoryOrGroup] || dayColors.default);
 }
 

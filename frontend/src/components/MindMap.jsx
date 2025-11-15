@@ -41,10 +41,13 @@ export const MindMap = ({ data, className = '' }) => {
       const nodeType = node.type === 'concept' ? 'concept' : 'concept';
 
       // Prepare data object for the node
+      // Support both 'category' (legacy) and 'group' (new format)
+      const categoryOrGroup = node.category || node.data?.category || node.data?.group || 'default';
       const nodeData = {
         label: node.label || node.data?.label || node.id,
         description: node.description || node.data?.description || '',
-        category: node.category || node.data?.category || 'default',
+        category: categoryOrGroup, // Use category for compatibility
+        group: categoryOrGroup, // Also include group for new format
         skills: node.skills || node.data?.skills || [],
         ...(node.data || {}),
       };
