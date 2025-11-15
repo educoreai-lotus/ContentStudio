@@ -190,22 +190,67 @@ export default function TopicContentManager() {
     content => content.content_type_id === CONTENT_TYPES.find(t => t.id === 'avatar_video')?.dbId
   );
 
-  const handleVideoTranscriptionComplete = async ({ transcript, source, videoType }) => {
-    // After transcription, generate all content formats using the transcript
-    // This will trigger the multi-format generation pipeline
-    try {
-      // Navigate to AI generation page with the transcript as prompt
-      navigate(`/topics/${topicId}/content/ai-generate`, {
-        state: {
-          transcript,
-          source,
-          videoType,
-          autoGenerate: true, // Flag to trigger automatic generation
-        },
-      });
-    } catch (error) {
-      console.error('Failed to process transcription:', error);
-      alert('Failed to process transcription. Please try again.');
+  const [contentGenerationLoading, setContentGenerationLoading] = useState(false);
+  const [currentGenerationStep, setCurrentGenerationStep] = useState(null);
+  const [generationProgress, setGenerationProgress] = useState([]);
+
+  const handleVideoTranscriptionComplete = async ({ transcript, source, videoType, progress_events, content_formats, topic_id }) => {
+    // If content generation already completed (content_formats exists), just refresh the content
+    if (content_formats && Object.keys(content_formats).length > 0) {
+      setContentGenerationLoading(false);
+      setCurrentGenerationStep(null);
+      setGenerationProgress([]);
+      // Refresh content to show newly generated formats
+      await fetchContent();
+      // Show success message
+      alert(`Successfully generated ${Object.keys(content_formats).length} content formats!`);
+      return;
+    }
+
+    // If transcription only (no content generation), show message and refresh
+    if (transcript) {
+      setContentGenerationLoading(false);
+      setCurrentGenerationStep(null);
+      setGenerationProgress([]);
+      // Refresh content in case something was generated
+      await fetchContent();
+      // Show message
+      alert('Video transcribed successfully. Content generation may still be in progress.');
+      return;
+    }
+
+    // If we have progress events but no content yet, show loading state
+    if (progress_events && progress_events.length > 0) {
+      setContentGenerationLoading(true);
+      setGenerationProgress(progress_events);
+      const lastEvent = progress_events[progress_events.length - 1];
+      setCurrentGenerationStep(lastEvent.message);
+      
+      // Poll for completion (refresh content periodically)
+      const pollInterval = setInterval(async () => {
+        try {
+          await fetchContent();
+          // Check if we have all formats now
+          const updatedContent = await contentService.listByTopic(parseInt(topicId));
+          if (updatedContent && updatedContent.length >= 6) {
+            // All formats generated
+            clearInterval(pollInterval);
+            setContentGenerationLoading(false);
+            setCurrentGenerationStep(null);
+            setGenerationProgress([]);
+            alert('All content formats generated successfully!');
+          }
+        } catch (error) {
+          console.error('Failed to poll for content:', error);
+        }
+      }, 3000); // Poll every 3 seconds
+
+      // Clear polling after 2 minutes max
+      setTimeout(() => {
+        clearInterval(pollInterval);
+        setContentGenerationLoading(false);
+        setCurrentGenerationStep(null);
+      }, 120000);
     }
   };
 
@@ -264,6 +309,69 @@ export default function TopicContentManager() {
             }`}
           >
             {error}
+          </div>
+        )}
+
+        {/* Content Generation Loading Spinner */}
+        {contentGenerationLoading && (
+          <div
+            className={`mb-6 p-6 rounded-2xl border-2 ${
+              theme === 'day-mode'
+                ? 'bg-blue-50 border-blue-200'
+                : 'bg-blue-900/20 border-blue-500/40'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <div className="relative w-12 h-12 mr-4">
+                  <div className={`absolute inset-0 border-4 border-transparent rounded-full animate-spin ${
+                    theme === 'day-mode' ? 'border-t-blue-600' : 'border-t-blue-400'
+                  }`}></div>
+                </div>
+                <div>
+                  <h3
+                    className={`text-lg font-semibold mb-1 ${
+                      theme === 'day-mode' ? 'text-gray-900' : 'text-white'
+                    }`}
+                  >
+                    Generating Content Formats...
+                  </h3>
+                  {currentGenerationStep && (
+                    <p
+                      className={`text-sm ${
+                        theme === 'day-mode' ? 'text-gray-600' : 'text-gray-300'
+                      }`}
+                    >
+                      {currentGenerationStep}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+            {/* Progress Events List */}
+            {generationProgress.length > 0 && (
+              <div className="mt-4 space-y-2">
+                {generationProgress.map((event, index) => (
+                  <div
+                    key={index}
+                    className={`flex items-center text-sm ${
+                      theme === 'day-mode' ? 'text-gray-700' : 'text-gray-300'
+                    }`}
+                  >
+                    <i
+                      className={`fas mr-2 ${
+                        event.status === 'completed'
+                          ? 'fa-check-circle text-emerald-600'
+                          : event.status === 'failed'
+                          ? 'fa-times-circle text-red-600'
+                          : 'fa-spinner fa-spin text-blue-600'
+                      }`}
+                    ></i>
+                    <span>{event.message}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

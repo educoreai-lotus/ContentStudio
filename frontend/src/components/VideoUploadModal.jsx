@@ -72,6 +72,11 @@ export const VideoUploadModal = ({ open, onClose, topicId, theme = 'day-mode', o
 
       const formData = new FormData();
 
+      // Add topic_id to formData (required for content generation)
+      if (topicId) {
+        formData.append('topic_id', topicId.toString());
+      }
+
       if (youtubeUrl) {
         // Handle YouTube URL
         addMessage({ message: 'Extracting YouTube captions…', timestamp: new Date().toISOString() });
@@ -94,26 +99,64 @@ export const VideoUploadModal = ({ open, onClose, topicId, theme = 'day-mode', o
         },
       });
 
-      const { transcript, source, videoType } = response.data.data || response.data;
+      const responseData = response.data.data || response.data;
+      const { transcript, source, videoType, progress_events, content_formats, topic_id } = responseData;
 
-      addMessage({
-        message: 'Transcription completed successfully',
-        timestamp: new Date().toISOString(),
-      });
-      setCurrentStatus(null);
+      // Process progress events if available
+      if (progress_events && Array.isArray(progress_events)) {
+        progress_events.forEach(event => {
+          addMessage({
+            message: event.message,
+            timestamp: event.timestamp || new Date().toISOString(),
+          });
+          setCurrentStatus(event.message);
+        });
+      }
 
-      // Show success popup
-      showPopup({
-        type: 'success',
-        title: 'Video Transcription Completed',
-        message: 'Video transcribed successfully',
-        reason: `Source: ${source === 'youtube-captions' ? 'YouTube Captions' : 'Whisper'}`,
-      });
+      // Check if content generation completed
+      const hasGeneratedContent = content_formats && Object.keys(content_formats).length > 0;
+      
+      if (hasGeneratedContent) {
+        addMessage({
+          message: 'All content formats generated successfully',
+          timestamp: new Date().toISOString(),
+        });
+        setCurrentStatus(null);
 
-      // Call callback with transcript
+        // Show success popup
+        showPopup({
+          type: 'success',
+          title: 'Content Generation Completed',
+          message: 'Video transcribed and all lesson formats generated successfully',
+          reason: `Generated ${Object.keys(content_formats).length} content formats`,
+        });
+      } else {
+        addMessage({
+          message: 'Transcription completed successfully',
+          timestamp: new Date().toISOString(),
+        });
+        setCurrentStatus(null);
+
+        // Show success popup for transcription only
+        showPopup({
+          type: 'success',
+          title: 'Video Transcription Completed',
+          message: 'Video transcribed successfully',
+          reason: `Source: ${source === 'youtube-captions' ? 'YouTube Captions' : 'Whisper'}`,
+        });
+      }
+
+      // Call callback with full response data
       if (onTranscriptionComplete) {
         setTimeout(() => {
-          onTranscriptionComplete({ transcript, source, videoType });
+          onTranscriptionComplete({
+            transcript,
+            source,
+            videoType,
+            progress_events,
+            content_formats,
+            topic_id,
+          });
           onClose();
         }, 2000);
       } else {
