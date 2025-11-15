@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { aiGenerationService } from '../../services/ai-generation.js';
+import { topicsService } from '../../services/topics.js';
 import { useApp } from '../../context/AppContext.jsx';
 
 export const AIContentForm = () => {
@@ -32,6 +33,24 @@ export const AIContentForm = () => {
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [generationProgress, setGenerationProgress] = useState(null);
+  const [topic, setTopic] = useState(null); // Topic information
+
+  // Fetch topic information when component mounts
+  useEffect(() => {
+    const fetchTopic = async () => {
+      if (!topicId) return;
+      
+      try {
+        const topicData = await topicsService.getById(parseInt(topicId));
+        setTopic(topicData);
+      } catch (err) {
+        console.error('Failed to load topic:', err);
+        // Don't show error - topic info is nice to have but not critical
+      }
+    };
+
+    fetchTopic();
+  }, [topicId]);
 
   useEffect(() => {
     if (!topicId) {
@@ -100,6 +119,43 @@ export const AIContentForm = () => {
       }`}
     >
       <div className="max-w-4xl mx-auto">
+        {/* Topic Information Banner */}
+        {topic && (
+          <div
+            className={`mb-6 p-4 rounded-xl border ${
+              theme === 'day-mode'
+                ? 'bg-emerald-50 border-emerald-200'
+                : 'bg-emerald-900/20 border-emerald-500/30'
+            }`}
+          >
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 mt-1">
+                <i className={`fas fa-book text-xl ${
+                  theme === 'day-mode' ? 'text-emerald-600' : 'text-emerald-400'
+                }`}></i>
+              </div>
+              <div className="flex-1">
+                <h3
+                  className={`font-bold text-lg mb-1 ${
+                    theme === 'day-mode' ? 'text-gray-900' : 'text-white'
+                  }`}
+                >
+                  {topic.topic_name || 'Untitled Topic'}
+                </h3>
+                {topic.description && (
+                  <p
+                    className={`text-sm ${
+                      theme === 'day-mode' ? 'text-gray-700' : 'text-gray-300'
+                    }`}
+                  >
+                    {topic.description}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="mb-8">
           <h1
             className="text-3xl md:text-4xl font-bold mb-2"

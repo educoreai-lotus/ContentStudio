@@ -376,7 +376,14 @@ export default function TopicContentManager() {
         )}
 
         <div className="lg:flex lg:items-start lg:gap-8 xl:gap-12">
-          <div className="flex-1 min-w-0">
+          <div className="mt-8 lg:mt-0 lg:w-[360px] lg:flex-shrink-0 order-2 lg:order-1">
+            <ContentHistorySidebar
+              existingContent={existingContent}
+              onHistoryChanged={fetchContent}
+            />
+          </div>
+
+          <div className="flex-1 min-w-0 order-1 lg:order-2">
             {/* Content Progress */}
             <div
               className={`mb-8 p-6 rounded-2xl shadow-lg ${
@@ -813,13 +820,6 @@ export default function TopicContentManager() {
                 </button>
               </div>
             )}
-          </div>
-
-          <div className="mt-8 lg:mt-0 lg:w-[360px] lg:ml-auto">
-            <ContentHistorySidebar
-              existingContent={existingContent}
-              onHistoryChanged={fetchContent}
-            />
           </div>
         </div>
 

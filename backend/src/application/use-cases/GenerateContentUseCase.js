@@ -1,5 +1,6 @@
 import { Content } from '../../domain/entities/Content.js';
 import { ContentDataCleaner } from '../utils/ContentDataCleaner.js';
+import { PromptSanitizer } from '../../infrastructure/security/PromptSanitizer.js';
 
 const PROMPT_BUILDERS = {
   text: ({ lessonTopic, lessonDescription, language, skillsList }) => `You are an expert educational content creator in EduCore Content Studio.
@@ -31,7 +32,7 @@ Lesson Context:
 
 Output only pure, conversational text in ${language}.`,
   code: ({ lessonTopic, lessonDescription, language, skillsList }) => `You are a senior coding mentor in EduCore Content Studio.
-🎯 Objective: Generate a complete, working code example related to ${lessonTopic}.
+🎯 Objective: Generate clean, production-ready code example related to ${lessonTopic}.
 
 Lesson Context:
 - Topic: ${lessonTopic}
@@ -39,11 +40,19 @@ Lesson Context:
 - Skills: ${skillsList}
 - Language: ${language}
 
+⚠️ CRITICAL REQUIREMENTS:
+- Write clean, readable code WITHOUT excessive comments
+- Code should be self-explanatory through clear naming and structure
+- Only add comments if absolutely necessary for complex logic
+- Focus on writing code, not explaining it with comments
+- Learners need to see clean code they can read and understand
+- The code itself is the teaching tool - make it readable
+
 Guidelines:
-- Generate a code block in the most relevant programming language.
-- Add inline comments explaining each section.
-- Include one brief exercise or question for learners.
-- Output: code + short natural explanation, no JSON.`,
+- Generate a complete, working code block in the most relevant programming language
+- Use clear variable and function names that explain themselves
+- Write code that is easy to read and understand without comments
+- Output: clean code only, no JSON format.`,
   presentation: ({ lessonTopic, lessonDescription, language, skillsList }) => `You are an AI educational designer for EduCore Content Studio.
 🎯 Objective: Generate presentation slide text based on ${lessonTopic}.
 
@@ -132,21 +141,32 @@ export class GenerateContentUseCase {
       throw new Error('lessonTopic, lessonDescription, language, and skillsList are required');
     }
 
-    const skillsAsArray = Array.isArray(skillsList)
-      ? skillsList
-      : String(skillsList)
+    // Sanitize all input variables to prevent prompt injection
+    const sanitizedInput = PromptSanitizer.sanitizeVariables({
+      lessonTopic,
+      lessonDescription,
+      language,
+      skillsList,
+      transcriptText,
+      trainerRequestText,
+    });
+
+    // Rebuild skills array after sanitization
+    const skillsAsArray = Array.isArray(sanitizedInput.skillsList)
+      ? sanitizedInput.skillsList
+      : (sanitizedInput.skillsList || String(skillsList))
           .split(',')
           .map(skill => skill.trim())
           .filter(Boolean);
 
     return {
-      lessonTopic: lessonTopic.trim(),
-      lessonDescription: lessonDescription.trim(),
-      language: language.trim(),
+      lessonTopic: sanitizedInput.lessonTopic || lessonTopic.trim(),
+      lessonDescription: sanitizedInput.lessonDescription || lessonDescription.trim(),
+      language: sanitizedInput.language || language.trim(),
       skillsList: skillsAsArray.join(', '),
-      skillsListArray: skillsAsArray,
-      transcriptText: transcriptText || null,
-      trainerRequestText: trainerRequestText || null,
+      skillsListArray: sanitizedInput.skillsListArray || skillsAsArray,
+      transcriptText: sanitizedInput.transcriptText || transcriptText || null,
+      trainerRequestText: sanitizedInput.trainerRequestText || trainerRequestText || null,
     };
   }
 
@@ -170,7 +190,25 @@ export class GenerateContentUseCase {
     if (!builder) {
       throw new Error(`Prompt builder not defined for content type: ${typeKey}`);
     }
-    return builder(variables);
+    
+    // Wrap user input variables to prevent prompt injection
+    const wrappedVariables = {
+      ...variables,
+      lessonTopic: PromptSanitizer.wrapUserInput(variables.lessonTopic || ''),
+      lessonDescription: PromptSanitizer.wrapUserInput(variables.lessonDescription || ''),
+      language: PromptSanitizer.wrapUserInput(variables.language || ''),
+      skillsList: PromptSanitizer.wrapUserInput(variables.skillsList || ''),
+    };
+    
+    // Build prompt with wrapped variables
+    const basePrompt = builder(wrappedVariables);
+    
+    // Add security instruction at the beginning
+    const securityInstruction = PromptSanitizer.getSystemInstruction();
+    
+    return `${securityInstruction}
+
+${basePrompt}`;
   }
 
   async execute(generationRequest) {
@@ -197,15 +235,25 @@ export class GenerateContentUseCase {
       const template = await this.promptTemplateService.getTemplate(
         generationRequest.template_id
       );
+      
+      // Sanitize template variables if provided
+      const sanitizedTemplateVars = generationRequest.template_variables
+        ? PromptSanitizer.sanitizeVariables(generationRequest.template_variables)
+        : {};
+      
       prompt = template.render({
         ...promptVariables,
-        ...(generationRequest.template_variables || {}),
+        ...sanitizedTemplateVars,
       });
     }
 
     if (!prompt) {
       prompt = this.buildPrompt(generationRequest.content_type_id, promptVariables);
     }
+
+    // Sanitize the final prompt before sending to AI
+    // Note: User inputs are already wrapped in delimiters by buildPrompt()
+    prompt = PromptSanitizer.sanitizePrompt(prompt);
 
     // Generate content based on type
     let contentData = {};

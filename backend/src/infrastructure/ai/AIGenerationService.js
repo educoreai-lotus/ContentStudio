@@ -5,6 +5,7 @@ import { GeminiClient } from '../external-apis/gemini/GeminiClient.js';
 import { HeygenClient } from './HeygenClient.js';
 import { SupabaseStorageClient } from '../storage/SupabaseStorageClient.js';
 import { GoogleSlidesClient } from '../external-apis/google-slides/GoogleSlidesClient.js';
+import { PromptSanitizer } from '../security/PromptSanitizer.js';
 
 /**
  * AI Generation Service Implementation
@@ -58,8 +59,12 @@ export class AIGenerationService extends IAIGenerationService {
       throw new Error('OpenAI client not configured');
     }
 
+    // Sanitize and wrap user prompt to prevent injection
+    const sanitizedPrompt = PromptSanitizer.sanitizePrompt(prompt);
+    const wrappedPrompt = PromptSanitizer.wrapUserInput(sanitizedPrompt);
+    
     const systemPrompt = this.buildSystemPrompt('text', config);
-    const fullPrompt = this.buildTextPrompt(prompt, config);
+    const fullPrompt = this.buildTextPrompt(wrappedPrompt, config);
 
     return await this.openaiClient.generateText(fullPrompt, {
       systemPrompt,
@@ -73,29 +78,65 @@ export class AIGenerationService extends IAIGenerationService {
       throw new Error('OpenAI client not configured');
     }
 
-    const systemPrompt = `You are an expert ${language} programmer. Generate clean, well-documented code with comments explaining the logic.`;
-    const fullPrompt = `Generate ${language} code for: ${prompt}\n\nInclude comments explaining the code logic.`;
+    // Sanitize user prompt and language to prevent injection
+    const sanitizedPrompt = PromptSanitizer.sanitizePrompt(prompt);
+    const sanitizedLanguage = PromptSanitizer.sanitizeString(language, 'language', {
+      maxLength: 50,
+      removeNewlines: true,
+    });
+
+    // Wrap user input in delimiters
+    const wrappedPrompt = PromptSanitizer.wrapUserInput(sanitizedPrompt);
+
+    const securityInstruction = PromptSanitizer.getSystemInstruction();
+    const systemPrompt = `${securityInstruction}
+
+You are an expert ${sanitizedLanguage} programmer. Generate clean, production-ready code that is readable and self-explanatory. Write code that learners can read and understand easily.`;
+    
+    const fullPrompt = `Generate ${sanitizedLanguage} code based on the following user request:
+
+${wrappedPrompt}
+
+IMPORTANT REQUIREMENTS:
+- Write clean, readable code without excessive comments
+- Code should be self-explanatory through clear naming and structure
+- Only add comments if absolutely necessary for complex logic
+- Focus on writing code, not explaining it with comments
+- The code itself should be the primary teaching tool
+- Learners need to see clean code, not comment-heavy examples
+
+Generate the code now:`;
 
     const generatedCode = await this.openaiClient.generateText(fullPrompt, {
       systemPrompt,
-      temperature: config.temperature || 0.3, // Lower temperature for code
+      temperature: config.temperature || 0.3,
       max_tokens: config.max_tokens || 3000,
     });
 
     return {
       code: generatedCode,
-      language: language,
+      language: sanitizedLanguage,
       explanation: config.include_explanation
-        ? await this.generateCodeExplanation(generatedCode, language)
+        ? await this.generateCodeExplanation(generatedCode, sanitizedLanguage)
         : null,
     };
   }
 
   async generateMindMap(topicText, config = {}) {
+    // Sanitize input to prevent injection
+    const sanitizedTopicText = PromptSanitizer.sanitizePrompt(topicText);
+    
     // Try Gemini first, fallback to OpenAI if it fails
     if (this.geminiClient) {
       try {
-        return await this.geminiClient.generateMindMap(topicText, config);
+        // Sanitize config before passing to Gemini
+        const sanitizedConfig = {
+          ...config,
+          topic_title: config.topic_title ? PromptSanitizer.sanitizeString(config.topic_title, 'topic_title') : undefined,
+          trainer_prompt: config.trainer_prompt ? PromptSanitizer.sanitizePrompt(config.trainer_prompt) : undefined,
+          lessonDescription: config.lessonDescription ? PromptSanitizer.sanitizePrompt(config.lessonDescription) : undefined,
+        };
+        return await this.geminiClient.generateMindMap(sanitizedTopicText, sanitizedConfig);
       } catch (error) {
         console.warn('[AIGenerationService] Gemini failed, falling back to OpenAI:', error.message);
       }
@@ -106,19 +147,40 @@ export class AIGenerationService extends IAIGenerationService {
       throw new Error('Neither Gemini nor OpenAI client is configured for mind map generation');
     }
 
-    // Extract variables from config or use topicText as fallback
-    const topic_title = config.topic_title || topicText || 'Untitled Topic';
-    const skills = Array.isArray(config.skills) ? config.skills : [];
-    const trainer_prompt = config.trainer_prompt || config.lessonDescription || '';
+    // Extract and sanitize variables from config or use topicText as fallback
+    const topic_title = PromptSanitizer.sanitizeString(
+      config.topic_title || sanitizedTopicText || 'Untitled Topic',
+      'topic_title',
+      { maxLength: 200, removeNewlines: true }
+    );
+    const skills = Array.isArray(config.skills)
+      ? config.skills.map(skill => PromptSanitizer.sanitizeString(String(skill), 'skill', { maxLength: 100 }))
+      : [];
+    const trainer_prompt = PromptSanitizer.sanitizePrompt(
+      config.trainer_prompt || config.lessonDescription || ''
+    );
 
-    const prompt = `You are an expert educational Knowledge-Graph MindMap Generator.
+    // Wrap user inputs in delimiters
+    const wrappedTopicTitle = PromptSanitizer.wrapUserInput(topic_title);
+    const wrappedTrainerPrompt = PromptSanitizer.wrapUserInput(trainer_prompt);
 
-Your task is to convert:
-• the topic_title: "${topic_title}"
-• the list of skills (for understanding only): ${JSON.stringify(skills)}
-• the trainer_prompt: "${trainer_prompt}"
+    const mindMapSecurityInstruction = PromptSanitizer.getSystemInstruction();
+    const prompt = `${mindMapSecurityInstruction}
 
-into a clear, professional conceptual MindMap.
+You are an expert educational Knowledge-Graph MindMap Generator.
+
+Your task is to convert the following user inputs into a clear, professional conceptual MindMap:
+
+Topic Title:
+${wrappedTopicTitle}
+
+List of skills (for understanding only):
+${JSON.stringify(skills)}
+
+Trainer Prompt:
+${wrappedTrainerPrompt}
+
+Now create the MindMap:
 
 IMPORTANT:
 This is NOT a tree and NOT a hierarchy.
@@ -193,8 +255,11 @@ Return ONLY valid JSON:
 Generate a radial non-hierarchical MindMap as described above.
 Return ONLY the JSON.`;
 
+    const mindMapSystemSecurity = PromptSanitizer.getSystemInstruction();
     const response = await this.openaiClient.generateText(prompt, {
-      systemPrompt: 'You are an expert educational Knowledge-Graph MindMap Generator. Create radial, non-hierarchical mind maps with semantic connections.',
+      systemPrompt: `${mindMapSystemSecurity}
+
+You are an expert educational Knowledge-Graph MindMap Generator. Create radial, non-hierarchical mind maps with semantic connections.`,
       temperature: 0.3,
       max_tokens: 4000, // Increased for more concepts
     });
@@ -218,8 +283,15 @@ Return ONLY the JSON.`;
     const style = config.style || 'educational';
     const difficulty = config.difficulty || 'intermediate';
 
-    return `You are an expert educational content creator. Create ${style} content suitable for ${difficulty} level learners. 
+    const basePrompt = `You are an expert educational content creator. Create ${style} content suitable for ${difficulty} level learners. 
 The content should be clear, well-structured, and engaging.`;
+
+    // Add security instruction for handling wrapped user input
+    const securityInstruction = PromptSanitizer.getSystemInstruction();
+
+    return `${securityInstruction}
+
+${basePrompt}`;
   }
 
   buildTextPrompt(prompt, config) {
@@ -328,10 +400,24 @@ The content should be clear, well-structured, and engaging.`;
       throw new Error('OpenAI client not configured');
     }
 
-    const slideCount = config.slide_count || 10;
-    const style = config.style || 'educational';
+    // Sanitize user input to prevent injection
+    const sanitizedTopic = PromptSanitizer.sanitizePrompt(topic);
+    const sanitizedStyle = PromptSanitizer.sanitizeString(config.style || 'educational', 'style', {
+      maxLength: 50,
+      removeNewlines: true,
+    });
 
-    const presentationPrompt = `Create a ${style} presentation about: ${topic}
+    const slideCount = Math.min(Math.max(parseInt(config.slide_count) || 10, 1), 50); // Limit 1-50
+
+    // Wrap user input in delimiters
+    const wrappedTopic = PromptSanitizer.wrapUserInput(sanitizedTopic);
+
+    const securityInstruction = PromptSanitizer.getSystemInstruction();
+    const presentationPrompt = `${securityInstruction}
+
+Create a ${sanitizedStyle} presentation about the following topic:
+
+${wrappedTopic}
 
 Generate ${slideCount} slides with:
 - Clear titles for each slide
@@ -448,13 +534,22 @@ Format as JSON with this structure:
    * @returns {string} Avatar text
    */
   buildAvatarText(lessonData = {}) {
+    // Sanitize all input to prevent injection
+    const sanitizedData = PromptSanitizer.sanitizeVariables({
+      lessonTopic: lessonData.lessonTopic || '',
+      lessonDescription: lessonData.lessonDescription || '',
+      skillsList: lessonData.skillsList || [],
+      trainerRequestText: lessonData.trainerRequestText || '',
+      transcriptText: lessonData.transcriptText || '',
+    });
+
     const {
       lessonTopic = '',
       lessonDescription = '',
       skillsList = [],
       trainerRequestText = '',
       transcriptText = '',
-    } = lessonData;
+    } = sanitizedData;
 
     // Ensure skillsList is an array
     let skillsArray = [];
