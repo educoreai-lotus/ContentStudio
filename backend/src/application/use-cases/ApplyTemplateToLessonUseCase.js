@@ -93,6 +93,17 @@ export class ApplyTemplateToLessonUseCase {
       // Trim whitespace from type name (fix for database issues)
       dbTypeName = String(dbTypeName).trim();
       
+      // Debug logging for mind_map and avatar_video
+      if (typeId === 5 || typeId === 6) {
+        console.log(`[ApplyTemplateToLessonUseCase] Found content_type_id ${typeId}:`, {
+          typeId,
+          dbTypeName,
+          typeNameMapValue: typeNameMap.get(typeId),
+          content_id: content.content_id,
+          hasContentData: !!content.content_data,
+        });
+      }
+      
       if (!contentByType[dbTypeName]) {
         contentByType[dbTypeName] = [];
       }
@@ -100,6 +111,11 @@ export class ApplyTemplateToLessonUseCase {
     });
     
     console.log('[ApplyTemplateToLessonUseCase] Content by type (normalized):', Object.keys(contentByType));
+    console.log('[ApplyTemplateToLessonUseCase] Content by type details:', Object.entries(contentByType).map(([type, items]) => ({
+      type,
+      count: items.length,
+      content_ids: items.map(c => c.content_id),
+    })));
 
     // Apply template format order
     const formatOrder = template.format_order || [];
@@ -191,13 +207,25 @@ export class ApplyTemplateToLessonUseCase {
       'avatar_video': 'avatar_video',
     };
     const templateDbTypes = new Set(formatOrder.map(f => formatNameToDbName[f] || f));
+    
+    console.log('[ApplyTemplateToLessonUseCase] Checking for content types not in template order...', {
+      templateDbTypes: Array.from(templateDbTypes),
+      contentByTypeKeys: Object.keys(contentByType),
+    });
+    
     Object.keys(contentByType).forEach((dbTypeName) => {
       if (!templateDbTypes.has(dbTypeName)) {
         const formatType = dbNameToFormatName[dbTypeName] || dbTypeName;
+        console.log(`[ApplyTemplateToLessonUseCase] Adding content type not in template order: ${dbTypeName} -> ${formatType}`, {
+          contentCount: contentByType[dbTypeName].length,
+          content_ids: contentByType[dbTypeName].map(c => c.content_id),
+        });
         orderedContent.push({
           format_type: formatType,
           content: contentByType[dbTypeName],
         });
+      } else {
+        console.log(`[ApplyTemplateToLessonUseCase] Content type ${dbTypeName} already in template order, skipping`);
       }
     });
 

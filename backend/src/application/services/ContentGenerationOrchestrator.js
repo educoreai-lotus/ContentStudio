@@ -100,11 +100,17 @@ export class ContentGenerationOrchestrator {
     ];
 
     const results = {};
+    const startTime = Date.now();
+    
     const progressPromises = formats.map(async (format) => {
+      const formatStartTime = Date.now();
       try {
         // Emit progress: starting
         onProgress(format.name, 'starting', `[AI] Starting: ${format.label}`);
-        logger.info(`[ContentGenerationOrchestrator] Starting generation: ${format.label}`);
+        logger.info(`[ContentGenerationOrchestrator] Starting generation: ${format.label}`, {
+          format: format.name,
+          content_type_id: format.id,
+        });
 
         // Build generation request for this format
         const generationRequest = {
@@ -112,19 +118,53 @@ export class ContentGenerationOrchestrator {
           content_type_id: format.id,
         };
 
+        logger.info(`[ContentGenerationOrchestrator] Calling GenerateContentUseCase for ${format.label}`, {
+          topic_id: generationRequest.topic_id,
+          content_type_id: format.id,
+          lessonTopic: generationRequest.lessonTopic,
+        });
+
         // Generate content using existing GenerateContentUseCase
-        const generatedContent = await this.generateContentUseCase.execute(generationRequest);
+        // Add timeout of 5 minutes per format
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => {
+            reject(new Error(`Generation timeout: ${format.label} took more than 5 minutes`));
+          }, 300000); // 5 minutes
+        });
+
+        const generatedContent = await Promise.race([
+          this.generateContentUseCase.execute(generationRequest),
+          timeoutPromise,
+        ]);
+
+        logger.info(`[ContentGenerationOrchestrator] Content generated for ${format.label}`, {
+          format: format.name,
+          hasContentData: !!generatedContent.content_data,
+          contentDataKeys: generatedContent.content_data ? Object.keys(generatedContent.content_data) : [],
+        });
 
         // Override generation_method_id to 'video_to_lesson' (instead of 'ai_assisted')
         generatedContent.generation_method_id = 'video_to_lesson';
 
         // Save to database
+        logger.info(`[ContentGenerationOrchestrator] Saving ${format.label} to database...`, {
+          format: format.name,
+        });
+
         const savedContent = await this.contentRepository.create(generatedContent);
+
+        const formatDuration = Date.now() - formatStartTime;
+        logger.info(`[ContentGenerationOrchestrator] Saved ${format.label} to database`, {
+          format: format.name,
+          content_id: savedContent.content_id,
+          duration: `${formatDuration}ms`,
+        });
 
         // Emit progress: completed
         onProgress(format.name, 'completed', `[AI] Completed: ${format.label}`);
-        logger.info(`[ContentGenerationOrchestrator] Completed generation: ${format.label}`, {
+        logger.info(`[ContentGenerationOrchestrator] ✅ Completed generation: ${format.label}`, {
           content_id: savedContent.content_id,
+          duration: `${formatDuration}ms`,
         });
 
         // Return result
@@ -138,10 +178,14 @@ export class ContentGenerationOrchestrator {
 
         return results[format.name];
       } catch (error) {
+        const formatDuration = Date.now() - formatStartTime;
         // Emit progress: failed
-        onProgress(format.name, 'failed', `[AI] Failed: ${format.label} - ${error.message}`);
-        logger.error(`[ContentGenerationOrchestrator] Failed to generate ${format.label}`, {
-          error: error.message,
+        const errorMessage = error.message || 'Unknown error';
+        onProgress(format.name, 'failed', `[AI] Failed: ${format.label} - ${errorMessage}`);
+        logger.error(`[ContentGenerationOrchestrator] ❌ Failed to generate ${format.label}`, {
+          format: format.name,
+          error: errorMessage,
+          duration: `${formatDuration}ms`,
           stack: error.stack,
         });
 
@@ -149,7 +193,7 @@ export class ContentGenerationOrchestrator {
           format: format.name,
           content_type_id: format.id,
           generated: false,
-          error: error.message,
+          error: errorMessage,
         };
 
         return results[format.name];
@@ -157,12 +201,40 @@ export class ContentGenerationOrchestrator {
     });
 
     // Wait for all formats to complete (or fail)
-    await Promise.all(progressPromises);
-
-    logger.info('[ContentGenerationOrchestrator] All formats processed', {
+    // Use Promise.allSettled to ensure all formats complete even if some fail
+    logger.info('[ContentGenerationOrchestrator] Waiting for all formats to complete...', {
       topicId,
-      formatsGenerated: Object.keys(results).filter(k => results[k].generated).length,
-      formatsFailed: Object.keys(results).filter(k => !results[k].generated).length,
+      formatsCount: formats.length,
+    });
+
+    const settledResults = await Promise.allSettled(progressPromises);
+    
+    const totalDuration = Date.now() - startTime;
+    const successCount = Object.keys(results).filter(k => results[k].generated).length;
+    const failedCount = Object.keys(results).filter(k => !results[k].generated).length;
+
+    logger.info('[ContentGenerationOrchestrator] ✅ All formats processed', {
+      topicId,
+      formatsGenerated: successCount,
+      formatsFailed: failedCount,
+      totalDuration: `${totalDuration}ms (${Math.round(totalDuration / 1000)}s)`,
+      settledResultsCount: settledResults.length,
+    });
+
+    // Log detailed results
+    formats.forEach(format => {
+      const result = results[format.name];
+      if (result) {
+        if (result.generated) {
+          logger.info(`[ContentGenerationOrchestrator] ✅ ${format.label}: Success`, {
+            content_id: result.content_id,
+          });
+        } else {
+          logger.warn(`[ContentGenerationOrchestrator] ❌ ${format.label}: Failed`, {
+            error: result.error,
+          });
+        }
+      }
     });
 
     return {

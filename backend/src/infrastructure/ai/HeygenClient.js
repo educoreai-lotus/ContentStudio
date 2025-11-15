@@ -108,7 +108,7 @@ export class HeygenClient {
         console.log(`[HeygenClient] Video downloaded (${videoBuffer.length} bytes)`);
 
         console.log(`[HeygenClient] Uploading to Supabase Storage...`);
-        let storagePath = heygenVideoUrl;
+        let storageUrl = null; // Start with null, not Heygen URL
         try {
           const uploadedUrl = await this.uploadToStorage({
             fileBuffer: videoBuffer,
@@ -116,20 +116,33 @@ export class HeygenClient {
             contentType: 'video/mp4',
           });
           if (uploadedUrl) {
-            storagePath = uploadedUrl;
+            storageUrl = uploadedUrl;
+            console.log(`[HeygenClient] Video uploaded to Supabase Storage: ${storageUrl}`);
+          } else {
+            console.warn('[HeygenClient] uploadToStorage returned null, using Heygen URL as fallback');
+            storageUrl = heygenVideoUrl;
           }
         } catch (uploadErr) {
-          console.warn('[HeygenClient] Falling back to Heygen URL due to upload error:', uploadErr.message);
+          console.warn('[HeygenClient] Upload to Supabase failed, using Heygen URL as fallback:', uploadErr.message);
+          storageUrl = heygenVideoUrl; // Fallback to Heygen URL only if upload fails
         }
 
+        // Ensure we always return a valid URL
+        if (!storageUrl) {
+          console.warn('[HeygenClient] No storage URL available, using Heygen URL as final fallback');
+          storageUrl = heygenVideoUrl;
+        }
+
+        console.log(`[HeygenClient] Returning video URL: ${storageUrl} (${storageUrl.startsWith('http') ? 'Full URL' : 'Path'})`);
+
         return {
-          videoUrl: storagePath,
-          heygenVideoUrl: heygenVideoUrl,
+          videoUrl: storageUrl, // This should be Supabase public URL if upload succeeded, otherwise Heygen URL
+          heygenVideoUrl: heygenVideoUrl, // Always keep original Heygen URL for reference
           videoId,
           duration: config.duration || 15,
           script,
           status: 'completed',
-          fallback: false,
+          fallback: storageUrl === heygenVideoUrl, // Mark as fallback if we're using Heygen URL
         };
       } catch (downloadErr) {
         const fallbackUrl = `https://app.heygen.com/share/${videoId}`;
@@ -248,7 +261,16 @@ export class HeygenClient {
         .from('media')
         .getPublicUrl(filePath);
 
-      return urlData.publicUrl;
+      const publicUrl = urlData?.publicUrl;
+      
+      if (!publicUrl) {
+        console.error('[HeygenClient] Failed to get public URL from Supabase');
+        throw new Error('Failed to get public URL from Supabase storage');
+      }
+
+      console.log(`[HeygenClient] Video uploaded successfully to Supabase: ${publicUrl}`);
+      
+      return publicUrl;
     } catch (error) {
       console.error('[HeygenClient] Storage upload error:', error.message);
       throw new Error(`Failed to upload video to storage: ${error.message}`);
