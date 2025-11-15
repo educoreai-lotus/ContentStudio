@@ -271,12 +271,7 @@ export default function TopicContentManager() {
   return (
     <div className={`min-h-screen ${theme === 'day-mode' ? 'bg-gray-50' : 'bg-[#1e293b]'}`}>
       {/* Fixed Left Sidebar */}
-      <div className="hidden lg:block fixed left-0 top-0 h-screen w-[280px] overflow-y-auto z-40 border-r"
-        style={{
-          backgroundColor: theme === 'day-mode' ? '#ffffff' : '#0f172a',
-          borderColor: theme === 'day-mode' ? '#e5e7eb' : '#334155'
-        }}
-      >
+      <div className="hidden lg:block fixed left-0 top-0 h-screen w-[280px] overflow-y-auto z-40">
         <div className="h-full pt-20 px-4">
           <ContentHistorySidebar
             existingContent={existingContent}

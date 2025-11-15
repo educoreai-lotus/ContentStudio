@@ -290,10 +290,10 @@ export function ContentHistorySidebar({ existingContent = [], onHistoryChanged }
 
   return (
     <aside
-      className={`rounded-2xl border shadow-xl p-4 h-full overflow-y-auto ${
+      className={`p-4 h-full overflow-y-auto ${
         theme === 'day-mode'
-          ? 'bg-white border-gray-200 text-gray-900'
-          : 'bg-slate-900 border-slate-700 text-slate-200'
+          ? 'bg-white text-gray-900'
+          : 'bg-slate-900 text-slate-200'
       }`}
     >
       <div className="flex items-center justify-between mb-6">
