@@ -90,7 +90,7 @@ export const CourseDetail = () => {
   return (
     <div
       className={`min-h-screen p-8 ${
-        theme === 'day-mode' ? 'bg-gray-50' : 'bg-slate-900'
+        theme === 'day-mode' ? 'bg-gray-50' : 'bg-[#1e293b]'
       }`}
     >
       <div className="max-w-6xl mx-auto">
@@ -173,7 +173,7 @@ export const CourseDetail = () => {
           className={`rounded-2xl shadow-lg p-6 mb-8 ${
             theme === 'day-mode'
               ? 'bg-white border border-gray-200'
-              : 'bg-gray-800 border border-gray-700'
+              : 'bg-[#1e293b] border border-[#334155]'
           }`}
           style={{
             background: theme === 'day-mode' ? 'var(--gradient-card)' : undefined,
@@ -236,7 +236,7 @@ export const CourseDetail = () => {
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                     theme === 'day-mode'
                       ? 'bg-gray-200 hover:bg-gray-300 text-gray-700'
-                      : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+                      : 'bg-[#334155] hover:bg-[#475569] text-[#f8fafc]'
                   }`}
                 >
                   <i className="fas fa-edit mr-2"></i>
@@ -280,7 +280,7 @@ export const CourseDetail = () => {
             className={`rounded-2xl shadow-lg p-8 text-center ${
               theme === 'day-mode'
                 ? 'bg-white border border-gray-200'
-                : 'bg-gray-800 border border-gray-700'
+                : 'bg-[#1e293b] border border-[#334155]'
             }`}
             style={{
               background: theme === 'day-mode' ? 'var(--gradient-card)' : undefined,
@@ -296,7 +296,7 @@ export const CourseDetail = () => {
             className={`rounded-2xl shadow-lg p-8 text-center ${
               theme === 'day-mode'
                 ? 'bg-white border border-gray-200'
-                : 'bg-gray-800 border border-gray-700'
+                : 'bg-[#1e293b] border border-[#334155]'
             }`}
             style={{
               background: theme === 'day-mode' ? 'var(--gradient-card)' : undefined,
@@ -329,7 +329,7 @@ export const CourseDetail = () => {
                   className={`rounded-2xl shadow-lg p-6 transition-all ${
                     theme === 'day-mode'
                       ? 'bg-white border border-gray-200 hover:border-emerald-400'
-                      : 'bg-gray-800 border border-gray-700 hover:border-emerald-500'
+                      : 'bg-[#1e293b] border border-[#334155] hover:border-[#0d9488]'
                   }`}
                   style={{
                     background: theme === 'day-mode' ? 'var(--gradient-card)' : undefined,
@@ -389,7 +389,7 @@ export const CourseDetail = () => {
                         </div>
                         <div
                           className={`w-full rounded-full h-2 ${
-                            theme === 'day-mode' ? 'bg-gray-200' : 'bg-gray-700'
+                            theme === 'day-mode' ? 'bg-gray-200' : 'bg-[#334155]'
                           }`}
                         >
                           <div
@@ -427,7 +427,7 @@ export const CourseDetail = () => {
                         className={`px-3 py-1 rounded-lg text-sm font-medium transition-all ${
                           theme === 'day-mode'
                             ? 'bg-gray-200 hover:bg-gray-300 text-gray-700'
-                            : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+                            : 'bg-[#334155] hover:bg-[#475569] text-[#f8fafc]'
                         }`}
                       >
                         Edit
