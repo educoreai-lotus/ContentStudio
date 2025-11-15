@@ -102,16 +102,45 @@ export class AIGenerationController {
       });
 
       const content = await this.generateContentUseCase.execute(generationRequest);
+      
+      // Check if content generation failed (especially for avatar_video)
+      const isFailed = content.content_data?.status === 'failed';
+      const isAvatarVideo = content.content_type_id === 6; // avatar_video
+      
+      if (isFailed && isAvatarVideo) {
+        const errorMessage = content.content_data?.reason || 
+                            content.content_data?.error || 
+                            'Avatar video generation failed';
+        const errorCode = content.content_data?.errorCode || 'AVATAR_GENERATION_FAILED';
+        
+        console.error('[AI Generation] Avatar video generation failed:', {
+          contentType: content.content_type_id,
+          topicId: content.topic_id,
+          error: errorMessage,
+          errorCode,
+        });
+
+        return res.status(400).json({
+          success: false,
+          error: errorMessage,
+          errorCode,
+          data: ContentDTO.toContentResponse(content),
+          message: 'Avatar video generation failed',
+        });
+      }
+
       console.log('[AI Generation] Content generated successfully:', {
         hasContentData: !!content.content_data,
         contentType: content.content_type_id,
         topicId: content.topic_id,
+        status: content.content_data?.status || 'success',
       });
 
       const responseData = ContentDTO.toContentResponse(content);
       console.log('[AI Generation] Response data prepared:', {
         hasContentData: !!responseData.content_data,
         contentDataKeys: responseData.content_data ? Object.keys(responseData.content_data) : [],
+        status: responseData.content_data?.status || 'success',
       });
 
       res.status(201).json({
