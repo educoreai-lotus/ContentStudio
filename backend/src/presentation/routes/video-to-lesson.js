@@ -7,8 +7,8 @@ import { OpenAIClient } from '../../infrastructure/external-apis/openai/OpenAICl
 import { GeminiClient } from '../../infrastructure/external-apis/gemini/GeminiClient.js';
 import { TTSClient } from '../../infrastructure/external-apis/openai/TTSClient.js';
 import { AIGenerationService } from '../../infrastructure/ai/AIGenerationService.js';
-import { TopicRepository } from '../../infrastructure/database/repositories/TopicRepository.js';
-import { ContentRepository } from '../../infrastructure/database/repositories/ContentRepository.js';
+import { RepositoryFactory } from '../../infrastructure/database/repositories/RepositoryFactory.js';
+import { ContentGenerationOrchestrator } from '../../application/services/ContentGenerationOrchestrator.js';
 
 const router = express.Router();
 
@@ -30,44 +30,105 @@ const aiGenerationService = new AIGenerationService({
   googleServiceAccountJson: process.env.GOOGLE_SERVICE_ACCOUNT_JSON,
 });
 
-// Initialize repositories
-const topicRepository = new TopicRepository(null);
-const contentRepository = new ContentRepository();
+// Initialize repositories and services
+let topicRepository = null;
+let contentRepository = null;
+let videoToLessonUseCase = null;
+let videoTranscriptionService = null;
+let contentGenerationOrchestrator = null;
+let videoToLessonController = null;
 
-// Initialize use case
-const videoToLessonUseCase = new VideoToLessonUseCase({
-  whisperClient,
-  openaiClient,
-  geminiClient,
-  ttsClient,
-  topicRepository,
-  contentRepository,
-  aiGenerationService,
+// Initialize repositories and services asynchronously
+const initServices = async () => {
+  if (videoToLessonController) {
+    return videoToLessonController; // Already initialized
+  }
+
+  try {
+    topicRepository = await RepositoryFactory.getTopicRepository();
+    contentRepository = await RepositoryFactory.getContentRepository();
+
+    // Initialize use case
+    videoToLessonUseCase = new VideoToLessonUseCase({
+      whisperClient,
+      openaiClient,
+      geminiClient,
+      ttsClient,
+      topicRepository,
+      contentRepository,
+      aiGenerationService,
+    });
+
+    // Initialize video transcription service
+    videoTranscriptionService = openaiApiKey
+      ? new VideoTranscriptionService({ openaiApiKey })
+      : null;
+
+    // Initialize Content Generation Orchestrator
+    contentGenerationOrchestrator = openaiApiKey
+      ? new ContentGenerationOrchestrator({
+          aiGenerationService,
+          openaiClient,
+          contentRepository,
+          topicRepository,
+        })
+      : null;
+
+    // Initialize controller
+    videoToLessonController = new VideoToLessonController({
+      videoToLessonUseCase,
+      videoTranscriptionService,
+      contentGenerationOrchestrator,
+    });
+
+    return videoToLessonController;
+  } catch (error) {
+    console.error('[video-to-lesson] Failed to initialize repositories:', error);
+    throw error;
+  }
+};
+
+// Initialize immediately
+initServices().catch(err => {
+  console.error('[video-to-lesson] Initialization error:', err);
 });
 
-// Initialize video transcription service
-const videoTranscriptionService = openaiApiKey
-  ? new VideoTranscriptionService({ openaiApiKey })
-  : null;
-
-// Initialize controller
-const videoToLessonController = new VideoToLessonController({
-  videoToLessonUseCase,
-  videoTranscriptionService,
-});
+// Middleware to ensure controller is initialized
+const ensureController = async (req, res, next) => {
+  try {
+    const controller = await initServices();
+    req.videoToLessonController = controller;
+    next();
+  } catch (error) {
+    res.status(503).json({
+      success: false,
+      error: 'Service is initializing. Please try again in a moment.',
+    });
+  }
+};
 
 // Routes
 router.post(
   '/',
-  videoToLessonController.getUploadMiddleware(),
-  (req, res, next) => videoToLessonController.transform(req, res, next)
+  ensureController,
+  (req, res, next) => {
+    req.videoToLessonController.getUploadMiddleware()(req, res, (err) => {
+      if (err) return next(err);
+      return req.videoToLessonController.transform(req, res, next);
+    });
+  }
 );
 
-// New transcription endpoint
+// New transcription endpoint with automatic content generation
 router.post(
   '/transcribe',
-  videoToLessonController.getUploadMiddleware(),
-  (req, res, next) => videoToLessonController.transcribe(req, res, next)
+  ensureController,
+  (req, res, next) => {
+    req.videoToLessonController.getUploadMiddleware()(req, res, (err) => {
+      if (err) return next(err);
+      return req.videoToLessonController.transcribe(req, res, next);
+    });
+  }
 );
 
 export default router;

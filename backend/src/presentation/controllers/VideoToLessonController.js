@@ -40,9 +40,10 @@ const upload = multer({
  * Video-to-Lesson Controller
  */
 export class VideoToLessonController {
-  constructor({ videoToLessonUseCase, videoTranscriptionService }) {
+  constructor({ videoToLessonUseCase, videoTranscriptionService, contentGenerationOrchestrator }) {
     this.videoToLessonUseCase = videoToLessonUseCase;
     this.videoTranscriptionService = videoTranscriptionService;
+    this.contentGenerationOrchestrator = contentGenerationOrchestrator;
     this.upload = upload;
   }
 
@@ -119,19 +120,19 @@ export class VideoToLessonController {
         });
       }
 
-      let result;
+      let transcriptionResult;
 
       if (youtubeUrl) {
         // Handle YouTube URL
         logger.info('[VideoToLessonController] Transcribing YouTube URL', { youtubeUrl });
-        result = await this.videoTranscriptionService.transcribeYouTube(youtubeUrl);
+        transcriptionResult = await this.videoTranscriptionService.transcribeYouTube(youtubeUrl);
       } else if (uploadedFile) {
         // Handle file upload
         logger.info('[VideoToLessonController] Transcribing uploaded file', {
           filename: uploadedFile.originalname,
           path: uploadedFile.path,
         });
-        result = await this.videoTranscriptionService.transcribeUploadedFile(uploadedFile.path);
+        transcriptionResult = await this.videoTranscriptionService.transcribeUploadedFile(uploadedFile.path);
 
         // Clean up uploaded file after processing
         try {
@@ -146,15 +147,58 @@ export class VideoToLessonController {
         }
       }
 
+      // Extract transcript text
+      const transcriptText = transcriptionResult.transcript;
+
+      // Step 2: Generate all lesson formats using ContentGenerationOrchestrator
+      let generatedContent = null;
+      if (this.contentGenerationOrchestrator && transcriptText) {
+        try {
+          logger.info('[VideoToLessonController] Starting automatic content generation from transcript', {
+            transcriptLength: transcriptText.length,
+          });
+
+          const { trainer_id, topic_name, course_id } = req.body;
+          
+          generatedContent = await this.contentGenerationOrchestrator.generateAll(transcriptText, {
+            trainer_id,
+            topic_name,
+            course_id: course_id ? parseInt(course_id) : null,
+          });
+
+          logger.info('[VideoToLessonController] All content formats generated successfully', {
+            topic_id: generatedContent.topic_id,
+            formatsCount: Object.keys(generatedContent.content_formats).length,
+          });
+        } catch (orchestratorError) {
+          logger.error('[VideoToLessonController] Content generation failed', {
+            error: orchestratorError.message,
+            stack: orchestratorError.stack,
+          });
+          // Continue with transcription result even if generation fails
+        }
+      }
+
+      // Return response with transcription and generated content
       res.status(200).json({
         success: true,
         data: {
-          transcript: result.transcript,
-          source: result.source,
-          videoType: result.videoType,
-          videoId: result.videoId || null,
+          transcript: {
+            text: transcriptText,
+            source: transcriptionResult.source,
+            videoType: transcriptionResult.videoType,
+            videoId: transcriptionResult.videoId || null,
+          },
+          // Include generated content if available
+          ...(generatedContent && {
+            topic_id: generatedContent.topic_id,
+            metadata: generatedContent.metadata,
+            content_formats: generatedContent.content_formats,
+          }),
         },
-        message: 'Video transcribed successfully',
+        message: generatedContent
+          ? 'Video transcribed and all lesson formats generated successfully'
+          : 'Video transcribed successfully',
       });
     } catch (error) {
       // Clean up file on error
