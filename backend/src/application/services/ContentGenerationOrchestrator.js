@@ -54,6 +54,11 @@ export class ContentGenerationOrchestrator {
     // Step 4: Create or get topic
     let topicId = options.topic_id;
     if (!topicId) {
+      // Validate trainer_id before creating topic
+      if (!options.trainer_id) {
+        throw new Error('Trainer ID is required to create a topic. Please provide trainer_id in options.');
+      }
+      
       const topic = await this.createTopic(metadata, options);
       topicId = topic.topic_id;
       logger.info('[ContentGenerationOrchestrator] Topic created', { topicId });

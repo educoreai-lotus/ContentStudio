@@ -158,7 +158,18 @@ export class VideoToLessonController {
             transcriptLength: transcriptText.length,
           });
 
-          const { trainer_id, topic_name, course_id } = req.body;
+          // Get trainer_id from request body or authentication
+          const trainer_id = req.body.trainer_id || req.auth?.trainer?.trainer_id || null;
+          const { topic_name, course_id } = req.body;
+
+          // Validate trainer_id before proceeding
+          if (!trainer_id) {
+            logger.warn('[VideoToLessonController] Trainer ID not provided, skipping content generation', {
+              hasBodyTrainerId: !!req.body.trainer_id,
+              hasAuthTrainerId: !!req.auth?.trainer?.trainer_id,
+            });
+            throw new Error('Trainer ID is required for content generation. Please provide trainer_id in request body or ensure authentication is configured.');
+          }
           
           generatedContent = await this.contentGenerationOrchestrator.generateAll(transcriptText, {
             trainer_id,
@@ -176,6 +187,7 @@ export class VideoToLessonController {
             stack: orchestratorError.stack,
           });
           // Continue with transcription result even if generation fails
+          // The error is logged but not thrown, so the transcription result is still returned
         }
       }
 
