@@ -86,6 +86,13 @@ export class HeygenClient {
           config.pollInterval || 5000,
         );
       } catch (pollError) {
+        // If video generation failed permanently, don't return fallback - throw error
+        if (pollError.status === 'failed' || (pollError.message && pollError.message.includes('Video generation failed'))) {
+          console.error('[HeygenClient] Video generation failed permanently:', pollError.errorMessage || pollError.message);
+          throw new Error(`Avatar video generation failed: ${pollError.errorMessage || pollError.message || 'Unknown error'}`);
+        }
+        
+        // If polling timeout/error but not a permanent failure, return fallback URL
         const fallbackUrl = pollError.videoUrl || `https://app.heygen.com/share/${videoId}`;
         console.warn('[HeygenClient] Video not ready within polling window, returning fallback URL:', fallbackUrl);
         return {
@@ -173,7 +180,7 @@ export class HeygenClient {
   async pollVideoStatus(videoId, maxAttempts = 60, interval = 3000) {
     console.log(`[HeygenClient] Starting to poll for video ${videoId}`);
     
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
       try {
         // Heygen API v1 endpoint for status
         const response = await this.client.get(`/v1/video_status.get?video_id=${videoId}`);
@@ -186,12 +193,30 @@ export class HeygenClient {
           console.log(`[HeygenClient] Video completed! URL: ${videoUrl}`);
           return { status, videoUrl };
         } else if (status === 'failed') {
-          throw new Error('Video generation failed');
+          // Get error message from response if available
+          const errorMessage = response.data.data.error_message || response.data.data.error || 'Video generation failed';
+          console.error(`[HeygenClient] Video generation failed: ${errorMessage}`, {
+            videoId,
+            attempt: attempt + 1,
+            responseData: response.data.data,
+          });
+          // Throw error immediately - don't continue polling if video failed
+          const failedError = new Error(`Video generation failed: ${errorMessage}`);
+          failedError.status = 'failed';
+          failedError.videoId = videoId;
+          failedError.errorMessage = errorMessage;
+          throw failedError;
         }
 
-        // Wait before next poll
+        // Wait before next poll (only if status is 'processing' or other non-final status)
         await new Promise(resolve => setTimeout(resolve, interval));
       } catch (error) {
+        // If video failed, don't retry - throw immediately
+        if (error.status === 'failed' || (error.message && error.message.includes('Video generation failed'))) {
+          console.error(`[HeygenClient] Video generation failed permanently, stopping polling:`, error.message);
+          throw error;
+        }
+        
         // If we get a 404 or network error, the video might still be processing
         console.error(`[HeygenClient] Poll attempt ${attempt + 1} failed:`, error.response?.data || error.message);
         
