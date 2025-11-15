@@ -105,10 +105,19 @@ export const MindMap = ({ data, className = '' }) => {
     // If nodes have no positions, calculate a simple layout
     const nodesWithPositions = calculateLayoutIfNeeded(nodes, edges);
 
-    return {
+    const result = {
       nodes: nodesWithPositions,
       edges: edges,
     };
+    
+    console.log('[MindMap] Transformed result:', {
+      nodesCount: result.nodes.length,
+      edgesCount: result.edges.length,
+      firstNode: result.nodes[0],
+      firstEdge: result.edges[0],
+    });
+    
+    return result;
   }, [data, theme]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(transformedData.nodes);
@@ -116,9 +125,15 @@ export const MindMap = ({ data, className = '' }) => {
 
   // Update nodes and edges when data changes
   useEffect(() => {
-    setNodes(transformedData.nodes);
-    setEdges(transformedData.edges);
-  }, [transformedData, setNodes, setEdges]);
+    if (transformedData.nodes.length > 0 || transformedData.edges.length > 0) {
+      console.log('[MindMap] Updating nodes and edges:', {
+        nodesCount: transformedData.nodes.length,
+        edgesCount: transformedData.edges.length,
+      });
+      setNodes(transformedData.nodes);
+      setEdges(transformedData.edges);
+    }
+  }, [data, transformedData.nodes.length, transformedData.edges.length, setNodes, setEdges]);
 
   const onConnect = useCallback(
     (params) => setEdges((eds) => addEdge(params, eds)),
@@ -141,6 +156,7 @@ export const MindMap = ({ data, className = '' }) => {
       }}
     >
       <ReactFlow
+        key={`mindmap-${nodes.length}-${edges.length}`}
         nodes={nodes}
         edges={edges}
         onNodesChange={onNodesChange}
@@ -151,6 +167,7 @@ export const MindMap = ({ data, className = '' }) => {
         fitViewOptions={{
           padding: 0.2,
           maxZoom: 1.5,
+          minZoom: 0.5,
         }}
         proOptions={{ hideAttribution: true }}
         defaultEdgeOptions={{
