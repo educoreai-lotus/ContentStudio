@@ -271,6 +271,26 @@ export class PostgreSQLTopicRepository extends ITopicRepository {
   }
 
   /**
+   * Increment usage_count for a topic
+   * @param {number} topicId - Topic ID
+   * @returns {Promise<void>}
+   */
+  async incrementUsageCount(topicId) {
+    if (!this.db.isConnected()) {
+      throw new Error('Database not connected.');
+    }
+
+    const query = `
+      UPDATE topics 
+      SET usage_count = usage_count + 1,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE topic_id = $1
+    `;
+
+    await this.db.query(query, [topicId]);
+  }
+
+  /**
    * Map database row to Topic entity
    * @param {Object} row - Database row
    * @returns {Topic} Topic entity
@@ -287,6 +307,7 @@ export class PostgreSQLTopicRepository extends ITopicRepository {
       language: row.language || 'en',
       status: row.status,
       format_flags: row.format_flags || {},
+      usage_count: row.usage_count || 0,
       created_at: row.created_at,
       updated_at: row.updated_at,
     });

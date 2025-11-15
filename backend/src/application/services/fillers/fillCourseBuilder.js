@@ -53,6 +53,17 @@ export async function fillCourseBuilder(data) {
         filled.topic_language = topic.topic_language || '';
         filled.template_id = topic.template_id || null;
         
+        // Increment usage_count for this topic
+        try {
+          await db.query(
+            'UPDATE topics SET usage_count = usage_count + 1, updated_at = CURRENT_TIMESTAMP WHERE topic_id = $1',
+            [data.topic_id]
+          );
+        } catch (error) {
+          logger.warn('[fillCourseBuilder] Failed to increment topic usage count:', error.message);
+          // Don't fail the entire operation if usage count increment fails
+        }
+        
         // Parse format_order from JSON if it's a string
         if (topic.format_order) {
           filled.format_order = typeof topic.format_order === 'string' 

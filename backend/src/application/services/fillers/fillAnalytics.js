@@ -40,6 +40,21 @@ export async function fillAnalytics(data) {
     `;
     const coursesResult = await db.query(coursesQuery);
     
+    // Increment usage_count for all fetched courses
+    const courseIds = coursesResult.rows.map(row => row.course_id);
+    if (courseIds.length > 0) {
+      try {
+        const placeholders = courseIds.map((_, index) => `$${index + 1}`).join(', ');
+        await db.query(
+          `UPDATE trainer_courses SET usage_count = usage_count + 1, updated_at = CURRENT_TIMESTAMP WHERE course_id IN (${placeholders})`,
+          courseIds
+        );
+      } catch (error) {
+        logger.warn('[fillAnalytics] Failed to increment courses usage count:', error.message);
+        // Don't fail the entire operation if usage count increment fails
+      }
+    }
+    
     filled.courses = coursesResult.rows.map(row => ({
       course_id: row.course_id,
       course_name: row.course_name || '',
@@ -71,6 +86,21 @@ export async function fillAnalytics(data) {
       ORDER BY created_at DESC
     `;
     const topicsResult = await db.query(topicsQuery);
+    
+    // Increment usage_count for all fetched topics
+    const topicIds = topicsResult.rows.map(row => row.topic_id);
+    if (topicIds.length > 0) {
+      try {
+        const placeholders = topicIds.map((_, index) => `$${index + 1}`).join(', ');
+        await db.query(
+          `UPDATE topics SET usage_count = usage_count + 1, updated_at = CURRENT_TIMESTAMP WHERE topic_id IN (${placeholders})`,
+          topicIds
+        );
+      } catch (error) {
+        logger.warn('[fillAnalytics] Failed to increment topics usage count:', error.message);
+        // Don't fail the entire operation if usage count increment fails
+      }
+    }
     
     filled.topics_stand_alone = topicsResult.rows.map(row => ({
       topic_id: row.topic_id,

@@ -27,7 +27,7 @@ export async function fillDirectory(data) {
 
     // If course_id is provided, fetch course details
     if (data.course_id) {
-      const courseQuery = 'SELECT course_id, course_name, trainer_id, status FROM trainer_courses WHERE course_id = $1 AND status != $2';
+      const courseQuery = 'SELECT course_id, course_name, trainer_id, status, permissions FROM trainer_courses WHERE course_id = $1 AND status != $2';
       const courseResult = await db.query(courseQuery, [data.course_id, 'deleted']);
       
       if (courseResult.rows.length > 0) {
@@ -36,6 +36,18 @@ export async function fillDirectory(data) {
         filled.course_name = course.course_name || '';
         filled.trainer_id = course.trainer_id || '';
         filled.status = course.status || '';
+        filled.permissions = course.permissions || null;
+        
+        // Increment usage_count for this course
+        try {
+          await db.query(
+            'UPDATE trainer_courses SET usage_count = usage_count + 1, updated_at = CURRENT_TIMESTAMP WHERE course_id = $1',
+            [data.course_id]
+          );
+        } catch (error) {
+          logger.warn('[fillDirectory] Failed to increment course usage count:', error.message);
+          // Don't fail the entire operation if usage count increment fails
+        }
       }
     }
 

@@ -18,8 +18,8 @@ export class PostgreSQLCourseRepository extends ICourseRepository {
 
     const query = `
       INSERT INTO trainer_courses (
-        course_name, trainer_id, description, skills, language, status, company_logo
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+        course_name, trainer_id, description, skills, language, status, company_logo, permissions, usage_count
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       RETURNING *
     `;
 
@@ -31,6 +31,8 @@ export class PostgreSQLCourseRepository extends ICourseRepository {
       course.language || 'en',
       course.status || 'active',
       course.company_logo || null,
+      course.permissions || null,
+      course.usage_count || 0,
     ];
 
     const result = await this.db.query(query, values);
@@ -135,7 +137,7 @@ export class PostgreSQLCourseRepository extends ICourseRepository {
       throw new Error('Database not connected. Using in-memory repository.');
     }
 
-    const allowedFields = ['course_name', 'description', 'skills', 'language', 'status', 'company_logo'];
+    const allowedFields = ['course_name', 'description', 'skills', 'language', 'status', 'company_logo', 'permissions'];
     const setClauses = [];
     const values = [];
     let paramIndex = 1;
@@ -188,6 +190,26 @@ export class PostgreSQLCourseRepository extends ICourseRepository {
    * @param {Object} row - Database row
    * @returns {Course} Course entity
    */
+  /**
+   * Increment usage_count for a course
+   * @param {number} courseId - Course ID
+   * @returns {Promise<void>}
+   */
+  async incrementUsageCount(courseId) {
+    if (!this.db.isConnected()) {
+      throw new Error('Database not connected.');
+    }
+
+    const query = `
+      UPDATE trainer_courses 
+      SET usage_count = usage_count + 1,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE course_id = $1
+    `;
+
+    await this.db.query(query, [courseId]);
+  }
+
   mapRowToCourse(row) {
     return new Course({
       course_id: row.course_id,
@@ -198,6 +220,8 @@ export class PostgreSQLCourseRepository extends ICourseRepository {
       language: row.language || 'en',
       status: row.status,
       company_logo: row.company_logo,
+      permissions: row.permissions || null,
+      usage_count: row.usage_count || 0,
       created_at: row.created_at,
       updated_at: row.updated_at,
     });

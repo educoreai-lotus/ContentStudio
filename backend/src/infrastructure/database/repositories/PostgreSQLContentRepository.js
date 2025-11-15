@@ -104,6 +104,35 @@ export class PostgreSQLContentRepository extends IContentRepository {
     return result.rows[0].method_name;
   }
 
+  /**
+   * Increment usage_count for a generation method
+   * @param {number|string} methodIdOrName - Generation method ID or name
+   * @returns {Promise<void>}
+   */
+  async incrementGenerationMethodUsageCount(methodIdOrName) {
+    if (!this.db.isConnected()) {
+      throw new Error('Database not connected.');
+    }
+
+    // Determine if we have an ID or name
+    let methodId;
+    if (typeof methodIdOrName === 'string' && isNaN(Number(methodIdOrName))) {
+      // It's a method name, get the ID
+      methodId = await this.getGenerationMethodId(methodIdOrName);
+    } else {
+      // It's already an ID
+      methodId = methodIdOrName;
+    }
+
+    const query = `
+      UPDATE generation_methods 
+      SET usage_count = usage_count + 1
+      WHERE method_id = $1
+    `;
+
+    await this.db.query(query, [methodId]);
+  }
+
   async create(content) {
     if (!this.db.isConnected()) {
       throw new Error('Database not connected. Using in-memory repository.');
@@ -146,6 +175,14 @@ export class PostgreSQLContentRepository extends IContentRepository {
 
     const result = await this.db.query(query, values);
     const row = result.rows[0];
+
+    // Increment usage_count for the generation method
+    try {
+      await this.incrementGenerationMethodUsageCount(generationMethodId);
+    } catch (error) {
+      console.warn('[PostgreSQLContentRepository] Failed to increment generation method usage count:', error.message);
+      // Don't fail the entire operation if usage count increment fails
+    }
 
     return await this.mapRowToContent(row);
   }

@@ -8,6 +8,8 @@ export class Course {
     language = 'en',
     status = 'active',
     company_logo = null,
+    permissions = null,
+    usage_count = 0,
     created_at = null,
     updated_at = null,
   }) {
@@ -21,6 +23,8 @@ export class Course {
     this.language = language;
     this.status = status;
     this.company_logo = company_logo;
+    this.permissions = permissions;
+    this.usage_count = usage_count || 0;
     this.created_at = created_at;
     this.updated_at = updated_at;
   }
@@ -58,6 +62,11 @@ export class Course {
     this.updated_at = new Date().toISOString();
   }
 
+  incrementUsageCount() {
+    this.usage_count++;
+    this.updated_at = new Date().toISOString();
+  }
+
   toJSON() {
     return {
       course_id: this.course_id,
@@ -68,6 +77,8 @@ export class Course {
       language: this.language,
       status: this.status,
       company_logo: this.company_logo,
+      permissions: this.permissions,
+      usage_count: this.usage_count,
       created_at: this.created_at,
       updated_at: this.updated_at,
     };
