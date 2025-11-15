@@ -16,7 +16,8 @@ RUN apt-get update && \
 # Install yt-dlp using pip with --break-system-packages flag
 # Python 3.11+ in Debian 12 requires this flag for system-wide installation
 # yt-dlp is a YouTube downloader that works better than youtube-dl
-RUN pip3 install --no-cache-dir --upgrade pip && \
+# Using --break-system-packages is safe in Docker containers
+RUN pip3 install --no-cache-dir --upgrade pip --break-system-packages && \
     pip3 install --no-cache-dir --break-system-packages yt-dlp
 
 # Verify installations
