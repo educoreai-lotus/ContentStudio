@@ -86,6 +86,7 @@ import exchangeRouter from './src/presentation/routes/exchange.js';
 import uploadRouter from './src/presentation/routes/upload.js';
 import debugRouter from './src/presentation/routes/debug.js';
 import contentMetricsRouter from './src/presentation/routes/content-metrics.js';
+import exercisesRouter from './src/presentation/routes/exercises.js';
 import { errorHandler } from './src/presentation/middleware/errorHandler.js';
 import { requestLogger } from './src/presentation/middleware/requestLogger.js';
 import { authenticationMiddleware } from './src/presentation/middleware/authentication.js';
@@ -108,6 +109,7 @@ app.use('/api/exchange', exchangeRouter);
 app.use('/api/upload', uploadRouter);
 app.use('/api/debug', debugRouter);
 app.use('/api/fill-content-metrics', contentMetricsRouter);
+app.use('/api/exercises', exercisesRouter);
 
 // Error handling middleware (must be after routes)
 app.use(errorHandler);

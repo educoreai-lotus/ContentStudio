@@ -7,6 +7,7 @@ import { TemplateSelectionModal } from '../../components/Templates/TemplateSelec
 import { RegenerateOptionsModal } from '../../components/Content/RegenerateOptionsModal.jsx';
 import { ContentHistorySidebar } from '../../components/Content/ContentHistorySidebar.jsx';
 import { VideoUploadModal } from '../../components/VideoUploadModal.jsx';
+import ExerciseCreationModal from '../../components/Exercises/ExerciseCreationModal.jsx';
 
 const CONTENT_TYPES = [
   { id: 'text', name: 'Text & Audio', icon: 'fa-file-alt', color: 'blue', dbId: 1, allowManual: true },
@@ -35,6 +36,7 @@ export default function TopicContentManager() {
   const [regenerateTarget, setRegenerateTarget] = useState(null);
   const [qualityCheckInfo, setQualityCheckInfo] = useState(null);
   const [videoUploadModalOpen, setVideoUploadModalOpen] = useState(false);
+  const [exerciseModalOpen, setExerciseModalOpen] = useState(false);
 
   useEffect(() => {
     fetchContent();
@@ -898,6 +900,23 @@ export default function TopicContentManager() {
               </div>
             )}
 
+            {/* Create Exercises Button */}
+            {hasAllFormats && (
+              <div className="mt-8 text-center">
+                <button
+                  onClick={() => setExerciseModalOpen(true)}
+                  className={`px-8 py-4 text-white rounded-lg text-lg font-semibold transition-all ${
+                    theme === 'day-mode'
+                      ? 'bg-purple-600 hover:bg-purple-700 shadow-lg'
+                      : 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 shadow-lg shadow-purple-600/40'
+                  }`}
+                >
+                  <i className="fas fa-code mr-2"></i>
+                  Create DevLab Exercises
+                </button>
+              </div>
+            )}
+
             {/* View Lesson Button */}
             {existingContent.length > 0 && (
               <div className="mt-8 text-center">
@@ -939,6 +958,15 @@ export default function TopicContentManager() {
           topicId={parseInt(topicId)}
           theme={theme}
           onTranscriptionComplete={handleVideoTranscriptionComplete}
+        />
+
+        <ExerciseCreationModal
+          isOpen={exerciseModalOpen}
+          onClose={() => setExerciseModalOpen(false)}
+          topicId={parseInt(topicId)}
+          topicName={topicDetails?.topic_name || ''}
+          topicSkills={topicDetails?.skills || []}
+          topicLanguage={topicDetails?.language || 'en'}
         />
       </div>
     </div>

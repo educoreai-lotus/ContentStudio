@@ -161,6 +161,249 @@ export class DevlabClient {
   }
 
   /**
+   * Generate AI exercises from Dabla/DevLab
+   * Used when trainer selects AI mode for exercise generation
+   * @param {Object} exerciseRequest - Exercise generation request:
+   *   {
+   *     topic_id: string,
+   *     topic_name: string,
+   *     skills: string[],
+   *     question_type: "code" | "theoretical",
+   *     programming_language: string,
+   *     Language: string,
+   *     amount: number (default 4)
+   *   }
+   * @returns {Promise<Object>} Response with exercises array:
+   *   {
+   *     exercises: Array<{
+   *       question_text: string,
+   *       hint: string,
+   *       solution: string,
+   *       test_cases: any,
+   *       difficulty: string,
+   *       ...other fields
+   *     }>
+   *   }
+   */
+  async generateAIExercises(exerciseRequest) {
+    if (!this.baseUrl) {
+      logger.warn('[DevlabClient] DevLab URL not configured, cannot generate AI exercises', {
+        topicId: exerciseRequest?.topic_id,
+      });
+      throw new Error('DevLab URL not configured');
+    }
+
+    const endpoint = `${this.baseUrl}/api/generate-exercises`;
+
+    try {
+      // Validate exerciseRequest
+      if (!exerciseRequest || typeof exerciseRequest !== 'object') {
+        throw new Error('Invalid exercise request');
+      }
+
+      // Build payload with required fields
+      const payload = {
+        topic_id: exerciseRequest.topic_id || '',
+        topic_name: exerciseRequest.topic_name || '',
+        skills: Array.isArray(exerciseRequest.skills) ? exerciseRequest.skills : [],
+        question_type: exerciseRequest.question_type || 'code',
+        programming_language: exerciseRequest.programming_language || '',
+        Language: exerciseRequest.Language || exerciseRequest.language || 'en',
+        amount: exerciseRequest.amount || 4,
+      };
+
+      // Stringify payload
+      let payloadString;
+      try {
+        payloadString = JSON.stringify(payload);
+      } catch (stringifyError) {
+        throw new Error(`Failed to stringify payload: ${stringifyError.message}`);
+      }
+
+      // Build request body
+      const body = qs.stringify({
+        serviceName: 'ContentStudio',
+        payload: payloadString,
+      });
+
+      logger.info('[DevlabClient] Sending AI exercise generation request to Dabla', {
+        endpoint,
+        topicId: payload.topic_id,
+        topicName: payload.topic_name,
+        questionType: payload.question_type,
+        amount: payload.amount,
+      });
+
+      // Send POST request
+      const response = await axios.post(endpoint, body, {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        timeout: 60000, // 60 seconds timeout for AI generation
+      });
+
+      // Validate response structure
+      if (!response.data || typeof response.data !== 'object' || response.data === null) {
+        throw new Error('Invalid response structure from Dabla');
+      }
+
+      if (!response.data.payload || typeof response.data.payload !== 'string') {
+        throw new Error('Missing or invalid payload in response');
+      }
+
+      // Parse payload string
+      let responsePayload;
+      try {
+        responsePayload = JSON.parse(response.data.payload);
+      } catch (parseError) {
+        throw new Error(`Failed to parse response payload: ${parseError.message}`);
+      }
+
+      // Validate that parsed payload is an object
+      if (typeof responsePayload !== 'object' || responsePayload === null) {
+        throw new Error('Invalid payload structure in response');
+      }
+
+      logger.info('[DevlabClient] Successfully received AI exercises from Dabla', {
+        topicId: payload.topic_id,
+        exercisesCount: Array.isArray(responsePayload.exercises) ? responsePayload.exercises.length : 0,
+      });
+
+      return responsePayload;
+    } catch (error) {
+      logger.error('[DevlabClient] Failed to generate AI exercises', {
+        error: error.message,
+        endpoint,
+        topicId: exerciseRequest?.topic_id,
+        errorType: error.response ? 'response_error' : error.request ? 'no_response' : 'request_error',
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Validate a single manual exercise from trainer
+   * Used when trainer selects Manual mode and submits a question
+   * @param {Object} exerciseData - Exercise data:
+   *   {
+   *     topic_id: string,
+   *     topic_name: string,
+   *     skills: string[],
+   *     question_type: "code" | "theoretical",
+   *     programming_language: string,
+   *     Language: string,
+   *     question_text: string,
+   *     hint: string (optional),
+   *     solution: string (optional)
+   *   }
+   * @returns {Promise<Object>} Validation result:
+   *   {
+   *     valid: boolean,
+   *     message: string (if rejected),
+   *     exercise: Object (if approved, contains validated exercise data)
+   *   }
+   */
+  async validateManualExercise(exerciseData) {
+    if (!this.baseUrl) {
+      logger.warn('[DevlabClient] DevLab URL not configured, cannot validate exercise', {
+        topicId: exerciseData?.topic_id,
+      });
+      throw new Error('DevLab URL not configured');
+    }
+
+    const endpoint = `${this.baseUrl}/api/validate-exercise`;
+
+    try {
+      // Validate exerciseData
+      if (!exerciseData || typeof exerciseData !== 'object') {
+        throw new Error('Invalid exercise data');
+      }
+
+      // Build payload with required fields
+      const payload = {
+        topic_id: exerciseData.topic_id || '',
+        topic_name: exerciseData.topic_name || '',
+        skills: Array.isArray(exerciseData.skills) ? exerciseData.skills : [],
+        question_type: exerciseData.question_type || 'code',
+        programming_language: exerciseData.programming_language || '',
+        Language: exerciseData.Language || exerciseData.language || 'en',
+        question_text: exerciseData.question_text || '',
+        hint: exerciseData.hint || null,
+        solution: exerciseData.solution || null,
+      };
+
+      // Stringify payload
+      let payloadString;
+      try {
+        payloadString = JSON.stringify(payload);
+      } catch (stringifyError) {
+        throw new Error(`Failed to stringify payload: ${stringifyError.message}`);
+      }
+
+      // Build request body
+      const body = qs.stringify({
+        serviceName: 'ContentStudio',
+        payload: payloadString,
+      });
+
+      logger.info('[DevlabClient] Sending manual exercise validation request to Dabla', {
+        endpoint,
+        topicId: payload.topic_id,
+        questionType: payload.question_type,
+      });
+
+      // Send POST request
+      const response = await axios.post(endpoint, body, {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        timeout: 30000, // 30 seconds timeout
+      });
+
+      // Validate response structure
+      if (!response.data || typeof response.data !== 'object' || response.data === null) {
+        throw new Error('Invalid response structure from Dabla');
+      }
+
+      if (!response.data.payload || typeof response.data.payload !== 'string') {
+        throw new Error('Missing or invalid payload in response');
+      }
+
+      // Parse payload string
+      let responsePayload;
+      try {
+        responsePayload = JSON.parse(response.data.payload);
+      } catch (parseError) {
+        throw new Error(`Failed to parse response payload: ${parseError.message}`);
+      }
+
+      // Validate that parsed payload is an object
+      if (typeof responsePayload !== 'object' || responsePayload === null) {
+        throw new Error('Invalid payload structure in response');
+      }
+
+      logger.info('[DevlabClient] Successfully received validation result from Dabla', {
+        topicId: payload.topic_id,
+        valid: responsePayload.valid,
+      });
+
+      return responsePayload;
+    } catch (error) {
+      logger.error('[DevlabClient] Failed to validate manual exercise', {
+        error: error.message,
+        endpoint,
+        topicId: exerciseData?.topic_id,
+        errorType: error.response ? 'response_error' : error.request ? 'no_response' : 'request_error',
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+      });
+      throw error;
+    }
+  }
+
+  /**
    * Fetch trainer question validation from DevLab
    * @param {string} question - Question text
    * @param {string} courseId - Course ID
@@ -274,9 +517,19 @@ export function getDevlabClient() {
   return devlabClientInstance;
 }
 
-// Export convenience function
+// Export convenience functions
 export async function validateTrainerQuestion(question, courseId, trainerId) {
   const client = getDevlabClient();
   return client.fetchTrainerQuestionValidation(question, courseId, trainerId);
+}
+
+export async function generateAIExercises(exerciseRequest) {
+  const client = getDevlabClient();
+  return client.generateAIExercises(exerciseRequest);
+}
+
+export async function validateManualExercise(exerciseData) {
+  const client = getDevlabClient();
+  return client.validateManualExercise(exerciseData);
 }
 

@@ -1,6 +1,7 @@
 import { logger } from '../../infrastructure/logging/Logger.js';
 import { fillDirectory } from '../../application/services/fillers/fillDirectory.js';
 import { fillCourseBuilder } from '../../application/services/fillers/fillCourseBuilder.js';
+import { fillCourseBuilderByCompany } from '../../application/services/fillers/fillCourseBuilderByCompany.js';
 import { fillDevLab } from '../../application/services/fillers/fillDevLab.js';
 import { fillSkillsEngine } from '../../application/services/fillers/fillSkillsEngine.js';
 import { fillAnalytics } from '../../application/services/fillers/fillAnalytics.js';
@@ -20,7 +21,29 @@ export class ContentMetricsController {
    */
   async fillContentMetrics(req, res, next) {
     try {
-      const { serviceName, payload } = req.body;
+      // Check if request body is a stringified JSON (Course Builder format)
+      let requestBody = req.body;
+      if (typeof req.body === 'string') {
+        try {
+          requestBody = JSON.parse(req.body);
+        } catch (parseError) {
+          logger.error('[ContentMetricsController] Failed to parse stringified request body', {
+            error: parseError.message,
+            bodyPreview: req.body.substring(0, 200),
+          });
+          return res.status(400).json({
+            error: 'Invalid JSON in request body',
+          });
+        }
+      }
+
+      // Check if this is Course Builder format (has microservice_name instead of serviceName)
+      if (requestBody.microservice_name === 'course-builder' || requestBody.microservice_name === 'CourseBuilder') {
+        return await this.handleCourseBuilderFormat(requestBody, res, next);
+      }
+
+      // Otherwise, handle the old format with serviceName/payload
+      const { serviceName, payload } = requestBody;
 
       // Validate serviceName
       if (!serviceName || typeof serviceName !== 'string') {
@@ -167,6 +190,77 @@ export class ContentMetricsController {
       });
     } catch (error) {
       logger.error('[ContentMetricsController] Unexpected error', {
+        error: error.message,
+        stack: error.stack,
+      });
+      next(error);
+    }
+  }
+
+  /**
+   * Handle Course Builder format: stringified JSON with microservice_name, payload, response
+   * @param {Object} requestData - Parsed request data
+   * @param {Object} res - Express response object
+   * @param {Function} next - Express next middleware
+   */
+  async handleCourseBuilderFormat(requestData, res, next) {
+    try {
+      // Validate structure
+      if (!requestData.payload || typeof requestData.payload !== 'object') {
+        logger.error('[ContentMetricsController] Invalid Course Builder format - missing or invalid payload');
+        return res.status(400).json({
+          error: 'Invalid Course Builder format - payload is required',
+        });
+      }
+
+      // Ensure response field exists (initialize to null if not present)
+      if (requestData.response === undefined) {
+        requestData.response = null;
+      }
+
+      logger.info('[ContentMetricsController] Processing Course Builder format', {
+        microservice_name: requestData.microservice_name,
+        hasPayload: !!requestData.payload,
+        hasResponse: requestData.response !== undefined,
+      });
+
+      // Fill the request data with topics
+      let filledData;
+      try {
+        filledData = await fillCourseBuilderByCompany(requestData);
+      } catch (fillError) {
+        logger.error('[ContentMetricsController] Fill function error for Course Builder', {
+          error: fillError.message,
+          stack: fillError.stack,
+        });
+        // On error, set empty topics array
+        filledData = { ...requestData, response: [] };
+      }
+
+      // Stringify the entire object
+      let stringifiedData;
+      try {
+        stringifiedData = JSON.stringify(filledData);
+      } catch (stringifyError) {
+        logger.error('[ContentMetricsController] Failed to stringify Course Builder response', {
+          error: stringifyError.message,
+        });
+        return res.status(500).json({
+          error: 'Failed to stringify response',
+        });
+      }
+
+      // Return response in Course Builder format: { response: stringifiedData }
+      logger.info('[ContentMetricsController] Successfully filled Course Builder request', {
+        topicsCount: Array.isArray(filledData.response) ? filledData.response.length : 0,
+        responseSize: stringifiedData.length,
+      });
+
+      return res.status(200).json({
+        response: stringifiedData,
+      });
+    } catch (error) {
+      logger.error('[ContentMetricsController] Unexpected error in Course Builder format handler', {
         error: error.message,
         stack: error.stack,
       });
