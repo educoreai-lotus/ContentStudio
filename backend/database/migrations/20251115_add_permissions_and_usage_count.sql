@@ -39,3 +39,4 @@ COMMENT ON COLUMN generation_methods.usage_count IS 'Counts how many times this 
 -- No migration needed for topics table
 -- ============================================
 
+
