@@ -28,8 +28,13 @@ RUN ffmpeg -version && \
 # Set working directory
 WORKDIR /app
 
-# Copy package files from backend
-COPY backend/package*.json ./
+# Allow building from repo root or from backend directory
+# If building from repo root, leave APP_DIR=backend (default)
+# If building with context set to backend/, pass --build-arg APP_DIR=.
+ARG APP_DIR=backend
+
+# Copy package files
+COPY ${APP_DIR}/package*.json ./
 
 # Install Node.js dependencies
 # Use npm ci for faster, reliable, reproducible builds
@@ -37,8 +42,8 @@ COPY backend/package*.json ./
 RUN npm ci && \
     npm cache clean --force
 
-# Copy application code from backend
-COPY backend/ .
+# Copy application code
+COPY ${APP_DIR}/ .
 
 # Create uploads directory if it doesn't exist
 RUN mkdir -p /app/uploads/temp /app/uploads/videos
