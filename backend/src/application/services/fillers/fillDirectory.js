@@ -27,8 +27,8 @@ export async function fillDirectory(data) {
 
     // If course_id is provided, fetch course details
     if (data.course_id) {
-      const courseQuery = 'SELECT course_id, course_name, trainer_id, status, permissions FROM trainer_courses WHERE course_id = $1 AND status != $2';
-      const courseResult = await db.query(courseQuery, [data.course_id, 'deleted']);
+      const courseQuery = 'SELECT course_id, course_name, trainer_id, status, permissions FROM trainer_courses WHERE course_id = $1';
+      const courseResult = await db.query(courseQuery, [data.course_id]);
       
       if (courseResult.rows.length > 0) {
         const course = courseResult.rows[0];
