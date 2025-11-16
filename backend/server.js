@@ -107,7 +107,7 @@ app.use('/api/jobs', jobsRouter);
 app.use('/api/exchange', exchangeRouter);
 app.use('/api/upload', uploadRouter);
 app.use('/api/debug', debugRouter);
-app.use('/api', contentMetricsRouter);
+app.use('/api/fill-content-metrics', contentMetricsRouter);
 
 // Error handling middleware (must be after routes)
 app.use(errorHandler);

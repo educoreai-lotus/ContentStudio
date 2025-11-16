@@ -21,7 +21,7 @@ const contentMetricsController = new ContentMetricsController();
  *   "payload": "<stringified filled JSON>"
  * }
  */
-router.post('/fill-content-metrics', (req, res, next) => {
+router.post('/', (req, res, next) => {
   contentMetricsController.fillContentMetrics(req, res, next);
 });
 
