@@ -33,30 +33,43 @@ export class ContentMetricsController {
         });
       }
 
-      // Validate payload
-      if (!payload || typeof payload !== 'string') {
-        logger.error('[ContentMetricsController] Missing or invalid payload', {
+      // Validate payload presence (allow string or object)
+      if (payload === undefined || payload === null) {
+        logger.error('[ContentMetricsController] Missing payload', {
           serviceName,
           payloadType: typeof payload,
         });
         return res.status(400).json({
-          error: 'payload is required and must be a stringified JSON',
+          error: 'payload is required',
         });
       }
 
-      // Parse payload
+      // Parse payload (accept stringified JSON or plain object)
       let parsedPayload;
-      try {
-        parsedPayload = JSON.parse(payload);
-      } catch (parseError) {
-        logger.error('[ContentMetricsController] Failed to parse payload', {
+      if (typeof payload === 'string') {
+        try {
+          parsedPayload = JSON.parse(payload);
+        } catch (parseError) {
+          logger.error('[ContentMetricsController] Failed to parse payload', {
+            serviceName,
+            error: parseError.message,
+            payloadPreview: payload.substring(0, 200),
+          });
+          return res.status(400).json({
+            serviceName,
+            payload: JSON.stringify({ error: 'Invalid JSON payload' }),
+          });
+        }
+      } else if (typeof payload === 'object') {
+        parsedPayload = payload;
+      } else {
+        logger.error('[ContentMetricsController] Invalid payload type', {
           serviceName,
-          error: parseError.message,
-          payloadPreview: payload.substring(0, 200),
+          payloadType: typeof payload,
         });
         return res.status(400).json({
           serviceName,
-          payload: JSON.stringify({ error: 'Invalid JSON payload' }),
+          payload: JSON.stringify({ error: 'Invalid payload type' }),
         });
       }
 
