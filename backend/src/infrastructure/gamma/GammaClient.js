@@ -72,7 +72,7 @@ export class GammaClient {
         payload,
         {
           headers: {
-            'Authorization': `Bearer ${this.apiKey}`,
+            'X-API-KEY': this.apiKey,  // Gamma Public API uses X-API-KEY header
             'Content-Type': 'application/json',
           },
           timeout: 120000, // 120 seconds timeout (presentations can take longer)
@@ -181,7 +181,7 @@ export class GammaClient {
         `${this.baseUrl}/v1/decks/${deckId}/export`,
         {
           headers: {
-            'Authorization': `Bearer ${this.apiKey}`,
+            'X-API-KEY': this.apiKey,  // Gamma Public API uses X-API-KEY header
           },
           responseType: 'arraybuffer',
           timeout: 60000,
