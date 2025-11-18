@@ -423,6 +423,13 @@ function renderPreviewContent(sectionId, version, theme) {
         data.presentation?.url ||
         data.storageUrl ||
         data.fileUrl;
+      
+      // Extract Gamma URL from metadata if available (for viewing in Gamma app)
+      const gammaUrl = data.metadata?.gamma_raw_response?.result?.gammaUrl || 
+                       data.metadata?.gamma_raw_response?.gammaUrl ||
+                       data.gamma_raw_response?.result?.gammaUrl ||
+                       data.gamma_raw_response?.gammaUrl ||
+                       data.gammaUrl;
 
       const summaryItems = [
         data.slide_count ? `${data.slide_count} total slides` : null,
@@ -448,17 +455,32 @@ function renderPreviewContent(sectionId, version, theme) {
                   ))}
                 </ul>
               )}
-              {presentationUrl && (
-                <a
-                  href={presentationUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  download
-                  className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-600 hover:text-emerald-700"
-                >
-                  <i className="fas fa-download"></i>
-                  Download presentation
-                </a>
+              {(gammaUrl || presentationUrl) && (
+                <div className="flex flex-wrap gap-2">
+                  {gammaUrl && (
+                    <a
+                      href={gammaUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-600 hover:text-emerald-700"
+                    >
+                      <i className="fas fa-external-link-alt"></i>
+                      View
+                    </a>
+                  )}
+                  {presentationUrl && (
+                    <a
+                      href={presentationUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      download
+                      className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-600 hover:text-emerald-700"
+                    >
+                      <i className="fas fa-download"></i>
+                      Download
+                    </a>
+                  )}
+                </div>
               )}
             </div>
           </div>

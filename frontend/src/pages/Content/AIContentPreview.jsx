@@ -335,27 +335,55 @@ export const AIContentPreview = () => {
                       Size: {(content.content_data.fileSize / 1024 / 1024).toFixed(2)} MB
                     </p>
                   )}
-                  {(content.content_data?.presentationUrl || content.content_data?.fileUrl) && (
-                    <div className="mt-4 space-y-2">
-                      <a
-                        href={content.content_data?.presentationUrl || content.content_data?.fileUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        download
-                        className="inline-block px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-                      >
-                        <i className="fas fa-download mr-2"></i>
-                        Download Presentation
-                      </a>
-                      <p
-                        className={`text-xs ${
-                          theme === 'day-mode' ? 'text-gray-500' : 'text-gray-500'
-                        }`}
-                      >
-                        {content.content_data?.format === 'gamma' ? 'PPTX file from Gamma' : 'Opens in a new tab'}
-                      </p>
-                    </div>
-                  )}
+                  {(() => {
+                    const presentationUrl = content.content_data?.presentationUrl || content.content_data?.fileUrl;
+                    const gammaUrl = content.content_data?.metadata?.gamma_raw_response?.result?.gammaUrl || 
+                                     content.content_data?.metadata?.gamma_raw_response?.gammaUrl ||
+                                     content.content_data?.gamma_raw_response?.result?.gammaUrl ||
+                                     content.content_data?.gamma_raw_response?.gammaUrl ||
+                                     content.content_data?.gammaUrl;
+                    
+                    return (gammaUrl || presentationUrl) && (
+                      <div className="mt-4 space-y-3">
+                        <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                          {gammaUrl && (
+                            <a
+                              href={gammaUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-block px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                            >
+                              <i className="fas fa-external-link-alt mr-2"></i>
+                              View Presentation
+                            </a>
+                          )}
+                          {presentationUrl && (
+                            <a
+                              href={presentationUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              download
+                              className="inline-block px-6 py-3 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors"
+                            >
+                              <i className="fas fa-download mr-2"></i>
+                              Download PPTX
+                            </a>
+                          )}
+                        </div>
+                        <p
+                          className={`text-xs ${
+                            theme === 'day-mode' ? 'text-gray-500' : 'text-gray-500'
+                          }`}
+                        >
+                          {gammaUrl && presentationUrl 
+                            ? 'View online or download PPTX file' 
+                            : gammaUrl 
+                            ? 'Opens in Gamma viewer' 
+                            : 'PPTX file from Supabase Storage'}
+                        </p>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             </div>

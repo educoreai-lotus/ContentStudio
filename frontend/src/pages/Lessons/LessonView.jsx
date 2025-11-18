@@ -236,6 +236,13 @@ export default function LessonView() {
     // Support both old format (googleSlidesUrl/fileUrl) and new format (presentationUrl from Supabase Storage)
     const presentationUrl = parsedData?.presentationUrl || parsedData?.googleSlidesUrl || parsedData?.fileUrl;
     const presentation = parsedData?.presentation;
+    
+    // Extract Gamma URL from metadata if available (for viewing in Gamma app)
+    const gammaUrl = parsedData?.metadata?.gamma_raw_response?.result?.gammaUrl || 
+                     parsedData?.metadata?.gamma_raw_response?.gammaUrl ||
+                     parsedData?.gamma_raw_response?.result?.gammaUrl ||
+                     parsedData?.gamma_raw_response?.gammaUrl ||
+                     parsedData?.gammaUrl;
 
     return (
       <div
@@ -265,24 +272,43 @@ export default function LessonView() {
               {parsedData.slide_count} slides
             </p>
           )}
-          {presentationUrl && (
-            <div className="mt-4 space-y-2">
-              <a
-                href={presentationUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                download
-                className="inline-block px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-              >
-                <i className="fas fa-download mr-2"></i>
-                Download Presentation
-              </a>
+          {(gammaUrl || presentationUrl) && (
+            <div className="mt-4 space-y-3">
+              <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                {gammaUrl && (
+                  <a
+                    href={gammaUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-block px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                  >
+                    <i className="fas fa-external-link-alt mr-2"></i>
+                    View Presentation
+                  </a>
+                )}
+                {presentationUrl && (
+                  <a
+                    href={presentationUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    download
+                    className="inline-block px-6 py-3 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors"
+                  >
+                    <i className="fas fa-download mr-2"></i>
+                    Download PPTX
+                  </a>
+                )}
+              </div>
               <p
                 className={`text-xs ${
                   theme === 'day-mode' ? 'text-gray-500' : 'text-gray-500'
                 }`}
               >
-                {parsedData?.format === 'gamma' ? 'PPTX file from Gamma' : 'Opens in a new tab'}
+                {gammaUrl && presentationUrl 
+                  ? 'View online or download PPTX file' 
+                  : gammaUrl 
+                  ? 'Opens in Gamma viewer' 
+                  : 'PPTX file from Supabase Storage'}
               </p>
             </div>
           )}
