@@ -170,14 +170,21 @@ ${basePrompt}`;
     }
 
     // For presentation (type 3), we don't need a prompt builder - we use Gamma API directly
+    // For mind_map (type 5), we use transcript as prompt directly (like presentation)
     // For other types, build prompt if not provided
-    if (!prompt && generationRequest.content_type_id !== 3) {
+    if (!prompt && generationRequest.content_type_id !== 3 && generationRequest.content_type_id !== 5) {
       prompt = this.buildPrompt(generationRequest.content_type_id, promptVariables);
+    }
+
+    // For mind_map (type 5), use transcript (lessonDescription) as prompt if not provided
+    if (!prompt && generationRequest.content_type_id === 5) {
+      prompt = promptVariables.lessonDescription || promptVariables.transcriptText || '';
     }
 
     // Sanitize the final prompt before sending to AI (only if prompt exists)
     // Note: User inputs are already wrapped in delimiters by buildPrompt()
     // For presentation (type 3), prompt is not needed - we use Gamma API directly
+    // For mind_map (type 5), sanitize the transcript prompt
     if (prompt && generationRequest.content_type_id !== 3) {
       prompt = PromptSanitizer.sanitizePrompt(prompt);
     }
@@ -313,7 +320,16 @@ ${basePrompt}`;
         }
 
         case 5: { // mind_map
-          const mindMap = await this.aiGenerationService.generateMindMap(prompt, {
+          // Ensure prompt is not empty - use transcript (lessonDescription) as fallback
+          const mindMapPrompt = prompt && prompt.trim().length > 0
+            ? prompt
+            : promptVariables.lessonDescription || promptVariables.transcriptText || '';
+          
+          if (!mindMapPrompt || mindMapPrompt.trim().length === 0) {
+            throw new Error('Mind map generation requires a prompt or transcript text');
+          }
+
+          const mindMap = await this.aiGenerationService.generateMindMap(mindMapPrompt, {
             topic_title: promptVariables.lessonTopic,
             skills: promptVariables.skillsListArray,
             trainer_prompt: promptVariables.trainerRequestText || promptVariables.lessonDescription,
