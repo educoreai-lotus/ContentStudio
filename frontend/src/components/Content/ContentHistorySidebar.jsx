@@ -415,7 +415,9 @@ function renderPreviewContent(sectionId, version, theme) {
         data.fileName ||
         'Presentation Deck';
       const slides = data.presentation?.slides || data.slides || [];
-      const googleUrl =
+      // Support both old format (googleSlidesUrl/fileUrl) and new format (presentationUrl from Supabase Storage)
+      const presentationUrl =
+        data.presentationUrl ||
         data.googleSlidesUrl ||
         data.presentation?.publicUrl ||
         data.presentation?.url ||
@@ -446,15 +448,16 @@ function renderPreviewContent(sectionId, version, theme) {
                   ))}
                 </ul>
               )}
-              {googleUrl && (
+              {presentationUrl && (
                 <a
-                  href={googleUrl}
+                  href={presentationUrl}
                   target="_blank"
                   rel="noopener noreferrer"
+                  download
                   className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-600 hover:text-emerald-700"
                 >
-                  <i className="fas fa-external-link-alt"></i>
-                  Open presentation
+                  <i className="fas fa-download"></i>
+                  Download presentation
                 </a>
               )}
             </div>

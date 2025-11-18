@@ -238,23 +238,24 @@ export const ContentViewer = () => {
                     Size: {(content.content_data.fileSize / 1024 / 1024).toFixed(2)} MB
                   </p>
                 )}
-                {content.content_data?.fileUrl && (
+                {(content.content_data?.presentationUrl || content.content_data?.fileUrl) && (
                   <div className="mt-4 space-y-2">
                     <a
-                      href={content.content_data.fileUrl}
+                      href={content.content_data?.presentationUrl || content.content_data?.fileUrl}
                       target="_blank"
                       rel="noopener noreferrer"
+                      download
                       className="inline-block px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
                     >
-                      <i className="fas fa-external-link-alt mr-2"></i>
-                      Open Presentation
+                      <i className="fas fa-download mr-2"></i>
+                      Download Presentation
                     </a>
                     <p
                       className={`text-xs ${
                         theme === 'day-mode' ? 'text-gray-500' : 'text-gray-500'
                       }`}
                     >
-                      Opens in a new tab
+                      {content.content_data?.format === 'gamma' ? 'PPTX file from Gamma' : 'Opens in a new tab'}
                     </p>
                   </div>
                 )}

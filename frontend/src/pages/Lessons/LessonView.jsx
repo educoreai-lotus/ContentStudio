@@ -233,7 +233,8 @@ export default function LessonView() {
       }
     }
 
-    const googleSlidesUrl = parsedData?.googleSlidesUrl || parsedData?.fileUrl;
+    // Support both old format (googleSlidesUrl/fileUrl) and new format (presentationUrl from Supabase Storage)
+    const presentationUrl = parsedData?.presentationUrl || parsedData?.googleSlidesUrl || parsedData?.fileUrl;
     const presentation = parsedData?.presentation;
 
     return (
@@ -264,23 +265,24 @@ export default function LessonView() {
               {parsedData.slide_count} slides
             </p>
           )}
-          {googleSlidesUrl && (
+          {presentationUrl && (
             <div className="mt-4 space-y-2">
               <a
-                href={googleSlidesUrl}
+                href={presentationUrl}
                 target="_blank"
                 rel="noopener noreferrer"
+                download
                 className="inline-block px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
               >
-                <i className="fas fa-external-link-alt mr-2"></i>
-                Open Presentation
+                <i className="fas fa-download mr-2"></i>
+                Download Presentation
               </a>
               <p
                 className={`text-xs ${
                   theme === 'day-mode' ? 'text-gray-500' : 'text-gray-500'
                 }`}
               >
-                Opens in a new tab
+                {parsedData?.format === 'gamma' ? 'PPTX file from Gamma' : 'Opens in a new tab'}
               </p>
             </div>
           )}
