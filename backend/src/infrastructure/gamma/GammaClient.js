@@ -429,7 +429,8 @@ export class GammaClient {
         .substring(0, 50)
         .toLowerCase();
       const timestamp = Date.now();
-      const extension = contentType.includes('json') ? 'json' : (contentType.includes('pdf') ? 'pdf' : 'pptx');
+      // MANDATORY: Only PDF or PPTX files - NO JSON files allowed
+      const extension = contentType.includes('pdf') ? 'pdf' : 'pptx';
       const fileName = `presentations/${sanitizedTopicName}_${timestamp}.${extension}`;
 
       // Upload to Supabase Storage
