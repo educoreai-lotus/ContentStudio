@@ -169,13 +169,18 @@ ${basePrompt}`;
       });
     }
 
-    if (!prompt) {
+    // For presentation (type 3), we don't need a prompt builder - we use Gamma API directly
+    // For other types, build prompt if not provided
+    if (!prompt && generationRequest.content_type_id !== 3) {
       prompt = this.buildPrompt(generationRequest.content_type_id, promptVariables);
     }
 
-    // Sanitize the final prompt before sending to AI
+    // Sanitize the final prompt before sending to AI (only if prompt exists)
     // Note: User inputs are already wrapped in delimiters by buildPrompt()
-    prompt = PromptSanitizer.sanitizePrompt(prompt);
+    // For presentation (type 3), prompt is not needed - we use Gamma API directly
+    if (prompt && generationRequest.content_type_id !== 3) {
+      prompt = PromptSanitizer.sanitizePrompt(prompt);
+    }
 
     // Generate content based on type
     let contentData = {};
