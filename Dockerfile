@@ -37,17 +37,39 @@ COPY . /src
 # Install Node.js dependencies
 # Use npm ci for faster, reliable, reproducible builds
 # Don't use --only=production to ensure all dependencies are available
-# Copy package files from detected app dir inside the image, then install
-RUN APP_SRC=/src; \
-    if [ -d /src/backend ]; then APP_SRC=/src/backend; fi; \
+# Auto-detect source directory: prefer /src/backend if it exists and has package.json, otherwise use /src
+RUN set -e; \
+    APP_SRC=/src; \
+    if [ -d /src/backend ] && [ -f /src/backend/package.json ]; then \
+        APP_SRC=/src/backend; \
+        echo "Detected backend directory: ${APP_SRC}"; \
+    elif [ -f /src/package.json ]; then \
+        APP_SRC=/src; \
+        echo "Using root source directory: ${APP_SRC}"; \
+    else \
+        echo "ERROR: package.json not found!"; \
+        echo "Contents of /src:"; \
+        ls -la /src/ || true; \
+        if [ -d /src/backend ]; then \
+            echo "Contents of /src/backend:"; \
+            ls -la /src/backend/ || true; \
+        fi; \
+        exit 1; \
+    fi; \
+    echo "Copying package files from ${APP_SRC}"; \
     cp ${APP_SRC}/package*.json ./ && \
     npm ci && \
     npm cache clean --force
 
 # Copy application code from detected app dir inside the image
-RUN APP_SRC=/src; \
-    if [ -d /src/backend ]; then APP_SRC=/src/backend; fi; \
-    cp -R ${APP_SRC}/. .
+RUN set -e; \
+    APP_SRC=/src; \
+    if [ -d /src/backend ] && [ -f /src/backend/package.json ]; then \
+        APP_SRC=/src/backend; \
+    fi; \
+    echo "Copying application code from ${APP_SRC}"; \
+    cp -R ${APP_SRC}/. . && \
+    rm -rf /src
 
 # Create uploads directory if it doesn't exist
 RUN mkdir -p /app/uploads/temp /app/uploads/videos
