@@ -301,30 +301,3 @@ export class ContentDataCleaner {
   }
 }
 
-
-      default:
-        // For unknown types, return as-is but log a warning
-        console.warn(`[ContentDataCleaner] Unknown content type ID: ${contentTypeId}, returning data as-is`);
-        return contentData;
-    }
-  }
-}
-
-
-      default:
-        // For unknown types, return as-is but log a warning
-        console.warn(`[ContentDataCleaner] Unknown content type ID: ${contentTypeId}, returning data as-is`);
-        return contentData;
-    }
-  }
-}
-
-
-      default:
-        // For unknown types, return as-is but log a warning
-        console.warn(`[ContentDataCleaner] Unknown content type ID: ${contentTypeId}, returning data as-is`);
-        return contentData;
-    }
-  }
-}
-
