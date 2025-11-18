@@ -160,28 +160,25 @@ export class GammaClient {
 
       // Step 3: Extract PPTX download URL from result and download to Supabase Storage
       // Gamma Public API v1.0 with exportAs: "pptx" returns:
-      // {
-      //   generationId,
-      //   gammaUrl,
-      //   export: {
-      //     pptx: "<temporary_download_url>"
-      //   }
-      // }
+      // Option 1: { exportUrl: "<temporary_download_url>" }
+      // Option 2: { export: { pptx: "<temporary_download_url>" } }
       const resultData = result.result || result;
       logger.info('[GammaClient] Generation completed, extracting export URLs', { 
         resultKeys: Object.keys(resultData),
         hasExport: !!resultData.export,
+        hasExportUrl: !!resultData.exportUrl,
         exportKeys: resultData.export ? Object.keys(resultData.export) : []
       });
       
-      // Extract PPTX download URL from export.pptx
+      // Extract PPTX download URL - check both exportUrl (direct) and export.pptx (nested)
       // This is a TEMPORARY URL that expires - we MUST download immediately
-      const pptxDownloadUrl = resultData.export?.pptx;
+      const pptxDownloadUrl = resultData.exportUrl || resultData.export?.pptx;
       const gammaUrl = resultData.gammaUrl; // For metadata only, NOT for storage
       
       if (!pptxDownloadUrl) {
         logger.error('[GammaClient] No PPTX export URL found in Gamma response', { 
-          resultData: JSON.stringify(resultData).substring(0, 500)
+          resultData: JSON.stringify(resultData).substring(0, 500),
+          availableKeys: Object.keys(resultData)
         });
         throw new Error('Gamma API did not return PPTX export URL. exportAs: "pptx" must be included in request payload.');
       }
