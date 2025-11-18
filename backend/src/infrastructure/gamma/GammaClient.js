@@ -57,12 +57,11 @@ export class GammaClient {
     try {
       logger.info('[GammaClient] Generating presentation with text prompt', { topicName, language, promptLength: prompt.length });
 
-      // Build request payload with text prompt
+      // Build request payload for Gamma Public API
+      // Gamma API expects: inputText (string), textMode (generate/condense/preserve)
       const payload = {
-        prompt: prompt.trim(),
-        options: {
-          language: language,
-        },
+        inputText: prompt.trim(),
+        textMode: 'generate', // Options: 'generate', 'condense', 'preserve'
       };
 
       // Make API request to Gamma Public API
