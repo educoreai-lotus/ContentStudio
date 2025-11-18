@@ -97,11 +97,12 @@ export class GammaClient {
       // Normalize language to Gamma's supported codes
       const normalizedLanguage = normalizeLanguage(language);
       
+      // Build payload according to Gamma Public API v1.0 specification
+      // Note: themeId is optional - only include if valid theme exists
       const payload = {
         inputText: inputText.trim(),
         textMode: 'generate',
         format: 'presentation',
-        themeId: 'Oasis',
         numCards: 8,
         cardSplit: 'auto',
         additionalInstructions: 'Create an educational presentation for students.',
@@ -112,6 +113,13 @@ export class GammaClient {
           language: normalizedLanguage,
         },
       };
+      
+      // Only add themeId if a valid theme is provided via environment variable
+      // Gamma Public API may not support all themes, so we make it optional
+      const themeId = process.env.GAMMA_THEME_ID;
+      if (themeId && themeId.trim().length > 0) {
+        payload.themeId = themeId.trim();
+      }
       
       logger.info('[GammaClient] Sending payload to Gamma API', { 
         inputTextLength: payload.inputText.length,
