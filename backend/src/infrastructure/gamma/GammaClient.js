@@ -35,33 +35,46 @@ export class GammaClient {
   /**
    * Generate a presentation using Gamma Public API with text prompt
    * Uses async job pattern: POST to create generation, then poll until completed
-   * @param {string} prompt - Text prompt for Gamma to generate presentation
+   * @param {string} inputText - Full text content for Gamma to generate presentation
    * @param {Object} options - Generation options
    * @param {string} options.topicName - Topic name for file naming
-   * @param {string} options.language - Language code
+   * @param {string} options.language - Language code (e.g., 'en', 'he', 'ar')
+   * @param {string} options.audience - Target audience (e.g., 'beginner developers', 'students')
    * @returns {Promise<Object>} Presentation data with storage info
    * @returns {string} presentationUrl - Public URL to view the presentation
    * @returns {string} storagePath - Storage path in Supabase
    * @returns {Object} rawResponse - Full response from Gamma API
    */
-  async generatePresentation(prompt, options = {}) {
+  async generatePresentation(inputText, options = {}) {
     if (!this.enabled) {
       throw new Error('Gamma client not enabled');
     }
 
-    if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
-      throw new Error('Prompt is required for presentation generation');
+    if (!inputText || typeof inputText !== 'string' || inputText.trim().length === 0) {
+      throw new Error('Input text is required for presentation generation');
     }
 
-    const { topicName = 'presentation', language = 'en' } = options;
+    const { topicName = 'presentation', language = 'en', audience = 'beginner developers' } = options;
 
     try {
-      logger.info('[GammaClient] Generating presentation with text prompt', { topicName, language, promptLength: prompt.length });
+      logger.info('[GammaClient] Generating presentation with Gamma Public API', { topicName, language, inputTextLength: inputText.length });
 
-      // Step 1: POST to create generation job
+      // Step 1: POST to create generation job with correct payload structure
+      // Gamma Public API v1.0 requires specific payload format
       const payload = {
-        inputText: prompt.trim(),
-        textMode: 'generate', // Options: 'generate', 'condense', 'preserve'
+        inputText: inputText.trim(),
+        textMode: 'generate',
+        format: 'presentation',
+        themeId: 'Oasis',
+        numCards: 8,
+        cardSplit: 'auto',
+        additionalInstructions: 'Create an educational presentation for students.',
+        textOptions: {
+          amount: 'detailed',
+          tone: 'educational',
+          audience: audience,
+          language: language === 'English' ? 'en' : (language === 'Hebrew' ? 'he' : (language === 'Arabic' ? 'ar' : language.toLowerCase())),
+        },
       };
 
       const createResponse = await axios.post(
@@ -99,9 +112,14 @@ export class GammaClient {
       }
 
       // Step 3: Extract URLs from result
-      const resultData = result.result || {};
+      // Gamma returns URLs in result object: result.pdfUrl, result.url, result.fileUrl
+      const resultData = result.result || result;
+      logger.info('[GammaClient] Generation completed, extracting URLs', { resultKeys: Object.keys(resultData) });
+      
       const presentationUrl = resultData.url || resultData.presentationUrl || resultData.viewUrl;
       const pdfUrl = resultData.pdfUrl || resultData.fileUrl || resultData.exportUrl;
+      
+      logger.info('[GammaClient] Extracted URLs', { presentationUrl, pdfUrl });
 
       let finalPresentationUrl = presentationUrl;
       let storagePath = null;

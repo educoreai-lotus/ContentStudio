@@ -466,31 +466,30 @@ ${basePrompt}`;
       throw new Error('Either trainer prompt or transcript text is required for presentation generation');
     }
 
-    // Build text prompt for Gamma
+    // Build inputText for Gamma - combine all content into a single text
+    // Gamma expects a complete text input, not a structured prompt
     const skillsList = skills.length > 0
       ? skills.map(skill => `- ${skill}`).join('\n')
       : 'None specified';
 
-    const promptText = `Create a professional presentation.
+    // Build comprehensive inputText that includes all relevant information
+    const inputText = `Topic: ${topicName}
 
-Topic: ${topicName}
 Description: ${topicDescription}
 
 Key Skills:
 ${skillsList}
 
-Trainer Notes / Source Material:
+Content:
 ${effectivePrompt}
 
-Language: ${language}
-Audience: ${audience}
+This presentation should be educational and suitable for ${audience}.`;
 
-Produce a structured, polished slide deck.`;
-
-    // Generate presentation using Gamma API
-    const gammaResult = await this.gammaClient.generatePresentation(promptText, {
+    // Generate presentation using Gamma API with correct payload structure
+    const gammaResult = await this.gammaClient.generatePresentation(inputText, {
       topicName,
       language,
+      audience,
     });
 
     return {
