@@ -161,7 +161,7 @@ export class GammaClient {
         throw new Error(`Generation failed with status: ${result.status}`);
       }
 
-      // Step 3: Extract URLs from result
+      // Step 3: Extract URLs from result and download PDF to Supabase Storage
       // Gamma Public API v1.0 returns: gammaUrl, pdfUrl (optional), viewUrl (optional)
       const resultData = result.result || result;
       logger.info('[GammaClient] Generation completed, extracting URLs', { resultKeys: Object.keys(resultData) });
@@ -176,10 +176,10 @@ export class GammaClient {
       let finalPresentationUrl = null;
       let storagePath = null;
 
-      // Priority 1: Try to download PDF if available
+      // Priority 1: Try to download PDF from direct pdfUrl if available
       if (pdfUrl) {
         try {
-          logger.info('[GammaClient] Downloading PDF from Gamma', { pdfUrl });
+          logger.info('[GammaClient] Downloading PDF from Gamma pdfUrl', { pdfUrl });
           const pdfResponse = await axios.get(pdfUrl, {
             responseType: 'arraybuffer',
             timeout: 60000,
@@ -191,14 +191,15 @@ export class GammaClient {
           if (uploadResult.url) {
             finalPresentationUrl = uploadResult.url;
             storagePath = uploadResult.path;
-            logger.info('[GammaClient] PDF uploaded to Supabase Storage', { storagePath });
+            logger.info('[GammaClient] PDF uploaded to Supabase Storage', { storagePath, url: finalPresentationUrl });
           }
         } catch (downloadError) {
-          logger.warn('[GammaClient] Failed to download PDF, will try alternative URLs', { error: downloadError.message });
+          logger.warn('[GammaClient] Failed to download PDF from pdfUrl, trying generationId endpoint', { error: downloadError.message });
         }
       }
 
-      // Priority 2: Try to download PDF using generationId endpoint
+      // Priority 2: Try to download PDF using generationId endpoint (primary method)
+      // This is the recommended way to get PDF from Gamma Public API
       if (!finalPresentationUrl && result.generationId) {
         try {
           logger.info('[GammaClient] Attempting to download PDF using generationId endpoint', { generationId: result.generationId });
@@ -219,27 +220,44 @@ export class GammaClient {
           if (uploadResult.url) {
             finalPresentationUrl = uploadResult.url;
             storagePath = uploadResult.path;
-            logger.info('[GammaClient] PDF downloaded and uploaded to Supabase Storage', { storagePath });
+            logger.info('[GammaClient] PDF downloaded and uploaded to Supabase Storage successfully', { storagePath, url: finalPresentationUrl });
+          } else {
+            logger.warn('[GammaClient] PDF uploaded but no URL returned from storage');
           }
         } catch (pdfDownloadError) {
-          logger.warn('[GammaClient] PDF download via generationId endpoint failed', { error: pdfDownloadError.message });
+          logger.error('[GammaClient] PDF download via generationId endpoint failed', { 
+            error: pdfDownloadError.message,
+            status: pdfDownloadError.response?.status,
+            data: pdfDownloadError.response?.data ? Buffer.from(pdfDownloadError.response.data).toString('utf-8').substring(0, 200) : null
+          });
         }
       }
 
-      // Priority 3: Use viewUrl if available
-      if (!finalPresentationUrl && viewUrl) {
-        finalPresentationUrl = viewUrl;
-        logger.info('[GammaClient] Using viewUrl as presentation URL', { viewUrl });
-      }
-
-      // Priority 4: Use gammaUrl (Gamma's primary URL)
-      if (!finalPresentationUrl && gammaUrl) {
-        finalPresentationUrl = gammaUrl;
-        logger.info('[GammaClient] Gamma returned only gammaUrl; using that as presentationUrl', { gammaUrl });
+      // If we successfully uploaded to Supabase, use that URL
+      if (finalPresentationUrl && storagePath) {
+        logger.info('[GammaClient] Using Supabase Storage URL for presentation', { 
+          presentationUrl: finalPresentationUrl,
+          storagePath 
+        });
+      } else {
+        // Fallback: If storage upload failed, log warning but use gammaUrl as last resort
+        // Note: This should ideally not happen - storage should always be available
+        if (gammaUrl) {
+          logger.warn('[GammaClient] Failed to upload to Supabase Storage, using gammaUrl as fallback', { 
+            gammaUrl,
+            error: 'Storage upload failed or not configured'
+          });
+          finalPresentationUrl = gammaUrl;
+          storagePath = null; // No storage path if we're using gammaUrl
+        } else if (viewUrl) {
+          logger.warn('[GammaClient] Failed to upload to Supabase Storage, using viewUrl as fallback', { viewUrl });
+          finalPresentationUrl = viewUrl;
+          storagePath = null;
+        }
       }
 
       if (!finalPresentationUrl) {
-        throw new Error('No presentation URL found in Gamma response (checked: pdfUrl, viewUrl, gammaUrl)');
+        throw new Error('No presentation URL found in Gamma response and failed to download/upload PDF');
       }
 
       logger.info('[GammaClient] Presentation generated successfully', { 
