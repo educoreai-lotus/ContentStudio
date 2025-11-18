@@ -65,9 +65,9 @@ export class GammaClient {
       };
 
       // Make API request to Gamma
-      // Gamma API endpoint: /api/decks/generate (or /api/generate)
+      // Gamma API endpoint: /api/generate (correct endpoint for slide generation)
       const response = await axios.post(
-        `${this.baseUrl}/api/decks/generate`,
+        `${this.baseUrl}/api/generate`,
         payload,
         {
           headers: {
