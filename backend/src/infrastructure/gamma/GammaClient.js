@@ -2,6 +2,39 @@ import axios from 'axios';
 import { logger } from '../logging/Logger.js';
 
 /**
+ * Language mapper for Gamma API
+ * Maps various language inputs to Gamma's supported language codes
+ */
+const LANGUAGE_MAP = {
+  // English variants
+  'english': 'en',
+  'en': 'en',
+  'eng': 'en',
+  // Hebrew variants
+  'hebrew': 'he',
+  'he': 'he',
+  'heb': 'he',
+  // Arabic variants
+  'arabic': 'ar',
+  'ar': 'ar',
+  'ara': 'ar',
+};
+
+/**
+ * Normalize language code to Gamma API format
+ * @param {string} language - Language input (can be "English", "english", "en", "EN", etc.)
+ * @returns {string} Normalized language code (defaults to "en")
+ */
+function normalizeLanguage(language) {
+  if (!language || typeof language !== 'string') {
+    return 'en';
+  }
+
+  const normalized = language.toLowerCase().trim();
+  return LANGUAGE_MAP[normalized] || 'en';
+}
+
+/**
  * Gamma API Client
  * Handles presentation generation using Gamma's REST API with text prompts
  */
@@ -61,6 +94,9 @@ export class GammaClient {
 
       // Step 1: POST to create generation job with correct payload structure
       // Gamma Public API v1.0 requires specific payload format
+      // Normalize language to Gamma's supported codes
+      const normalizedLanguage = normalizeLanguage(language);
+      
       const payload = {
         inputText: inputText.trim(),
         textMode: 'generate',
@@ -72,10 +108,16 @@ export class GammaClient {
         textOptions: {
           amount: 'detailed',
           tone: 'educational',
-          audience: audience,
-          language: language === 'English' ? 'en' : (language === 'Hebrew' ? 'he' : (language === 'Arabic' ? 'ar' : language.toLowerCase())),
+          audience: audience || 'students',
+          language: normalizedLanguage,
         },
       };
+      
+      logger.info('[GammaClient] Sending payload to Gamma API', { 
+        inputTextLength: payload.inputText.length,
+        language: normalizedLanguage,
+        audience: payload.textOptions.audience
+      });
 
       const createResponse = await axios.post(
         `${this.baseUrl}/v1.0/generations`,
