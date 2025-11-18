@@ -8,7 +8,11 @@ import { logger } from '../logging/Logger.js';
 export class GammaClient {
   constructor({ apiKey, storageClient }) {
     if (!apiKey) {
-      logger.warn('[GammaClient] API key not provided. Gamma integration disabled.');
+      if (logger && typeof logger.warn === 'function') {
+        logger.warn('[GammaClient] API key not provided. Gamma integration disabled.');
+      } else {
+        console.warn('[GammaClient] API key not provided. Gamma integration disabled.');
+      }
       this.enabled = false;
       return;
     }
