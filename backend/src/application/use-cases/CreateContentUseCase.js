@@ -46,6 +46,27 @@ export class CreateContentUseCase {
     const { candidateIdsOrNames, resolverDebugLabel } = await this.getContentTypeIdentifiers(content);
     let existingContent = await this.findExistingContent(content.topic_id, candidateIdsOrNames, resolverDebugLabel);
 
+    // If findExistingContent didn't find content, try direct lookup by topic_id and content_type_id
+    if (!existingContent && content.content_type_id) {
+      try {
+        if (typeof this.contentRepository.findLatestByTopicAndType === 'function') {
+          existingContent = await this.contentRepository.findLatestByTopicAndType(
+            content.topic_id,
+            content.content_type_id
+          );
+          if (existingContent) {
+            console.log('[CreateContentUseCase] Found existing content via direct lookup:', {
+              content_id: existingContent.content_id,
+              topic_id: existingContent.topic_id,
+              content_type_id: existingContent.content_type_id,
+            });
+          }
+        }
+      } catch (error) {
+        console.warn('[CreateContentUseCase] Failed to find existing content via direct lookup:', error.message);
+      }
+    }
+
     // Check if this is manual content that needs quality check BEFORE audio generation
     const isManualContent = content.generation_method_id === 'manual' || content.generation_method_id === 'manual_edited';
     const needsQualityCheck = isManualContent && this.qualityCheckService;
@@ -55,16 +76,27 @@ export class CreateContentUseCase {
       isManualContent,
       hasQualityCheckService: !!this.qualityCheckService,
       needsQualityCheck,
+      hasExistingContent: !!existingContent,
     });
 
-    if (existingContent) {
-      if (this.contentHistoryService?.saveVersion) {
-        try {
-          await this.contentHistoryService.saveVersion(existingContent, { force: true });
-        } catch (error) {
-          console.error('[CreateContentUseCase] Failed to save previous version before update:', error.message);
-        }
+    // Save existing content to history BEFORE creating/updating new content
+    if (existingContent && this.contentHistoryService?.saveVersion) {
+      try {
+        console.log('[CreateContentUseCase] Saving existing content to history before update:', {
+          content_id: existingContent.content_id,
+          topic_id: existingContent.topic_id,
+          content_type_id: existingContent.content_type_id,
+        });
+        await this.contentHistoryService.saveVersion(existingContent, { force: true });
+        console.log('[CreateContentUseCase] Successfully saved content to history');
+      } catch (error) {
+        console.error('[CreateContentUseCase] Failed to save previous version before update:', error.message, error.stack);
       }
+    } else if (existingContent && !this.contentHistoryService?.saveVersion) {
+      console.warn('[CreateContentUseCase] ContentHistoryService not available, skipping history save');
+    }
+
+    if (existingContent) {
 
       // Save content WITHOUT audio first (if quality check is needed)
       let updatedContent = await this.contentRepository.update(existingContent.content_id, {
