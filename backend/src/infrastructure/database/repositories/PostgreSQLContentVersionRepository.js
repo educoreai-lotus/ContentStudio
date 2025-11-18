@@ -57,6 +57,27 @@ export class PostgreSQLContentVersionRepository extends IContentVersionRepositor
       throw new Error('topic_id and content_type_id are required to create a content history entry');
     }
 
+    // Convert generation_method_id from string to integer ID if needed
+    // The database expects INTEGER, but Content entity may have string (method_name)
+    if (typeof generationMethodId === 'string') {
+      try {
+        const query = 'SELECT method_id FROM generation_methods WHERE method_name = $1';
+        const result = await this.db.query(query, [generationMethodId]);
+        if (result.rows.length === 0) {
+          console.warn(`[PostgreSQLContentVersionRepository] Generation method not found: ${generationMethodId}, using default`);
+          // Try to get default method_id (usually 'manual' = 1)
+          const defaultResult = await this.db.query('SELECT method_id FROM generation_methods WHERE method_name = $1', ['manual']);
+          generationMethodId = defaultResult.rows.length > 0 ? defaultResult.rows[0].method_id : 1;
+        } else {
+          generationMethodId = result.rows[0].method_id;
+        }
+      } catch (error) {
+        console.error('[PostgreSQLContentVersionRepository] Failed to convert generation_method_id to integer:', error.message);
+        // Fallback to default method_id
+        generationMethodId = 1; // Default to 'manual' method_id
+      }
+    }
+
     const now = new Date();
     const baseColumns = [
       'topic_id',
