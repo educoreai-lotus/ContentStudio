@@ -219,9 +219,21 @@ export class GammaClient {
 
         const status = data.status || data.state;
 
-        logger.info('[GammaClient] Polling generation status', { generationId, status, attempt: attempts + 1 });
+        logger.info('[GammaClient] Polling generation status', { 
+          generationId, 
+          status, 
+          attempt: attempts + 1,
+          hasResult: !!data.result,
+          resultKeys: data.result ? Object.keys(data.result) : []
+        });
 
         if (status === 'completed' || status === 'success') {
+          // Log full result structure for debugging
+          logger.info('[GammaClient] Generation completed', { 
+            status,
+            result: data.result,
+            fullData: JSON.stringify(data).substring(0, 500)
+          });
           return data;
         }
 
