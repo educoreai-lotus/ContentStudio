@@ -48,7 +48,19 @@ export class AIGenerationService extends IAIGenerationService {
       case 'audio':
         return this.generateAudio(prompt, config);
       case 'presentation':
-        return this.generatePresentation(prompt, config);
+        // Convert prompt/config to contentData format for new generatePresentation signature
+        const contentData = typeof prompt === 'object' && prompt !== null
+          ? prompt
+          : {
+              topicName: config?.topicName || config?.lessonTopic || 'Presentation',
+              topicDescription: config?.topicDescription || config?.lessonDescription || prompt || '',
+              skills: config?.skills || config?.skillsList || [],
+              trainerPrompt: config?.trainerPrompt || config?.trainer_prompt || null,
+              transcriptText: config?.transcriptText || config?.transcription || null,
+              language: config?.language || 'en',
+              audience: config?.audience || 'general',
+            };
+        return this.generatePresentation(contentData, config);
       case 'avatar_video':
         return this.generateAvatarVideo(prompt, config);
       default:

@@ -245,6 +245,8 @@ export async function generatePresentation(prompt, options = {}) {
     throw new Error('GAMMA_API environment variable is required');
   }
 
-  const client = new GammaClient({ apiKey });
+  // Note: This convenience function doesn't have storageClient, so uploads will be skipped
+  // For full functionality, use GammaClient instance with storageClient
+  const client = new GammaClient({ apiKey, storageClient: null });
   return client.generatePresentation(prompt, options);
 }
