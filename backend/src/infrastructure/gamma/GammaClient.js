@@ -162,19 +162,21 @@ export class GammaClient {
       }
 
       // Step 3: Extract URLs from result
-      // Gamma returns URLs in result object: result.pdfUrl, result.url, result.fileUrl
+      // Gamma Public API v1.0 returns: gammaUrl, pdfUrl (optional), viewUrl (optional)
       const resultData = result.result || result;
       logger.info('[GammaClient] Generation completed, extracting URLs', { resultKeys: Object.keys(resultData) });
       
-      const presentationUrl = resultData.url || resultData.presentationUrl || resultData.viewUrl;
+      // Extract all possible URL fields from Gamma response
+      const gammaUrl = resultData.gammaUrl;
       const pdfUrl = resultData.pdfUrl || resultData.fileUrl || resultData.exportUrl;
+      const viewUrl = resultData.viewUrl || resultData.url || resultData.presentationUrl;
       
-      logger.info('[GammaClient] Extracted URLs', { presentationUrl, pdfUrl });
+      logger.info('[GammaClient] Extracted URLs from Gamma', { gammaUrl, pdfUrl, viewUrl });
 
-      let finalPresentationUrl = presentationUrl;
+      let finalPresentationUrl = null;
       let storagePath = null;
 
-      // Step 4: Download PDF if available and upload to Supabase
+      // Priority 1: Try to download PDF if available
       if (pdfUrl) {
         try {
           logger.info('[GammaClient] Downloading PDF from Gamma', { pdfUrl });
@@ -192,18 +194,52 @@ export class GammaClient {
             logger.info('[GammaClient] PDF uploaded to Supabase Storage', { storagePath });
           }
         } catch (downloadError) {
-          logger.warn('[GammaClient] Failed to download PDF, using Gamma URL', { error: downloadError.message });
-          // Fallback to Gamma URL if download fails
+          logger.warn('[GammaClient] Failed to download PDF, will try alternative URLs', { error: downloadError.message });
         }
       }
 
-      // If no PDF URL but we have presentation URL, use it directly
-      if (!finalPresentationUrl && presentationUrl) {
-        finalPresentationUrl = presentationUrl;
+      // Priority 2: Try to download PDF using generationId endpoint
+      if (!finalPresentationUrl && result.generationId) {
+        try {
+          logger.info('[GammaClient] Attempting to download PDF using generationId endpoint', { generationId: result.generationId });
+          const pdfResponse = await axios.get(
+            `${this.baseUrl}/v1.0/generations/${result.generationId}/pdf`,
+            {
+              headers: {
+                'X-API-KEY': this.apiKey,
+              },
+              responseType: 'arraybuffer',
+              timeout: 60000,
+            }
+          );
+
+          const fileBuffer = Buffer.from(pdfResponse.data);
+          const uploadResult = await this._uploadToStorage(fileBuffer, topicName, language, 'application/pdf');
+          
+          if (uploadResult.url) {
+            finalPresentationUrl = uploadResult.url;
+            storagePath = uploadResult.path;
+            logger.info('[GammaClient] PDF downloaded and uploaded to Supabase Storage', { storagePath });
+          }
+        } catch (pdfDownloadError) {
+          logger.warn('[GammaClient] PDF download via generationId endpoint failed', { error: pdfDownloadError.message });
+        }
+      }
+
+      // Priority 3: Use viewUrl if available
+      if (!finalPresentationUrl && viewUrl) {
+        finalPresentationUrl = viewUrl;
+        logger.info('[GammaClient] Using viewUrl as presentation URL', { viewUrl });
+      }
+
+      // Priority 4: Use gammaUrl (Gamma's primary URL)
+      if (!finalPresentationUrl && gammaUrl) {
+        finalPresentationUrl = gammaUrl;
+        logger.info('[GammaClient] Gamma returned only gammaUrl; using that as presentationUrl', { gammaUrl });
       }
 
       if (!finalPresentationUrl) {
-        throw new Error('No presentation URL or PDF URL found in Gamma response');
+        throw new Error('No presentation URL found in Gamma response (checked: pdfUrl, viewUrl, gammaUrl)');
       }
 
       logger.info('[GammaClient] Presentation generated successfully', { 
