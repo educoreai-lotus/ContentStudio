@@ -36,7 +36,7 @@ const aiGenerationService = new AIGenerationService({
   heygenApiKey: process.env.HEYGEN_API_KEY,
   supabaseUrl: process.env.SUPABASE_URL,
   supabaseServiceKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
-  googleServiceAccountJson: process.env.GOOGLE_SERVICE_ACCOUNT_JSON,
+  gammaApiKey: process.env.GAMMA_API,
 });
 
 const getLessonByLanguageUseCase = new GetLessonByLanguageUseCase({

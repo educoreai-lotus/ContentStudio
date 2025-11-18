@@ -4,8 +4,9 @@ import { TTSClient } from '../external-apis/openai/TTSClient.js';
 import { GeminiClient } from '../external-apis/gemini/GeminiClient.js';
 import { HeygenClient } from './HeygenClient.js';
 import { SupabaseStorageClient } from '../storage/SupabaseStorageClient.js';
-import { GoogleSlidesClient } from '../external-apis/google-slides/GoogleSlidesClient.js';
+import { GammaClient } from '../gamma/GammaClient.js';
 import { PromptSanitizer } from '../security/PromptSanitizer.js';
+import { logger } from '../logging/Logger.js';
 
 /**
  * AI Generation Service Implementation
@@ -18,7 +19,7 @@ export class AIGenerationService extends IAIGenerationService {
     heygenApiKey,
     supabaseUrl,
     supabaseServiceKey,
-    googleServiceAccountJson,
+    gammaApiKey,
   }) {
     super();
     this.openaiClient = openaiApiKey ? new OpenAIClient({ apiKey: openaiApiKey }) : null;
@@ -28,9 +29,10 @@ export class AIGenerationService extends IAIGenerationService {
     this.storageClient = (supabaseUrl && supabaseServiceKey)
       ? new SupabaseStorageClient({ supabaseUrl, supabaseServiceKey })
       : null;
-    this.googleSlidesClient = googleServiceAccountJson
-      ? new GoogleSlidesClient({ serviceAccountJson: googleServiceAccountJson })
-      : null;
+    this.gammaClient = gammaApiKey ? new GammaClient({ 
+      apiKey: gammaApiKey,
+      storageClient: this.storageClient,
+    }) : null;
   }
 
   async generate(options) {
@@ -390,127 +392,109 @@ ${basePrompt}`;
   }
 
   /**
-   * Generate presentation slides from text/topic
-   * @param {string} topic - Topic or text for presentation
-   * @param {Object} config - Presentation config
-   * @returns {Promise<Object>} Presentation data
+   * Generate Gamma presentation from content data
+   * @param {Object} contentData - Presentation content data
+   * @param {string} contentData.topicName - Topic name
+   * @param {string} contentData.topicDescription - Topic description
+   * @param {Array<string>} contentData.skills - Skills array
+   * @param {string} contentData.trainerPrompt - Trainer prompt (may be null for VideoToLesson)
+   * @param {string} contentData.transcriptText - Transcription text (fallback if trainerPrompt is null)
+   * @param {string} contentData.language - Language code
+   * @param {string} contentData.audience - Target audience
+   * @param {Object} config - Additional config
+   * @returns {Promise<Object>} Gamma presentation data with storage info
    */
-  async generatePresentation(topic, config = {}) {
-    if (!this.openaiClient) {
-      throw new Error('OpenAI client not configured');
+  async generatePresentation(contentData, config = {}) {
+    if (!this.gammaClient) {
+      throw new Error('Gamma client not configured');
     }
 
-    // Sanitize user input to prevent injection
-    const sanitizedTopic = PromptSanitizer.sanitizePrompt(topic);
-    const sanitizedStyle = PromptSanitizer.sanitizeString(config.style || 'educational', 'style', {
-      maxLength: 50,
-      removeNewlines: true,
+    // Extract and sanitize input data
+    const topicName = PromptSanitizer.sanitizeString(
+      contentData.topicName || contentData.topic || '',
+      'topicName',
+      { maxLength: 200 }
+    );
+    const topicDescription = PromptSanitizer.sanitizePrompt(
+      contentData.topicDescription || contentData.description || ''
+    );
+    const skills = Array.isArray(contentData.skills)
+      ? contentData.skills.map(skill => PromptSanitizer.sanitizeString(String(skill), 'skill', { maxLength: 100 }))
+      : [];
+    const language = PromptSanitizer.sanitizeString(
+      contentData.language || config.language || 'en',
+      'language',
+      { maxLength: 10 }
+    );
+    const audience = PromptSanitizer.sanitizeString(
+      contentData.audience || config.audience || 'general',
+      'audience',
+      { maxLength: 100 }
+    );
+
+    if (!topicName) {
+      throw new Error('Topic name is required for presentation generation');
+    }
+
+    // Determine effective prompt: trainerPrompt if available, otherwise use transcriptText
+    const trainerPrompt = contentData.trainerPrompt 
+      ? PromptSanitizer.sanitizePrompt(contentData.trainerPrompt)
+      : null;
+    const transcriptText = contentData.transcriptText
+      ? PromptSanitizer.sanitizePrompt(contentData.transcriptText)
+      : null;
+
+    const effectivePrompt = (trainerPrompt && trainerPrompt.trim().length > 0)
+      ? trainerPrompt
+      : (transcriptText && transcriptText.trim().length > 0)
+        ? transcriptText
+        : topicDescription;
+
+    if (!effectivePrompt || effectivePrompt.trim().length === 0) {
+      throw new Error('Either trainer prompt or transcript text is required for presentation generation');
+    }
+
+    // Build text prompt for Gamma
+    const skillsList = skills.length > 0
+      ? skills.map(skill => `- ${skill}`).join('\n')
+      : 'None specified';
+
+    const promptText = `Create a professional presentation.
+
+Topic: ${topicName}
+Description: ${topicDescription}
+
+Key Skills:
+${skillsList}
+
+Trainer Notes / Source Material:
+${effectivePrompt}
+
+Language: ${language}
+Audience: ${audience}
+
+Produce a structured, polished slide deck.`;
+
+    // Generate presentation using Gamma API
+    const gammaResult = await this.gammaClient.generatePresentation(promptText, {
+      topicName,
+      language,
     });
-
-    const slideCount = Math.min(Math.max(parseInt(config.slide_count) || 10, 1), 50); // Limit 1-50
-
-    // Wrap user input in delimiters
-    const wrappedTopic = PromptSanitizer.wrapUserInput(sanitizedTopic);
-
-    const securityInstruction = PromptSanitizer.getSystemInstruction();
-    const presentationPrompt = `${securityInstruction}
-
-Create a ${sanitizedStyle} presentation about the following topic:
-
-${wrappedTopic}
-
-Generate ${slideCount} slides with:
-- Clear titles for each slide
-- 3-5 bullet points per slide
-- Logical flow and progression
-- Engaging content suitable for learning
-
-Format as JSON with this structure:
-{
-  "title": "Presentation Title",
-  "slides": [
-    {
-      "slide_number": 1,
-      "title": "Slide Title",
-      "content": ["Bullet point 1", "Bullet point 2", ...]
-    },
-    ...
-  ]
-}`;
-
-    const generatedContent = await this.openaiClient.generateText(presentationPrompt, {
-      systemPrompt: 'You are an expert presentation designer. Create well-structured, educational presentations.',
-      temperature: 0.7,
-      max_tokens: 3000,
-    });
-
-    // Try to parse JSON from response
-    let presentationData;
-    try {
-      // Extract JSON from markdown code blocks if present
-      const jsonMatch = generatedContent.match(/```json\s*([\s\S]*?)\s*```/) ||
-                       generatedContent.match(/```\s*([\s\S]*?)\s*```/);
-      const jsonText = jsonMatch ? jsonMatch[1] : generatedContent;
-      presentationData = JSON.parse(jsonText);
-    } catch (error) {
-      // If parsing fails, create a simple structure
-      const lines = generatedContent.split('\n').filter(line => line.trim());
-      presentationData = {
-        title: topic,
-        slides: lines.slice(0, slideCount).map((line, index) => ({
-          slide_number: index + 1,
-          title: `Slide ${index + 1}`,
-          content: [line.trim()],
-        })),
-      };
-    }
-
-    let googleSlidesUrl = null;
-    if (this.googleSlidesClient?.isEnabled?.()) {
-      try {
-        const slidesPayload = this.normalizeSlides(presentationData);
-        if (slidesPayload.length > 0) {
-          const lessonTopic = config.lessonTopic || topic;
-          const { publicUrl } = await this.googleSlidesClient.createPresentation({
-            lessonTopic,
-            slides: slidesPayload,
-            accentColor: '#00B894',
-          });
-          googleSlidesUrl = publicUrl;
-          console.log('[AIGenerationService] Google Slides shared successfully:', googleSlidesUrl);
-        }
-      } catch (slidesError) {
-        console.warn('[AIGenerationService] Google Slides generation failed:', slidesError.message);
-      }
-    }
 
     return {
-      presentation: presentationData,
-      format: 'json',
-      slide_count: presentationData.slides?.length || 0,
-      googleSlidesUrl,
+      presentationUrl: gammaResult.presentationUrl,
+      storagePath: gammaResult.storagePath,
+      format: 'gamma',
       metadata: {
-        style,
         generated_at: new Date().toISOString(),
-        googleSlidesUrl,
-        language: config.language,
+        presentationUrl: gammaResult.presentationUrl,
+        storagePath: gammaResult.storagePath,
+        language,
+        audience,
+        source: trainerPrompt ? 'prompt' : 'video_transcription',
+        gamma_raw_response: gammaResult.rawResponse,
       },
     };
-  }
-
-  normalizeSlides(presentationData) {
-    if (!presentationData || !Array.isArray(presentationData.slides)) {
-      return [];
-    }
-
-    return presentationData.slides.map((slide, index) => ({
-      title: this.truncateWords(slide.title || `Slide ${index + 1}`, 7),
-      points: Array.isArray(slide.content)
-        ? slide.content.map(point => String(point).trim()).filter(Boolean)
-        : Array.isArray(slide.points)
-          ? slide.points.map(point => String(point).trim()).filter(Boolean)
-          : [],
-    }));
   }
 
   truncateWords(text = '', maxWords = 7) {

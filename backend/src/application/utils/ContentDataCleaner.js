@@ -82,7 +82,7 @@ export class ContentDataCleaner {
   /**
    * Clean content_data for presentation content type
    * Removes: redundant metadata (lessonTopic, lessonDescription, language, skillsList)
-   * Keeps: presentation data, googleSlidesUrl, essential metadata
+   * Keeps: Gamma presentation URLs, essential metadata
    * 
    * @param {Object} contentData - Raw content data
    * @returns {Object} Cleaned content data
@@ -92,34 +92,49 @@ export class ContentDataCleaner {
       return contentData;
     }
 
-    const cleaned = {
-      presentation: contentData.presentation,
-    };
+    const cleaned = {};
 
     if (contentData.format) {
       cleaned.format = contentData.format;
     }
-    if (contentData.slide_count !== undefined) {
-      cleaned.slide_count = contentData.slide_count;
+    if (contentData.presentationUrl) {
+      cleaned.presentationUrl = contentData.presentationUrl;
     }
-    if (contentData.googleSlidesUrl || contentData.storageUrl) {
-      cleaned.googleSlidesUrl = contentData.googleSlidesUrl || contentData.storageUrl;
+    if (contentData.storagePath) {
+      cleaned.storagePath = contentData.storagePath;
     }
 
-    // Keep only essential metadata (style, generated_at), remove topic/skills/language metadata
+    // Keep only essential metadata, remove topic/skills/language metadata
     if (contentData.metadata) {
       const essentialMetadata = {};
-      if (contentData.metadata.style) {
-        essentialMetadata.style = contentData.metadata.style;
-      }
       if (contentData.metadata.generated_at) {
         essentialMetadata.generated_at = contentData.metadata.generated_at;
       }
-      if (contentData.metadata.googleSlidesUrl) {
-        essentialMetadata.googleSlidesUrl = contentData.metadata.googleSlidesUrl;
+      if (contentData.metadata.presentationUrl) {
+        essentialMetadata.presentationUrl = contentData.metadata.presentationUrl;
+      }
+      if (contentData.metadata.storagePath) {
+        essentialMetadata.storagePath = contentData.metadata.storagePath;
+      }
+      if (contentData.metadata.deckId) {
+        essentialMetadata.deckId = contentData.metadata.deckId;
+      }
+      if (contentData.metadata.embedUrl) {
+        essentialMetadata.embedUrl = contentData.metadata.embedUrl;
+      }
+      if (contentData.metadata.language) {
+        essentialMetadata.language = contentData.metadata.language;
+      }
+      if (contentData.metadata.audience) {
+        essentialMetadata.audience = contentData.metadata.audience;
+      }
+      if (contentData.metadata.source) {
+        essentialMetadata.source = contentData.metadata.source;
+      }
+      if (contentData.metadata.gamma_raw_response) {
+        essentialMetadata.gamma_raw_response = contentData.metadata.gamma_raw_response;
       }
       
-      // Remove: language (redundant - stored in topics table)
       // Remove: lessonTopic, lessonDescription, skillsList (redundant - stored in topics/skills tables)
       
       if (Object.keys(essentialMetadata).length > 0) {
@@ -278,6 +293,33 @@ export class ContentDataCleaner {
         return this.cleanMindMapData(contentData);
       case 6: // avatar_video
         return this.cleanAvatarVideoData(contentData);
+      default:
+        // For unknown types, return as-is but log a warning
+        console.warn(`[ContentDataCleaner] Unknown content type ID: ${contentTypeId}, returning data as-is`);
+        return contentData;
+    }
+  }
+}
+
+
+      default:
+        // For unknown types, return as-is but log a warning
+        console.warn(`[ContentDataCleaner] Unknown content type ID: ${contentTypeId}, returning data as-is`);
+        return contentData;
+    }
+  }
+}
+
+
+      default:
+        // For unknown types, return as-is but log a warning
+        console.warn(`[ContentDataCleaner] Unknown content type ID: ${contentTypeId}, returning data as-is`);
+        return contentData;
+    }
+  }
+}
+
+
       default:
         // For unknown types, return as-is but log a warning
         console.warn(`[ContentDataCleaner] Unknown content type ID: ${contentTypeId}, returning data as-is`);

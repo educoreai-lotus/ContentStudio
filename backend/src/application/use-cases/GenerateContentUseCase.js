@@ -48,90 +48,20 @@ Lesson Context:
 - Learners need to see clean code they can read and understand
 - The code itself is the teaching tool - make it readable
 
-Guidelines:
-- Generate a complete, working code block in the most relevant programming language
-- Use clear variable and function names that explain themselves
-- Write code that is easy to read and understand without comments
-- Output: clean code only, no JSON format.`,
-  presentation: ({ lessonTopic, lessonDescription, language, skillsList }) => `You are an AI educational designer for EduCore Content Studio.
-🎯 Objective: Generate presentation slide text based on ${lessonTopic}.
-
-Lesson Context:
-- Topic: ${lessonTopic}
-- Description: ${lessonDescription}
-- Skills: ${skillsList}
-- Language: ${language}
-
-Guidelines:
-- Create content for 8–10 slides.
-- Each slide: title + 2–3 short bullet points.
-- Keep tone educational and professional.
-- Output plain slide text only (no JSON).` ,
-  audio: ({ lessonTopic, lessonDescription, language, skillsList }) => `You are a professional voice narration assistant for EduCore Content Studio.
-🎯 Objective: Create an engaging spoken narration script for ${lessonTopic}.
-
-Lesson Context:
-- Topic: ${lessonTopic}
-- Description: ${lessonDescription}
-- Skills: ${skillsList}
-- Language: ${language}
-
-Guidelines:
-- Use a natural spoken tone.
-- Length: around 1–2 minutes.
-- Output: clean narration text to convert with TTS (no JSON).` ,
-  mind_map: ({ lessonTopic, lessonDescription, language, skillsList }) => `You are an AI mind map generator for EduCore Content Studio.
-🎯 Objective: Create a visual mind map that represents the structure of ${lessonTopic}.
-
-Lesson Context:
-- Topic: ${lessonTopic}
-- Description: ${lessonDescription}
-- Skills: ${skillsList}
-- Language: ${language}
-
-Guidelines:
-- Identify 5–8 main nodes based on the description and skills.
-- Show relationships clearly between ideas.
-- Prefer generating a mind map image (visual output).
-- If image rendering fails, output Mermaid syntax:
-mindmap
-  root((${lessonTopic}))
-    A({subtopic1})
-      A1({detail1})
-      A2({detail2})
-    B({subtopic2})` ,
-  avatar_video: ({ lessonTopic, lessonDescription, language, skillsList }) => `You are a virtual presenter in EduCore Content Studio.
-🎯 Objective: Create a short 15-second video introduction about ${lessonTopic}.
-
-Lesson Context:
-- Topic: ${lessonTopic}
-- Description: ${lessonDescription}
-- Skills: ${skillsList}
-- Language: ${language}
-
-Guidelines:
-- Use engaging, spoken tone in ${language}.
-- Limit to ~100 words (≈15 seconds).
-- End with a motivational or inspiring sentence.
-- Output: text narration script (for Heygen API video generation).`
+Generate ${language} code that demonstrates the concepts clearly.`,
 };
 
-// Supported content type IDs (integers from database)
 const SUPPORTED_TYPES = [1, 2, 3, 4, 5, 6]; // text, code, presentation, audio, mind_map, avatar_video
 
-/**
- * Generate Content Use Case
- * Handles AI-assisted content generation
- */
 export class GenerateContentUseCase {
   constructor({
-    contentRepository,
     aiGenerationService,
+    contentRepository,
     promptTemplateService,
     qualityCheckService,
   }) {
-    this.contentRepository = contentRepository;
     this.aiGenerationService = aiGenerationService;
+    this.contentRepository = contentRepository;
     this.promptTemplateService = promptTemplateService;
     this.qualityCheckService = qualityCheckService;
   }
@@ -175,25 +105,17 @@ export class GenerateContentUseCase {
     const typeMap = {
       1: 'text',
       2: 'code',
-      3: 'presentation',
-      4: 'audio',
-      5: 'mind_map',
-      6: 'avatar_video',
     };
-    
-    const typeKey = typeMap[contentTypeId];
-    if (!typeKey) {
-      throw new Error(`Unknown content type ID: ${contentTypeId}`);
+
+    const builderKey = typeMap[contentTypeId];
+    if (!builderKey || !PROMPT_BUILDERS[builderKey]) {
+      throw new Error(`No prompt builder for content type: ${contentTypeId}`);
     }
+
+    const builder = PROMPT_BUILDERS[builderKey];
     
-    const builder = PROMPT_BUILDERS[typeKey];
-    if (!builder) {
-      throw new Error(`Prompt builder not defined for content type: ${typeKey}`);
-    }
-    
-    // Wrap user input variables to prevent prompt injection
+    // Wrap user input variables in delimiters
     const wrappedVariables = {
-      ...variables,
       lessonTopic: PromptSanitizer.wrapUserInput(variables.lessonTopic || ''),
       lessonDescription: PromptSanitizer.wrapUserInput(variables.lessonDescription || ''),
       language: PromptSanitizer.wrapUserInput(variables.language || ''),
@@ -318,23 +240,35 @@ ${basePrompt}`;
         }
 
         case 3: { // presentation
-          const presentation = await this.aiGenerationService.generatePresentation(prompt, {
-            slide_count: generationRequest.slide_count || 10,
-            style: generationRequest.presentation_style || 'educational',
-            lessonTopic: promptVariables.lessonTopic,
-            lessonDescription: promptVariables.lessonDescription,
+          // Build content object for Gamma API with VideoToLesson support
+          const presentationContent = {
+            topicName: promptVariables.lessonTopic,
+            topicDescription: promptVariables.lessonDescription,
+            skills: promptVariables.skillsListArray || [],
+            trainerPrompt: promptVariables.trainerRequestText || null, // May be null for VideoToLesson
+            transcriptText: promptVariables.transcriptText || null, // Fallback if trainerPrompt is null
+            audience: generationRequest.audience || 'general',
             language: promptVariables.language,
-            skillsList: promptVariables.skillsListArray,
+          };
+
+          const presentation = await this.aiGenerationService.generatePresentation(presentationContent, {
+            language: promptVariables.language,
+            audience: generationRequest.audience || 'general',
           });
           
           // Build raw content data
           const rawContentData = {
             ...presentation,
-            googleSlidesUrl: presentation.googleSlidesUrl,
+            presentationUrl: presentation.presentationUrl,
+            storagePath: presentation.storagePath,
             metadata: {
-              style: presentation.metadata?.style,
               generated_at: presentation.metadata?.generated_at,
-              googleSlidesUrl: presentation.googleSlidesUrl,
+              presentationUrl: presentation.metadata?.presentationUrl,
+              storagePath: presentation.metadata?.storagePath,
+              language: presentation.metadata?.language,
+              audience: presentation.metadata?.audience,
+              source: presentation.metadata?.source,
+              gamma_raw_response: presentation.metadata?.gamma_raw_response,
             },
           };
           
@@ -447,6 +381,3 @@ ${basePrompt}`;
     return content;
   }
 }
-
-
-
