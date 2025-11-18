@@ -445,6 +445,14 @@ export default function LessonView() {
       }
     }
 
+    // Support multiple possible locations for videoUrl
+    const videoUrl = parsedData?.videoUrl || 
+                     parsedData?.storageUrl ||
+                     parsedData?.metadata?.heygen_video_url ||
+                     parsedData?.heygen_video_url ||
+                     parsedData?.metadata?.heygenVideoUrl ||
+                     parsedData?.heygenVideoUrl;
+
     return (
       <div className="space-y-4">
         {parsedData?.script && (
@@ -470,7 +478,7 @@ export default function LessonView() {
           </div>
         )}
 
-        {parsedData?.videoUrl ? (
+        {videoUrl ? (
           <div className="space-y-3">
             <div
               className={`flex items-center gap-2 px-4 py-2 rounded-lg ${
@@ -488,7 +496,7 @@ export default function LessonView() {
             </div>
             <div className="relative rounded-lg overflow-hidden shadow-2xl bg-black">
               <video
-                src={parsedData.videoUrl}
+                src={videoUrl}
                 controls
                 className="w-full h-auto"
                 style={{ maxHeight: '500px' }}
@@ -514,6 +522,38 @@ export default function LessonView() {
                 Duration: {Math.round(parsedData.duration_seconds)}s
               </div>
             )}
+          </div>
+        ) : parsedData?.videoId ? (
+          <div className="space-y-3">
+            <div
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg ${
+                theme === 'day-mode' ? 'bg-blue-50' : 'bg-blue-900/20'
+              }`}
+            >
+              <i className="fas fa-video text-blue-600"></i>
+              <span
+                className={`text-sm font-medium ${
+                  theme === 'day-mode' ? 'text-blue-900' : 'text-blue-300'
+                }`}
+              >
+                Avatar Video
+              </span>
+            </div>
+            <div className="text-center p-4">
+              <a
+                href={`https://app.heygen.com/share/${parsedData.videoId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`inline-block px-6 py-3 rounded-lg ${
+                  theme === 'day-mode'
+                    ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                    : 'bg-blue-500 hover:bg-blue-600 text-white'
+                }`}
+              >
+                <i className="fas fa-external-link-alt mr-2"></i>
+                View Video on Heygen
+              </a>
+            </div>
           </div>
         ) : (
           <div
@@ -828,10 +868,38 @@ export default function LessonView() {
               contentCount: f.content?.length || 0 
             })));
             
-            return sortedFormats.map((formatItem, index) => {
+            // Deduplicate content items to prevent showing same content multiple times
+            const seenContentIds = new Set();
+            const deduplicatedFormats = sortedFormats.map(formatItem => {
               // Skip 'audio' format if it's part of text_audio_combined (to avoid duplicate)
               if (formatItem.type === 'audio' && sortedFormats.some(f => f.type === 'text_audio_combined' || f.type === 'audio_text')) {
-                return null;
+                return { ...formatItem, content: [] };
+              }
+              
+              // Deduplicate content items within this format
+              if (formatItem.content && formatItem.content.length > 0) {
+                const deduplicatedContent = formatItem.content.filter(contentItem => {
+                  const contentId = contentItem.content_id || contentItem.id;
+                  if (!contentId) return true; // Keep items without ID
+                  if (seenContentIds.has(contentId)) {
+                    return false; // Skip duplicate
+                  }
+                  seenContentIds.add(contentId);
+                  return true; // Keep unique item
+                });
+                return { ...formatItem, content: deduplicatedContent };
+              }
+              return formatItem;
+            });
+
+            return deduplicatedFormats.map((formatItem, index) => {
+              // Skip formats with no content after deduplication
+              if (!formatItem.content || formatItem.content.length === 0) {
+                // Only skip if it's an empty format that was already shown in combined format
+                if (formatItem.type === 'audio' && sortedFormats.some(f => f.type === 'text_audio_combined' || f.type === 'audio_text')) {
+                  return null;
+                }
+                // For other empty formats, show empty state
               }
               
               // Determine display label and icon for combined formats
@@ -870,7 +938,7 @@ export default function LessonView() {
                     <p className={`text-sm ${
                       theme === 'day-mode' ? 'text-gray-500' : 'text-gray-400'
                     }`}>
-                      Step {formatItem.display_order + 1} of {lessonView.formats.length}
+                      Step {formatItem.display_order + 1} of {deduplicatedFormats.filter(f => f.content && f.content.length > 0).length}
                     </p>
                   </div>
                 </div>
@@ -892,7 +960,7 @@ export default function LessonView() {
                 )}
               </div>
               );
-            });
+            }).filter(item => item !== null);
           })()}
         </div>
       </div>
