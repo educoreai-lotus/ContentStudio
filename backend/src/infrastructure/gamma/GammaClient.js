@@ -65,8 +65,9 @@ export class GammaClient {
       };
 
       // Make API request to Gamma
+      // Gamma API endpoint: /api/generate/deck
       const response = await axios.post(
-        `${this.baseUrl}/v1/decks`,
+        `${this.baseUrl}/api/generate/deck`,
         payload,
         {
           headers: {
