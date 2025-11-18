@@ -112,12 +112,6 @@ export class GammaClient {
       };
       
       // Only add themeId if a valid theme is provided via environment variable
-      const themeId = process.env.GAMMA_THEME_ID;
-      if (themeId && themeId.trim().length > 0) {
-        payload.themeId = themeId.trim();
-      }
-      
-      // Only add themeId if a valid theme is provided via environment variable
       // Gamma Public API may not support all themes, so we make it optional
       const themeId = process.env.GAMMA_THEME_ID;
       if (themeId && themeId.trim().length > 0) {
