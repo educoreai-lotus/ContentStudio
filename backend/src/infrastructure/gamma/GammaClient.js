@@ -198,75 +198,73 @@ export class GammaClient {
         }
       }
 
-      // Priority 2: Try to download PDF using generationId endpoint (primary method)
-      // This is the recommended way to get PDF from Gamma Public API
+      // Priority 2: MANDATORY - Download REAL PDF file from Gamma API
+      // This is the PRIMARY and ONLY acceptable method - we MUST get a PDF/PPTX file
       if (!finalPresentationUrl && result.generationId) {
         try {
           logger.info('[GammaClient] Attempting to download PDF using generationId endpoint', { generationId: result.generationId });
-          const pdfResponse = await axios.get(
-            `${this.baseUrl}/v1.0/generations/${result.generationId}/pdf`,
-            {
-              headers: {
-                'X-API-KEY': this.apiKey,
-              },
-              responseType: 'arraybuffer',
-              timeout: 60000,
+          
+          // Try the primary PDF endpoint: GET https://api.gamma.app/v1/generations/{generationId}/pdf
+          // Note: Using api.gamma.app (not public-api.gamma.app) for PDF download
+          const pdfEndpoint = `https://api.gamma.app/v1/generations/${result.generationId}/pdf`;
+          
+          const pdfResponse = await axios.get(pdfEndpoint, {
+            headers: {
+              'X-API-KEY': this.apiKey,
+            },
+            responseType: 'arraybuffer',
+            timeout: 120000, // 2 minutes for large PDFs
+          });
+
+          // Validate that we got a PDF file (check content-type or file signature)
+          const contentType = pdfResponse.headers['content-type'] || '';
+          const isPdf = contentType.includes('pdf') || 
+                       (pdfResponse.data && pdfResponse.data.length > 4 && 
+                        pdfResponse.data[0] === 0x25 && pdfResponse.data[1] === 0x50 && 
+                        pdfResponse.data[2] === 0x44 && pdfResponse.data[3] === 0x46); // PDF magic bytes: %PDF
+
+          if (!isPdf) {
+            logger.warn('[GammaClient] Response from PDF endpoint is not a PDF file', { contentType });
+            // Try to detect if it's PPTX instead
+            const isPptx = contentType.includes('pptx') || contentType.includes('presentation');
+            if (!isPptx) {
+              throw new Error('Gamma API returned non-PDF/non-PPTX file from PDF endpoint');
             }
-          );
+          }
 
           const fileBuffer = Buffer.from(pdfResponse.data);
-          const uploadResult = await this._uploadToStorage(fileBuffer, topicName, language, 'application/pdf');
+          const mimeType = isPdf ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+          const uploadResult = await this._uploadToStorage(fileBuffer, topicName, language, mimeType);
           
-          if (uploadResult.url) {
+          if (uploadResult.url && uploadResult.path) {
             finalPresentationUrl = uploadResult.url;
             storagePath = uploadResult.path;
-            logger.info('[GammaClient] PDF downloaded and uploaded to Supabase Storage successfully', { storagePath, url: finalPresentationUrl });
+            logger.info('[GammaClient] PDF/PPTX downloaded and uploaded to Supabase Storage successfully', { 
+              storagePath, 
+              url: finalPresentationUrl,
+              fileSize: fileBuffer.length,
+              contentType: mimeType
+            });
           } else {
-            logger.warn('[GammaClient] PDF uploaded but no URL returned from storage');
+            throw new Error('PDF uploaded but no URL or path returned from storage');
           }
         } catch (pdfDownloadError) {
           logger.error('[GammaClient] PDF download via generationId endpoint failed', { 
             error: pdfDownloadError.message,
             status: pdfDownloadError.response?.status,
+            endpoint: `https://api.gamma.app/v1/generations/${result.generationId}/pdf`,
             data: pdfDownloadError.response?.data ? Buffer.from(pdfDownloadError.response.data).toString('utf-8').substring(0, 200) : null
           });
+          
+          // CRITICAL: Do NOT create JSON fallback - throw error instead
+          // JSON files are NOT presentations - we MUST have a real PDF/PPTX file
+          throw new Error(`Failed to download presentation PDF from Gamma API: ${pdfDownloadError.message}. PDF download is mandatory - JSON fallback is not acceptable.`);
         }
       }
 
-      // MANDATORY: We MUST store the presentation in Supabase Storage
-      // If PDF download failed, create a JSON fallback file with gammaUrl
+      // MANDATORY: We MUST have a real PDF/PPTX file - no JSON fallback allowed
       if (!finalPresentationUrl || !storagePath) {
-        logger.warn('[GammaClient] PDF download failed, creating JSON fallback with gammaUrl', { 
-          generationId: result.generationId,
-          gammaUrl 
-        });
-        
-        // Create JSON fallback file containing gammaUrl
-        const fallbackData = {
-          gammaUrl: gammaUrl || viewUrl,
-          generationId: result.generationId,
-          status: 'completed',
-          note: 'PDF download not available, storing gammaUrl as fallback',
-        };
-        
-        const jsonBuffer = Buffer.from(JSON.stringify(fallbackData, null, 2), 'utf-8');
-        const uploadResult = await this._uploadToStorage(jsonBuffer, topicName, language, 'application/json');
-        
-        if (!uploadResult.url || !uploadResult.path) {
-          throw new Error('Failed to upload presentation to Supabase Storage. Storage is required for all presentations.');
-        }
-        
-        finalPresentationUrl = uploadResult.url;
-        storagePath = uploadResult.path;
-        logger.info('[GammaClient] Created JSON fallback and uploaded to Supabase Storage', { 
-          storagePath,
-          url: finalPresentationUrl 
-        });
-      }
-
-      // Final validation: We MUST have a Supabase Storage URL
-      if (!finalPresentationUrl || !storagePath) {
-        throw new Error('Failed to store presentation in Supabase Storage. This is mandatory - external URLs are not allowed.');
+        throw new Error('Failed to download and store presentation file. PDF/PPTX download from Gamma API is mandatory - JSON files are not acceptable as presentations.');
       }
 
       // Ensure we're not returning a gammaUrl directly

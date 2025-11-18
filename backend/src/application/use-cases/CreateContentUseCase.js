@@ -79,10 +79,15 @@ export class CreateContentUseCase {
       hasExistingContent: !!existingContent,
     });
 
-    // Save existing content to history BEFORE creating/updating new content
-    if (existingContent && this.contentHistoryService?.saveVersion) {
+    // MANDATORY: Save existing content to history BEFORE creating/updating new content
+    // This applies to ALL content formats - no exceptions
+    if (existingContent) {
+      if (!this.contentHistoryService?.saveVersion) {
+        throw new Error('ContentHistoryService is required for content updates. History save is mandatory.');
+      }
+
       try {
-        console.log('[CreateContentUseCase] Saving existing content to history before update:', {
+        console.log('[CreateContentUseCase] MANDATORY: Saving existing content to history before update:', {
           content_id: existingContent.content_id,
           topic_id: existingContent.topic_id,
           content_type_id: existingContent.content_type_id,
@@ -91,9 +96,9 @@ export class CreateContentUseCase {
         console.log('[CreateContentUseCase] Successfully saved content to history');
       } catch (error) {
         console.error('[CreateContentUseCase] Failed to save previous version before update:', error.message, error.stack);
+        // Do not proceed with update if history save fails
+        throw new Error(`Failed to archive content to history: ${error.message}`);
       }
-    } else if (existingContent && !this.contentHistoryService?.saveVersion) {
-      console.warn('[CreateContentUseCase] ContentHistoryService not available, skipping history save');
     }
 
     if (existingContent) {

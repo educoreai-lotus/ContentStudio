@@ -75,12 +75,14 @@ export class RegenerateContentUseCase {
 
     // Step 3: Generate new content using GenerateContentUseCase logic
     // Import GenerateContentUseCase to reuse its generation logic
+    // Note: We pass null for contentHistoryService because we've already saved history above
     const { GenerateContentUseCase } = await import('./GenerateContentUseCase.js');
     const generateContentUseCase = new GenerateContentUseCase({
       contentRepository: this.contentRepository,
       aiGenerationService: this.aiGenerationService,
       promptTemplateService: this.promptTemplateService,
       qualityCheckService: this.qualityCheckService,
+      // contentHistoryService is not needed here - we've already saved history
     });
 
     // Build generation request from regenerate request
