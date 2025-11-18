@@ -1,5 +1,6 @@
 import { CreateContentUseCase } from '../../application/use-cases/CreateContentUseCase.js';
 import { UpdateContentUseCase } from '../../application/use-cases/UpdateContentUseCase.js';
+import { RegenerateContentUseCase } from '../../application/use-cases/RegenerateContentUseCase.js';
 import { ContentDTO } from '../../application/dtos/ContentDTO.js';
 
 /**
@@ -12,6 +13,7 @@ export class ContentController {
     qualityCheckService,
     aiGenerationService,
     contentHistoryService,
+    promptTemplateService,
   }) {
     this.createContentUseCase = new CreateContentUseCase({
       contentRepository,
@@ -22,6 +24,13 @@ export class ContentController {
     this.updateContentUseCase = new UpdateContentUseCase({
       contentRepository,
       contentHistoryService,
+    });
+    this.regenerateContentUseCase = new RegenerateContentUseCase({
+      contentRepository,
+      contentHistoryService,
+      aiGenerationService,
+      promptTemplateService,
+      qualityCheckService,
     });
     this.contentRepository = contentRepository;
     this.contentHistoryService = contentHistoryService;
@@ -260,11 +269,10 @@ export class ContentController {
   }
 
   /**
-   * Delete content (soft delete)
+   * Delete content (hard delete with mandatory history)
    * DELETE /api/content/:id
    * 
-   * Note: The repository's delete() method handles archiving to history
-   * within a transaction, so we don't need to call contentHistoryService.saveVersion() here.
+   * MANDATORY: Always save to content_history BEFORE deletion
    */
   async remove(req, res, next) {
     try {
@@ -280,7 +288,27 @@ export class ContentController {
         });
       }
 
-      // Repository delete() method handles archiving to history within a transaction
+      // MANDATORY: Save to history BEFORE deletion
+      if (this.contentHistoryService?.saveVersion) {
+        try {
+          console.log('[ContentController] Saving content to history before deletion:', {
+            content_id: contentId,
+            topic_id: existingContent.topic_id,
+            content_type_id: existingContent.content_type_id,
+          });
+          await this.contentHistoryService.saveVersion(existingContent, { force: true });
+          console.log('[ContentController] Successfully archived content to history before deletion');
+        } catch (error) {
+          console.error('[ContentController] Failed to save content to history before deletion:', error.message, error.stack);
+          // Do not proceed with deletion if history save fails
+          throw new Error(`Failed to archive content to history: ${error.message}`);
+        }
+      } else {
+        console.warn('[ContentController] ContentHistoryService not available, but proceeding with deletion');
+      }
+
+      // Repository delete() method also handles archiving to history as a backup
+      // But we've already done it above to ensure it happens
       await this.contentRepository.delete(contentId);
 
       res.status(204).send();

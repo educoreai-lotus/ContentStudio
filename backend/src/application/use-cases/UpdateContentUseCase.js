@@ -24,13 +24,24 @@ export class UpdateContentUseCase {
       throw new Error('Content not found');
     }
 
-    // Create version from current content before updating
-    if (updates.content_data && this.hasContentChanged(existingContent.content_data, updates.content_data)) {
+    // MANDATORY: Always save previous version to history before updating
+    // This applies to ALL content formats and ALL update scenarios
+    if (this.contentHistoryService?.saveVersion) {
       try {
-        await this.contentHistoryService.saveVersion(existingContent);
+        console.log('[UpdateContentUseCase] Saving previous version to history before update:', {
+          content_id: contentId,
+          topic_id: existingContent.topic_id,
+          content_type_id: existingContent.content_type_id,
+        });
+        await this.contentHistoryService.saveVersion(existingContent, { force: true });
+        console.log('[UpdateContentUseCase] Successfully archived previous version to history');
       } catch (error) {
-        console.error('Failed to store content history before update:', error);
+        console.error('[UpdateContentUseCase] Failed to save previous version to history:', error.message, error.stack);
+        // Do not proceed with update if history save fails
+        throw new Error(`Failed to archive content to history: ${error.message}`);
       }
+    } else {
+      throw new Error('ContentHistoryService is required for content updates');
     }
 
     // Clean content_data before updating if it's being updated

@@ -43,11 +43,17 @@ let contentController;
     gammaApiKey: process.env.GAMMA_API,
   });
 
+  const { PromptTemplateService } = await import('../../infrastructure/services/PromptTemplateService.js');
+  const promptTemplateService = new PromptTemplateService({
+    templateRepository: await RepositoryFactory.getTemplateRepository(),
+  });
+
   contentController = new ContentController({
     contentRepository,
     qualityCheckService,
     aiGenerationService,
     contentHistoryService,
+    promptTemplateService,
   });
 })();
 
@@ -106,6 +112,13 @@ router.put('/:id', async (req, res, next) => {
     return res.status(503).json({ error: 'Service initializing, please try again' });
   }
   return contentController.update(req, res, next);
+});
+
+router.post('/:id/regenerate', async (req, res, next) => {
+  if (!contentController) {
+    return res.status(503).json({ error: 'Service initializing, please try again' });
+  }
+  return contentController.regenerate(req, res, next);
 });
 
 router.delete('/:id', async (req, res, next) => {
