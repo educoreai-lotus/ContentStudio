@@ -18,7 +18,8 @@ export class GammaClient {
     }
 
     this.apiKey = apiKey;
-    this.baseUrl = process.env.GAMMA_API_URL || 'https://api.gamma.app';
+    // Gamma Public API base URL
+    this.baseUrl = process.env.GAMMA_API_URL || 'https://public-api.gamma.app';
     this.storageClient = storageClient; // SupabaseStorageClient for file uploads
     this.enabled = true;
   }
@@ -64,10 +65,10 @@ export class GammaClient {
         },
       };
 
-      // Make API request to Gamma
-      // Gamma API endpoint: /v2/generate (correct endpoint for slide generation)
+      // Make API request to Gamma Public API
+      // Gamma Public API endpoint: /v1.0/generations (correct endpoint)
       const response = await axios.post(
-        `${this.baseUrl}/v2/generate`,
+        `${this.baseUrl}/v1.0/generations`,
         payload,
         {
           headers: {
