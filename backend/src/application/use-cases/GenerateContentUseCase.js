@@ -261,19 +261,28 @@ ${basePrompt}`;
             audience: generationRequest.audience || 'general',
           });
           
-          // Build raw content data
+          // Build raw content data - MANDATORY structure for presentations
+          // presentationUrl MUST be from Supabase Storage, never gammaUrl
+          if (presentation.presentationUrl && presentation.presentationUrl.includes('gamma.app')) {
+            throw new Error('Invalid presentation URL: External Gamma URL detected. All presentations must be stored in Supabase Storage.');
+          }
+
+          if (!presentation.storagePath) {
+            throw new Error('Missing storage path. All presentations must be stored in Supabase Storage.');
+          }
+
           const rawContentData = {
-            ...presentation,
-            presentationUrl: presentation.presentationUrl,
-            storagePath: presentation.storagePath,
+            format: presentation.format || 'gamma',
+            presentationUrl: presentation.presentationUrl, // Supabase Storage URL only
+            storagePath: presentation.storagePath, // Required storage path
             metadata: {
-              generated_at: presentation.metadata?.generated_at,
-              presentationUrl: presentation.metadata?.presentationUrl,
-              storagePath: presentation.metadata?.storagePath,
-              language: presentation.metadata?.language,
-              audience: presentation.metadata?.audience,
-              source: presentation.metadata?.source,
+              source: presentation.metadata?.source || (promptVariables.trainerRequestText ? 'prompt' : 'video_transcription'),
+              audience: presentation.metadata?.audience || generationRequest.audience || 'general',
+              language: presentation.metadata?.language || promptVariables.language,
+              generated_at: presentation.metadata?.generated_at || new Date().toISOString(),
+              gamma_generation_id: presentation.metadata?.gamma_generation_id,
               gamma_raw_response: presentation.metadata?.gamma_raw_response,
+              // DO NOT include presentationUrl or storagePath in metadata - they're top-level fields
             },
           };
           

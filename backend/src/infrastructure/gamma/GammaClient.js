@@ -233,31 +233,49 @@ export class GammaClient {
         }
       }
 
-      // If we successfully uploaded to Supabase, use that URL
-      if (finalPresentationUrl && storagePath) {
-        logger.info('[GammaClient] Using Supabase Storage URL for presentation', { 
-          presentationUrl: finalPresentationUrl,
-          storagePath 
+      // MANDATORY: We MUST store the presentation in Supabase Storage
+      // If PDF download failed, create a JSON fallback file with gammaUrl
+      if (!finalPresentationUrl || !storagePath) {
+        logger.warn('[GammaClient] PDF download failed, creating JSON fallback with gammaUrl', { 
+          generationId: result.generationId,
+          gammaUrl 
         });
-      } else {
-        // Fallback: If storage upload failed, log warning but use gammaUrl as last resort
-        // Note: This should ideally not happen - storage should always be available
-        if (gammaUrl) {
-          logger.warn('[GammaClient] Failed to upload to Supabase Storage, using gammaUrl as fallback', { 
-            gammaUrl,
-            error: 'Storage upload failed or not configured'
-          });
-          finalPresentationUrl = gammaUrl;
-          storagePath = null; // No storage path if we're using gammaUrl
-        } else if (viewUrl) {
-          logger.warn('[GammaClient] Failed to upload to Supabase Storage, using viewUrl as fallback', { viewUrl });
-          finalPresentationUrl = viewUrl;
-          storagePath = null;
+        
+        // Create JSON fallback file containing gammaUrl
+        const fallbackData = {
+          gammaUrl: gammaUrl || viewUrl,
+          generationId: result.generationId,
+          status: 'completed',
+          note: 'PDF download not available, storing gammaUrl as fallback',
+        };
+        
+        const jsonBuffer = Buffer.from(JSON.stringify(fallbackData, null, 2), 'utf-8');
+        const uploadResult = await this._uploadToStorage(jsonBuffer, topicName, language, 'application/json');
+        
+        if (!uploadResult.url || !uploadResult.path) {
+          throw new Error('Failed to upload presentation to Supabase Storage. Storage is required for all presentations.');
         }
+        
+        finalPresentationUrl = uploadResult.url;
+        storagePath = uploadResult.path;
+        logger.info('[GammaClient] Created JSON fallback and uploaded to Supabase Storage', { 
+          storagePath,
+          url: finalPresentationUrl 
+        });
       }
 
-      if (!finalPresentationUrl) {
-        throw new Error('No presentation URL found in Gamma response and failed to download/upload PDF');
+      // Final validation: We MUST have a Supabase Storage URL
+      if (!finalPresentationUrl || !storagePath) {
+        throw new Error('Failed to store presentation in Supabase Storage. This is mandatory - external URLs are not allowed.');
+      }
+
+      // Ensure we're not returning a gammaUrl directly
+      if (finalPresentationUrl.includes('gamma.app')) {
+        logger.error('[GammaClient] CRITICAL: Returning gammaUrl instead of Supabase URL', { 
+          finalPresentationUrl,
+          storagePath 
+        });
+        throw new Error('Invalid presentation URL: External Gamma URL detected. All presentations must be stored in Supabase Storage.');
       }
 
       logger.info('[GammaClient] Presentation generated successfully', { 
@@ -403,22 +421,25 @@ export class GammaClient {
    */
   async _uploadToStorage(fileBuffer, topicName, language, contentType = 'application/pdf') {
     if (!this.storageClient || !this.storageClient.isConfigured()) {
-      logger.warn('[GammaClient] Storage client not configured, skipping upload');
-      return { url: null, path: null };
+      throw new Error('Supabase Storage client not configured. Storage is mandatory for all presentations.');
     }
 
     try {
-      // Generate file name
+      // Generate file name with topicId if available (for better organization)
       const sanitizedTopicName = topicName
         .replace(/[^a-zA-Z0-9]/g, '_')
         .substring(0, 50)
         .toLowerCase();
       const timestamp = Date.now();
-      const extension = contentType.includes('pdf') ? 'pdf' : 'pptx';
-      const fileName = `presentations/${language}/${sanitizedTopicName}_${timestamp}.${extension}`;
+      const extension = contentType.includes('json') ? 'json' : (contentType.includes('pdf') ? 'pdf' : 'pptx');
+      const fileName = `presentations/${sanitizedTopicName}_${timestamp}.${extension}`;
 
       // Upload to Supabase Storage
       const uploadResult = await this.storageClient.uploadFile(fileBuffer, fileName, contentType);
+
+      if (!uploadResult.url || !uploadResult.path) {
+        throw new Error('Storage upload succeeded but no URL or path returned');
+      }
 
       logger.info('[GammaClient] Presentation uploaded to storage', { path: uploadResult.path, url: uploadResult.url });
 
@@ -427,7 +448,7 @@ export class GammaClient {
         path: uploadResult.path,
       };
     } catch (error) {
-      logger.error('[GammaClient] Failed to upload presentation to storage', { error: error.message });
+      logger.error('[GammaClient] Failed to upload presentation to storage', { error: error.message, stack: error.stack });
       throw new Error(`Failed to upload presentation to storage: ${error.message}`);
     }
   }

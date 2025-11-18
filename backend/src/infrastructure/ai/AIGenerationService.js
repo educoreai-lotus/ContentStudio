@@ -492,18 +492,28 @@ This presentation should be educational and suitable for ${audience}.`;
       audience,
     });
 
+    // MANDATORY: Only return Supabase Storage URL, never gammaUrl
+    // Validate that presentationUrl is from Supabase Storage, not Gamma
+    if (gammaResult.presentationUrl && gammaResult.presentationUrl.includes('gamma.app')) {
+      throw new Error('Invalid presentation URL: Gamma URL detected. All presentations must be stored in Supabase Storage.');
+    }
+
+    if (!gammaResult.storagePath) {
+      throw new Error('Missing storage path. All presentations must be stored in Supabase Storage.');
+    }
+
     return {
-      presentationUrl: gammaResult.presentationUrl,
-      storagePath: gammaResult.storagePath,
+      presentationUrl: gammaResult.presentationUrl, // Must be Supabase Storage URL
+      storagePath: gammaResult.storagePath, // Required storage path
       format: 'gamma',
       metadata: {
         generated_at: new Date().toISOString(),
-        presentationUrl: gammaResult.presentationUrl,
-        storagePath: gammaResult.storagePath,
         language,
         audience,
         source: trainerPrompt ? 'prompt' : 'video_transcription',
+        gamma_generation_id: gammaResult.rawResponse?.generationId || gammaResult.rawResponse?.result?.generationId,
         gamma_raw_response: gammaResult.rawResponse,
+        // DO NOT include presentationUrl or storagePath in metadata - they're top-level fields
       },
     };
   }

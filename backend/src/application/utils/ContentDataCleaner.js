@@ -94,10 +94,15 @@ export class ContentDataCleaner {
 
     const cleaned = {};
 
+    // MANDATORY: Keep format, presentationUrl, and storagePath at top level
     if (contentData.format) {
       cleaned.format = contentData.format;
     }
     if (contentData.presentationUrl) {
+      // Validate that it's not a gammaUrl
+      if (contentData.presentationUrl.includes('gamma.app')) {
+        throw new Error('Invalid presentation URL in content data: External Gamma URL detected. All presentations must be stored in Supabase Storage.');
+      }
       cleaned.presentationUrl = contentData.presentationUrl;
     }
     if (contentData.storagePath) {
@@ -105,25 +110,32 @@ export class ContentDataCleaner {
     }
 
     // Keep only essential metadata, remove topic/skills/language metadata
+    // DO NOT include presentationUrl or storagePath in metadata - they're top-level fields
     if (contentData.metadata) {
       const essentialMetadata = {};
       if (contentData.metadata.generated_at) {
         essentialMetadata.generated_at = contentData.metadata.generated_at;
       }
-      if (contentData.metadata.presentationUrl) {
-        essentialMetadata.presentationUrl = contentData.metadata.presentationUrl;
+      if (contentData.metadata.source) {
+        essentialMetadata.source = contentData.metadata.source;
       }
-      if (contentData.metadata.storagePath) {
-        essentialMetadata.storagePath = contentData.metadata.storagePath;
+      if (contentData.metadata.audience) {
+        essentialMetadata.audience = contentData.metadata.audience;
+      }
+      if (contentData.metadata.language) {
+        essentialMetadata.language = contentData.metadata.language;
+      }
+      if (contentData.metadata.gamma_generation_id) {
+        essentialMetadata.gamma_generation_id = contentData.metadata.gamma_generation_id;
+      }
+      if (contentData.metadata.gamma_raw_response) {
+        essentialMetadata.gamma_raw_response = contentData.metadata.gamma_raw_response;
       }
       if (contentData.metadata.deckId) {
         essentialMetadata.deckId = contentData.metadata.deckId;
       }
       if (contentData.metadata.embedUrl) {
         essentialMetadata.embedUrl = contentData.metadata.embedUrl;
-      }
-      if (contentData.metadata.language) {
-        essentialMetadata.language = contentData.metadata.language;
       }
       if (contentData.metadata.audience) {
         essentialMetadata.audience = contentData.metadata.audience;
