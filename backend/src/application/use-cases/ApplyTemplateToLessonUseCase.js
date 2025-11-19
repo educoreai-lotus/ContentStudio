@@ -128,6 +128,8 @@ export class ApplyTemplateToLessonUseCase {
     // Track which content types have already been added to avoid duplicates
     // This is important for text_audio which might be referenced by both 'text' and 'audio' in template
     const addedContentTypes = new Set();
+    // Also track content IDs to prevent same content appearing in multiple formats
+    const addedContentIds = new Set();
     
     // Build ordered content array according to template
     // IMPORTANT: Follow the exact order specified in template.format_order
@@ -159,6 +161,25 @@ export class ApplyTemplateToLessonUseCase {
           continue; // Skip duplicate
         }
         
+        // Filter out content that has already been added (by content_id)
+        const filteredContent = foundContent.filter(c => {
+          if (!c.content_id) {
+            console.warn(`[ApplyTemplateToLessonUseCase] Content without ID in text_audio, skipping`);
+            return false;
+          }
+          if (addedContentIds.has(c.content_id)) {
+            console.log(`[ApplyTemplateToLessonUseCase] Content ID ${c.content_id} already added, skipping duplicate`);
+            return false;
+          }
+          addedContentIds.add(c.content_id);
+          return true;
+        });
+        
+        if (filteredContent.length === 0) {
+          console.log(`[ApplyTemplateToLessonUseCase] All text_audio content already added, skipping`);
+          continue;
+        }
+        
         // Determine if audio should be before or after text based on template order
         const textIndex = formatOrder.indexOf('text');
         const audioIndex = formatOrder.indexOf('audio');
@@ -171,23 +192,42 @@ export class ApplyTemplateToLessonUseCase {
         orderedContent.push({
           format_type: audioBeforeText ? 'audio_text' : 'text_audio_combined', // Special format type for combined display
           originalFormatType: templateFormatType, // Keep original for reference
-          content: foundContent,
+          content: filteredContent,
           audioFirst: audioBeforeText, // Flag to indicate audio should be shown first
         });
         
-        console.log(`[ApplyTemplateToLessonUseCase] Added text_audio as combined format (audioFirst: ${audioBeforeText})`);
+        console.log(`[ApplyTemplateToLessonUseCase] Added text_audio as combined format (audioFirst: ${audioBeforeText}, contentCount: ${filteredContent.length})`);
       } else if (foundContent) {
-        // For other content types, check if already added
+        // For other content types, check if already added by type
         if (addedContentTypes.has(foundDbTypeName)) {
           console.log(`[ApplyTemplateToLessonUseCase] ${foundDbTypeName} already added, skipping duplicate`);
           continue;
         }
         
+        // Filter out content that has already been added (by content_id)
+        const filteredContent = foundContent.filter(c => {
+          if (!c.content_id) {
+            console.warn(`[ApplyTemplateToLessonUseCase] Content without ID in ${foundDbTypeName}, skipping`);
+            return false;
+          }
+          if (addedContentIds.has(c.content_id)) {
+            console.log(`[ApplyTemplateToLessonUseCase] Content ID ${c.content_id} already added, skipping duplicate`);
+            return false;
+          }
+          addedContentIds.add(c.content_id);
+          return true;
+        });
+        
+        if (filteredContent.length === 0) {
+          console.log(`[ApplyTemplateToLessonUseCase] All ${foundDbTypeName} content already added, skipping`);
+          continue;
+        }
+        
         addedContentTypes.add(foundDbTypeName);
-        console.log(`[ApplyTemplateToLessonUseCase] Found content for "${foundDbTypeName}", adding to orderedContent at position ${orderedContent.length}`);
+        console.log(`[ApplyTemplateToLessonUseCase] Found content for "${foundDbTypeName}", adding to orderedContent at position ${orderedContent.length} (contentCount: ${filteredContent.length})`);
         orderedContent.push({
           format_type: templateFormatType, // Keep template format name for frontend
-          content: foundContent,
+          content: filteredContent,
         });
       } else {
         console.log(`[ApplyTemplateToLessonUseCase] No content found for template "${templateFormatType}" (tried: ${possibleNames.join(', ')})`);
@@ -196,7 +236,12 @@ export class ApplyTemplateToLessonUseCase {
     
     console.log('[ApplyTemplateToLessonUseCase] Final orderedContent:', orderedContent.map(item => ({ type: item.format_type, contentCount: item.content.length })));
 
+    // addedContentIds is already populated from the main loop above
+    // Just log it for debugging
+    console.log('[ApplyTemplateToLessonUseCase] Already added content IDs:', Array.from(addedContentIds));
+    
     // Add any remaining content types not in template order (at the end)
+    // BUT: Only add content that hasn't been added already (by content_id)
     // Map database type names back to template format names for display
     const dbNameToFormatName = {
       'text_audio': 'text',
@@ -211,19 +256,45 @@ export class ApplyTemplateToLessonUseCase {
     console.log('[ApplyTemplateToLessonUseCase] Checking for content types not in template order...', {
       templateDbTypes: Array.from(templateDbTypes),
       contentByTypeKeys: Object.keys(contentByType),
+      alreadyAddedContentIds: Array.from(addedContentIds),
     });
     
     Object.keys(contentByType).forEach((dbTypeName) => {
       if (!templateDbTypes.has(dbTypeName)) {
-        const formatType = dbNameToFormatName[dbTypeName] || dbTypeName;
-        console.log(`[ApplyTemplateToLessonUseCase] Adding content type not in template order: ${dbTypeName} -> ${formatType}`, {
-          contentCount: contentByType[dbTypeName].length,
-          content_ids: contentByType[dbTypeName].map(c => c.content_id),
+        // Filter out content that has already been added
+        const newContent = contentByType[dbTypeName].filter(c => {
+          if (!c.content_id) {
+            console.warn(`[ApplyTemplateToLessonUseCase] Content without ID found for type ${dbTypeName}, skipping`);
+            return false;
+          }
+          if (addedContentIds.has(c.content_id)) {
+            console.log(`[ApplyTemplateToLessonUseCase] Content ID ${c.content_id} already added, skipping duplicate`);
+            return false;
+          }
+          return true;
         });
-        orderedContent.push({
-          format_type: formatType,
-          content: contentByType[dbTypeName],
-        });
+        
+        if (newContent.length > 0) {
+          const formatType = dbNameToFormatName[dbTypeName] || dbTypeName;
+          console.log(`[ApplyTemplateToLessonUseCase] Adding content type not in template order: ${dbTypeName} -> ${formatType}`, {
+            contentCount: newContent.length,
+            content_ids: newContent.map(c => c.content_id),
+          });
+          
+          // Mark these content IDs as added
+          newContent.forEach(c => {
+            if (c.content_id) {
+              addedContentIds.add(c.content_id);
+            }
+          });
+          
+          orderedContent.push({
+            format_type: formatType,
+            content: newContent,
+          });
+        } else {
+          console.log(`[ApplyTemplateToLessonUseCase] All content for type ${dbTypeName} already added, skipping`);
+        }
       } else {
         console.log(`[ApplyTemplateToLessonUseCase] Content type ${dbTypeName} already in template order, skipping`);
       }

@@ -868,28 +868,65 @@ export default function LessonView() {
               contentCount: f.content?.length || 0 
             })));
             
-            // Deduplicate content items to prevent showing same content multiple times
-            const seenContentIds = new Set();
-            const deduplicatedFormats = sortedFormats.map(formatItem => {
+            // Global deduplication: Track all content IDs across all formats
+            const seenContentIds = new Map(); // Map: contentId -> { formatType, firstSeenIndex }
+            const deduplicatedFormats = [];
+            
+            // First pass: Identify duplicates and determine which format to keep each content item in
+            sortedFormats.forEach((formatItem, formatIndex) => {
               // Skip 'audio' format if it's part of text_audio_combined (to avoid duplicate)
               if (formatItem.type === 'audio' && sortedFormats.some(f => f.type === 'text_audio_combined' || f.type === 'audio_text')) {
-                return { ...formatItem, content: [] };
+                return; // Skip this format entirely
               }
               
-              // Deduplicate content items within this format
-              if (formatItem.content && formatItem.content.length > 0) {
-                const deduplicatedContent = formatItem.content.filter(contentItem => {
-                  const contentId = contentItem.content_id || contentItem.id;
-                  if (!contentId) return true; // Keep items without ID
-                  if (seenContentIds.has(contentId)) {
-                    return false; // Skip duplicate
-                  }
-                  seenContentIds.add(contentId);
-                  return true; // Keep unique item
-                });
-                return { ...formatItem, content: deduplicatedContent };
+              if (!formatItem.content || formatItem.content.length === 0) {
+                deduplicatedFormats.push({ ...formatItem, content: [] });
+                return;
               }
-              return formatItem;
+              
+              const deduplicatedContent = [];
+              
+              formatItem.content.forEach(contentItem => {
+                const contentId = contentItem.content_id || contentItem.id;
+                
+                // If no ID, keep it (but warn)
+                if (!contentId) {
+                  console.warn('[LessonView] Content item without ID:', contentItem);
+                  deduplicatedContent.push(contentItem);
+                  return;
+                }
+                
+                // Check if we've seen this content before
+                if (seenContentIds.has(contentId)) {
+                  const existing = seenContentIds.get(contentId);
+                  // Keep content in the first format it appears in (based on display_order)
+                  // This prevents showing the same content in multiple formats
+                  console.log(`[LessonView] Skipping duplicate content_id ${contentId} in format "${formatItem.type}" (already in format "${existing.formatType}")`);
+                  return; // Skip duplicate
+                }
+                
+                // First time seeing this content - keep it
+                seenContentIds.set(contentId, {
+                  formatType: formatItem.type,
+                  formatIndex: formatIndex,
+                  displayOrder: formatItem.display_order ?? formatIndex
+                });
+                deduplicatedContent.push(contentItem);
+              });
+              
+              deduplicatedFormats.push({
+                ...formatItem,
+                content: deduplicatedContent
+              });
+            });
+            
+            console.log('[LessonView] Deduplication complete:', {
+              totalContentItems: seenContentIds.size,
+              formatsWithContent: deduplicatedFormats.filter(f => f.content && f.content.length > 0).length,
+              contentByFormat: deduplicatedFormats.map(f => ({
+                type: f.type,
+                count: f.content?.length || 0
+              }))
             });
 
             return deduplicatedFormats.map((formatItem, index) => {
