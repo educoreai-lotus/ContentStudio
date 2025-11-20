@@ -1,0 +1,83 @@
+# Frontend (not needed for backend build)
+frontend/
+frontend/**/*
+
+# Node modules (will be installed in container)
+**/node_modules/
+node_modules/
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Documentation
+*.md
+docs/
+README.md
+
+# Tests
+**/tests/
+**/*.test.js
+**/*.spec.js
+coverage/
+**/coverage/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+**/dist/
+**/build/
+frontend/dist/
+
+# Logs
+**/logs/
+**/*.log
+npm-debug.log
+yarn-error.log
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Temporary files
+**/tmp/
+**/temp/
+**/*.tmp
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Uploads (will be created in container)
+**/uploads/
+!**/uploads/.gitkeep
+
+# Railway config (not needed in container)
+railway.json
+
+# Package lock files (will be generated)
+**/package-lock.json
+
+# Vercel config
+vercel.json
+
+# Design tokens (frontend only)
+**/design-tokens.json
+
+# PostCSS/Tailwind config (frontend only)
+postcss.config.js
+tailwind.config.js
+vite.config.js
+

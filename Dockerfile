@@ -31,8 +31,9 @@ WORKDIR /app
 # Support building from repo root or backend/ context without depending on host paths
 # Auto-detect source dir inside the image (prefers /src/backend if exists)
 
-# Always copy the entire build context into the image first
-COPY . /src
+# Copy only backend directory to reduce build context size
+# This significantly speeds up the build process
+COPY backend /src/backend
 
 # Install Node.js dependencies
 # Use npm ci for faster, reliable, reproducible builds
