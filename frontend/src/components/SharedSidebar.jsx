@@ -345,6 +345,13 @@ export function SharedSidebar({ onRestore }) {
       try {
         let result;
         
+        // CRITICAL: Ensure historyData is cleared for non-content contexts
+        if (context.type !== 'content') {
+          if (!isCancelled) {
+            setHistoryData({});
+          }
+        }
+        
         if (context.type === 'courses') {
           // Load deleted courses
           result = await coursesService.list(
@@ -354,7 +361,9 @@ export function SharedSidebar({ onRestore }) {
             },
             { page: 1, limit: 50 }
           );
-          setDeletedContent(result.courses || []);
+          if (!isCancelled && context.type === 'courses') {
+            setDeletedContent(result.courses || []);
+          }
         } else if (context.type === 'topics') {
           // Load deleted topics - if courseId is provided, load topics for that course, otherwise standalone topics
           const filters = {
@@ -371,7 +380,9 @@ export function SharedSidebar({ onRestore }) {
           }
           
           result = await topicsService.list(filters, { page: 1, limit: 50 });
-          setDeletedContent(result.topics || []);
+          if (!isCancelled && context.type === 'topics') {
+            setDeletedContent(result.topics || []);
+          }
         } else if (context.type === 'content') {
           // Load content history for all content items in the topic
           // Similar to ContentHistorySidebar, we need to load history for each content item
@@ -522,8 +533,8 @@ export function SharedSidebar({ onRestore }) {
               historyBySection[sectionId].versions = versionsForThisContent;
             });
             
-            // Only update state if not cancelled
-            if (!isCancelled) {
+            // Only update state if not cancelled AND still in content context
+            if (!isCancelled && context?.type === 'content') {
               // Store history data organized by section
               setHistoryData(historyBySection);
               
@@ -532,23 +543,42 @@ export function SharedSidebar({ onRestore }) {
                 console.log('[SharedSidebar] Content items checked:', allContent.map(c => ({ id: c.content_id, type: c.content_type_id, name: c.content_type_name })));
               }
               
-              // For display, we'll use historyData, but keep deletedContent for other contexts
+              // CRITICAL: Set deletedContent ONLY for content context
+              // This ensures history versions never appear in other contexts
               setDeletedContent(allHistoryVersions);
+            } else if (!isCancelled && context?.type !== 'content') {
+              // If context changed to non-content, ensure cleanup
+              console.log('[SharedSidebar] Context changed during history load, clearing history data');
+              setHistoryData({});
+              setDeletedContent([]);
             }
           } catch (err) {
-            if (!isCancelled) {
+            if (!isCancelled && context?.type === 'content') {
               console.error('[SharedSidebar] Failed to load content history:', err);
               setError(err.error?.message || err.message || 'Failed to load content history');
               setDeletedContent([]);
               setHistoryData({});
+            } else if (!isCancelled && context?.type !== 'content') {
+              // Ensure cleanup for non-content contexts
+              setHistoryData({});
+              setDeletedContent([]);
             }
+          }
+        } else {
+          // CRITICAL: For any other context type, ensure historyData is cleared
+          if (!isCancelled && context.type !== 'content') {
+            setHistoryData({});
+            // deletedContent will be set by the appropriate branch above
           }
         }
       } catch (err) {
         if (!isCancelled) {
           setError(err.error?.message || 'Failed to load deleted content');
           setDeletedContent([]);
-          setHistoryData({});
+          // CRITICAL: Always clear historyData for non-content contexts
+          if (context?.type !== 'content') {
+            setHistoryData({});
+          }
         }
       } finally {
         if (!isCancelled) {
@@ -682,9 +712,19 @@ export function SharedSidebar({ onRestore }) {
       }
 
       setError(null);
+      
+      // CRITICAL: Clear history state for non-content contexts
+      if (context?.type !== 'content') {
+        setHistoryData({});
+      }
     } catch (err) {
       setError(err.error?.message || err.message || 'Failed to delete version');
       alert(err.error?.message || err.message || 'Failed to delete version');
+      
+      // CRITICAL: Clear history state for non-content contexts even on error
+      if (context?.type !== 'content') {
+        setHistoryData({});
+      }
     } finally {
       setLoading(false);
     }
