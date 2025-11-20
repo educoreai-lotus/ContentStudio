@@ -429,7 +429,7 @@ export class PostgreSQLContentRepository extends IContentRepository {
         : contentRow.content_data;
 
     // Clean content_data before saving to history to ensure consistency
-    const { ContentDataCleaner } = await import('../../application/utils/ContentDataCleaner.js');
+    const { ContentDataCleaner } = await import('../../../application/utils/ContentDataCleaner.js');
     const cleanedContentData = ContentDataCleaner.clean(
       normalizedContentData,
       contentRow.content_type_id
