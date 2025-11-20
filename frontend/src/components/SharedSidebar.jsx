@@ -264,29 +264,41 @@ export function SharedSidebar({ onRestore }) {
   useEffect(() => {
     console.log('[SharedSidebar] useEffect triggered:', { isOpen, context });
     
+    // Cleanup function: Clear data when context changes or component unmounts
+    let isCancelled = false;
+    
+    // Immediately clear old data when context changes
+    setHistoryData({});
+    setDeletedContent([]);
+    
     if (!isOpen) {
       console.log('[SharedSidebar] Sidebar is closed, clearing content');
-      setDeletedContent([]);
-      setHistoryData({}); // Clear history data when sidebar is closed
-      return;
+      return () => {
+        // Cleanup on unmount or when sidebar closes
+        setDeletedContent([]);
+        setHistoryData({});
+      };
     }
     
     // If no context, don't load content
     if (!context) {
       console.log('[SharedSidebar] No context, clearing content');
-      setDeletedContent([]);
-      setHistoryData({}); // Clear history data when no context
-      return;
+      return () => {
+        // Cleanup on unmount or when no context
+        setDeletedContent([]);
+        setHistoryData({});
+      };
     }
-    
-    // Clear history data when context changes (especially when leaving content context)
-    // This ensures old history doesn't persist when switching between topics/courses
-    setHistoryData({});
-    setDeletedContent([]);
     
     console.log('[SharedSidebar] Loading content for context:', context);
 
     const loadDeletedContent = async () => {
+      // Don't proceed if component unmounted or context changed
+      if (isCancelled) {
+        console.log('[SharedSidebar] Load cancelled, context changed');
+        return;
+      }
+      
       setLoading(true);
       setError(null);
 
@@ -481,6 +493,14 @@ export function SharedSidebar({ onRestore }) {
     };
 
     loadDeletedContent();
+    
+    // Cleanup function: Cancel any in-flight requests and clear data when context changes
+    return () => {
+      isCancelled = true;
+      console.log('[SharedSidebar] Cleanup: Clearing data due to context change');
+      setHistoryData({});
+      setDeletedContent([]);
+    };
   }, [context, isOpen]);
 
   const handleToggleSection = (section) => {
