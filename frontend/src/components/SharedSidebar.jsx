@@ -267,6 +267,7 @@ export function SharedSidebar({ onRestore }) {
     if (!isOpen) {
       console.log('[SharedSidebar] Sidebar is closed, clearing content');
       setDeletedContent([]);
+      setHistoryData({}); // Clear history data when sidebar is closed
       return;
     }
     
@@ -274,8 +275,14 @@ export function SharedSidebar({ onRestore }) {
     if (!context) {
       console.log('[SharedSidebar] No context, clearing content');
       setDeletedContent([]);
+      setHistoryData({}); // Clear history data when no context
       return;
     }
+    
+    // Clear history data when context changes (especially when leaving content context)
+    // This ensures old history doesn't persist when switching between topics/courses
+    setHistoryData({});
+    setDeletedContent([]);
     
     console.log('[SharedSidebar] Loading content for context:', context);
 
