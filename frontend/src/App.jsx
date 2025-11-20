@@ -24,11 +24,11 @@ import LanguageStatsPage from './pages/Multilingual/LanguageStatsPage.jsx';
 function AppContent() {
   const { theme, sidebarState } = useApp();
   
-  // Calculate margin-right for main content based on sidebar state
+  // Calculate margin-left for main content based on sidebar state
   const mainContentMargin = sidebarState.isOpen
     ? sidebarState.isCollapsed
-      ? 'mr-16' // 64px for collapsed sidebar
-      : 'mr-96' // 384px for expanded sidebar
+      ? 'ml-16' // 64px for collapsed sidebar
+      : 'ml-96' // 384px for expanded sidebar
     : '';
   
   return (

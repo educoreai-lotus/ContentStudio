@@ -5,7 +5,6 @@ import { topicsService } from '../../services/topics.js';
 import { useApp } from '../../context/AppContext';
 import { TemplateSelectionModal } from '../../components/Templates/TemplateSelectionModal.jsx';
 import { RegenerateOptionsModal } from '../../components/Content/RegenerateOptionsModal.jsx';
-import { ContentHistorySidebar } from '../../components/Content/ContentHistorySidebar.jsx';
 import { VideoUploadModal } from '../../components/VideoUploadModal.jsx';
 import ExerciseCreationModal from '../../components/Exercises/ExerciseCreationModal.jsx';
 
@@ -272,17 +271,7 @@ export default function TopicContentManager() {
 
   return (
     <div className={`min-h-screen ${theme === 'day-mode' ? 'bg-gray-50' : 'bg-[#1e293b]'}`}>
-      {/* Fixed Left Sidebar */}
-      <div className="hidden lg:block fixed left-4 top-0 h-screen w-[320px] overflow-y-auto z-40">
-        <div className="h-full pt-20 pr-4 pl-0">
-          <ContentHistorySidebar
-            existingContent={existingContent}
-            onHistoryChanged={fetchContent}
-          />
-        </div>
-      </div>
-
-      <div className="max-w-7xl mx-auto p-6 lg:p-8 lg:pl-[348px]">
+      <div className="max-w-7xl mx-auto p-6 lg:p-8">
         <div className="mb-8">
           <button
             onClick={() => {
@@ -429,14 +418,6 @@ export default function TopicContentManager() {
             )}
           </div>
         )}
-
-        {/* Mobile Sidebar */}
-        <div className="mt-8 lg:hidden">
-          <ContentHistorySidebar
-            existingContent={existingContent}
-            onHistoryChanged={fetchContent}
-          />
-        </div>
 
         <div className="lg:flex lg:items-start lg:gap-6">
           <div className="flex-1 min-w-0">
