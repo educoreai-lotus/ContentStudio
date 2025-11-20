@@ -9,15 +9,6 @@ import { ContentPreviewRenderer } from './Content/ContentPreviewRenderer.jsx';
 
 const DEFAULT_TRAINER_ID = 'trainer-maya-levi';
 
-// Content type names mapping
-const CONTENT_TYPE_NAMES = {
-  1: 'Text & Audio',
-  2: 'Code Example',
-  3: 'Presentation',
-  5: 'Mind Map',
-  6: 'Avatar Video',
-};
-
 // Section definitions (matching ContentHistorySidebar structure)
 const SECTION_DEFINITIONS = [
   { id: 'text_audio', label: 'Text & Audio', icon: 'fa-file-audio', typeId: 1 },
@@ -485,7 +476,7 @@ export function SharedSidebar({ onRestore }) {
                     history_id: historyId, // Backend uses version_id, we normalize to history_id
                     content_id: contentItem.content_id,
                     content_type_id: contentItem.content_type_id,
-                    content_type_name: contentItem.content_type_name || CONTENT_TYPE_NAMES[contentItem.content_type_id] || `Content Type ${contentItem.content_type_id}`,
+                    content_type_name: contentItem.content_type_name,
                     topic_id: context.topicId,
                     preview: version.preview, // Already normalized above
                     sectionId: sectionId,
@@ -743,16 +734,16 @@ export function SharedSidebar({ onRestore }) {
               return (historyResponse.versions || []).map(version => {
                 // Use preview from backend (built by #buildPreview) or fallback to formatPreview
                 const preview = version.preview || formatPreview(contentItem.content_type_id, version);
-                return {
-                  ...version,
-                  history_id: version.history_id || version.version_id, // Support both field names
-                  content_id: contentItem.content_id,
-                  content_type_id: contentItem.content_type_id,
-                  content_type_name: contentItem.content_type_name || CONTENT_TYPE_NAMES[contentItem.content_type_id] || `Content Type ${contentItem.content_type_id}`,
-                  topic_id: context.topicId,
-                  preview: preview, // Use backend preview (from #buildPreview) or fallback
-                  sectionId: sectionId,
-                };
+                  return {
+                    ...version,
+                    history_id: version.history_id || version.version_id, // Support both field names
+                    content_id: contentItem.content_id,
+                    content_type_id: contentItem.content_type_id,
+                    content_type_name: contentItem.content_type_name,
+                    topic_id: context.topicId,
+                    preview: preview, // Use backend preview (from #buildPreview) or fallback
+                    sectionId: sectionId,
+                  };
               });
             } catch (err) {
               console.error(`[SharedSidebar] Failed to reload history for content ${contentItem.content_id}:`, err);
