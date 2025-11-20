@@ -836,11 +836,15 @@ export function SharedSidebar({ onRestore }) {
       {/* Toggle Button (Open/Close) */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className={`absolute right-0 top-1/2 translate-x-full -translate-y-1/2 w-10 h-20 rounded-r-lg flex items-center justify-center transition-all ${
+        className={`absolute top-1/2 -translate-y-1/2 w-10 h-20 rounded-r-lg flex items-center justify-center transition-all z-50 ${
           theme === 'day-mode'
             ? 'bg-white border-r border-t border-b border-gray-200 hover:bg-gray-50'
             : 'bg-slate-900 border-r border-t border-b border-slate-700 hover:bg-slate-800'
         }`}
+        style={{ 
+          right: 0,
+          transform: 'translate(calc(100% + 16px), -50%)'
+        }}
         title={isOpen ? 'Close sidebar' : 'Open deleted content'}
       >
         <i className={`fas ${isOpen ? 'fa-chevron-left' : 'fa-chevron-right'} text-lg transition-transform duration-300`}></i>

@@ -25,10 +25,11 @@ function AppContent() {
   const { theme, sidebarState } = useApp();
   
   // Calculate margin-left for main content based on sidebar state
+  // Add extra space for the toggle button (40px button + 16px gap = 56px) so content doesn't overlap
   const mainContentMargin = sidebarState.isOpen
     ? sidebarState.isCollapsed
-      ? 'ml-16' // 64px for collapsed sidebar
-      : 'ml-72' // 288px for expanded sidebar
+      ? 'ml-30' // 64px sidebar + 56px (40px button + 16px gap) = 120px
+      : 'ml-[344px]' // 288px sidebar + 56px (40px button + 16px gap) = 344px
     : '';
   
   return (
