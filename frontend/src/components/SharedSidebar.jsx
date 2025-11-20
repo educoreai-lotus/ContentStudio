@@ -261,6 +261,45 @@ export function SharedSidebar({ onRestore }) {
     return null;
   }, [location.pathname, params.id, params.topicId]);
 
+  // Track previous context to detect transitions from "content" to other contexts
+  const prevContextRef = React.useRef(context);
+
+  // CRITICAL: Route change cleanup - Reset all state when leaving "content" context
+  // This runs on EVERY route change, BEFORE loading new data
+  useEffect(() => {
+    const prevContext = prevContextRef.current;
+    const currentContext = context;
+
+    // If we're transitioning FROM "content" TO a different context type
+    if (prevContext && prevContext.type === 'content' && 
+        currentContext && currentContext.type !== 'content') {
+      console.log('[SharedSidebar] Route change detected: Leaving content context, performing full cleanup', {
+        from: prevContext.type,
+        to: currentContext?.type || 'null',
+        path: location.pathname
+      });
+
+      // IMMEDIATE cleanup - happens BEFORE any new data loading
+      setHistoryData({});
+      setDeletedContent([]);
+      setPreviewState(null); // Close modal
+      setOpenSections({});
+      setError(null);
+    }
+    // Also cleanup if context becomes null (no context)
+    else if (prevContext && prevContext.type === 'content' && !currentContext) {
+      console.log('[SharedSidebar] Route change detected: Content context to null, performing cleanup');
+      setHistoryData({});
+      setDeletedContent([]);
+      setPreviewState(null);
+      setOpenSections({});
+      setError(null);
+    }
+
+    // Update ref for next comparison
+    prevContextRef.current = currentContext;
+  }, [location.pathname, context]);
+
   // Load deleted items based on context
   useEffect(() => {
     console.log('[SharedSidebar] useEffect triggered:', { isOpen, context });
