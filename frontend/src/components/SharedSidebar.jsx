@@ -758,7 +758,7 @@ export function SharedSidebar({ onRestore }) {
       className={`fixed left-0 top-20 bottom-0 transform transition-all duration-300 z-40 ${
         isOpen ? 'translate-x-0' : '-translate-x-full'
       } ${
-        isCollapsed ? 'w-16' : 'w-96'
+        isCollapsed ? 'w-16' : 'w-80'
       } ${
         theme === 'day-mode'
           ? 'bg-white border-r border-gray-200 shadow-2xl'

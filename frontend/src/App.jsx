@@ -28,7 +28,7 @@ function AppContent() {
   const mainContentMargin = sidebarState.isOpen
     ? sidebarState.isCollapsed
       ? 'ml-16' // 64px for collapsed sidebar
-      : 'ml-96' // 384px for expanded sidebar
+      : 'ml-80' // 320px for expanded sidebar
     : '';
   
   return (
