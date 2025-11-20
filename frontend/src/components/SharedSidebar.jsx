@@ -5,6 +5,7 @@ import { useApp } from '../context/AppContext.jsx';
 import { coursesService } from '../services/courses.js';
 import { topicsService } from '../services/topics.js';
 import { contentService } from '../services/content.js';
+import { ContentPreviewRenderer } from './Content/ContentPreviewRenderer.jsx';
 
 const DEFAULT_TRAINER_ID = 'trainer-maya-levi';
 
@@ -26,13 +27,12 @@ const SECTION_DEFINITIONS = [
   { id: 'avatar_video', label: 'Avatar Video', icon: 'fa-video', typeId: 6 },
 ];
 
-// VersionRow component (matching ContentHistorySidebar)
+// VersionRow component (matching ContentHistorySidebar, without delete)
 const VersionRow = ({
   version,
   isCurrent,
   onPreview,
   onRestore,
-  onDelete,
   theme,
 }) => {
   const baseClasses = theme === 'day-mode'
@@ -83,28 +83,13 @@ const VersionRow = ({
           Preview
         </button>
         {!isCurrent && (
-          <>
-            <button
-              onClick={() => onRestore(version)}
-              className={`flex-1 px-3 py-2 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white`}
-            >
-              <i className="fas fa-history mr-2"></i>
-              Restore
-            </button>
-            {onDelete && (
-              <button
-                onClick={() => onDelete(version)}
-                className={`px-3 py-2 text-xs font-semibold rounded-lg ${
-                  theme === 'day-mode'
-                    ? 'bg-red-500 hover:bg-red-600 text-white'
-                    : 'bg-red-600 hover:bg-red-700 text-white'
-                }`}
-                title="Delete this version"
-              >
-                <i className="fas fa-trash"></i>
-              </button>
-            )}
-          </>
+          <button
+            onClick={() => onRestore(version)}
+            className={`flex-1 px-3 py-2 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white`}
+          >
+            <i className="fas fa-history mr-2"></i>
+            Restore
+          </button>
         )}
       </div>
     </div>
@@ -634,100 +619,11 @@ export function SharedSidebar({ onRestore }) {
               })
             }
             onRestore={version => handleRestore(version)}
-            onDelete={version => handleDeleteVersion(version)}
             theme={theme}
           />
         ))}
       </div>
     );
-  };
-
-  const handleDeleteVersion = async (content) => {
-    if (!window.confirm(`Delete this version? This action cannot be undone.`)) {
-      return;
-    }
-
-    try {
-      if (!content.history_id) {
-        alert('Cannot delete: History ID is missing');
-        return;
-      }
-
-      setLoading(true);
-      await contentService.deleteVersion(content.history_id);
-
-      // Reload content history after delete
-      if (context && context.type === 'content') {
-        try {
-          const allContent = await contentService.listByTopic(context.topicId);
-          
-          if (!allContent || allContent.length === 0) {
-            setDeletedContent([]);
-            return;
-          }
-          
-          const historyPromises = allContent.map(async (contentItem) => {
-            try {
-              const historyResponse = await contentService.getHistory(contentItem.content_id);
-              
-              if (!historyResponse || !historyResponse.versions) {
-                return [];
-              }
-              
-              const sectionMap = {
-                1: 'text_audio',
-                2: 'code',
-                3: 'slides',
-                5: 'mind_map',
-                6: 'avatar_video',
-              };
-              const sectionId = sectionMap[contentItem.content_type_id] || 'default';
-              
-              return (historyResponse.versions || []).map(version => {
-                const preview = version.preview || formatPreview(contentItem.content_type_id, version);
-                return {
-                  ...version,
-                  history_id: version.history_id || version.version_id,
-                  content_id: contentItem.content_id,
-                  content_type_id: contentItem.content_type_id,
-                  content_type_name: contentItem.content_type_name || CONTENT_TYPE_NAMES[contentItem.content_type_id] || `Content Type ${contentItem.content_type_id}`,
-                  topic_id: context.topicId,
-                  preview: preview,
-                  sectionId: sectionId,
-                };
-              });
-            } catch (err) {
-              console.error(`[SharedSidebar] Failed to reload history for content ${contentItem.content_id}:`, err);
-              return [];
-            }
-          });
-          
-          const historyArrays = await Promise.all(historyPromises);
-          const allHistoryVersions = historyArrays.flat();
-          setDeletedContent(allHistoryVersions || []);
-        } catch (err) {
-          console.error('[SharedSidebar] Failed to reload content history after delete:', err);
-          setDeletedContent([]);
-        }
-      }
-
-      setError(null);
-      
-      // CRITICAL: Clear history state for non-content contexts
-      if (context?.type !== 'content') {
-        setHistoryData({});
-      }
-    } catch (err) {
-      setError(err.error?.message || err.message || 'Failed to delete version');
-      alert(err.error?.message || err.message || 'Failed to delete version');
-      
-      // CRITICAL: Clear history state for non-content contexts even on error
-      if (context?.type !== 'content') {
-        setHistoryData({});
-      }
-    } finally {
-      setLoading(false);
-    }
   };
 
   const handleRestore = async (content) => {
@@ -1203,7 +1099,11 @@ export function SharedSidebar({ onRestore }) {
             </h3>
 
             <div className="max-h-[70vh] overflow-auto pr-1 space-y-4">
-              {renderPreviewContent(previewState.sectionId, previewState.version, theme)}
+              <ContentPreviewRenderer 
+                sectionId={previewState.sectionId} 
+                version={previewState.version} 
+                theme={theme} 
+              />
             </div>
           </div>
         </div>,

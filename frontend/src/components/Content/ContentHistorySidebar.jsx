@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import PropTypes from 'prop-types';
 import { contentService } from '../../services/content.js';
 import { useApp } from '../../context/AppContext.jsx';
-import { MindMapViewer } from '../MindMapViewer.jsx';
+import { ContentPreviewRenderer } from './ContentPreviewRenderer.jsx';
 
 const SECTION_DEFINITIONS = [
   { id: 'text_audio', label: 'Text & Audio', icon: 'fa-file-audio', typeId: 1 },
@@ -361,7 +361,11 @@ export function ContentHistorySidebar({ existingContent = [], onHistoryChanged }
             </h3>
 
             <div className="max-h-[70vh] overflow-auto pr-1 space-y-4">
-              {renderPreviewContent(previewState.sectionId, previewState.version, theme)}
+              <ContentPreviewRenderer 
+                sectionId={previewState.sectionId} 
+                version={previewState.version} 
+                theme={theme} 
+              />
             </div>
           </div>
         </div>
