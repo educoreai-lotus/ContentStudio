@@ -66,9 +66,18 @@ export class GenerateContentUseCase {
     this.qualityCheckService = qualityCheckService;
   }
 
-  buildPromptVariables({ lessonTopic, lessonDescription, language, skillsList, transcriptText, trainerRequestText }) {
-    if (!lessonTopic || !lessonDescription || !language || !skillsList) {
-      throw new Error('lessonTopic, lessonDescription, language, and skillsList are required');
+  buildPromptVariables({ lessonTopic, lessonDescription, language, skillsList, transcriptText, trainerRequestText }, contentTypeId) {
+    // For avatar video (type 6), only lessonTopic is required (or transcriptText/trainerRequestText)
+    // For other types, require all standard fields
+    if (contentTypeId !== 6) {
+      if (!lessonTopic || !lessonDescription || !language || !skillsList) {
+        throw new Error('lessonTopic, lessonDescription, language, and skillsList are required');
+      }
+    } else {
+      // For avatar video, at least one of these must be provided
+      if (!lessonTopic && !transcriptText && !trainerRequestText) {
+        throw new Error('At least one of lessonTopic, transcriptText, or trainerRequestText is required for avatar video');
+      }
     }
 
     // Sanitize all input variables to prevent prompt injection
@@ -149,7 +158,7 @@ ${basePrompt}`;
       );
     }
 
-    const promptVariables = this.buildPromptVariables(generationRequest);
+    const promptVariables = this.buildPromptVariables(generationRequest, generationRequest.content_type_id);
 
     // Build prompt (template_id still supported if provided)
     let prompt = generationRequest.prompt;
@@ -171,8 +180,9 @@ ${basePrompt}`;
 
     // For presentation (type 3), we don't need a prompt builder - we use Gamma API directly
     // For mind_map (type 5), we use transcript as prompt directly (like presentation)
+    // For avatar_video (type 6), we don't need a prompt builder - we use buildAvatarText() and HeyGen directly
     // For other types, build prompt if not provided
-    if (!prompt && generationRequest.content_type_id !== 3 && generationRequest.content_type_id !== 5) {
+    if (!prompt && generationRequest.content_type_id !== 3 && generationRequest.content_type_id !== 5 && generationRequest.content_type_id !== 6) {
       prompt = this.buildPrompt(generationRequest.content_type_id, promptVariables);
     }
 
@@ -184,8 +194,9 @@ ${basePrompt}`;
     // Sanitize the final prompt before sending to AI (only if prompt exists)
     // Note: User inputs are already wrapped in delimiters by buildPrompt()
     // For presentation (type 3), prompt is not needed - we use Gamma API directly
+    // For avatar_video (type 6), prompt is not needed - we use buildAvatarText() and HeyGen directly
     // For mind_map (type 5), sanitize the transcript prompt
-    if (prompt && generationRequest.content_type_id !== 3) {
+    if (prompt && generationRequest.content_type_id !== 3 && generationRequest.content_type_id !== 6) {
       prompt = PromptSanitizer.sanitizePrompt(prompt);
     }
 
