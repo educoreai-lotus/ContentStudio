@@ -342,11 +342,18 @@ export function SharedSidebar({ onRestore }) {
             console.log('[SharedSidebar] Number of content items:', allContent?.length || 0);
             
             if (!allContent || allContent.length === 0) {
-              setDeletedContent([]);
+              if (!isCancelled) {
+                setDeletedContent([]);
+                setHistoryData({});
+              }
               return;
             }
             
             const historyPromises = allContent.map(async (contentItem) => {
+              // Check if cancelled before processing each item
+              if (isCancelled) {
+                return [];
+              }
               try {
                 console.log(`[SharedSidebar] Loading history for content ${contentItem.content_id} (type: ${contentItem.content_type_id})`);
                 const historyResponse = await contentService.getHistory(contentItem.content_id);
@@ -438,6 +445,13 @@ export function SharedSidebar({ onRestore }) {
             });
             
             const historyArrays = await Promise.all(historyPromises);
+            
+            // Check if cancelled after async operations
+            if (isCancelled) {
+              console.log('[SharedSidebar] Load cancelled after async operations');
+              return;
+            }
+            
             const allHistoryVersions = historyArrays.flat().filter(Boolean); // Remove any null/undefined content
             console.log('[SharedSidebar] All history versions after processing:', allHistoryVersions);
             console.log('[SharedSidebar] Total history versions count:', allHistoryVersions.length);
@@ -468,27 +482,38 @@ export function SharedSidebar({ onRestore }) {
               historyBySection[sectionId].versions = versionsForThisContent;
             });
             
-            // Store history data organized by section
-            setHistoryData(historyBySection);
-            
-            if (allHistoryVersions.length === 0) {
-              console.warn('[SharedSidebar] No history versions found for any content items');
-              console.log('[SharedSidebar] Content items checked:', allContent.map(c => ({ id: c.content_id, type: c.content_type_id, name: c.content_type_name })));
+            // Only update state if not cancelled
+            if (!isCancelled) {
+              // Store history data organized by section
+              setHistoryData(historyBySection);
+              
+              if (allHistoryVersions.length === 0) {
+                console.warn('[SharedSidebar] No history versions found for any content items');
+                console.log('[SharedSidebar] Content items checked:', allContent.map(c => ({ id: c.content_id, type: c.content_type_id, name: c.content_type_name })));
+              }
+              
+              // For display, we'll use historyData, but keep deletedContent for other contexts
+              setDeletedContent(allHistoryVersions);
             }
-            
-            // For display, we'll use historyData, but keep deletedContent for other contexts
-            setDeletedContent(allHistoryVersions);
           } catch (err) {
-            console.error('[SharedSidebar] Failed to load content history:', err);
-            setError(err.error?.message || err.message || 'Failed to load content history');
-            setDeletedContent([]);
+            if (!isCancelled) {
+              console.error('[SharedSidebar] Failed to load content history:', err);
+              setError(err.error?.message || err.message || 'Failed to load content history');
+              setDeletedContent([]);
+              setHistoryData({});
+            }
           }
         }
       } catch (err) {
-        setError(err.error?.message || 'Failed to load deleted content');
-        setDeletedContent([]);
+        if (!isCancelled) {
+          setError(err.error?.message || 'Failed to load deleted content');
+          setDeletedContent([]);
+          setHistoryData({});
+        }
       } finally {
-        setLoading(false);
+        if (!isCancelled) {
+          setLoading(false);
+        }
       }
     };
 
