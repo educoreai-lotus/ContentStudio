@@ -17,11 +17,12 @@ const CONTENT_TYPE_NAMES = {
 };
 
 // Format preview text for content history (similar to ContentHistorySidebar)
-const formatPreview = (contentTypeId, entry) => {
+// Accepts either contentTypeId (number) or sectionId (string) for compatibility
+const formatPreview = (contentTypeIdOrSectionId, entry) => {
   if (!entry) return '';
   const data = entry.content_data || entry;
 
-  // Map content_type_id to section IDs
+  // Map content_type_id to section IDs if needed
   const sectionMap = {
     1: 'text_audio',
     2: 'code',
@@ -30,7 +31,10 @@ const formatPreview = (contentTypeId, entry) => {
     6: 'avatar_video',
   };
   
-  const sectionId = sectionMap[contentTypeId] || 'default';
+  // If it's a number, convert to sectionId; if it's already a string, use it
+  const sectionId = typeof contentTypeIdOrSectionId === 'number' 
+    ? (sectionMap[contentTypeIdOrSectionId] || 'default')
+    : contentTypeIdOrSectionId;
 
   switch (sectionId) {
     case 'text_audio': {
@@ -233,22 +237,38 @@ export function SharedSidebar({ onRestore }) {
                   return [];
                 }
                 
-                if (!historyResponse.versions) {
+                // Normalize response structure (same as ContentHistorySidebar)
+                // Backend returns: { current: {...}, versions: [...] }
+                const normalized = {
+                  ...historyResponse,
+                  current: historyResponse.current ? {
+                    ...historyResponse.current,
+                    preview: historyResponse.current.preview || formatPreview(contentItem.content_type_id, {
+                      content_data: historyResponse.current.content_data,
+                    }),
+                  } : null,
+                  versions: (historyResponse.versions || []).map(entry => ({
+                    ...entry,
+                    preview: entry.preview || formatPreview(contentItem.content_type_id, entry),
+                  })),
+                };
+                
+                if (!normalized.versions) {
                   console.warn(`[SharedSidebar] No 'versions' field in history response for content ${contentItem.content_id}`, historyResponse);
                   return [];
                 }
                 
-                if (!Array.isArray(historyResponse.versions)) {
-                  console.error(`[SharedSidebar] 'versions' is not an array for content ${contentItem.content_id}:`, typeof historyResponse.versions);
+                if (!Array.isArray(normalized.versions)) {
+                  console.error(`[SharedSidebar] 'versions' is not an array for content ${contentItem.content_id}:`, typeof normalized.versions);
                   return [];
                 }
                 
-                if (historyResponse.versions.length === 0) {
+                if (normalized.versions.length === 0) {
                   console.log(`[SharedSidebar] Empty versions array for content ${contentItem.content_id}`);
                   return [];
                 }
                 
-                console.log(`[SharedSidebar] Found ${historyResponse.versions.length} versions for content ${contentItem.content_id}`);
+                console.log(`[SharedSidebar] Found ${normalized.versions.length} versions for content ${contentItem.content_id}`);
                 
                 // Map content_type_id to section ID for formatPreview
                 const sectionMap = {
@@ -263,9 +283,7 @@ export function SharedSidebar({ onRestore }) {
                 // Return history versions (not current, as current is the active content)
                 // Backend returns history_id from entry.version_id (see ContentHistoryService.js line 149)
                 // Backend also returns preview built by #buildPreview (see ContentHistoryService.js line 152)
-                return (historyResponse.versions || []).map(version => {
-                  // Use preview from backend (built by #buildPreview) or fallback to formatPreview
-                  const preview = version.preview || formatPreview(contentItem.content_type_id, version);
+                return normalized.versions.map(version => {
                   const historyId = version.history_id || version.version_id;
                   
                   console.log(`[SharedSidebar] Processing version:`, {
@@ -273,7 +291,7 @@ export function SharedSidebar({ onRestore }) {
                     content_id: contentItem.content_id,
                     has_content_data: !!version.content_data,
                     preview_from_backend: version.preview,
-                    preview_final: preview
+                    preview_final: version.preview
                   });
                   
                   return {
@@ -283,7 +301,7 @@ export function SharedSidebar({ onRestore }) {
                     content_type_id: contentItem.content_type_id,
                     content_type_name: contentItem.content_type_name || CONTENT_TYPE_NAMES[contentItem.content_type_id] || `Content Type ${contentItem.content_type_id}`,
                     topic_id: context.topicId,
-                    preview: preview, // Use backend preview (from #buildPreview) or fallback
+                    preview: version.preview, // Already normalized above
                     sectionId: sectionId,
                   };
                 });
