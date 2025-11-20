@@ -168,32 +168,60 @@ export function SharedSidebar({ onRestore }) {
           // Similar to ContentHistorySidebar, we need to load history for each content item
           try {
             const allContent = await contentService.listByTopic(context.topicId);
+            console.log('[SharedSidebar] Loaded content items:', allContent);
+            
+            if (!allContent || allContent.length === 0) {
+              setDeletedItems([]);
+              return;
+            }
+            
             const historyPromises = allContent.map(async (contentItem) => {
               try {
+                console.log(`[SharedSidebar] Loading history for content ${contentItem.content_id}`);
                 const historyResponse = await contentService.getHistory(contentItem.content_id);
+                console.log(`[SharedSidebar] History response for ${contentItem.content_id}:`, historyResponse);
+                
+                if (!historyResponse || !historyResponse.versions) {
+                  console.warn(`[SharedSidebar] No versions in history response for ${contentItem.content_id}`);
+                  return [];
+                }
+                
+                // Map content_type_id to section ID for formatPreview
+                const sectionMap = {
+                  1: 'text_audio',
+                  2: 'code',
+                  3: 'slides',
+                  5: 'mind_map',
+                  6: 'avatar_video',
+                };
+                const sectionId = sectionMap[contentItem.content_type_id] || 'default';
+                
                 // Return history versions (not current, as current is the active content)
                 return (historyResponse.versions || []).map(version => {
                   const preview = formatPreview(contentItem.content_type_id, version);
                   return {
                     ...version,
+                    content_id: contentItem.content_id,
                     content_type_id: contentItem.content_type_id,
-                    content_type_name: contentItem.content_type_name,
+                    content_type_name: contentItem.content_type_name || `Content Type ${contentItem.content_type_id}`,
                     topic_id: context.topicId,
                     preview: version.preview || preview,
+                    sectionId: sectionId,
                   };
                 });
               } catch (err) {
-                console.warn(`Failed to load history for content ${contentItem.content_id}:`, err);
+                console.error(`[SharedSidebar] Failed to load history for content ${contentItem.content_id}:`, err);
                 return [];
               }
             });
             
             const historyArrays = await Promise.all(historyPromises);
             const allHistoryVersions = historyArrays.flat();
+            console.log('[SharedSidebar] All history versions:', allHistoryVersions);
             setDeletedItems(allHistoryVersions || []);
           } catch (err) {
-            console.error('Failed to load content history:', err);
-            setError(err.error?.message || 'Failed to load content history');
+            console.error('[SharedSidebar] Failed to load content history:', err);
+            setError(err.error?.message || err.message || 'Failed to load content history');
             setDeletedItems([]);
           }
         }
@@ -269,28 +297,54 @@ export function SharedSidebar({ onRestore }) {
       } else if (context.type === 'content') {
         try {
           const allContent = await contentService.listByTopic(context.topicId);
+          console.log('[SharedSidebar] Reloading content history after restore, found content items:', allContent?.length || 0);
+          
+          if (!allContent || allContent.length === 0) {
+            setDeletedItems([]);
+            return;
+          }
+          
           const historyPromises = allContent.map(async (contentItem) => {
             try {
               const historyResponse = await contentService.getHistory(contentItem.content_id);
+              
+              if (!historyResponse || !historyResponse.versions) {
+                return [];
+              }
+              
+              const sectionMap = {
+                1: 'text_audio',
+                2: 'code',
+                3: 'slides',
+                5: 'mind_map',
+                6: 'avatar_video',
+              };
+              const sectionId = sectionMap[contentItem.content_type_id] || 'default';
+              
               return (historyResponse.versions || []).map(version => {
                 const preview = formatPreview(contentItem.content_type_id, version);
                 return {
                   ...version,
+                  content_id: contentItem.content_id,
                   content_type_id: contentItem.content_type_id,
-                  content_type_name: contentItem.content_type_name,
+                  content_type_name: contentItem.content_type_name || `Content Type ${contentItem.content_type_id}`,
                   topic_id: context.topicId,
                   preview: version.preview || preview,
+                  sectionId: sectionId,
                 };
               });
             } catch (err) {
+              console.error(`[SharedSidebar] Failed to reload history for content ${contentItem.content_id}:`, err);
               return [];
             }
           });
           
           const historyArrays = await Promise.all(historyPromises);
           const allHistoryVersions = historyArrays.flat();
+          console.log('[SharedSidebar] Reloaded history versions after restore:', allHistoryVersions.length);
           setDeletedItems(allHistoryVersions || []);
         } catch (err) {
+          console.error('[SharedSidebar] Failed to reload content history after restore:', err);
           setDeletedItems([]);
         }
       }
@@ -476,7 +530,7 @@ export function SharedSidebar({ onRestore }) {
               <div className="space-y-4">
                 {deletedItems.map(item => (
                   <div
-                    key={item.course_id || item.topic_id || item.content_id}
+                    key={item.course_id || item.topic_id || item.content_id || item.history_id || `item-${Math.random()}`}
                     className={`rounded-xl border p-3 flex flex-col gap-3 transition-all ${
                       theme === 'day-mode'
                         ? 'bg-gray-50 border-gray-200 text-gray-700'
@@ -492,7 +546,9 @@ export function SharedSidebar({ onRestore }) {
                             item.history_id ? `Content Version #${item.history_id}` : 'Content')}
                         </p>
                         <p className={`text-xs opacity-70 mt-1`}>
-                          Deleted: {new Date(item.updated_at || item.created_at).toLocaleString()}
+                          {item.updated_at || item.created_at 
+                            ? `Saved: ${new Date(item.updated_at || item.created_at).toLocaleString()}`
+                            : 'No date available'}
                         </p>
                       </div>
                       <span className={`px-2 py-1 text-xs rounded-full ${
