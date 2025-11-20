@@ -546,9 +546,10 @@ export function SharedSidebar({ onRestore }) {
                 console.log('[SharedSidebar] Content items checked:', allContent.map(c => ({ id: c.content_id, type: c.content_type_id, name: c.content_type_name })));
               }
               
-              // CRITICAL: Set deletedContent ONLY for content context
-              // This ensures history versions never appear in other contexts
-              setDeletedContent(allHistoryVersions);
+              // CRITICAL: Do NOT set deletedContent for content context
+              // We use historyData for display, not deletedContent
+              // Setting deletedContent here causes duplicate display (flat list + sections)
+              setDeletedContent([]);
             }
           } catch (err) {
             if (!isCancelled && context?.type === 'content') {
@@ -781,7 +782,10 @@ export function SharedSidebar({ onRestore }) {
           
           setHistoryData(historyBySection);
           console.log('[SharedSidebar] Reloaded history versions after restore:', allHistoryVersions.length);
-          setDeletedContent(allHistoryVersions || []);
+          // CRITICAL: Do NOT set deletedContent for content context
+          // We use historyData for display, not deletedContent
+          // Setting deletedContent here causes duplicate display (flat list + sections)
+          setDeletedContent([]);
         } catch (err) {
           console.error('[SharedSidebar] Failed to reload content history after restore:', err);
           setDeletedContent([]);
@@ -967,18 +971,10 @@ export function SharedSidebar({ onRestore }) {
               >
                 <p className="text-sm">{error}</p>
               </div>
-            ) : deletedContent.length === 0 ? (
-              <div
-                className={`text-center py-8 ${
-                  theme === 'day-mode' ? 'text-gray-500' : 'text-slate-400'
-                }`}
-              >
-                <i className="fas fa-check-circle text-3xl mb-2 opacity-50"></i>
-                <p className="text-sm opacity-70">No deleted {displayContext.type === 'content' ? 'content' : displayContext.type === 'courses' ? 'courses' : displayContext.type === 'topics' ? 'topics' : 'content'}</p>
-              </div>
             ) : context.type === 'content' ? (
               // For content context, ONLY display history organized by sections
               // Never show flat list for content history
+              // CRITICAL: Only show sections view, never show deletedContent flat list
               Object.keys(historyData).length > 0 ? (
                 <div className="space-y-4">
                   {SECTION_DEFINITIONS.map(section => {
@@ -1035,8 +1031,19 @@ export function SharedSidebar({ onRestore }) {
                   <p className="text-sm opacity-70">No content history available</p>
                 </div>
               )
+            ) : deletedContent.length === 0 ? (
+              // Empty state for courses/topics
+              <div
+                className={`text-center py-8 ${
+                  theme === 'day-mode' ? 'text-gray-500' : 'text-slate-400'
+                }`}
+              >
+                <i className="fas fa-check-circle text-3xl mb-2 opacity-50"></i>
+                <p className="text-sm opacity-70">No deleted {displayContext.type === 'courses' ? 'courses' : displayContext.type === 'topics' ? 'topics' : 'content'}</p>
+              </div>
             ) : (
               // Fallback: Display flat list ONLY for courses/topics (NOT for content)
+              // CRITICAL: This branch should NEVER execute for content context
               <div className="space-y-4">
                 {deletedContent.map(content => (
                   <div
