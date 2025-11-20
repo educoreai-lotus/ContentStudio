@@ -214,12 +214,14 @@ export function SharedSidebar({ onRestore }) {
       }
     }
     // Inside a course (viewing course detail) - show deleted topics/lessons for this course
+    // Route: /courses/:id (where id is numeric, and NOT /edit or /new)
     else if (path.startsWith('/courses/') && params.id && !path.includes('/edit') && !path.includes('/new')) {
       const courseId = parseInt(params.id);
       if (!isNaN(courseId) && courseId > 0) {
+        console.log('[SharedSidebar] Course detail context detected:', { courseId, path });
         return {
           type: 'topics',
-          courseId: courseId,
+          courseId: courseId, // CRITICAL: Must pass courseId to load only topics for this course
           title: 'History of Deleted Topics',
           icon: 'fa-list',
         };
@@ -227,6 +229,7 @@ export function SharedSidebar({ onRestore }) {
     }
     // Courses list page
     else if (path === '/courses' || (path.startsWith('/courses') && !params.id)) {
+      console.log('[SharedSidebar] Courses list context detected:', { path });
       return {
         type: 'courses',
         title: 'History of Deleted Courses',
@@ -235,8 +238,10 @@ export function SharedSidebar({ onRestore }) {
     }
     // Standalone topics page
     else if (path === '/topics' || path === '/lessons') {
+      console.log('[SharedSidebar] Standalone topics context detected:', { path });
       return {
         type: 'topics',
+        courseId: undefined, // CRITICAL: No courseId means standalone topics
         title: 'History of Deleted Topics',
         icon: 'fa-list',
       };
@@ -353,16 +358,23 @@ export function SharedSidebar({ onRestore }) {
           };
           
           if (context.courseId) {
-            // Load deleted topics for this specific course
+            // CRITICAL: Load ONLY deleted topics belonging to this specific course
+            // Do NOT load standalone topics (course_id: null) when inside a course
+            console.log('[SharedSidebar] Loading deleted topics for course:', context.courseId);
             filters.course_id = context.courseId;
           } else {
-            // Load deleted standalone topics
+            // Load deleted standalone topics (only when NOT inside a course)
+            console.log('[SharedSidebar] Loading deleted standalone topics');
             filters.course_id = null;
           }
           
+          // CRITICAL: Do NOT load content history or use contentService.getHistory() for this route
+          // History loading must ONLY happen on /topics/:topicId/content
           result = await topicsService.list(filters, { page: 1, limit: 50 });
           if (!isCancelled && context.type === 'topics') {
             setDeletedContent(result.topics || []);
+            // CRITICAL: Ensure historyData is cleared for topics context
+            setHistoryData({});
           }
         } else if (context.type === 'content') {
           // 🚨 CRITICAL: Double-check context is still 'content' before loading
