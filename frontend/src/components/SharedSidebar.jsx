@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useLocation, useParams } from 'react-router-dom';
 import { useApp } from '../context/AppContext.jsx';
 import { coursesService } from '../services/courses.js';
@@ -1088,19 +1089,20 @@ export function SharedSidebar({ onRestore }) {
         )}
       </div>
 
-      {/* Preview Modal */}
-      {previewState && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      {/* Preview Modal - Rendered as Portal to body for proper centering */}
+      {previewState && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setPreviewState(null)}>
           <div
-            className={`max-w-4xl w-full mx-auto my-auto rounded-2xl shadow-2xl border p-6 relative ${
+            className={`max-w-4xl w-full mx-4 rounded-2xl shadow-2xl border p-6 relative ${
               theme === 'day-mode'
                 ? 'bg-white border-gray-200 text-gray-900'
                 : 'bg-slate-900 border-slate-700 text-slate-200'
             }`}
             style={{ maxHeight: '90vh' }}
+            onClick={(e) => e.stopPropagation()}
           >
             <button
-              className="absolute top-4 right-4 text-xl opacity-60 hover:opacity-100"
+              className="absolute top-4 right-4 text-xl opacity-60 hover:opacity-100 transition-opacity"
               onClick={() => setPreviewState(null)}
             >
               <i className="fas fa-times"></i>
@@ -1115,7 +1117,8 @@ export function SharedSidebar({ onRestore }) {
               {renderPreviewContent(previewState.sectionId, previewState.version, theme)}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
