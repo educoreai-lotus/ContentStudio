@@ -78,16 +78,6 @@ export const CourseDetail = () => {
     }
   };
 
-  const getFormatProgress = topic => {
-    // Count unique content types that have been created for this topic
-    // This should be fetched from the backend, but for now we'll use a placeholder
-    // TODO: Fetch actual content count from /api/content?topic_id=X
-    const completed = topic.content_count || 0;
-    const required = 5;
-    const percentage = Math.min((completed / required) * 100, 100);
-    return { completed, required, percentage };
-  };
-
   /**
    * Check if course is ready to publish (all validations pass)
    * This is a client-side check - backend will do full validation
@@ -335,17 +325,6 @@ export const CourseDetail = () => {
                   Edit Course
                 </button>
                 <button
-                  onClick={() => navigate('/topics/new')}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                    theme === 'day-mode'
-                      ? 'bg-blue-600 hover:bg-blue-700 text-white'
-                      : 'bg-blue-500 hover:bg-blue-600 text-white'
-                  }`}
-                >
-                  <i className="fas fa-book-open mr-2"></i>
-                  Create Stand-alone Lesson
-                </button>
-                <button
                   onClick={handlePublishCourse}
                   disabled={publishing || !isCourseReadyToPublish()}
                   title={
@@ -446,7 +425,6 @@ export const CourseDetail = () => {
         ) : (
           <div className="space-y-4">
             {topics.map(topic => {
-              const progress = getFormatProgress(topic);
               return (
                 <div
                   key={topic.topic_id}
@@ -493,41 +471,6 @@ export const CourseDetail = () => {
                           {topic.description}
                         </p>
                       )}
-
-                      <div className="mb-4">
-                        <div className="flex items-center justify-between mb-1">
-                          <span
-                            className={`text-sm font-medium ${
-                              theme === 'day-mode' ? 'text-gray-700' : 'text-gray-300'
-                            }`}
-                          >
-                            Format Requirements
-                          </span>
-                          <span
-                            className={`text-sm ${
-                              theme === 'day-mode' ? 'text-gray-600' : 'text-gray-400'
-                            }`}
-                          >
-                            {progress.completed}/{progress.required} formats
-                          </span>
-                        </div>
-                        <div
-                          className={`w-full rounded-full h-2 ${
-                            theme === 'day-mode' ? 'bg-gray-200' : 'bg-[#334155]'
-                          }`}
-                        >
-                          <div
-                            className={`h-2 rounded-full ${
-                              progress.percentage === 100
-                                ? 'bg-emerald-600'
-                                : progress.percentage >= 60
-                                ? 'bg-yellow-500'
-                                : 'bg-red-500'
-                            }`}
-                            style={{ width: `${progress.percentage}%` }}
-                          ></div>
-                        </div>
-                      </div>
 
                       <div
                         className={`flex flex-wrap gap-4 text-sm ${

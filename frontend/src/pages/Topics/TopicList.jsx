@@ -98,13 +98,6 @@ export const TopicList = ({ courseId = null }) => {
     }
   };
 
-  const getFormatProgress = topic => {
-    const completed = topic.total_content_formats || 0;
-    const required = 5;
-    const percentage = (completed / required) * 100;
-    return { completed, required, percentage };
-  };
-
   if (loading && topics.length === 0) {
     return (
       <div
@@ -295,7 +288,6 @@ export const TopicList = ({ courseId = null }) => {
         ) : (
           <div className="space-y-4">
             {topics.map(topic => {
-              const formatProgress = getFormatProgress(topic);
               return (
                 <div
                   key={topic.topic_id}
@@ -307,7 +299,9 @@ export const TopicList = ({ courseId = null }) => {
                   style={{
                     background: theme === 'day-mode' ? 'var(--gradient-card)' : undefined,
                     boxShadow: 'var(--shadow-card)',
+                    cursor: 'pointer',
                   }}
+                  onClick={() => navigate(`/topics/${topic.topic_id}/content`)}
                   onMouseEnter={e => {
                     e.currentTarget.style.transform = 'translateY(-4px)';
                     e.currentTarget.style.boxShadow = 'var(--shadow-hover)';
@@ -344,56 +338,6 @@ export const TopicList = ({ courseId = null }) => {
                       </p>
                     )}
 
-                    {/* Format Requirements Progress */}
-                    <div className="mb-4">
-                      <div className="flex items-center justify-between mb-1">
-                        <span
-                          className={`text-sm font-medium ${
-                            theme === 'day-mode' ? 'text-gray-700' : 'text-gray-300'
-                          }`}
-                        >
-                          Format Requirements
-                        </span>
-                        <span
-                          className={`text-sm ${
-                            theme === 'day-mode' ? 'text-gray-600' : 'text-gray-400'
-                          }`}
-                        >
-                          {formatProgress.completed}/{formatProgress.required} formats
-                        </span>
-                      </div>
-                      <div
-                        className={`w-full rounded-full h-2 ${
-                          theme === 'day-mode' ? 'bg-gray-200' : 'bg-[#334155]'
-                        }`}
-                      >
-                        <div
-                          className={`h-2 rounded-full ${
-                            formatProgress.percentage === 100
-                              ? 'bg-emerald-600'
-                              : formatProgress.percentage >= 60
-                              ? 'bg-yellow-500'
-                              : 'bg-red-500'
-                          }`}
-                          style={{ width: `${formatProgress.percentage}%` }}
-                        ></div>
-                      </div>
-                      {formatProgress.completed < formatProgress.required && (
-                        <p
-                          className={`text-xs mt-1 ${
-                            theme === 'day-mode' ? 'text-red-600' : 'text-red-400'
-                          }`}
-                        >
-                          Missing: {topic.format_flags
-                            ? Object.entries(topic.format_flags)
-                                .filter(([_, has]) => !has)
-                                .map(([format]) => format.replace('has_', ''))
-                                .join(', ')
-                            : 'text, code, presentation, audio, mind_map'}
-                        </p>
-                      )}
-                    </div>
-
                     <div
                       className={`flex items-center gap-4 text-sm ${
                         theme === 'day-mode' ? 'text-gray-500' : 'text-gray-400'
@@ -407,7 +351,7 @@ export const TopicList = ({ courseId = null }) => {
                       )}
                     </div>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2" onClick={e => e.stopPropagation()}>
                     <button
                       onClick={() =>
                         navigate(`/topics/${topic.topic_id}/content/new`)
@@ -437,6 +381,7 @@ export const TopicList = ({ courseId = null }) => {
                       AI Generate
                     </button>
                     <button
+                      onClick={() => navigate(`/topics/${topic.topic_id}/content`)}
                       className={`px-3 py-1 rounded-lg text-sm font-medium transition-all ${
                         theme === 'day-mode'
                           ? 'bg-blue-600 hover:bg-blue-700 text-white'
