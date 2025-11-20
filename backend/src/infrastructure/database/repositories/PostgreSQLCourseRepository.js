@@ -46,8 +46,9 @@ export class PostgreSQLCourseRepository extends ICourseRepository {
       throw new Error('Database not connected. Using in-memory repository.');
     }
 
-    const query = 'SELECT * FROM trainer_courses WHERE course_id = $1 AND status != $2';
-    const result = await this.db.query(query, [courseId, 'deleted']);
+    // CRITICAL: Only return active courses in regular queries
+    const query = 'SELECT * FROM trainer_courses WHERE course_id = $1 AND status = $2';
+    const result = await this.db.query(query, [courseId, 'active']);
 
     if (result.rows.length === 0) {
       return null;
@@ -61,8 +62,10 @@ export class PostgreSQLCourseRepository extends ICourseRepository {
       throw new Error('Database not connected. Using in-memory repository.');
     }
 
-    let query = 'SELECT * FROM trainer_courses WHERE status != $1';
-    const params = ['deleted'];
+    // CRITICAL: Only return active courses in regular queries
+    // History sidebar will query with status='deleted' explicitly
+    let query = 'SELECT * FROM trainer_courses WHERE status = $1';
+    const params = ['active'];
     let paramIndex = 2;
 
     // Apply filters
@@ -99,22 +102,24 @@ export class PostgreSQLCourseRepository extends ICourseRepository {
     let paramIndex = 2;
 
     // Apply status filter
+    // CRITICAL: Only return active courses by default
+    // History sidebar will query with status='deleted' explicitly
     if (filters.status && filters.status !== 'all') {
-      // If requesting deleted, show only deleted
-      // Otherwise, exclude deleted by default
+      // If requesting deleted, show only deleted (for History Sidebar)
       if (filters.status === 'deleted') {
         query += ` AND status = $${paramIndex}`;
         params.push('deleted');
         paramIndex++;
       } else {
-        query += ` AND status != $${paramIndex} AND status = $${paramIndex + 1}`;
-        params.push('deleted', filters.status);
-        paramIndex += 2;
+        // For active or other statuses, filter by that status
+        query += ` AND status = $${paramIndex}`;
+        params.push(filters.status);
+        paramIndex++;
       }
     } else {
-      // Default: exclude deleted
-      query += ` AND status != $${paramIndex}`;
-      params.push('deleted');
+      // Default: only active courses
+      query += ` AND status = $${paramIndex}`;
+      params.push('active');
       paramIndex++;
     }
 
@@ -194,8 +199,13 @@ export class PostgreSQLCourseRepository extends ICourseRepository {
       throw new Error('Database not connected. Using in-memory repository.');
     }
 
-    // Soft delete
+    // Soft delete - UPDATE status = 'deleted' (never DELETE FROM)
     return await this.update(courseId, { status: 'deleted' });
+  }
+
+  async softDelete(courseId) {
+    // Alias for delete() - implements soft delete (UPDATE status = 'deleted')
+    return await this.delete(courseId);
   }
 
   /**

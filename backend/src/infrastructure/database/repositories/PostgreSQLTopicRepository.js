@@ -46,8 +46,9 @@ export class PostgreSQLTopicRepository extends ITopicRepository {
       throw new Error('Database not connected. Using in-memory repository.');
     }
 
-    const query = 'SELECT * FROM topics WHERE topic_id = $1 AND status != $2';
-    const result = await this.db.query(query, [topicId, 'deleted']);
+    // CRITICAL: Only return active topics in regular queries
+    const query = 'SELECT * FROM topics WHERE topic_id = $1 AND status = $2';
+    const result = await this.db.query(query, [topicId, 'active']);
 
     if (result.rows.length === 0) {
       return null;
@@ -61,8 +62,10 @@ export class PostgreSQLTopicRepository extends ITopicRepository {
       throw new Error('Database not connected. Using in-memory repository.');
     }
 
-    let query = 'SELECT * FROM topics WHERE status != $1';
-    const params = ['deleted'];
+    // CRITICAL: Only return active topics in regular queries
+    // History sidebar will query with status='deleted' explicitly
+    let query = 'SELECT * FROM topics WHERE status = $1';
+    const params = ['active'];
     let paramIndex = 2;
 
     // Apply filters
@@ -122,21 +125,21 @@ export class PostgreSQLTopicRepository extends ITopicRepository {
 
     // Apply status filter in WHERE clause (before GROUP BY)
     if (filters.status && filters.status !== 'all') {
-      // If requesting deleted, show only deleted
-      // Otherwise, exclude deleted by default
+      // If requesting deleted, show only deleted (for History Sidebar)
       if (filters.status === 'deleted') {
         query += ` AND t.status = $${paramIndex}`;
         params.push('deleted');
         paramIndex++;
       } else {
-        query += ` AND t.status != $${paramIndex} AND t.status = $${paramIndex + 1}`;
-        params.push('deleted', filters.status);
-        paramIndex += 2;
+        // For active or other statuses, filter by that status
+        query += ` AND t.status = $${paramIndex}`;
+        params.push(filters.status);
+        paramIndex++;
       }
     } else {
-      // Default: exclude deleted
-      query += ` AND t.status != $${paramIndex}`;
-      params.push('deleted');
+      // Default: only active topics
+      query += ` AND t.status = $${paramIndex}`;
+      params.push('active');
       paramIndex++;
     }
 
@@ -244,8 +247,13 @@ export class PostgreSQLTopicRepository extends ITopicRepository {
       throw new Error('Database not connected. Using in-memory repository.');
     }
 
-    // Soft delete
+    // Soft delete - UPDATE status = 'deleted' (never DELETE FROM)
     return await this.update(topicId, { status: 'deleted' });
+  }
+
+  async softDelete(topicId) {
+    // Alias for delete() - implements soft delete (UPDATE status = 'deleted')
+    return await this.delete(topicId);
   }
 
   async validateFormatRequirements(topicId) {
