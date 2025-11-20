@@ -16,6 +16,100 @@ const CONTENT_TYPE_NAMES = {
   6: 'Avatar Video',
 };
 
+// Section definitions (matching ContentHistorySidebar structure)
+const SECTION_DEFINITIONS = [
+  { id: 'text_audio', label: 'Text & Audio', icon: 'fa-file-audio', typeId: 1 },
+  { id: 'code', label: 'Code', icon: 'fa-code', typeId: 2 },
+  { id: 'slides', label: 'Slides', icon: 'fa-slideshare', typeId: 3 },
+  { id: 'mind_map', label: 'Mind Map', icon: 'fa-project-diagram', typeId: 5 },
+  { id: 'avatar_video', label: 'Avatar Video', icon: 'fa-video', typeId: 6 },
+];
+
+// VersionRow component (matching ContentHistorySidebar)
+const VersionRow = ({
+  version,
+  isCurrent,
+  onPreview,
+  onRestore,
+  onDelete,
+  theme,
+}) => {
+  const baseClasses = theme === 'day-mode'
+    ? 'bg-gray-50 border-gray-200 text-gray-700'
+    : 'bg-slate-800/40 border-slate-700 text-slate-200';
+  const activeClasses = theme === 'day-mode'
+    ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+    : 'bg-emerald-900/30 border-emerald-500/40 text-emerald-200';
+
+  return (
+    <div
+      className={`rounded-xl border p-3 flex flex-col gap-3 transition-all ${
+        isCurrent ? activeClasses : baseClasses
+      }`}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold">
+            {isCurrent ? 'Active Version' : 'Saved Version'}
+          </p>
+          <p className="text-xs opacity-70">
+            Saved on: {new Date(version.updated_at || version.created_at).toLocaleString()}
+          </p>
+        </div>
+        {!isCurrent && (
+          <span className={`px-2 py-1 text-xs rounded-full ${
+            theme === 'day-mode' ? 'bg-gray-900/20' : 'bg-white/10'
+          }`}>
+            Historical
+          </span>
+        )}
+      </div>
+
+      <p className="text-sm leading-relaxed max-h-16 overflow-hidden">
+        {version.preview || 'No preview available'}
+      </p>
+
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => onPreview(version)}
+          className={`flex-1 px-3 py-2 text-xs font-semibold rounded-lg ${
+            theme === 'day-mode'
+              ? 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+              : 'bg-slate-700 text-slate-200 hover:bg-slate-600'
+          }`}
+        >
+          <i className="fas fa-eye mr-2"></i>
+          Preview
+        </button>
+        {!isCurrent && (
+          <>
+            <button
+              onClick={() => onRestore(version)}
+              className={`flex-1 px-3 py-2 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white`}
+            >
+              <i className="fas fa-history mr-2"></i>
+              Restore
+            </button>
+            {onDelete && (
+              <button
+                onClick={() => onDelete(version)}
+                className={`px-3 py-2 text-xs font-semibold rounded-lg ${
+                  theme === 'day-mode'
+                    ? 'bg-red-500 hover:bg-red-600 text-white'
+                    : 'bg-red-600 hover:bg-red-700 text-white'
+                }`}
+                title="Delete this version"
+              >
+                <i className="fas fa-trash"></i>
+              </button>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
+
 // Format preview text for content history (similar to ContentHistorySidebar)
 // Accepts either contentTypeId (number) or sectionId (string) for compatibility
 const formatPreview = (contentTypeIdOrSectionId, entry) => {
@@ -80,6 +174,9 @@ export function SharedSidebar({ onRestore }) {
   const [deletedContent, setDeletedContent] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [openSections, setOpenSections] = useState({});
+  const [previewState, setPreviewState] = useState(null);
+  const [historyData, setHistoryData] = useState({});
   
   const { isOpen, isCollapsed } = sidebarState;
   
@@ -315,17 +412,42 @@ export function SharedSidebar({ onRestore }) {
             const allHistoryVersions = historyArrays.flat().filter(Boolean); // Remove any null/undefined content
             console.log('[SharedSidebar] All history versions after processing:', allHistoryVersions);
             console.log('[SharedSidebar] Total history versions count:', allHistoryVersions.length);
-            console.log('[SharedSidebar] Sample version structure:', allHistoryVersions[0]);
+            
+            // Organize history by content type (section) - similar to ContentHistorySidebar
+            const historyBySection = {};
+            allContent.forEach(contentItem => {
+              const sectionMap = {
+                1: 'text_audio',
+                2: 'code',
+                3: 'slides',
+                5: 'mind_map',
+                6: 'avatar_video',
+              };
+              const sectionId = sectionMap[contentItem.content_type_id] || 'default';
+              
+              if (!historyBySection[sectionId]) {
+                historyBySection[sectionId] = {
+                  contentItem: contentItem,
+                  versions: [],
+                };
+              }
+              
+              // Find versions for this content item
+              const versionsForThisContent = allHistoryVersions.filter(
+                v => v.content_id === contentItem.content_id
+              );
+              historyBySection[sectionId].versions = versionsForThisContent;
+            });
+            
+            // Store history data organized by section
+            setHistoryData(historyBySection);
             
             if (allHistoryVersions.length === 0) {
               console.warn('[SharedSidebar] No history versions found for any content items');
               console.log('[SharedSidebar] Content items checked:', allContent.map(c => ({ id: c.content_id, type: c.content_type_id, name: c.content_type_name })));
-              console.log('[SharedSidebar] History responses received:', historyArrays.map((arr, idx) => ({
-                content_id: allContent[idx]?.content_id,
-                versions_count: arr?.length || 0
-              })));
             }
             
+            // For display, we'll use historyData, but keep deletedContent for other contexts
             setDeletedContent(allHistoryVersions);
           } catch (err) {
             console.error('[SharedSidebar] Failed to load content history:', err);
@@ -343,6 +465,50 @@ export function SharedSidebar({ onRestore }) {
 
     loadDeletedContent();
   }, [context, isOpen]);
+
+  const handleToggleSection = (section) => {
+    setOpenSections(prev => ({ ...prev, [section.id]: !prev[section.id] }));
+  };
+
+  const renderSectionBody = (section) => {
+    const sectionData = historyData[section.id];
+    if (!sectionData || !sectionData.versions || sectionData.versions.length === 0) {
+      return (
+        <p className={`text-sm opacity-70 ${
+          theme === 'day-mode' ? 'text-gray-600' : 'text-slate-400'
+        }`}>
+          No history versions recorded yet.
+        </p>
+      );
+    }
+
+    const entries = sectionData.versions.map(entry => ({ ...entry, isCurrent: false }));
+
+    return (
+      <div className="flex flex-col gap-3">
+        {entries.map(entry => (
+          <VersionRow
+            key={`${entry.history_id}`}
+            version={{
+              ...entry,
+              created_at: entry.created_at || entry.updated_at,
+            }}
+            isCurrent={false}
+            onPreview={version =>
+              setPreviewState({
+                sectionId: section.id,
+                sectionLabel: section.label,
+                version,
+              })
+            }
+            onRestore={version => handleRestore(version)}
+            onDelete={version => handleDeleteVersion(version)}
+            theme={theme}
+          />
+        ))}
+      </div>
+    );
+  };
 
   const handleDeleteVersion = async (content) => {
     if (!window.confirm(`Delete this version? This action cannot be undone.`)) {
@@ -528,12 +694,40 @@ export function SharedSidebar({ onRestore }) {
           });
           
           const historyArrays = await Promise.all(historyPromises);
-          const allHistoryVersions = historyArrays.flat();
+          const allHistoryVersions = historyArrays.flat().filter(Boolean);
+          
+          // Reorganize history by section after restore
+          const historyBySection = {};
+          allContent.forEach(contentItem => {
+            const sectionMap = {
+              1: 'text_audio',
+              2: 'code',
+              3: 'slides',
+              5: 'mind_map',
+              6: 'avatar_video',
+            };
+            const sectionId = sectionMap[contentItem.content_type_id] || 'default';
+            
+            if (!historyBySection[sectionId]) {
+              historyBySection[sectionId] = {
+                contentItem: contentItem,
+                versions: [],
+              };
+            }
+            
+            const versionsForThisContent = allHistoryVersions.filter(
+              v => v.content_id === contentItem.content_id
+            );
+            historyBySection[sectionId].versions = versionsForThisContent;
+          });
+          
+          setHistoryData(historyBySection);
           console.log('[SharedSidebar] Reloaded history versions after restore:', allHistoryVersions.length);
           setDeletedContent(allHistoryVersions || []);
         } catch (err) {
           console.error('[SharedSidebar] Failed to reload content history after restore:', err);
           setDeletedContent([]);
+          setHistoryData({});
         }
       }
 
@@ -714,7 +908,55 @@ export function SharedSidebar({ onRestore }) {
                 <i className="fas fa-check-circle text-3xl mb-2 opacity-50"></i>
                 <p className="text-sm opacity-70">No deleted {displayContext.type === 'content' ? 'content' : displayContext.type === 'courses' ? 'courses' : displayContext.type === 'topics' ? 'topics' : 'content'}</p>
               </div>
+            ) : context.type === 'content' && Object.keys(historyData).length > 0 ? (
+              // Display history organized by sections (like ContentHistorySidebar)
+              <div className="space-y-4">
+                {SECTION_DEFINITIONS.map(section => {
+                  const sectionData = historyData[section.id];
+                  const hasVersions = sectionData && sectionData.versions && sectionData.versions.length > 0;
+                  const isOpen = openSections[section.id];
+
+                  if (!hasVersions) return null;
+
+                  return (
+                    <div key={section.id} className={`border rounded-2xl overflow-hidden ${
+                      theme === 'day-mode' ? 'border-gray-200' : 'border-slate-700'
+                    }`}>
+                      <button
+                        className={`w-full flex items-center justify-between px-4 py-3 text-left transition-all ${
+                          theme === 'day-mode'
+                            ? 'bg-gray-100 hover:bg-gray-200 text-gray-800'
+                            : 'bg-slate-800 hover:bg-slate-700 text-slate-200'
+                        }`}
+                        onClick={() => handleToggleSection(section)}
+                      >
+                        <div className="flex items-center gap-3">
+                          <i className={`fas ${section.icon}`}></i>
+                          <span className="font-semibold text-sm uppercase tracking-wide">
+                            {section.label}
+                          </span>
+                          <span className={`px-2 py-0.5 text-xs rounded-full ${
+                            theme === 'day-mode' ? 'bg-gray-300 text-gray-700' : 'bg-slate-600 text-slate-200'
+                          }`}>
+                            {sectionData.versions.length}
+                          </span>
+                        </div>
+                        <i className={`fas fa-chevron-${isOpen ? 'up' : 'down'}`}></i>
+                      </button>
+
+                      {isOpen && (
+                        <div className={`px-4 py-4 ${
+                          theme === 'day-mode' ? 'bg-black/5' : 'bg-white/5'
+                        }`}>
+                          {renderSectionBody(section)}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             ) : (
+              // Fallback: Display flat list for courses/topics
               <div className="space-y-4">
                 {deletedContent.map(content => (
                   <div
@@ -768,19 +1010,6 @@ export function SharedSidebar({ onRestore }) {
                         <i className="fas fa-history mr-2"></i>
                         Restore
                       </button>
-                      {context.type === 'content' && content.history_id && (
-                        <button
-                          onClick={() => handleDeleteVersion(content)}
-                          className={`px-3 py-2 text-xs font-semibold rounded-lg transition-all ${
-                            theme === 'day-mode'
-                              ? 'bg-red-500 hover:bg-red-600 text-white'
-                              : 'bg-red-600 hover:bg-red-700 text-white'
-                          }`}
-                          title="Delete this version"
-                        >
-                          <i className="fas fa-trash"></i>
-                        </button>
-                      )}
                     </div>
                   </div>
                 ))}
@@ -789,8 +1018,242 @@ export function SharedSidebar({ onRestore }) {
           </div>
         )}
       </div>
+
+      {/* Preview Modal */}
+      {previewState && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div
+            className={`max-w-2xl w-full mx-4 rounded-2xl shadow-2xl border p-6 relative ${
+              theme === 'day-mode'
+                ? 'bg-white border-gray-200 text-gray-900'
+                : 'bg-slate-900 border-slate-700 text-slate-200'
+            }`}
+          >
+            <button
+              className="absolute top-4 right-4 text-xl opacity-60 hover:opacity-100"
+              onClick={() => setPreviewState(null)}
+            >
+              <i className="fas fa-times"></i>
+            </button>
+
+            <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+              <i className="fas fa-eye"></i>
+              {previewState.sectionLabel || 'Version Preview'}
+            </h3>
+
+            <div className="max-h-[70vh] overflow-auto pr-1 space-y-4">
+              {renderPreviewContent(previewState.sectionId, previewState.version, theme)}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
+}
+
+// Preview content renderer (same as ContentHistorySidebar)
+function renderPreviewContent(sectionId, version, theme) {
+  const data = version?.content_data || version || {};
+
+  if (!data || (typeof data === 'object' && Object.keys(data).length === 0)) {
+    return <p className="text-sm opacity-70">No data available for this version.</p>;
+  }
+
+  switch (sectionId) {
+    case 'text_audio':
+      return (
+        <div className="space-y-4">
+          {data.text && (
+            <div className="whitespace-pre-wrap leading-relaxed text-sm">
+              {data.text}
+            </div>
+          )}
+          {data.audioUrl && (
+            <div className="space-y-2">
+              <audio controls className="w-full" src={data.audioUrl}>
+                Your browser does not support the audio element.
+              </audio>
+              <div className="text-xs opacity-70 flex flex-wrap gap-3">
+                {data.audioVoice ? <span>Voice: {data.audioVoice}</span> : null}
+                {data.audioDuration ? (
+                  <span>Duration: {Math.round(data.audioDuration)}s</span>
+                ) : null}
+                {data.audioFormat ? <span>Format: {data.audioFormat}</span> : null}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+
+    case 'slides': {
+      const title =
+        data.presentation?.title ||
+        data.title ||
+        data.fileName ||
+        'Presentation Deck';
+      const slides = data.presentation?.slides || data.slides || [];
+      const presentationUrl =
+        data.presentationUrl ||
+        data.googleSlidesUrl ||
+        data.presentation?.publicUrl ||
+        data.presentation?.url ||
+        data.storageUrl ||
+        data.fileUrl;
+      
+      const gammaUrl = data.metadata?.gamma_raw_response?.result?.gammaUrl || 
+                       data.metadata?.gamma_raw_response?.gammaUrl ||
+                       data.gamma_raw_response?.result?.gammaUrl ||
+                       data.gamma_raw_response?.gammaUrl ||
+                       data.gammaUrl;
+
+      const summaryItems = [
+        data.slide_count ? `${data.slide_count} total slides` : null,
+        data.presentation?.createdBy ? `Author: ${data.presentation.createdBy}` : null,
+        data.presentation?.subject ? `Subject: ${data.presentation.subject}` : null,
+      ].filter(Boolean);
+
+      return (
+        <div className="space-y-5">
+          <div className="flex items-start gap-4">
+            <div className="flex-shrink-0">
+              <div className="w-14 h-14 rounded-xl bg-purple-500/15 text-purple-600 flex items-center justify-center text-2xl">
+                <i className="fas fa-file-powerpoint"></i>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <h4 className="text-lg font-semibold leading-tight">{title}</h4>
+              {summaryItems.length > 0 && (
+                <ul className="text-xs opacity-70 space-y-1">
+                  {summaryItems.map(item => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              )}
+              {(gammaUrl || presentationUrl) && (
+                <div className="flex flex-wrap gap-2">
+                  {gammaUrl && (
+                    <a
+                      href={gammaUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-600 hover:text-emerald-700"
+                    >
+                      <i className="fas fa-external-link-alt"></i>
+                      View
+                    </a>
+                  )}
+                  {presentationUrl && (
+                    <a
+                      href={presentationUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      download
+                      className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-600 hover:text-emerald-700"
+                    >
+                      <i className="fas fa-download"></i>
+                      Download
+                    </a>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {slides.length > 0 ? (
+            <div className="space-y-2">
+              <h5 className="text-sm font-semibold opacity-80">Slide Outline</h5>
+              <ol className="space-y-2 text-sm">
+                {slides.slice(0, 8).map((slide, index) => (
+                  <li
+                    key={slide.slide_number || index}
+                    className="border-l-2 border-purple-400 pl-3"
+                  >
+                    <p className="font-medium">{slide.title || `Slide ${index + 1}`}</p>
+                    {Array.isArray(slide.content) && slide.content.length > 0 && (
+                      <ul className="list-disc list-inside opacity-80">
+                        {slide.content.slice(0, 4).map((item, i) => (
+                          <li key={i}>{item}</li>
+                        ))}
+                        {slide.content.length > 4 && <li>…</li>}
+                      </ul>
+                    )}
+                  </li>
+                ))}
+                {slides.length > 8 && (
+                  <li className="opacity-60">… {slides.length - 8} more slides</li>
+                )}
+              </ol>
+            </div>
+          ) : (
+            <div
+              className={`p-4 rounded-lg border ${
+                theme === 'day-mode'
+                  ? 'bg-purple-50 border-purple-200'
+                  : 'bg-purple-900/20 border-purple-500/30'
+              }`}
+            >
+              <p className="text-sm opacity-80">
+                Slide outline not available for this version, but you can open the deck using the link
+                above.
+              </p>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    case 'mind_map':
+      return <p className="text-sm opacity-70">Mind map preview not available in this view.</p>;
+
+    case 'code': {
+      const code = data.code || data.snippet || data.text;
+      const language = data.language || data.languageLabel || 'code';
+      return code ? (
+        <div className="space-y-2">
+          <div className="text-xs uppercase tracking-widest opacity-60">{language}</div>
+          <pre
+            className={`rounded-lg p-4 overflow-auto text-sm ${
+              theme === 'day-mode'
+                ? 'bg-gray-900 text-green-100'
+                : 'bg-slate-800 text-emerald-100'
+            }`}
+          >
+            {code}
+          </pre>
+        </div>
+      ) : (
+        <p className="text-sm opacity-70">No code snippet available.</p>
+      );
+    }
+
+    case 'avatar_video': {
+      const videoUrl = data.videoUrl || data.storageUrl || data.cloudUrl;
+      return videoUrl ? (
+        <div className="space-y-3">
+          <video
+            controls
+            src={videoUrl}
+            className="w-full rounded-xl border border-gray-200 dark:border-slate-700"
+          >
+            <track kind="captions" />
+          </video>
+          <div className="text-xs opacity-70">
+            <div>Voice: {data.voice || data.audioVoice || 'Unknown'}</div>
+            {data.duration && <div>Duration: {Math.round(data.duration)}s</div>}
+          </div>
+        </div>
+      ) : (
+        <p className="text-sm opacity-70">Video URL missing for this version.</p>
+      );
+    }
+
+    default:
+      return (
+        <pre className="max-h-[60vh] overflow-auto text-sm whitespace-pre-wrap">
+          {JSON.stringify(data, null, 2)}
+        </pre>
+      );
+  }
 }
 
 export default SharedSidebar;
