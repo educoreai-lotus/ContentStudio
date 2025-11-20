@@ -882,6 +882,11 @@ export function SharedSidebar({ onRestore }) {
 
       setError(null);
 
+      // CRITICAL: Clear history state for non-content contexts
+      if (context?.type !== 'content') {
+        setHistoryData({});
+      }
+
       // Notify parent component if callback provided
       if (onRestore) {
         onRestore(content);
@@ -889,6 +894,11 @@ export function SharedSidebar({ onRestore }) {
     } catch (err) {
       setError(err.error?.message || err.message || 'Failed to restore content');
       alert(err.error?.message || err.message || 'Failed to restore content');
+      
+      // CRITICAL: Clear history state for non-content contexts even on error
+      if (context?.type !== 'content') {
+        setHistoryData({});
+      }
     } finally {
       setLoading(false);
     }
