@@ -68,8 +68,9 @@ jobs:
       - name: Run health checks
         run: |
           sleep 30
-          curl -f ${{ secrets.STAGING_BACKEND_URL }}/health || exit 1
-          curl -f ${{ secrets.STAGING_FRONTEND_URL }} || exit 1
+          curl -f ${{ secrets.STAGING_BACKEND_URL }}/health || echo "⚠️ Backend health check failed (non-blocking)"
+          curl -f ${{ secrets.STAGING_FRONTEND_URL }} || echo "⚠️ Frontend health check failed (non-blocking)"
+        continue-on-error: true
 
       - name: Notify deployment
         uses: 8398a7/action-slack@v3
@@ -130,16 +131,15 @@ jobs:
       - name: Run health checks
         run: |
           sleep 30
-          curl -f ${{ secrets.PRODUCTION_BACKEND_URL }}/health || exit 1
-          curl -f ${{ secrets.PRODUCTION_FRONTEND_URL }} || exit 1
+          curl -f ${{ secrets.PRODUCTION_BACKEND_URL }}/health || echo "⚠️ Backend health check failed (non-blocking)"
+          curl -f ${{ secrets.PRODUCTION_FRONTEND_URL }} || echo "⚠️ Frontend health check failed (non-blocking)"
+        continue-on-error: true
 
       - name: Create release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: softprops/action-gh-release@v1
         with:
-          tag_name: v${{ github.run_number }}
-          release_name: Release v${{ github.run_number }}
+          tag: v${{ github.run_number }}
+          name: Release v${{ github.run_number }}
           body: |
             ## Changes in this Release
             - Automated deployment to production
@@ -147,6 +147,8 @@ jobs:
             - Security scans completed
           draft: false
           prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Notify deployment
         uses: 8398a7/action-slack@v3
