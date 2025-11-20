@@ -227,13 +227,17 @@ export function SharedSidebar({ onRestore }) {
         console.warn('[SharedSidebar] Invalid topicId:', topicIdParam);
       }
     }
-    // Inside a course (viewing course detail) - show deleted courses, not lessons
+    // Inside a course (viewing course detail) - show deleted topics/lessons for this course
     else if (path.startsWith('/courses/') && params.id && !path.includes('/edit') && !path.includes('/new')) {
-      return {
-        type: 'courses',
-        title: 'History of Deleted Courses',
-        icon: 'fa-graduation-cap',
-      };
+      const courseId = parseInt(params.id);
+      if (!isNaN(courseId) && courseId > 0) {
+        return {
+          type: 'topics',
+          courseId: courseId,
+          title: 'History of Deleted Topics',
+          icon: 'fa-list',
+        };
+      }
     }
     // Courses list page
     else if (path === '/courses' || (path.startsWith('/courses') && !params.id)) {
@@ -293,15 +297,21 @@ export function SharedSidebar({ onRestore }) {
           );
           setDeletedContent(result.courses || []);
         } else if (context.type === 'topics') {
-          // Load deleted standalone topics
-          result = await topicsService.list(
-            {
-              trainer_id: DEFAULT_TRAINER_ID,
-              course_id: null,
-              status: 'deleted',
-            },
-            { page: 1, limit: 50 }
-          );
+          // Load deleted topics - if courseId is provided, load topics for that course, otherwise standalone topics
+          const filters = {
+            trainer_id: DEFAULT_TRAINER_ID,
+            status: 'deleted',
+          };
+          
+          if (context.courseId) {
+            // Load deleted topics for this specific course
+            filters.course_id = context.courseId;
+          } else {
+            // Load deleted standalone topics
+            filters.course_id = null;
+          }
+          
+          result = await topicsService.list(filters, { page: 1, limit: 50 });
           setDeletedContent(result.topics || []);
         } else if (context.type === 'content') {
           // Load content history for all content items in the topic
@@ -637,14 +647,21 @@ export function SharedSidebar({ onRestore }) {
         );
         setDeletedContent(result.courses || []);
       } else if (context.type === 'topics') {
-        result = await topicsService.list(
-          {
-            trainer_id: DEFAULT_TRAINER_ID,
-            course_id: null,
-            status: 'deleted',
-          },
-          { page: 1, limit: 50 }
-        );
+        // Reload deleted topics - if courseId is provided, load topics for that course, otherwise standalone topics
+        const filters = {
+          trainer_id: DEFAULT_TRAINER_ID,
+          status: 'deleted',
+        };
+        
+        if (context.courseId) {
+          // Load deleted topics for this specific course
+          filters.course_id = context.courseId;
+        } else {
+          // Load deleted standalone topics
+          filters.course_id = null;
+        }
+        
+        result = await topicsService.list(filters, { page: 1, limit: 50 });
         setDeletedContent(result.topics || []);
       } else if (context.type === 'content') {
         try {
