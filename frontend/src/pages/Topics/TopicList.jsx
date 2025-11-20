@@ -13,7 +13,7 @@ export const TopicList = ({ courseId = null }) => {
   const [error, setError] = useState(null);
   const [filters, setFilters] = useState({
     trainer_id: 'trainer-maya-levi',
-    status: 'all',
+    status: 'active', // Only show active topics by default (exclude deleted)
     course_id: courseId,
     search: '',
   });
@@ -188,6 +188,20 @@ export const TopicList = ({ courseId = null }) => {
                 All
               </button>
               <button
+                onClick={() => handleStatusFilter('active')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  filters.status === 'active'
+                    ? theme === 'day-mode'
+                      ? 'bg-emerald-600 text-white shadow-lg'
+                      : 'bg-emerald-500 text-white shadow-lg'
+                    : theme === 'day-mode'
+                    ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    : 'bg-[#334155] text-[#f8fafc] hover:bg-[#475569]'
+                }`}
+              >
+                Active
+              </button>
+              <button
                 onClick={() => handleStatusFilter('draft')}
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                   filters.status === 'draft'
@@ -352,34 +366,6 @@ export const TopicList = ({ courseId = null }) => {
                     </div>
                   </div>
                   <div className="flex gap-2" onClick={e => e.stopPropagation()}>
-                    <button
-                      onClick={() =>
-                        navigate(`/topics/${topic.topic_id}/content/new`)
-                      }
-                      className={`px-3 py-1 rounded-lg text-sm font-medium transition-all ${
-                        theme === 'day-mode'
-                          ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                          : 'bg-emerald-500 hover:bg-emerald-600 text-white'
-                      }`}
-                      title="Add Manual Content"
-                    >
-                      <i className="fas fa-plus mr-1"></i>
-                      Manual
-                    </button>
-                    <button
-                      onClick={() =>
-                        navigate(`/topics/${topic.topic_id}/content/ai-generate`)
-                      }
-                      className={`px-3 py-1 rounded-lg text-sm font-medium transition-all ${
-                        theme === 'day-mode'
-                          ? 'bg-purple-600 hover:bg-purple-700 text-white'
-                          : 'bg-purple-500 hover:bg-purple-600 text-white'
-                      }`}
-                      title="Generate with AI"
-                    >
-                      <i className="fas fa-magic mr-1"></i>
-                      AI Generate
-                    </button>
                     <button
                       onClick={() => navigate(`/topics/${topic.topic_id}/content`)}
                       className={`px-3 py-1 rounded-lg text-sm font-medium transition-all ${

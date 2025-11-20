@@ -47,7 +47,7 @@ export const CourseDetail = () => {
           {
             trainer_id: DEFAULT_TRAINER_ID,
             course_id: courseId,
-            status: 'all',
+            status: 'active', // Only show active topics (exclude deleted)
           },
           {
             page: 1,

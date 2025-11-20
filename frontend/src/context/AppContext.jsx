@@ -6,6 +6,10 @@ export const AppProvider = ({ children }) => {
   const [theme, setTheme] = useState('day-mode');
   const [lessons, setLessons] = useState([]);
   const [error, setError] = useState(null);
+  const [sidebarState, setSidebarState] = useState({
+    isOpen: false,
+    isCollapsed: false,
+  });
 
   useEffect(() => {
     // Load theme from localStorage
@@ -35,6 +39,8 @@ export const AppProvider = ({ children }) => {
         error,
         setError,
         handleNewLesson,
+        sidebarState,
+        setSidebarState,
       }}
     >
       {children}

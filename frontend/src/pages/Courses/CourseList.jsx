@@ -15,7 +15,7 @@ export const CourseList = () => {
   const [error, setError] = useState(null);
   const [filters, setFilters] = useState({
     trainer_id: DEFAULT_TRAINER_ID,
-    status: 'all',
+    status: 'active', // Only show active courses by default (exclude deleted)
     search: '',
   });
   const [pagination, setPagination] = useState({

@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AppProvider, useApp } from './context/AppContext.jsx';
 import Header from './components/Header.jsx';
+import { SharedSidebar } from './components/SharedSidebar.jsx';
 import HomePage from './pages/HomePage.jsx';
 import { CourseList } from './pages/Courses/CourseList.jsx';
 import { CourseForm } from './pages/Courses/CourseForm.jsx';
@@ -21,13 +22,21 @@ import TopicContentManager from './pages/Topics/TopicContentManager.jsx';
 import LanguageStatsPage from './pages/Multilingual/LanguageStatsPage.jsx';
 
 function AppContent() {
-  const { theme } = useApp();
+  const { theme, sidebarState } = useApp();
+  
+  // Calculate margin-right for main content based on sidebar state
+  const mainContentMargin = sidebarState.isOpen
+    ? sidebarState.isCollapsed
+      ? 'mr-16' // 64px for collapsed sidebar
+      : 'mr-96' // 384px for expanded sidebar
+    : '';
   
   return (
     <Router>
       <div className="min-h-screen transition-colors duration-300 bg-[#f8fafc] dark:bg-[#1e293b] text-gray-900 dark:text-[#f8fafc]">
           <Header />
-          <div className="pt-20">
+          <SharedSidebar />
+          <div className={`pt-20 transition-all duration-300 ${mainContentMargin}`}>
             {/* Routes */}
             <Routes>
               <Route path="/" element={<HomePage />} />
