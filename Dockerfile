@@ -82,7 +82,11 @@ ENV UPLOAD_DIR=/app/uploads
 EXPOSE 3000
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+# start-period gives the container time to start before health checks begin
+# interval is how often to check after start-period
+# timeout is how long to wait for each check
+# retries is how many consecutive failures before marking unhealthy
+HEALTHCHECK --interval=10s --timeout=5s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:3000/health || exit 1
 
 # Start the application
