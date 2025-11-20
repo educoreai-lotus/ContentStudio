@@ -963,55 +963,67 @@ export function SharedSidebar({ onRestore }) {
                 <i className="fas fa-check-circle text-3xl mb-2 opacity-50"></i>
                 <p className="text-sm opacity-70">No deleted {displayContext.type === 'content' ? 'content' : displayContext.type === 'courses' ? 'courses' : displayContext.type === 'topics' ? 'topics' : 'content'}</p>
               </div>
-            ) : context.type === 'content' && Object.keys(historyData).length > 0 ? (
-              // Display history organized by sections (like ContentHistorySidebar)
-              <div className="space-y-4">
-                {SECTION_DEFINITIONS.map(section => {
-                  const sectionData = historyData[section.id];
-                  const hasVersions = sectionData && sectionData.versions && sectionData.versions.length > 0;
-                  const isOpen = openSections[section.id];
+            ) : context.type === 'content' ? (
+              // For content context, ONLY display history organized by sections
+              // Never show flat list for content history
+              Object.keys(historyData).length > 0 ? (
+                <div className="space-y-4">
+                  {SECTION_DEFINITIONS.map(section => {
+                    const sectionData = historyData[section.id];
+                    const hasVersions = sectionData && sectionData.versions && sectionData.versions.length > 0;
+                    const isOpen = openSections[section.id];
 
-                  if (!hasVersions) return null;
+                    if (!hasVersions) return null;
 
-                  return (
-                    <div key={section.id} className={`border rounded-2xl overflow-hidden ${
-                      theme === 'day-mode' ? 'border-gray-200' : 'border-slate-700'
-                    }`}>
-                      <button
-                        className={`w-full flex items-center justify-between px-4 py-3 text-left transition-all ${
-                          theme === 'day-mode'
-                            ? 'bg-gray-100 hover:bg-gray-200 text-gray-800'
-                            : 'bg-slate-800 hover:bg-slate-700 text-slate-200'
-                        }`}
-                        onClick={() => handleToggleSection(section)}
-                      >
-                        <div className="flex items-center gap-3">
-                          <i className={`fas ${section.icon}`}></i>
-                          <span className="font-semibold text-sm uppercase tracking-wide">
-                            {section.label}
-                          </span>
-                          <span className={`px-2 py-0.5 text-xs rounded-full ${
-                            theme === 'day-mode' ? 'bg-gray-300 text-gray-700' : 'bg-slate-600 text-slate-200'
+                    return (
+                      <div key={section.id} className={`border rounded-2xl overflow-hidden ${
+                        theme === 'day-mode' ? 'border-gray-200' : 'border-slate-700'
+                      }`}>
+                        <button
+                          className={`w-full flex items-center justify-between px-4 py-3 text-left transition-all ${
+                            theme === 'day-mode'
+                              ? 'bg-gray-100 hover:bg-gray-200 text-gray-800'
+                              : 'bg-slate-800 hover:bg-slate-700 text-slate-200'
+                          }`}
+                          onClick={() => handleToggleSection(section)}
+                        >
+                          <div className="flex items-center gap-3">
+                            <i className={`fas ${section.icon}`}></i>
+                            <span className="font-semibold text-sm uppercase tracking-wide">
+                              {section.label}
+                            </span>
+                            <span className={`px-2 py-0.5 text-xs rounded-full ${
+                              theme === 'day-mode' ? 'bg-gray-300 text-gray-700' : 'bg-slate-600 text-slate-200'
+                            }`}>
+                              {sectionData.versions.length}
+                            </span>
+                          </div>
+                          <i className={`fas fa-chevron-${isOpen ? 'up' : 'down'}`}></i>
+                        </button>
+
+                        {isOpen && (
+                          <div className={`px-4 py-4 ${
+                            theme === 'day-mode' ? 'bg-black/5' : 'bg-white/5'
                           }`}>
-                            {sectionData.versions.length}
-                          </span>
-                        </div>
-                        <i className={`fas fa-chevron-${isOpen ? 'up' : 'down'}`}></i>
-                      </button>
-
-                      {isOpen && (
-                        <div className={`px-4 py-4 ${
-                          theme === 'day-mode' ? 'bg-black/5' : 'bg-white/5'
-                        }`}>
-                          {renderSectionBody(section)}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+                            {renderSectionBody(section)}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div
+                  className={`text-center py-8 ${
+                    theme === 'day-mode' ? 'text-gray-500' : 'text-slate-400'
+                  }`}
+                >
+                  <i className="fas fa-check-circle text-3xl mb-2 opacity-50"></i>
+                  <p className="text-sm opacity-70">No content history available</p>
+                </div>
+              )
             ) : (
-              // Fallback: Display flat list for courses/topics
+              // Fallback: Display flat list ONLY for courses/topics (NOT for content)
               <div className="space-y-4">
                 {deletedContent.map(content => (
                   <div
