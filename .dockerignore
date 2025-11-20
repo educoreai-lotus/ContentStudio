@@ -1,6 +1,8 @@
 # Frontend (not needed for backend build)
+# But keep backend/ directory structure
 frontend/
 frontend/**/*
+!backend/
 
 # Node modules (will be installed in container)
 **/node_modules/
