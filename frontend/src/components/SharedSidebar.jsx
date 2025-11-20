@@ -91,16 +91,39 @@ export function SharedSidebar({ onRestore }) {
   const context = React.useMemo(() => {
     const path = location.pathname;
     
+    // Extract topicId from path if not in params
+    // Support both /topics/:topicId/content and /topics/1/content patterns
+    let topicIdParam = params.topicId || params.id;
+    
+    // If topicId not in params, try to extract from path
+    if (!topicIdParam && path.includes('/topics/') && path.includes('/content')) {
+      const match = path.match(/\/topics\/(\d+)\/content/);
+      if (match && match[1]) {
+        topicIdParam = match[1];
+      }
+    }
+    
+    console.log('[SharedSidebar] Determining context:', { 
+      path, 
+      params, 
+      topicIdFromParams: params.topicId, 
+      idFromParams: params.id,
+      extractedTopicId: topicIdParam 
+    });
+    
     // Content page (for a topic) - must check this first before other /topics/ routes
-    if (path.includes('/topics/') && path.includes('/content') && params.topicId) {
-      const topicId = parseInt(params.topicId);
-      if (!isNaN(topicId)) {
+    if (path.includes('/topics/') && path.includes('/content') && topicIdParam) {
+      const topicId = parseInt(topicIdParam);
+      if (!isNaN(topicId) && topicId > 0) {
+        console.log('[SharedSidebar] Content context detected:', { topicId, path });
         return {
           type: 'content',
           topicId: topicId,
           title: 'History of Deleted Content',
           icon: 'fa-file-alt',
         };
+      } else {
+        console.warn('[SharedSidebar] Invalid topicId:', topicIdParam);
       }
     }
     // Inside a course (viewing course detail) - show deleted courses, not lessons
@@ -128,21 +151,28 @@ export function SharedSidebar({ onRestore }) {
       };
     }
     
+    console.log('[SharedSidebar] No context matched, returning null');
     return null;
   }, [location.pathname, params.id, params.topicId]);
 
   // Load deleted items based on context
   useEffect(() => {
+    console.log('[SharedSidebar] useEffect triggered:', { isOpen, context });
+    
     if (!isOpen) {
+      console.log('[SharedSidebar] Sidebar is closed, clearing content');
       setDeletedContent([]);
       return;
     }
     
     // If no context, don't load content
     if (!context) {
+      console.log('[SharedSidebar] No context, clearing content');
       setDeletedContent([]);
       return;
     }
+    
+    console.log('[SharedSidebar] Loading content for context:', context);
 
     const loadDeletedContent = async () => {
       setLoading(true);
@@ -176,8 +206,10 @@ export function SharedSidebar({ onRestore }) {
           // Load content history for all content items in the topic
           // Similar to ContentHistorySidebar, we need to load history for each content item
           try {
+            console.log('[SharedSidebar] Loading content history for topic:', context.topicId);
             const allContent = await contentService.listByTopic(context.topicId);
             console.log('[SharedSidebar] Loaded content items:', allContent);
+            console.log('[SharedSidebar] Number of content items:', allContent?.length || 0);
             
             if (!allContent || allContent.length === 0) {
               setDeletedContent([]);
