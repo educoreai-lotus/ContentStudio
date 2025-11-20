@@ -1038,13 +1038,14 @@ export function SharedSidebar({ onRestore }) {
 
       {/* Preview Modal */}
       {previewState && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div
-            className={`max-w-2xl w-full mx-4 rounded-2xl shadow-2xl border p-6 relative ${
+            className={`max-w-4xl w-full mx-auto my-auto rounded-2xl shadow-2xl border p-6 relative ${
               theme === 'day-mode'
                 ? 'bg-white border-gray-200 text-gray-900'
                 : 'bg-slate-900 border-slate-700 text-slate-200'
             }`}
+            style={{ maxHeight: '90vh' }}
           >
             <button
               className="absolute top-4 right-4 text-xl opacity-60 hover:opacity-100"
