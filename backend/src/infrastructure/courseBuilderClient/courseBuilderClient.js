@@ -274,7 +274,7 @@ export class CourseBuilderClient {
         courseId: courseData.course_id,
       });
     } catch (error) {
-      // Log error but don't throw - this is a fire-and-forget operation
+      // Log error and throw to allow PublishCourseUseCase to handle it
       logger.error('[CourseBuilderClient] Failed to send course to Course Builder', {
         error: error.message,
         endpoint,
@@ -283,7 +283,8 @@ export class CourseBuilderClient {
         status: error.response?.status,
         statusText: error.response?.statusText,
       });
-      // Silently fail - don't throw error as this is not critical for course creation
+      // Throw error so PublishCourseUseCase can catch and return appropriate error message
+      throw new Error('Transfer failed — Course Builder could not receive the data. Please try again later.');
     }
   }
 

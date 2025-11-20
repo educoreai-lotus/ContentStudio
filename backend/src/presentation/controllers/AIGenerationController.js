@@ -104,8 +104,11 @@ export class AIGenerationController {
       const content = await this.generateContentUseCase.execute(generationRequest);
       
       // Check if content generation failed (especially for avatar_video)
-      const isFailed = content.content_data?.status === 'failed';
+      // For avatar_video, check if videoUrl is null/undefined or error exists (status removed)
       const isAvatarVideo = content.content_type_id === 6; // avatar_video
+      const isFailed = isAvatarVideo 
+        ? (!content.content_data?.videoUrl || content.content_data?.error)
+        : content.content_data?.status === 'failed';
       
       if (isFailed && isAvatarVideo) {
         const errorMessage = content.content_data?.reason || 
@@ -133,14 +136,17 @@ export class AIGenerationController {
         hasContentData: !!content.content_data,
         contentType: content.content_type_id,
         topicId: content.topic_id,
-        status: content.content_data?.status || 'success',
+        // Status removed for avatar_video - check videoUrl/error instead
+        status: isAvatarVideo ? (content.content_data?.videoUrl ? 'success' : 'failed') : (content.content_data?.status || 'success'),
       });
 
       const responseData = ContentDTO.toContentResponse(content);
+      const isResponseAvatarVideo = responseData.content_type_id === 6;
       console.log('[AI Generation] Response data prepared:', {
         hasContentData: !!responseData.content_data,
         contentDataKeys: responseData.content_data ? Object.keys(responseData.content_data) : [],
-        status: responseData.content_data?.status || 'success',
+        // Status removed for avatar_video - check videoUrl/error instead
+        status: isResponseAvatarVideo ? (responseData.content_data?.videoUrl ? 'success' : 'failed') : (responseData.content_data?.status || 'success'),
       });
 
       res.status(201).json({

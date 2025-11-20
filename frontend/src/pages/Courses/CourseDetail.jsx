@@ -18,6 +18,9 @@ export const CourseDetail = () => {
   const [loadingCourse, setLoadingCourse] = useState(true);
   const [loadingTopics, setLoadingTopics] = useState(true);
   const [error, setError] = useState(null);
+  const [publishing, setPublishing] = useState(false);
+  const [publishError, setPublishError] = useState(null);
+  const [publishSuccess, setPublishSuccess] = useState(false);
 
   useEffect(() => {
     if (!courseId) {
@@ -83,6 +86,71 @@ export const CourseDetail = () => {
     const required = 5;
     const percentage = Math.min((completed / required) * 100, 100);
     return { completed, required, percentage };
+  };
+
+  /**
+   * Check if course is ready to publish (all validations pass)
+   * This is a client-side check - backend will do full validation
+   * @returns {boolean} True if course appears ready
+   */
+  const isCourseReadyToPublish = () => {
+    if (!topics || topics.length === 0) return false;
+    
+    // Check if all topics have templates
+    return topics.every(topic => topic.template_id);
+  };
+
+  /**
+   * Handle publish course (transfer to Course Builder)
+   * ⚠️ IMPORTANT: We do NOT publish the course here.
+   * We ONLY transfer it to Course Builder, which handles final publishing and visibility.
+   */
+  const handlePublishCourse = async () => {
+    setPublishing(true);
+    setPublishError(null);
+    setPublishSuccess(false);
+
+    try {
+      const result = await coursesService.publish(courseId);
+      
+      if (result.success) {
+        setPublishSuccess(true);
+        setPublishError(null);
+        // Clear success message after 5 seconds
+        setTimeout(() => setPublishSuccess(false), 5000);
+      } else {
+        // Handle case where backend returns success: false
+        const errorMessage = result.error?.message || 
+                            result.message ||
+                            'Failed to transfer course';
+        setPublishError(errorMessage);
+      }
+    } catch (err) {
+      // Handle different error types
+      let errorMessage = 'Transfer failed — Course Builder could not receive the data. Please try again later.';
+      
+      if (err.response) {
+        // Backend returned an error response
+        const errorData = err.response.data;
+        
+        if (errorData?.error?.message) {
+          // Validation errors or specific error messages
+          errorMessage = errorData.error.message;
+        } else if (errorData?.message) {
+          errorMessage = errorData.message;
+        } else if (err.response.status === 400) {
+          errorMessage = 'Validation failed. Please check all lessons have templates and required content.';
+        } else if (err.response.status === 500) {
+          errorMessage = 'Transfer failed — Course Builder could not receive the data. Please try again later.';
+        }
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      
+      setPublishError(errorMessage);
+    } finally {
+      setPublishing(false);
+    }
   };
 
   const isLoading = loadingCourse || loadingTopics;
@@ -169,6 +237,30 @@ export const CourseDetail = () => {
           </div>
         )}
 
+        {publishError && (
+          <div
+            className={`border px-4 py-3 rounded-lg mb-6 whitespace-pre-line ${
+              theme === 'day-mode'
+                ? 'bg-red-100 border-red-400 text-red-700'
+                : 'bg-red-900/20 border-red-500 text-red-300'
+            }`}
+          >
+            {publishError}
+          </div>
+        )}
+
+        {publishSuccess && (
+          <div
+            className={`border px-4 py-3 rounded-lg mb-6 ${
+              theme === 'day-mode'
+                ? 'bg-green-100 border-green-400 text-green-700'
+                : 'bg-green-900/20 border-green-500 text-green-300'
+            }`}
+          >
+            The course has been successfully transferred to Course Builder for publishing.
+          </div>
+        )}
+
         <div
           className={`rounded-2xl shadow-lg p-6 mb-8 ${
             theme === 'day-mode'
@@ -252,6 +344,38 @@ export const CourseDetail = () => {
                 >
                   <i className="fas fa-book-open mr-2"></i>
                   Create Stand-alone Lesson
+                </button>
+                <button
+                  onClick={handlePublishCourse}
+                  disabled={publishing || !isCourseReadyToPublish()}
+                  title={
+                    !isCourseReadyToPublish()
+                      ? 'Complete all required content and exercises before transferring the course to Course Builder.'
+                      : publishing
+                      ? 'Transferring the course to Course Builder, please wait...'
+                      : 'Transfer course to Course Builder for publishing'
+                  }
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all relative ${
+                    publishing || !isCourseReadyToPublish()
+                      ? 'opacity-50 cursor-not-allowed'
+                      : ''
+                  } ${
+                    theme === 'day-mode'
+                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                      : 'bg-emerald-500 hover:bg-emerald-600 text-white'
+                  }`}
+                >
+                  {publishing ? (
+                    <>
+                      <i className="fas fa-spinner fa-spin mr-2"></i>
+                      Transferring...
+                    </>
+                  ) : (
+                    <>
+                      <i className="fas fa-paper-plane mr-2"></i>
+                      Publish Course
+                    </>
+                  )}
                 </button>
               </div>
             </div>

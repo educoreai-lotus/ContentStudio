@@ -30,7 +30,14 @@ export class HeygenClient {
 
   /**
    * Generate avatar video from script
-   * @param {string} script - Narration script
+   * 
+   * ⚠️ IMPORTANT: The 'script' parameter is our formatted prompt (topic, description, skills, etc.),
+   * NOT an OpenAI-generated narration text. HeyGen generates the narration independently.
+   * 
+   * ❌ FORBIDDEN: Do NOT pass OpenAI-generated "video script" or "narration text" here.
+   * ✅ REQUIRED: Pass our internal prompt (formatted by buildAvatarText()).
+   * 
+   * @param {string} script - Our formatted prompt (NOT OpenAI-generated script)
    * @param {Object} config - Video configuration
    * @returns {Promise<Object>} Video data with URL
    */

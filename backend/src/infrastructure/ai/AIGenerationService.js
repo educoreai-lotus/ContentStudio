@@ -530,15 +530,38 @@ This presentation should be educational and suitable for ${audience}.`;
 
   /**
    * Build avatar text from lesson data - NO GPT, pure function
+   * 
+   * ⚠️ CRITICAL: This function MUST NEVER call OpenAI or any LLM.
+   * The avatar narration must come ONLY from HeyGen using our formatted prompt.
+   * 
+   * This is a pure function that formats lesson data into text for HeyGen.
+   * HeyGen will generate the narration directly from this text.
+   * 
+   * ❌ FORBIDDEN: Do NOT call OpenAI to generate:
+   * - "video script"
+   * - "narration text"
+   * - "summary of the topic to speak"
+   * - Any text intended to be spoken by the avatar
+   * 
+   * ✅ REQUIRED: Use ONLY our internal prompt components:
+   * - topic_name
+   * - lesson_description
+   * - trainer_prompt (or transcript_text)
+   * - skills
+   * 
    * @param {Object} lessonData - Lesson data
    * @param {string} lessonData.lessonTopic - Topic name
    * @param {string} lessonData.lessonDescription - Topic description
    * @param {Array} lessonData.skillsList - Skills list
    * @param {string} lessonData.trainerRequestText - Optional trainer request
    * @param {string} lessonData.transcriptText - Optional transcript text
-   * @returns {string} Avatar text
+   * @returns {string} Formatted text for avatar video (sent directly to HeyGen)
    */
   buildAvatarText(lessonData = {}) {
+    // ⚠️ VALIDATION: This function MUST be pure - no OpenAI calls allowed
+    // This is a pure function by design - no side effects, no external calls
+    // Validation is enforced via tests (AvatarVideoValidation.test.js)
+
     // Sanitize all input to prevent injection
     const sanitizedData = PromptSanitizer.sanitizeVariables({
       lessonTopic: lessonData.lessonTopic || '',
@@ -603,11 +626,30 @@ This presentation should be educational and suitable for ${audience}.`;
 
   /**
    * Generate avatar video - NO GPT, uses buildAvatarText()
-   * @param {string|Object} prompt - Prompt or lesson data object
+   * 
+   * ⚠️ CRITICAL: This function MUST NEVER call OpenAI or any LLM for script generation.
+   * The avatar narration must come ONLY from HeyGen using our formatted prompt.
+   * 
+   * ❌ FORBIDDEN: Do NOT:
+   * - Request OpenAI to generate "video script" or "narration text"
+   * - Forward OpenAI text output to HeyGen
+   * - Use any LLM-generated text for avatar narration
+   * 
+   * ✅ REQUIRED: 
+   * - Use buildAvatarText() to format our prompt (topic, description, skills, trainer_prompt/transcript)
+   * - Send formatted text directly to HeyGen API
+   * - Let HeyGen generate the narration independently
+   * 
+   * @param {string|Object} prompt - Prompt or lesson data object (NOT OpenAI-generated script)
    * @param {Object} config - Configuration
    * @returns {Promise<Object>} Avatar video result
    */
   async generateAvatarVideo(prompt, config = {}) {
+    // ⚠️ VALIDATION: Ensure no OpenAI script generation occurs
+    // This function MUST NOT call OpenAI to generate narration text
+    // Validation is enforced via tests (AvatarVideoValidation.test.js)
+    // Code structure prevents OpenAI calls - pure function + direct HeyGen call
+
     if (!this.heygenClient) {
       // Don't throw - return failed status
       return {
@@ -652,7 +694,25 @@ This presentation should be educational and suitable for ${audience}.`;
     };
 
     // Build avatar text - NO GPT, pure function
+    // ⚠️ CRITICAL: This MUST be a pure function that formats our prompt data.
+    // Do NOT call OpenAI here. HeyGen will generate narration from this text.
     const avatarText = this.buildAvatarText(lessonData);
+
+    // ⚠️ VALIDATION: Ensure text is from our prompt, not OpenAI-generated
+    // Check that text contains expected prompt components (topic, skills, description)
+    // This is a lightweight validation to detect if OpenAI text was accidentally passed
+    if (avatarText && avatarText.length > 0) {
+      const hasExpectedComponents = 
+        (lessonData.lessonTopic && avatarText.includes(lessonData.lessonTopic)) ||
+        (lessonData.lessonDescription && avatarText.includes(lessonData.lessonDescription)) ||
+        (lessonData.trainerRequestText && avatarText.includes(lessonData.trainerRequestText)) ||
+        (lessonData.transcriptText && avatarText.includes(lessonData.transcriptText?.substring(0, 50))) ||
+        avatarText.includes('Welcome to'); // Fallback text
+
+      if (!hasExpectedComponents && process.env.NODE_ENV !== 'production') {
+        console.warn('[AIGenerationService] ⚠️ Avatar text validation: Text may not contain expected prompt components');
+      }
+    }
 
     if (!avatarText || avatarText.trim().length === 0) {
       return {
@@ -675,6 +735,11 @@ This presentation should be educational and suitable for ${audience}.`;
     }
 
     // Generate video using Heygen - NO GPT, direct call
+    // ⚠️ CRITICAL: avatarText is our formatted prompt, NOT OpenAI-generated script.
+    // HeyGen receives our prompt and generates narration independently.
+    // Do NOT inject OpenAI text here.
+    // Validation: Tests ensure OpenAI is never called (see AvatarVideoValidation.test.js)
+
     try {
       const videoResult = await this.heygenClient.generateVideo(avatarText, {
         language: config.language || 'en',

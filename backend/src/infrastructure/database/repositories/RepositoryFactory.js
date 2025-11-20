@@ -11,6 +11,8 @@ import { ContentVersionRepository } from './ContentVersionRepository.js';
 import { PostgreSQLContentVersionRepository } from './PostgreSQLContentVersionRepository.js';
 import { QualityCheckRepository } from './QualityCheckRepository.js';
 import { PostgreSQLQualityCheckRepository } from './PostgreSQLQualityCheckRepository.js';
+import { ExerciseRepository } from './ExerciseRepository.js';
+import { PostgreSQLExerciseRepository } from './PostgreSQLExerciseRepository.js';
 
 /**
  * Repository Factory
@@ -63,6 +65,14 @@ export class RepositoryFactory {
       return new PostgreSQLQualityCheckRepository();
     }
     return new QualityCheckRepository();
+  }
+
+  static async getExerciseRepository() {
+    await db.ready;
+    if (db.isConnected()) {
+      return new PostgreSQLExerciseRepository();
+    }
+    return new ExerciseRepository();
   }
 
   /**

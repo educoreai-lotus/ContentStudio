@@ -224,8 +224,8 @@ export class ContentDataCleaner {
 
   /**
    * Clean content_data for avatar video content type
-   * Removes: redundant metadata, language (duplicate), fallback flag, error (if null)
-   * Keeps: script, videoUrl, videoId, duration, status
+   * Removes: status, redundant metadata, language (duplicate), fallback flag, error (if null)
+   * Keeps: script, videoUrl, videoId, duration, heygen_video_url
    * 
    * @param {Object} contentData - Raw content data
    * @returns {Object} Cleaned content data
@@ -249,26 +249,20 @@ export class ContentDataCleaner {
     if (contentData.duration_seconds !== undefined) {
       cleaned.duration_seconds = contentData.duration_seconds;
     }
-    if (contentData.status) {
-      cleaned.status = contentData.status;
-    }
 
+    // Remove: status (redundant - can be inferred from videoUrl presence)
     // Remove: language (redundant - stored in topics table)
     // Remove: fallback (technical flag, not needed for display)
 
-    // Keep only essential metadata (heygen_video_url, generation_status), remove topic/skills/language/error metadata
+    // Keep only essential metadata (heygen_video_url), remove status/generation_status/storage_fallback
     if (contentData.metadata) {
       const essentialMetadata = {};
       if (contentData.metadata.heygen_video_url) {
         essentialMetadata.heygen_video_url = contentData.metadata.heygen_video_url;
       }
-      if (contentData.metadata.generation_status) {
-        essentialMetadata.generation_status = contentData.metadata.generation_status;
-      }
-      if (contentData.metadata.storage_fallback !== undefined) {
-        essentialMetadata.storage_fallback = contentData.metadata.storage_fallback;
-      }
       
+      // Remove: generation_status (redundant - can be inferred from videoUrl)
+      // Remove: storage_fallback (technical flag, not needed for display)
       // Remove: error (if null or not needed for display)
       // Remove: language (redundant - stored in topics table)
       

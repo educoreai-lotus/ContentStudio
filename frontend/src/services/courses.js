@@ -63,6 +63,19 @@ export const coursesService = {
     const response = await apiClient.delete(`/api/courses/${courseId}`);
     return response.data;
   },
+
+  /**
+   * Publish course (transfer to Course Builder)
+   * ⚠️ IMPORTANT: We do NOT publish the course here.
+   * We ONLY transfer it to Course Builder, which handles final publishing and visibility.
+   * 
+   * @param {number} courseId - Course ID
+   * @returns {Promise<Object>} Publish result
+   */
+  async publish(courseId) {
+    const response = await apiClient.post(`/api/courses/${courseId}/publish`);
+    return response.data;
+  },
 };
 
 

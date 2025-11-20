@@ -343,6 +343,13 @@ ${basePrompt}`;
         }
 
         case 6: { // avatar_video
+          // ⚠️ CRITICAL: Avatar video generation MUST NOT use OpenAI for script generation.
+          // The narration must come ONLY from HeyGen using our formatted prompt.
+          // 
+          // ❌ FORBIDDEN: Do NOT call OpenAI to generate "video script" or "narration text"
+          // ✅ REQUIRED: Format our prompt (topic, description, skills, trainer_prompt/transcript) 
+          //              and send directly to HeyGen
+          //
           // Build lesson data for avatar text generation (NO GPT)
           // Ensure skillsList is an array
           const skillsListArray = Array.isArray(promptVariables.skillsListArray)
@@ -362,26 +369,33 @@ ${basePrompt}`;
           };
 
           // Generate avatar video - NO GPT, uses buildAvatarText()
+          // ⚠️ This calls buildAvatarText() which formats our prompt, then sends to HeyGen directly.
+          // No OpenAI script generation occurs in this flow.
           const avatarResult = await this.aiGenerationService.generateAvatarVideo(lessonData, {
             language: promptVariables.language,
           });
           
           // Handle failed status - save as failed content instead of throwing
           if (avatarResult.status === 'failed') {
-            // Create failed content data structure
+            // Create failed content data structure (without status - removed for consistency)
+            const failedMetadata = {};
+            if (avatarResult.metadata?.heygen_video_url) {
+              failedMetadata.heygen_video_url = avatarResult.metadata.heygen_video_url;
+            }
+            
             contentData = {
-              status: 'failed',
               script: avatarResult.script || null,
               videoUrl: null,
               videoId: avatarResult.videoId || null,
               error: avatarResult.error || avatarResult.errorMessage || 'Avatar video generation failed',
               errorCode: avatarResult.errorCode || 'UNKNOWN_ERROR',
               reason: avatarResult.reason || 'Avatar video failed due to unsupported voice engine. Please choose another voice.',
-              metadata: avatarResult.metadata || {},
+              // Keep only heygen_video_url in metadata (remove generation_status, storage_fallback)
+              metadata: Object.keys(failedMetadata).length > 0 ? failedMetadata : undefined,
             };
             // Don't break - continue to save failed content
           } else {
-            // Clean content data: remove redundant topic/skills metadata
+            // Clean content data: remove redundant topic/skills metadata, status, generation_status, storage_fallback
             contentData = ContentDataCleaner.cleanAvatarVideoData(avatarResult);
           }
           break;

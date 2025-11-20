@@ -142,11 +142,13 @@ export class ContentGenerationOrchestrator {
           format: format.name,
           hasContentData: !!generatedContent.content_data,
           contentDataKeys: generatedContent.content_data ? Object.keys(generatedContent.content_data) : [],
-          status: generatedContent.content_data?.status || 'success',
+          // Status removed for avatar_video - check videoUrl/error instead
+          hasVideoUrl: format.name === 'avatar_video' ? !!generatedContent.content_data?.videoUrl : undefined,
+          hasError: format.name === 'avatar_video' ? !!generatedContent.content_data?.error : undefined,
         });
 
-        // Check if avatar_video failed
-        const isFailed = format.name === 'avatar_video' && generatedContent.content_data?.status === 'failed';
+        // Check if avatar_video failed (by checking if videoUrl is null/undefined, since status is removed)
+        const isFailed = format.name === 'avatar_video' && (!generatedContent.content_data?.videoUrl || generatedContent.content_data?.error);
 
         // Override generation_method_id to 'video_to_lesson' (instead of 'ai_assisted')
         generatedContent.generation_method_id = 'video_to_lesson';
@@ -268,8 +270,8 @@ export class ContentGenerationOrchestrator {
       }
     });
 
-    // Check if avatar_video failed
-    const avatarVideoFailed = results.avatar_video && results.avatar_video.status === 'failed';
+    // Check if avatar_video failed (by checking if videoUrl is null/undefined, since status is removed)
+    const avatarVideoFailed = results.avatar_video && (!results.avatar_video.videoUrl || results.avatar_video.error);
 
     return {
       topic_id: topicId,

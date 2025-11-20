@@ -88,6 +88,86 @@ describe('AIGenerationService', () => {
     });
   });
 
+  describe('generateAvatarVideo', () => {
+    let mockHeygenClient;
+
+    beforeEach(() => {
+      mockHeygenClient = {
+        generateVideo: jest.fn().mockResolvedValue({
+          videoUrl: 'https://example.com/video.mp4',
+          videoId: 'test-video-id',
+          status: 'completed',
+          heygenVideoUrl: 'https://heygen.com/share/test-video-id',
+          duration: 15,
+        }),
+      };
+      service.heygenClient = mockHeygenClient;
+    });
+
+    it('should NOT call OpenAI for avatar video generation', async () => {
+      const lessonData = {
+        lessonTopic: 'JavaScript Basics',
+        lessonDescription: 'Introduction to JavaScript',
+        skillsList: ['javascript', 'variables'],
+        trainerRequestText: 'Explain basics clearly',
+      };
+
+      await service.generateAvatarVideo(lessonData, {
+        language: 'en',
+      });
+
+      // ⚠️ CRITICAL: OpenAI must NOT be called
+      expect(mockOpenAIClient.generateText).not.toHaveBeenCalled();
+
+      // Verify HeyGen was called instead
+      expect(mockHeygenClient.generateVideo).toHaveBeenCalled();
+    });
+
+    it('should format prompt text using buildAvatarText without OpenAI', () => {
+      const lessonData = {
+        lessonTopic: 'React Hooks',
+        lessonDescription: 'Understanding React Hooks',
+        skillsList: ['react', 'hooks'],
+        trainerRequestText: 'Explain hooks clearly',
+      };
+
+      const result = service.buildAvatarText(lessonData);
+
+      // Verify OpenAI was NOT called
+      expect(mockOpenAIClient.generateText).not.toHaveBeenCalled();
+
+      // Verify formatted text contains our data
+      expect(result).toContain('React Hooks');
+      expect(result).toContain('Understanding React Hooks');
+      expect(result).toContain('react, hooks');
+      expect(result).toContain('Explain hooks clearly');
+    });
+
+    it('should send formatted text directly to HeyGen', async () => {
+      const lessonData = {
+        lessonTopic: 'Python Basics',
+        lessonDescription: 'Python programming fundamentals',
+        skillsList: ['python'],
+        trainerRequestText: 'Start with basics',
+      };
+
+      await service.generateAvatarVideo(lessonData, {
+        language: 'en',
+      });
+
+      expect(mockOpenAIClient.generateText).not.toHaveBeenCalled();
+
+      const heygenCall = mockHeygenClient.generateVideo.mock.calls[0];
+      const scriptText = heygenCall[0];
+
+      // Verify script contains our prompt, not AI-generated text
+      expect(scriptText).toContain('Python Basics');
+      expect(scriptText).toContain('Python programming fundamentals');
+      expect(scriptText).toContain('python');
+      expect(scriptText).toContain('Start with basics');
+    });
+  });
+
   describe('generatePresentation', () => {
     it('should generate presentation from topic', async () => {
       const topic = 'Introduction to JavaScript';
