@@ -810,13 +810,13 @@ export function SharedSidebar({ onRestore }) {
     }
   };
 
-  // Always render sidebar
-  // If no context, show empty state with generic title
-  const displayContext = context || {
-    type: 'unknown',
-    title: 'History of Deleted Content',
-    icon: 'fa-archive',
-  };
+  // Only render sidebar if there's a valid context
+  // Hide sidebar on pages that don't have relevant content (HomePage, SearchResults, Templates, etc.)
+  if (!context) {
+    return null;
+  }
+
+  const displayContext = context;
 
   return (
     <div
