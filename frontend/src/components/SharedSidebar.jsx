@@ -289,10 +289,11 @@ export function SharedSidebar({ onRestore }) {
     let isCancelled = false;
     
     // 🚨 Hard reset for any NON-content page - MUST happen FIRST
+    // Clear history data, but keep deletedContent array ready for new data
     if (context && context.type !== 'content') {
       console.log('[SharedSidebar] Non-content context detected, clearing history data immediately');
       setHistoryData({});
-      setDeletedContent([]);
+      // Don't clear deletedContent here - let it be populated by loadDeletedContent
     }
     
     // 🚫 Stop here if sidebar closed or context missing
@@ -314,15 +315,6 @@ export function SharedSidebar({ onRestore }) {
         return;
       }
       
-      // 🚨 BLOCK loading content history outside /topics/:id/content
-      // BEFORE anything runs, block incorrect load
-      if (context && context.type !== 'content') {
-        console.log('[SharedSidebar] Blocking content history load for non-content context');
-        setHistoryData({});
-        setDeletedContent([]);
-        return;
-      }
-      
       setLoading(true);
       setError(null);
 
@@ -331,6 +323,7 @@ export function SharedSidebar({ onRestore }) {
         
         if (context.type === 'courses') {
           // Load deleted courses
+          console.log('[SharedSidebar] Loading deleted courses');
           result = await coursesService.list(
             {
               trainer_id: DEFAULT_TRAINER_ID,
@@ -338,8 +331,11 @@ export function SharedSidebar({ onRestore }) {
             },
             { page: 1, limit: 50 }
           );
+          console.log('[SharedSidebar] Deleted courses loaded:', result.courses?.length || 0, result.courses);
           if (!isCancelled && context.type === 'courses') {
             setDeletedContent(result.courses || []);
+            // CRITICAL: Clear history data for courses context
+            setHistoryData({});
           }
         } else if (context.type === 'topics') {
           // Load deleted topics - if courseId is provided, load topics for that course, otherwise standalone topics
