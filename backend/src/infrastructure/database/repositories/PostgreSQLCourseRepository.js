@@ -75,11 +75,9 @@ export class PostgreSQLCourseRepository extends ICourseRepository {
       paramIndex++;
     }
 
-    if (filters.status && filters.status !== 'all') {
-      query += ` AND status = $${paramIndex}`;
-      params.push(filters.status);
-      paramIndex++;
-    }
+    // Status filter is already applied in initial query
+    // This allows History Sidebar to query with status='deleted'
+    // and regular queries to use status='active' by default
 
     // Apply pagination
     const limit = pagination.limit || 10;

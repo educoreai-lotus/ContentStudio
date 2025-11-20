@@ -64,9 +64,22 @@ export class PostgreSQLTopicRepository extends ITopicRepository {
 
     // CRITICAL: Only return active topics in regular queries
     // History sidebar will query with status='deleted' explicitly
-    let query = 'SELECT * FROM topics WHERE status = $1';
-    const params = ['active'];
-    let paramIndex = 2;
+    let query;
+    const params = [];
+    let paramIndex = 1;
+
+    // Determine status filter first
+    if (filters.status && filters.status !== 'all') {
+      // If requesting deleted, show only deleted (for History Sidebar)
+      query = 'SELECT * FROM topics WHERE status = $1';
+      params.push(filters.status);
+      paramIndex = 2;
+    } else {
+      // Default: only active topics
+      query = 'SELECT * FROM topics WHERE status = $1';
+      params.push('active');
+      paramIndex = 2;
+    }
 
     // Apply filters
     if (filters.trainer_id) {
@@ -75,16 +88,12 @@ export class PostgreSQLTopicRepository extends ITopicRepository {
       paramIndex++;
     }
 
-    if (filters.status) {
-      query += ` AND status = $${paramIndex}`;
-      params.push(filters.status);
-      paramIndex++;
-    }
-
     if (filters.course_id !== undefined) {
       if (filters.course_id === null) {
+        // Standalone topics (not in a course)
         query += ` AND course_id IS NULL`;
       } else {
+        // Topics belonging to a specific course
         query += ` AND course_id = $${paramIndex}`;
         params.push(filters.course_id);
         paramIndex++;
