@@ -115,20 +115,35 @@ export class PostgreSQLTopicRepository extends ITopicRepository {
              COUNT(DISTINCT c.content_type_id) as content_count
       FROM topics t
       LEFT JOIN content c ON t.topic_id = c.topic_id
-      WHERE t.trainer_id = $1 AND t.status != $2
-      GROUP BY t.topic_id
+      WHERE t.trainer_id = $1
     `;
-    const params = [trainerId, 'deleted'];
-    let paramIndex = 3;
+    const params = [trainerId];
+    let paramIndex = 2;
 
-    // Build HAVING conditions (after GROUP BY)
-    let havingConditions = [];
-    
+    // Apply status filter in WHERE clause (before GROUP BY)
     if (filters.status && filters.status !== 'all') {
-      havingConditions.push(`t.status = $${paramIndex}`);
-      params.push(filters.status);
+      // If requesting deleted, show only deleted
+      // Otherwise, exclude deleted by default
+      if (filters.status === 'deleted') {
+        query += ` AND t.status = $${paramIndex}`;
+        params.push('deleted');
+        paramIndex++;
+      } else {
+        query += ` AND t.status != $${paramIndex} AND t.status = $${paramIndex + 1}`;
+        params.push('deleted', filters.status);
+        paramIndex += 2;
+      }
+    } else {
+      // Default: exclude deleted
+      query += ` AND t.status != $${paramIndex}`;
+      params.push('deleted');
       paramIndex++;
     }
+
+    query += ` GROUP BY t.topic_id`;
+
+    // Build HAVING conditions (after GROUP BY) - only for non-status filters
+    let havingConditions = [];
 
     if (filters.course_id !== undefined && filters.course_id !== 'null') {
       if (filters.course_id === null) {

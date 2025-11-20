@@ -59,8 +59,17 @@ export class TopicRepository extends ITopicRepository {
       }
     }
 
-    if (filters.status) {
-      filtered = filtered.filter((t) => t.status === filters.status);
+    if (filters.status && filters.status !== 'all') {
+      if (filters.status === 'deleted') {
+        // Show only deleted
+        filtered = filtered.filter((t) => t.status === 'deleted');
+      } else {
+        // Exclude deleted and show only requested status
+        filtered = filtered.filter((t) => t.status !== 'deleted' && t.status === filters.status);
+      }
+    } else {
+      // Default: exclude deleted
+      filtered = filtered.filter((t) => t.status !== 'deleted');
     }
 
     if (filters.language) {
@@ -81,8 +90,17 @@ export class TopicRepository extends ITopicRepository {
     let filteredTopics = this.topics.filter(t => t.trainer_id === trainerId);
 
     // Filter by status
-    if (filters.status) {
-      filteredTopics = filteredTopics.filter(t => t.status === filters.status);
+    if (filters.status && filters.status !== 'all') {
+      if (filters.status === 'deleted') {
+        // Show only deleted
+        filteredTopics = filteredTopics.filter(t => t.status === 'deleted');
+      } else {
+        // Exclude deleted and show only requested status
+        filteredTopics = filteredTopics.filter(t => t.status !== 'deleted' && t.status === filters.status);
+      }
+    } else {
+      // Default: exclude deleted
+      filteredTopics = filteredTopics.filter(t => t.status !== 'deleted');
     }
 
     // Filter by course_id

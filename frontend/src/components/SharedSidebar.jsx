@@ -186,17 +186,33 @@ export function SharedSidebar({ onRestore }) {
             
             const historyPromises = allContent.map(async (contentItem) => {
               try {
-                console.log(`[SharedSidebar] Loading history for content ${contentItem.content_id}`);
+                console.log(`[SharedSidebar] Loading history for content ${contentItem.content_id} (type: ${contentItem.content_type_id})`);
                 const historyResponse = await contentService.getHistory(contentItem.content_id);
-                console.log(`[SharedSidebar] History response for ${contentItem.content_id}:`, historyResponse);
+                console.log(`[SharedSidebar] History response for ${contentItem.content_id}:`, JSON.stringify(historyResponse, null, 2));
                 
                 if (!historyResponse) {
                   console.warn(`[SharedSidebar] No history response for content ${contentItem.content_id}`);
                   return [];
                 }
                 
-                if (!historyResponse.versions || !Array.isArray(historyResponse.versions) || historyResponse.versions.length === 0) {
-                  console.log(`[SharedSidebar] No versions in history response for content ${contentItem.content_id}, response:`, historyResponse);
+                // Check if response has the expected structure
+                if (typeof historyResponse !== 'object') {
+                  console.error(`[SharedSidebar] Invalid history response type for content ${contentItem.content_id}:`, typeof historyResponse);
+                  return [];
+                }
+                
+                if (!historyResponse.versions) {
+                  console.warn(`[SharedSidebar] No 'versions' field in history response for content ${contentItem.content_id}`, historyResponse);
+                  return [];
+                }
+                
+                if (!Array.isArray(historyResponse.versions)) {
+                  console.error(`[SharedSidebar] 'versions' is not an array for content ${contentItem.content_id}:`, typeof historyResponse.versions);
+                  return [];
+                }
+                
+                if (historyResponse.versions.length === 0) {
+                  console.log(`[SharedSidebar] Empty versions array for content ${contentItem.content_id}`);
                   return [];
                 }
                 
@@ -213,16 +229,29 @@ export function SharedSidebar({ onRestore }) {
                 const sectionId = sectionMap[contentItem.content_type_id] || 'default';
                 
                 // Return history versions (not current, as current is the active content)
+                // Backend returns history_id from entry.version_id (see ContentHistoryService.js line 149)
+                // Backend also returns preview built by #buildPreview (see ContentHistoryService.js line 152)
                 return (historyResponse.versions || []).map(version => {
-                  const preview = formatPreview(contentItem.content_type_id, version);
+                  // Use preview from backend (built by #buildPreview) or fallback to formatPreview
+                  const preview = version.preview || formatPreview(contentItem.content_type_id, version);
+                  const historyId = version.history_id || version.version_id;
+                  
+                  console.log(`[SharedSidebar] Processing version:`, {
+                    history_id: historyId,
+                    content_id: contentItem.content_id,
+                    has_content_data: !!version.content_data,
+                    preview_from_backend: version.preview,
+                    preview_final: preview
+                  });
+                  
                   return {
                     ...version,
-                    history_id: version.history_id || version.version_id, // Support both field names
+                    history_id: historyId, // Backend uses version_id, we normalize to history_id
                     content_id: contentItem.content_id,
                     content_type_id: contentItem.content_type_id,
                     content_type_name: contentItem.content_type_name || CONTENT_TYPE_NAMES[contentItem.content_type_id] || `Content Type ${contentItem.content_type_id}`,
                     topic_id: context.topicId,
-                    preview: version.preview || preview,
+                    preview: preview, // Use backend preview (from #buildPreview) or fallback
                     sectionId: sectionId,
                   };
                 });
@@ -234,12 +263,17 @@ export function SharedSidebar({ onRestore }) {
             
             const historyArrays = await Promise.all(historyPromises);
             const allHistoryVersions = historyArrays.flat().filter(Boolean); // Remove any null/undefined content
-            console.log('[SharedSidebar] All history versions:', allHistoryVersions);
+            console.log('[SharedSidebar] All history versions after processing:', allHistoryVersions);
             console.log('[SharedSidebar] Total history versions count:', allHistoryVersions.length);
+            console.log('[SharedSidebar] Sample version structure:', allHistoryVersions[0]);
             
             if (allHistoryVersions.length === 0) {
               console.warn('[SharedSidebar] No history versions found for any content items');
-              console.log('[SharedSidebar] Content items checked:', allContent.map(c => ({ id: c.content_id, type: c.content_type_id })));
+              console.log('[SharedSidebar] Content items checked:', allContent.map(c => ({ id: c.content_id, type: c.content_type_id, name: c.content_type_name })));
+              console.log('[SharedSidebar] History responses received:', historyArrays.map((arr, idx) => ({
+                content_id: allContent[idx]?.content_id,
+                versions_count: arr?.length || 0
+              })));
             }
             
             setDeletedContent(allHistoryVersions);
@@ -259,6 +293,84 @@ export function SharedSidebar({ onRestore }) {
 
     loadDeletedContent();
   }, [context, isOpen]);
+
+  const handleDeleteVersion = async (content) => {
+    if (!window.confirm(`Delete this version? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      if (!content.history_id) {
+        alert('Cannot delete: History ID is missing');
+        return;
+      }
+
+      setLoading(true);
+      await contentService.deleteVersion(content.history_id);
+
+      // Reload content history after delete
+      if (context && context.type === 'content') {
+        try {
+          const allContent = await contentService.listByTopic(context.topicId);
+          
+          if (!allContent || allContent.length === 0) {
+            setDeletedContent([]);
+            return;
+          }
+          
+          const historyPromises = allContent.map(async (contentItem) => {
+            try {
+              const historyResponse = await contentService.getHistory(contentItem.content_id);
+              
+              if (!historyResponse || !historyResponse.versions) {
+                return [];
+              }
+              
+              const sectionMap = {
+                1: 'text_audio',
+                2: 'code',
+                3: 'slides',
+                5: 'mind_map',
+                6: 'avatar_video',
+              };
+              const sectionId = sectionMap[contentItem.content_type_id] || 'default';
+              
+              return (historyResponse.versions || []).map(version => {
+                const preview = version.preview || formatPreview(contentItem.content_type_id, version);
+                return {
+                  ...version,
+                  history_id: version.history_id || version.version_id,
+                  content_id: contentItem.content_id,
+                  content_type_id: contentItem.content_type_id,
+                  content_type_name: contentItem.content_type_name || CONTENT_TYPE_NAMES[contentItem.content_type_id] || `Content Type ${contentItem.content_type_id}`,
+                  topic_id: context.topicId,
+                  preview: preview,
+                  sectionId: sectionId,
+                };
+              });
+            } catch (err) {
+              console.error(`[SharedSidebar] Failed to reload history for content ${contentItem.content_id}:`, err);
+              return [];
+            }
+          });
+          
+          const historyArrays = await Promise.all(historyPromises);
+          const allHistoryVersions = historyArrays.flat();
+          setDeletedContent(allHistoryVersions || []);
+        } catch (err) {
+          console.error('[SharedSidebar] Failed to reload content history after delete:', err);
+          setDeletedContent([]);
+        }
+      }
+
+      setError(null);
+    } catch (err) {
+      setError(err.error?.message || err.message || 'Failed to delete version');
+      alert(err.error?.message || err.message || 'Failed to delete version');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleRestore = async (content) => {
     const contentName = content.course_name || content.topic_name || 
@@ -346,15 +458,16 @@ export function SharedSidebar({ onRestore }) {
               const sectionId = sectionMap[contentItem.content_type_id] || 'default';
               
               return (historyResponse.versions || []).map(version => {
-                const preview = formatPreview(contentItem.content_type_id, version);
+                // Use preview from backend (built by #buildPreview) or fallback to formatPreview
+                const preview = version.preview || formatPreview(contentItem.content_type_id, version);
                 return {
                   ...version,
                   history_id: version.history_id || version.version_id, // Support both field names
                   content_id: contentItem.content_id,
                   content_type_id: contentItem.content_type_id,
-                  content_type_name: contentItem.content_type_name || `Content Type ${contentItem.content_type_id}`,
+                  content_type_name: contentItem.content_type_name || CONTENT_TYPE_NAMES[contentItem.content_type_id] || `Content Type ${contentItem.content_type_id}`,
                   topic_id: context.topicId,
-                  preview: version.preview || preview,
+                  preview: preview, // Use backend preview (from #buildPreview) or fallback
                   sectionId: sectionId,
                 };
               });
@@ -605,6 +718,19 @@ export function SharedSidebar({ onRestore }) {
                         <i className="fas fa-history mr-2"></i>
                         Restore
                       </button>
+                      {context.type === 'content' && content.history_id && (
+                        <button
+                          onClick={() => handleDeleteVersion(content)}
+                          className={`px-3 py-2 text-xs font-semibold rounded-lg transition-all ${
+                            theme === 'day-mode'
+                              ? 'bg-red-500 hover:bg-red-600 text-white'
+                              : 'bg-red-600 hover:bg-red-700 text-white'
+                          }`}
+                          title="Delete this version"
+                        >
+                          <i className="fas fa-trash"></i>
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}

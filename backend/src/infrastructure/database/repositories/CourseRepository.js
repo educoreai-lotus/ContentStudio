@@ -50,8 +50,17 @@ export class CourseRepository extends ICourseRepository {
     }
 
     // Filter by status
-    if (filters.status) {
-      filteredCourses = filteredCourses.filter(c => c.status === filters.status);
+    if (filters.status && filters.status !== 'all') {
+      if (filters.status === 'deleted') {
+        // Show only deleted
+        filteredCourses = filteredCourses.filter(c => c.status === 'deleted');
+      } else {
+        // Exclude deleted and show only requested status
+        filteredCourses = filteredCourses.filter(c => c.status !== 'deleted' && c.status === filters.status);
+      }
+    } else {
+      // Default: exclude deleted
+      filteredCourses = filteredCourses.filter(c => c.status !== 'deleted');
     }
 
     // Filter by search (course name or description)
@@ -80,8 +89,17 @@ export class CourseRepository extends ICourseRepository {
     let filteredCourses = this.courses.filter(c => c.trainer_id === trainerId);
 
     // Filter by status
-    if (filters.status) {
-      filteredCourses = filteredCourses.filter(c => c.status === filters.status);
+    if (filters.status && filters.status !== 'all') {
+      if (filters.status === 'deleted') {
+        // Show only deleted
+        filteredCourses = filteredCourses.filter(c => c.status === 'deleted');
+      } else {
+        // Exclude deleted and show only requested status
+        filteredCourses = filteredCourses.filter(c => c.status !== 'deleted' && c.status === filters.status);
+      }
+    } else {
+      // Default: exclude deleted
+      filteredCourses = filteredCourses.filter(c => c.status !== 'deleted');
     }
 
     // Filter by search (course name or description)

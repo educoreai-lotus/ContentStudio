@@ -94,14 +94,27 @@ export class PostgreSQLCourseRepository extends ICourseRepository {
       throw new Error('Database not connected. Using in-memory repository.');
     }
 
-    let query = 'SELECT * FROM trainer_courses WHERE trainer_id = $1 AND status != $2';
-    const params = [trainerId, 'deleted'];
-    let paramIndex = 3;
+    let query = 'SELECT * FROM trainer_courses WHERE trainer_id = $1';
+    const params = [trainerId];
+    let paramIndex = 2;
 
     // Apply status filter
     if (filters.status && filters.status !== 'all') {
-      query += ` AND status = $${paramIndex}`;
-      params.push(filters.status);
+      // If requesting deleted, show only deleted
+      // Otherwise, exclude deleted by default
+      if (filters.status === 'deleted') {
+        query += ` AND status = $${paramIndex}`;
+        params.push('deleted');
+        paramIndex++;
+      } else {
+        query += ` AND status != $${paramIndex} AND status = $${paramIndex + 1}`;
+        params.push('deleted', filters.status);
+        paramIndex += 2;
+      }
+    } else {
+      // Default: exclude deleted
+      query += ` AND status != $${paramIndex}`;
+      params.push('deleted');
       paramIndex++;
     }
 
