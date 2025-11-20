@@ -72,7 +72,7 @@ export class RepositoryFactory {
     if (db.isConnected()) {
       return new PostgreSQLExerciseRepository();
     }
-    return new ExerciseRepository();
+    return new ExerciseRepository(null);
   }
 
   /**
