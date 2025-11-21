@@ -623,9 +623,17 @@ This presentation should be educational and suitable for ${audience}.`;
     // ⚠️ CRITICAL: trainerPrompt is trainer's exact text, unmodified
 
     try {
-      const videoResult = await this.heygenClient.generateVideo(avatarText, {
+      const videoResult = await this.heygenClient.generateVideo({
+        prompt: trainerPrompt.trim(), // Trainer's exact text, unmodified
+        topic: topic,
+        description: description,
+        skills: skills,
+      }, {
+        title: 'EduCore Lesson',
         language: config.language || 'en',
-        topicName: config.topicName, // For logging only
+        duration: 15,
+        pollAttempts: 120,
+        pollInterval: 5000,
       });
 
       // Handle failed status - return partial success instead of throwing
