@@ -57,6 +57,7 @@ export async function saveGeneratedTopicToDatabase(generatedTopic, preferredLang
 
     // Build topic INSERT with parameterized query
     // Note: In DB schema, fields are 'description' and 'language', not 'topic_description' and 'topic_language'
+    // Note: skills is text[] (PostgreSQL array), not JSONB - pg driver will convert array automatically
     const insertTopicSql = `
       INSERT INTO topics (
         topic_name,
@@ -70,16 +71,17 @@ export async function saveGeneratedTopicToDatabase(generatedTopic, preferredLang
         status,
         devlab_exercises,
         usage_count
-      ) VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, $10, 0)
+      ) VALUES ($1, $2, $3, $4::text[], $5, $6, $7, $8, $9, $10, 0)
       RETURNING topic_id
     `;
 
     // Execute topic INSERT with parameterized query
+    // Pass skillsArray directly - pg driver will convert to PostgreSQL array automatically
     const topicResult = await db.query(insertTopicSql, [
       generatedTopic.topic_name || '',
       generatedTopic.topic_description || '', // description field in DB
       topicLanguage, // language field in DB - ensure language is passed correctly
-      JSON.stringify(skillsArray), // Convert array to JSONB
+      skillsArray, // PostgreSQL array - pg driver handles conversion automatically
       'system-auto',
       null, // course_id
       null, // template_id
