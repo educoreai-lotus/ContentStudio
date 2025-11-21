@@ -39,14 +39,13 @@ export class HeygenClient {
   /**
    * Generate avatar video
    * 
-   * @param {Object} payload - Complete request payload
+   * ⚠️ CRITICAL: HeyGen v2 API accepts ONLY title and prompt
+   * All other fields (topic, description, skills, language, duration) cause 400 error
+   * 
+   * @param {Object} payload - Request payload
    * @param {string} payload.title - Video title (default: 'EduCore Lesson')
    * @param {string} payload.prompt - Trainer's exact prompt (unmodified) - REQUIRED
-   * @param {string} payload.topic - Topic name
-   * @param {string} payload.description - Topic description
-   * @param {Array<string>} payload.skills - Skills array
-   * @param {string} payload.language - Language code (default: 'en')
-   * @param {number} payload.duration - Video duration in seconds (default: 15)
+   * @param {number} payload.duration - Video duration in seconds (default: 15) - used for response only
    * @returns {Promise<Object>} Video data with URL
    */
   async generateVideo(payload) {
@@ -63,11 +62,11 @@ export class HeygenClient {
           videoId: null,
           error: 'Invalid payload provided',
           errorCode: 'INVALID_PAYLOAD',
-          errorDetail: 'Payload must be an object with prompt, topic, description, and skills',
+          errorDetail: 'Payload must be an object with title and prompt',
         };
       }
 
-      const { prompt, topic, description, skills, title, language, duration } = payload;
+      const { prompt, title } = payload;
 
       // Validate prompt (trainer's exact text) - REQUIRED
       if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
@@ -81,15 +80,12 @@ export class HeygenClient {
         };
       }
 
-      // Build minimal request payload - ONLY allowed fields
+      // Build minimal request payload - ONLY title and prompt (HeyGen v2 API requirement)
+      // According to HeyGen Docs (V2 Video): accepts only title & prompt
+      // All other fields cause 400 error
       const requestPayload = {
         title: title || 'EduCore Lesson',
         prompt: prompt.trim(), // Trainer's exact text, unmodified
-        topic: topic || '',
-        description: description || '',
-        skills: Array.isArray(skills) ? skills : [],
-        language: language || 'en',
-        duration: duration || 15,
       };
 
       // Minimal logging - only allowed messages
@@ -107,6 +103,7 @@ export class HeygenClient {
 
       // Poll for video completion
       let pollResult;
+      const duration = payload.duration || 15; // Use from payload or default
       try {
         pollResult = await this.pollVideoStatus(
           videoId,
@@ -130,7 +127,7 @@ export class HeygenClient {
           videoUrl: fallbackUrl,
           heygenVideoUrl: fallbackUrl,
           videoId,
-          duration: requestPayload.duration || 15,
+          duration: duration || 15,
           status: pollError.status || 'processing',
           fallback: true,
         };
@@ -166,7 +163,7 @@ export class HeygenClient {
           videoUrl: storageUrl,
           heygenVideoUrl: heygenVideoUrl,
           videoId,
-          duration: requestPayload.duration || 15,
+          duration: duration || 15,
           status: 'completed',
           fallback: storageUrl === heygenVideoUrl,
         };
@@ -176,7 +173,7 @@ export class HeygenClient {
           videoUrl: fallbackUrl,
           heygenVideoUrl: heygenVideoUrl,
           videoId,
-          duration: requestPayload.duration || 15,
+          duration: duration || 15,
           status: 'processing',
           fallback: true,
           error: downloadErr.message,

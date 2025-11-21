@@ -623,14 +623,12 @@ This presentation should be educational and suitable for ${audience}.`;
     // ⚠️ CRITICAL: trainerPrompt is trainer's exact text, unmodified
 
     try {
+      // HeyGen v2 API accepts ONLY title and prompt
+      // All other fields (topic, description, skills, language, duration) cause 400 error
       const videoResult = await this.heygenClient.generateVideo({
         title: 'EduCore Lesson',
         prompt: trainerPrompt.trim(), // Trainer's exact text, unmodified
-        topic,
-        description,
-        skills,
-        language: config.language || 'en',
-        duration: 15,
+        duration: 15, // Used for response only, not sent to API
       });
 
       // Handle failed status - return partial success instead of throwing
