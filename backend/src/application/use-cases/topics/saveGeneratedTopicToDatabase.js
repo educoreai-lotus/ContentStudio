@@ -1,13 +1,6 @@
-import { readFileSync } from 'fs';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
-import { OpenAIClient } from '../../../infrastructure/external-apis/openai/OpenAIClient.js';
 import { db } from '../../../infrastructure/database/DatabaseConnection.js';
 import { logger } from '../../../infrastructure/logging/Logger.js';
 import { ContentDataCleaner } from '../../utils/ContentDataCleaner.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 
 // Content type name to ID mapping
 const CONTENT_TYPE_MAP = {
@@ -22,7 +15,7 @@ const CONTENT_TYPE_MAP = {
 
 /**
  * Saves a full AI-generated topic to the database.
- * Uses AI Query Builder pattern to generate INSERT queries dynamically.
+ * Uses parameterized queries for safe and reliable data insertion.
  * 
  * @param {Object} generatedTopic - Full topic object from generateAiTopic
  * @param {string} preferredLanguage - Preferred language code
@@ -50,19 +43,6 @@ export async function saveGeneratedTopicToDatabase(generatedTopic, preferredLang
     return null;
   }
 
-  // Read migration file
-  const migrationPath = join(__dirname, '../../../../database/doc_migration_content_studio.sql');
-  const migrationContent = readFileSync(migrationPath, 'utf-8');
-
-  // Initialize OpenAI client
-  const openaiApiKey = process.env.OPENAI_API_KEY;
-  if (!openaiApiKey) {
-    logger.error('[UseCase] OpenAI API key not configured');
-    return null;
-  }
-
-  const openaiClient = new OpenAIClient({ apiKey: openaiApiKey });
-
   // Ensure database is ready
   await db.ready;
   if (!db.isConnected()) {
@@ -71,86 +51,52 @@ export async function saveGeneratedTopicToDatabase(generatedTopic, preferredLang
   }
 
   try {
-    // Step 1: Save topic
-    // Convert skills array to PostgreSQL ARRAY format
-    const skillsArrayFormat = `{${generatedTopic.skills.map(s => `"${s.replace(/"/g, '\\"')}"`).join(',')}}`;
-    
-    const topicData = {
-      topic_name: generatedTopic.topic_name,
-      topic_description: generatedTopic.topic_description || '',
-      topic_language: generatedTopic.topic_language || preferredLanguage,
-      skills: skillsArrayFormat,
-      trainer_id: 'system-auto',
-      course_id: null,
-      template_id: null,
-      generation_methods_id: 5,
-      status: 'archived',
-      devlab_exercises: null,
-    };
+    // Step 1: Save topic using parameterized query to ensure proper data handling
+    const topicLanguage = generatedTopic.topic_language || preferredLanguage;
+    const skillsArray = generatedTopic.skills || [];
 
-    const topicBusinessRules = `- INSERT into "topics" table.
-- generation_methods_id MUST be 5 (full_ai_generated).
-- trainer_id MUST be 'system-auto' (string literal).
-- course_id MUST be NULL (AI standalone topic).
-- template_id MUST be NULL.
-- status MUST be 'archived' (string literal).
-- devlab_exercises MUST be NULL.
-- topic_language MUST be '${topicData.topic_language}' (string literal, use single quotes).
-- skills must be saved as JSONB array using the exact format provided: ${skillsArrayFormat}
-- Use the skills value AS-IS in the INSERT query (it's already in PostgreSQL ARRAY format).
-- usage_count should default to 0 (will be incremented later).
-- Return topic_id using RETURNING clause.`;
+    // Build topic INSERT with parameterized query
+    const insertTopicSql = `
+      INSERT INTO topics (
+        topic_name,
+        topic_description,
+        topic_language,
+        skills,
+        trainer_id,
+        course_id,
+        template_id,
+        generation_methods_id,
+        status,
+        devlab_exercises,
+        usage_count
+      ) VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, $10, 0)
+      RETURNING topic_id
+    `;
 
-    const topicPrompt = `You are an AI Query Builder for PostgreSQL. Generate ONLY an INSERT query (no explanations, no markdown).
-
-SCHEMA:
-${migrationContent}
-
-REQUEST DATA:
-${JSON.stringify(topicData, null, 2)}
-
-BUSINESS RULES:
-${topicBusinessRules}
-
-TASK:
-Return only the SQL INSERT query with RETURNING topic_id. Do NOT return any explanations.`;
-
-    const topicSql = await Promise.race([
-      openaiClient.generateText(topicPrompt, {
-        model: 'gpt-3.5-turbo',
-        temperature: 0.1,
-        max_tokens: 500,
-        systemPrompt: 'You are a PostgreSQL query generator. Return only valid SQL INSERT queries, no explanations.',
-      }),
-      new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('OpenAI request timeout')), 9000)
-      ),
+    // Execute topic INSERT with parameterized query
+    const topicResult = await db.query(insertTopicSql, [
+      generatedTopic.topic_name || '',
+      generatedTopic.topic_description || '',
+      topicLanguage, // Ensure language is passed correctly
+      JSON.stringify(skillsArray), // Convert array to JSONB
+      'system-auto',
+      null, // course_id
+      null, // template_id
+      5, // generation_methods_id
+      'archived',
+      null, // devlab_exercises
     ]);
 
-    // Clean SQL
-    const cleanTopicSql = topicSql.replace(/```sql\n?/g, '').replace(/```\n?/g, '').trim();
-    const sanitizedTopicSql = cleanTopicSql.replace(/;$/, '');
-
-    // Validate SQL is an INSERT query
-    if (!sanitizedTopicSql.toLowerCase().startsWith('insert')) {
-      logger.warn('[UseCase] AI returned non-INSERT SQL for topic. Skipping.');
-      return null;
-    }
-
-    // Check for placeholders
-    if (sanitizedTopicSql.includes('$')) {
-      logger.warn('[UseCase] AI topic query contains placeholders. Expected literal values.');
-    }
-
-    // Execute topic INSERT
-    const topicResult = await db.query(sanitizedTopicSql);
-    
     if (!topicResult.rows || topicResult.rows.length === 0 || !topicResult.rows[0].topic_id) {
       logger.error('[UseCase] Failed to save topic - no topic_id returned');
       return null;
     }
 
     const topicId = topicResult.rows[0].topic_id;
+    logger.info('[UseCase] Topic saved successfully', { 
+      topic_id: topicId,
+      topic_language: topicLanguage,
+    });
     logger.info('[UseCase] Topic saved successfully', { topic_id: topicId });
 
     // Step 2: Save contents
@@ -170,82 +116,25 @@ Return only the SQL INSERT query with RETURNING topic_id. Do NOT return any expl
         const rawContentData = content.content_data || {};
         const cleanedContentData = ContentDataCleaner.clean(rawContentData, contentTypeId);
 
-        // Stringify content_data for SQL - this ensures proper JSON escaping
-        const contentDataJsonString = JSON.stringify(cleanedContentData);
-        
-        // Escape single quotes for SQL (double them)
-        const escapedJsonString = contentDataJsonString.replace(/'/g, "''");
-        
-        const contentData = {
-          topic_id: topicId,
-          content_type_id: contentTypeId,
-          content_data_json_string: contentDataJsonString,
-          generation_method_id: 5,
-        };
+        // Use parameterized query for JSONB to avoid SQL injection and escaping issues
+        const insertContentSql = `
+          INSERT INTO content (
+            topic_id,
+            content_type_id,
+            content_data,
+            generation_method_id,
+            quality_check_status,
+            quality_check_data
+          ) VALUES ($1, $2, $3::jsonb, $4, NULL, NULL)
+        `;
 
-        // Show a truncated example if JSON is too long
-        const jsonExample = contentDataJsonString.length > 200 
-          ? contentDataJsonString.substring(0, 200) + '...' 
-          : contentDataJsonString;
-
-        const contentBusinessRules = `- INSERT into "content" table.
-- topic_id must match the saved topic_id (${topicId}).
-- content_type_id must be ${contentTypeId} (from content_types lookup).
-- content_data must be saved as JSONB type.
-- CRITICAL: Use the content_data_json_string value from REQUEST DATA.
-- CRITICAL: In SQL, wrap the JSON string in single quotes and cast to JSONB: '...'::jsonb
-- CRITICAL: Escape ALL single quotes inside the JSON string by doubling them (' becomes '')
-- Example format: content_data = '${escapedJsonString.substring(0, 100)}...'::jsonb
-- The full JSON string is in content_data_json_string field - use it EXACTLY as provided, but escape single quotes.
-- generation_method_id MUST be 5 (full_ai_generated).
-- quality_check_status should default to NULL.
-- quality_check_data should default to NULL.`;
-
-        const contentPrompt = `You are an AI Query Builder for PostgreSQL. Generate ONLY an INSERT query (no explanations, no markdown).
-
-SCHEMA:
-${migrationContent}
-
-REQUEST DATA:
-${JSON.stringify(contentData, null, 2)}
-
-BUSINESS RULES:
-${contentBusinessRules}
-
-TASK:
-Return only the SQL INSERT query. Do NOT return any explanations.`;
-
-        const contentSql = await Promise.race([
-          openaiClient.generateText(contentPrompt, {
-            model: 'gpt-3.5-turbo',
-            temperature: 0.1,
-            max_tokens: 500,
-            systemPrompt: 'You are a PostgreSQL query generator. Return only valid SQL INSERT queries, no explanations.',
-          }),
-          new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('OpenAI request timeout')), 9000)
-          ),
+        // Execute content INSERT with parameterized query
+        await db.query(insertContentSql, [
+          topicId,
+          contentTypeId,
+          JSON.stringify(cleanedContentData), // pg will handle JSONB conversion
+          5, // generation_method_id
         ]);
-
-        // Clean SQL
-        const cleanContentSql = contentSql.replace(/```sql\n?/g, '').replace(/```\n?/g, '').trim();
-        const sanitizedContentSql = cleanContentSql.replace(/;$/, '');
-
-        // Validate SQL is an INSERT query
-        if (!sanitizedContentSql.toLowerCase().startsWith('insert')) {
-          logger.warn('[UseCase] AI returned non-INSERT SQL for content. Skipping.', {
-            content_type: contentTypeName,
-          });
-          continue;
-        }
-
-        // Check for placeholders
-        if (sanitizedContentSql.includes('$')) {
-          logger.warn('[UseCase] AI content query contains placeholders. Expected literal values.');
-        }
-
-        // Execute content INSERT
-        await db.query(sanitizedContentSql);
         contentsSaved++;
         logger.info('[UseCase] Content saved successfully', {
           topic_id: topicId,

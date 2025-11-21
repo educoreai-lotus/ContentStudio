@@ -1,16 +1,9 @@
-import { readFileSync } from 'fs';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
-import { OpenAIClient } from '../../../infrastructure/external-apis/openai/OpenAIClient.js';
 import { db } from '../../../infrastructure/database/DatabaseConnection.js';
 import { logger } from '../../../infrastructure/logging/Logger.js';
 import { DevlabClient } from '../../../infrastructure/devlabClient/devlabClient.js';
 import { generateDevLabFallback } from '../../utils/generateDevLabFallback.js';
 import axios from 'axios';
 import qs from 'qs';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 
 const PROGRAMMING_LANGUAGES = [
   'javascript', 'js', 'typescript', 'ts', 'python', 'java', 'c', 'cpp', 'c++',
@@ -226,17 +219,6 @@ export async function generateDevLabExercisesForTopic(topic) {
 }
 
 async function updateTopicDevlabExercises(topicId, exercises) {
-  const migrationPath = join(__dirname, '../../../../database/doc_migration_content_studio.sql');
-  const migrationContent = readFileSync(migrationPath, 'utf-8');
-
-  const openaiApiKey = process.env.OPENAI_API_KEY;
-  if (!openaiApiKey) {
-    logger.error('[UseCase] OpenAI API key not configured');
-    return;
-  }
-
-  const openaiClient = new OpenAIClient({ apiKey: openaiApiKey });
-
   await db.ready;
   if (!db.isConnected()) {
     logger.error('[UseCase] Database not connected');
@@ -244,64 +226,33 @@ async function updateTopicDevlabExercises(topicId, exercises) {
   }
 
   try {
-    const sanitizedExercises = JSON.parse(JSON.stringify(exercises));
+    // Sanitize exercises array
+    const sanitizedExercises = Array.isArray(exercises) ? exercises : [];
 
-    const updateData = {
-      topic_id: topicId,
-      devlab_exercises: sanitizedExercises,
-    };
+    // Use parameterized query for JSONB to avoid SQL injection and escaping issues
+    const updateSql = `
+      UPDATE topics
+      SET devlab_exercises = $1::jsonb
+      WHERE topic_id = $2
+    `;
 
-    const businessRules = `- UPDATE "topics" table.
-- WHERE topic_id = ${topicId}.
-- SET devlab_exercises = the provided JSONB array.
-- devlab_exercises must be saved as JSONB.
-- Do NOT update any other fields.`;
-
-    const prompt = `You are an AI Query Builder for PostgreSQL. Generate ONLY an UPDATE query (no explanations, no markdown).
-
-SCHEMA:
-${migrationContent}
-
-REQUEST DATA:
-${JSON.stringify(updateData, null, 2)}
-
-BUSINESS RULES:
-${businessRules}
-
-TASK:
-Return only the SQL UPDATE query. Do NOT return any explanations.`;
-
-    const sql = await Promise.race([
-      openaiClient.generateText(prompt, {
-        model: 'gpt-3.5-turbo',
-        temperature: 0.1,
-        max_tokens: 500,
-        systemPrompt: 'You are a PostgreSQL query generator. Return only valid SQL UPDATE queries, no explanations.',
-      }),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('OpenAI request timeout')), 9000)
-      ),
+    // Execute UPDATE with parameterized query
+    await db.query(updateSql, [
+      JSON.stringify(sanitizedExercises), // Convert array to JSONB
+      topicId,
     ]);
-
-    const cleanSql = sql.replace(/```sql\n?/g, '').replace(/```\n?/g, '').trim();
-    const sanitizedSql = cleanSql.replace(/;$/, '');
-
-    if (!sanitizedSql.toLowerCase().startsWith('update')) {
-      logger.warn('[UseCase] AI returned non-UPDATE SQL. Skipping.');
-      return;
-    }
-
-    if (sanitizedSql.includes('$')) {
-      logger.warn('[UseCase] AI query contains placeholders. Expected literal values.');
-    }
-
-    await db.query(sanitizedSql);
-    logger.info('[UseCase] Updated topic devlab_exercises', { topic_id: topicId });
+    
+    logger.info('[UseCase] Updated topic devlab_exercises', { 
+      topic_id: topicId,
+      exercises_count: sanitizedExercises.length,
+    });
   } catch (error) {
     logger.error('[UseCase] Failed to update topic devlab_exercises', {
       error: error.message,
+      error_stack: error.stack,
       topic_id: topicId,
     });
+    throw error; // Re-throw to let caller handle
   }
 }
 
