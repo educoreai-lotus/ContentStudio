@@ -50,20 +50,47 @@ export class ContentMetricsController {
         requestBody = req.body;
       }
 
-      // Check if this is Course Builder format (has microservice_name instead of serviceName)
-      if (requestBody.microservice_name === 'course-builder' || requestBody.microservice_name === 'CourseBuilder' || requestBody.microservice_name === 'Course Builder') {
-        // Validate Course Builder format structure
-        if (!requestBody.microservice_name || !requestBody.payload || requestBody.response === undefined) {
-          logger.error('[ContentMetricsController] Invalid Course Builder format - missing required fields');
-          return res.status(400).json({
-            error: 'Invalid Course Builder format - microservice_name, payload, and response are required',
-          });
-        }
+      // ENFORCE STANDARD STRUCTURE: { requester_service, payload, response }
+      // Validate requester_service (MUST exist at top level, MUST be a string)
+      if (!requestBody.requester_service || typeof requestBody.requester_service !== 'string') {
+        logger.error('[ContentMetricsController] Missing or invalid requester_service', {
+          requester_service: requestBody.requester_service,
+          requester_serviceType: typeof requestBody.requester_service,
+        });
+        return res.status(400).json({
+          error: 'requester_service is required and must be a string at the top level',
+        });
+      }
 
+      // Validate payload (MUST exist at top level, MUST be an object)
+      if (!requestBody.payload || typeof requestBody.payload !== 'object' || requestBody.payload === null) {
+        logger.error('[ContentMetricsController] Missing or invalid payload', {
+          requester_service: requestBody.requester_service,
+          payloadType: typeof requestBody.payload,
+        });
+        return res.status(400).json({
+          error: 'payload is required and must be an object at the top level',
+        });
+      }
+
+      // Validate response (MUST exist at top level, MUST be an object - can be empty)
+      if (!requestBody.response || typeof requestBody.response !== 'object' || requestBody.response === null) {
+        // Initialize response as empty object if missing or invalid
+        requestBody.response = {};
+      }
+
+      // Store requester_service to avoid modifying the original request
+      const requesterService = requestBody.requester_service;
+
+      logger.info('[ContentMetricsController] Valid request structure', {
+        requester_service: requesterService,
+        payloadKeys: Object.keys(requestBody.payload),
+        responseKeys: Object.keys(requestBody.response),
+      });
+
+      // Check if this is Course Builder format
+      if (requesterService === 'course-builder' || requesterService === 'course_builder' || requesterService === 'CourseBuilder' || requesterService === 'Course Builder') {
         // Ensure response.course exists
-        if (!requestBody.response || typeof requestBody.response !== 'object') {
-          requestBody.response = { course: [] };
-        }
         if (!requestBody.response.hasOwnProperty('course')) {
           requestBody.response.course = [];
         }
@@ -71,186 +98,156 @@ export class ContentMetricsController {
         return await this.handleCourseBuilderFormat(requestBody, res, next);
       }
 
-      // Otherwise, handle the old format with serviceName/payload
-      const { serviceName, payload } = requestBody;
-
-      // Validate serviceName
-      if (!serviceName || typeof serviceName !== 'string') {
-        logger.error('[ContentMetricsController] Missing or invalid serviceName', {
-          serviceName,
-          serviceNameType: typeof serviceName,
-        });
-        return res.status(400).json({
-          error: 'serviceName is required and must be a string',
-        });
-      }
-
-      // Validate payload presence (allow string or object)
-      if (payload === undefined || payload === null) {
-        logger.error('[ContentMetricsController] Missing payload', {
-          serviceName,
-          payloadType: typeof payload,
-        });
-        return res.status(400).json({
-          error: 'payload is required',
-        });
-      }
-
-      // Parse payload (accept stringified JSON or plain object)
-      let parsedPayload;
-      if (typeof payload === 'string') {
-        try {
-          parsedPayload = JSON.parse(payload);
-        } catch (parseError) {
-          logger.error('[ContentMetricsController] Failed to parse payload', {
-            serviceName,
-            error: parseError.message,
-            payloadPreview: payload.substring(0, 200),
-          });
-          return res.status(400).json({
-            serviceName,
-            payload: JSON.stringify({ error: 'Invalid JSON payload' }),
-          });
-        }
-      } else if (typeof payload === 'object') {
-        parsedPayload = payload;
-      } else {
-        logger.error('[ContentMetricsController] Invalid payload type', {
-          serviceName,
-          payloadType: typeof payload,
-        });
-        return res.status(400).json({
-          serviceName,
-          payload: JSON.stringify({ error: 'Invalid payload type' }),
-        });
-      }
-
-      // Validate parsed payload is an object
-      if (typeof parsedPayload !== 'object' || parsedPayload === null) {
-        logger.error('[ContentMetricsController] Parsed payload is not an object', {
-          serviceName,
-          payloadType: typeof parsedPayload,
-        });
-        return res.status(400).json({
-          serviceName,
-          payload: JSON.stringify({ error: 'Invalid JSON payload' }),
-        });
-      }
+      // Handle other services using requester_service
+      // Note: We do NOT modify requester_service or payload - only fill response
+      const parsedPayload = requestBody.payload;
 
       logger.info('[ContentMetricsController] Processing fill request', {
-        serviceName,
+        requester_service: requesterService,
         payloadKeys: Object.keys(parsedPayload),
       });
 
-      // Switch by serviceName and call appropriate fill function
+      // Switch by requester_service and call appropriate fill function
       let filledData;
       try {
-        switch (serviceName) {
-          case 'Directory':
+        switch (requesterService.toLowerCase()) {
+          case 'directory':
             filledData = await fillDirectory(parsedPayload);
             break;
 
-          case 'CourseBuilder':
+          case 'coursebuilder':
+          case 'course_builder':
             filledData = await fillCourseBuilder(parsedPayload);
             break;
 
-          case 'DevLab':
+          case 'devlab':
+          case 'dev_lab':
             filledData = await fillDevLab(parsedPayload);
             break;
 
-          case 'SkillsEngine':
+          case 'skillsengine':
+          case 'skills_engine':
             filledData = await fillSkillsEngine(parsedPayload);
             break;
 
-          case 'Analytics':
+          case 'analytics':
             filledData = await fillAnalytics(parsedPayload);
             break;
 
-          case 'Management':
+          case 'management':
             filledData = await fillManagement(parsedPayload);
             break;
 
           default:
-            logger.error('[ContentMetricsController] Unknown serviceName', {
-              serviceName,
+            logger.error('[ContentMetricsController] Unknown requester_service', {
+              requester_service: requesterService,
             });
-            return res.status(400).json({
-              serviceName,
-              payload: JSON.stringify({ error: 'Unknown serviceName' }),
-            });
+            // Set error in response but keep original structure
+            requestBody.response = {
+              error: `Unknown requester_service: ${requesterService}`,
+            };
+            const errorStringified = JSON.stringify(requestBody);
+            res.setHeader('Content-Type', 'application/json');
+            return res.status(200).send(errorStringified);
         }
       } catch (fillError) {
         logger.error('[ContentMetricsController] Fill function error', {
-          serviceName,
+          requester_service: requesterService,
           error: fillError.message,
           stack: fillError.stack,
         });
-        return res.status(200).json({
-          serviceName,
-          payload: JSON.stringify({ error: 'Internal Fill Error' }),
-        });
+        // Set error in response but keep original structure
+        requestBody.response = {
+          error: 'Internal Fill Error',
+        };
+        const errorStringified = JSON.stringify(requestBody);
+        res.setHeader('Content-Type', 'application/json');
+        return res.status(200).send(errorStringified);
       }
 
-      // Stringify the filled data
-      let stringifiedPayload;
+      // Update ONLY the response field with filled data
+      // DO NOT modify requester_service or payload
+      requestBody.response = filledData || {};
+
+      // Stringify the entire original object (with updated response)
+      let stringifiedResponse;
       try {
-        stringifiedPayload = JSON.stringify(filledData);
+        stringifiedResponse = JSON.stringify(requestBody);
       } catch (stringifyError) {
-        logger.error('[ContentMetricsController] Failed to stringify filled data', {
-          serviceName,
+        logger.error('[ContentMetricsController] Failed to stringify response', {
+          requester_service: requesterService,
           error: stringifyError.message,
         });
-        return res.status(500).json({
-          serviceName,
-          payload: JSON.stringify({ error: 'Failed to stringify response' }),
-        });
+        // Set error in response but keep original structure
+        requestBody.response = {
+          error: 'Failed to stringify response',
+        };
+        stringifiedResponse = JSON.stringify(requestBody);
       }
 
-      // Return response with stringified payload
+      // Return response with stringified entire object
       logger.info('[ContentMetricsController] Successfully filled content metrics', {
-        serviceName,
-        filledKeys: Object.keys(filledData),
-        payloadSize: stringifiedPayload.length,
+        requester_service: requesterService,
+        filledKeys: Object.keys(filledData || {}),
+        responseSize: stringifiedResponse.length,
       });
 
-      return res.status(200).json({
-        serviceName,
-        payload: stringifiedPayload,
-      });
+      res.setHeader('Content-Type', 'application/json');
+      return res.status(200).send(stringifiedResponse);
     } catch (error) {
       logger.error('[ContentMetricsController] Unexpected error', {
         error: error.message,
         stack: error.stack,
       });
+      
+      // If we have a requestBody structure, return it with error in response
+      if (typeof req.body === 'string') {
+        try {
+          const errorBody = JSON.parse(req.body);
+          if (errorBody && typeof errorBody === 'object' && errorBody.requester_service && errorBody.payload) {
+            errorBody.response = { error: 'Internal server error' };
+            const errorStringified = JSON.stringify(errorBody);
+            res.setHeader('Content-Type', 'application/json');
+            return res.status(200).send(errorStringified);
+          }
+        } catch (parseError) {
+          // If we can't parse, fall through to next(error)
+        }
+      }
+      
       next(error);
     }
   }
 
 
   /**
-   * Handle Course Builder format: stringified JSON with microservice_name, payload, response
+   * Handle Course Builder format: stringified JSON with requester_service, payload, response
    * Orchestrates the full workflow using existing use-cases
-   * @param {Object} requestData - Parsed request data
+   * @param {Object} requestData - Parsed request data (with requester_service, payload, response)
    * @param {Object} res - Express response object
    * @param {Function} next - Express next middleware
    */
   async handleCourseBuilderFormat(requestData, res, next) {
     try {
-      // Validate structure
+      // Validate structure (already validated in fillContentMetrics, but double-check)
       if (!requestData.payload || typeof requestData.payload !== 'object') {
         logger.error('[ContentMetricsController] Invalid Course Builder format - missing or invalid payload');
-        return res.status(400).json({
-          error: 'Invalid Course Builder format - payload is required',
-        });
+        requestData.response = { error: 'Invalid Course Builder format - payload is required' };
+        const errorStringified = JSON.stringify(requestData);
+        res.setHeader('Content-Type', 'application/json');
+        return res.status(200).send(errorStringified);
       }
 
-      // Ensure response field exists (initialize to null if not present)
-      if (requestData.response === undefined) {
-        requestData.response = null;
+      // Ensure response.course exists
+      if (!requestData.response || typeof requestData.response !== 'object') {
+        requestData.response = {};
+      }
+      if (!requestData.response.hasOwnProperty('course')) {
+        requestData.response.course = [];
       }
 
       logger.info('[ContentMetricsController] Starting Course Builder workflow orchestration', {
-        microservice_name: requestData.microservice_name,
+        requester_service: requestData.requester_service,
         hasPayload: !!requestData.payload,
       });
 
