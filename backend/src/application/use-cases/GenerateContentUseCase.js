@@ -377,6 +377,11 @@ ${basePrompt}`;
             skillsList: skillsListArray, // Use array, not string
             transcriptText: promptVariables.transcriptText || null,
             trainerRequestText: promptVariables.trainerRequestText || null,
+            // HeyGen-specific parameters (optional - can be extracted from trainerRequestText or provided separately)
+            audience: generationRequest.audience || null,
+            musicTheme: generationRequest.musicTheme || null,
+            avatarDescription: generationRequest.avatarDescription || null,
+            voiceDescription: generationRequest.voiceDescription || null,
           };
 
           // Generate avatar video - NO GPT, uses buildAvatarText()
@@ -384,6 +389,11 @@ ${basePrompt}`;
           // No OpenAI script generation occurs in this flow.
           const avatarResult = await this.aiGenerationService.generateAvatarVideo(lessonData, {
             language: promptVariables.language,
+            // Pass HeyGen-specific config if provided
+            audience: generationRequest.audience,
+            musicTheme: generationRequest.musicTheme,
+            avatarDescription: generationRequest.avatarDescription,
+            voiceDescription: generationRequest.voiceDescription,
           });
           
           // Handle failed status - save as failed content instead of throwing

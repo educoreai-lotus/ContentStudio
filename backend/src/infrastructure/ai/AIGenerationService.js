@@ -569,6 +569,10 @@ This presentation should be educational and suitable for ${audience}.`;
       skillsList: lessonData.skillsList || [],
       trainerRequestText: lessonData.trainerRequestText || '',
       transcriptText: lessonData.transcriptText || '',
+      audience: lessonData.audience || '',
+      musicTheme: lessonData.musicTheme || '',
+      avatarDescription: lessonData.avatarDescription || '',
+      voiceDescription: lessonData.voiceDescription || '',
     });
 
     const {
@@ -577,6 +581,10 @@ This presentation should be educational and suitable for ${audience}.`;
       skillsList = [],
       trainerRequestText = '',
       transcriptText = '',
+      audience = '',
+      musicTheme = '',
+      avatarDescription = '',
+      voiceDescription = '',
     } = sanitizedData;
 
     // Ensure skillsList is an array
@@ -589,6 +597,11 @@ This presentation should be educational and suitable for ${audience}.`;
 
     // Build text from available data
     const parts = [];
+
+    // Add context information if provided (for HeyGen to understand the video style)
+    if (audience) {
+      parts.push(`This lesson is designed for ${audience}.`);
+    }
 
     if (lessonTopic) {
       parts.push(`Today we'll learn about ${lessonTopic}.`);
@@ -609,6 +622,19 @@ This presentation should be educational and suitable for ${audience}.`;
     if (skillsArray && skillsArray.length > 0) {
       const skillsText = skillsArray.join(', ');
       parts.push(`Key skills covered: ${skillsText}.`);
+    }
+
+    // Add style instructions at the end (for HeyGen to understand the tone)
+    if (musicTheme) {
+      parts.push(`Please use ${musicTheme} music theme.`);
+    }
+
+    if (avatarDescription) {
+      parts.push(`Avatar: ${avatarDescription}.`);
+    }
+
+    if (voiceDescription) {
+      parts.push(`Voice: ${voiceDescription}.`);
     }
 
     // Join all parts with spaces
@@ -691,6 +717,11 @@ This presentation should be educational and suitable for ${audience}.`;
       skillsList: config.skillsList || lessonData.skillsList || [],
       trainerRequestText: config.trainerRequestText || lessonData.trainerRequestText,
       transcriptText: config.transcriptText || lessonData.transcriptText,
+      // HeyGen-specific parameters for better video generation
+      audience: config.audience || lessonData.audience || '',
+      musicTheme: config.musicTheme || lessonData.musicTheme || '',
+      avatarDescription: config.avatarDescription || lessonData.avatarDescription || '',
+      voiceDescription: config.voiceDescription || lessonData.voiceDescription || '',
     };
 
     // Build avatar text - NO GPT, pure function
