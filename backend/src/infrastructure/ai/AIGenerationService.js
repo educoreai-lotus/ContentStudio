@@ -26,9 +26,12 @@ export class AIGenerationService extends IAIGenerationService {
     this.ttsClient = openaiApiKey ? new TTSClient({ apiKey: openaiApiKey }) : null;
     this.geminiClient = geminiApiKey ? new GeminiClient({ apiKey: geminiApiKey }) : null;
     this.heygenClient = heygenApiKey ? new HeygenClient({ apiKey: heygenApiKey }) : null;
-    this.storageClient = (supabaseUrl && supabaseServiceKey)
-      ? new SupabaseStorageClient({ supabaseUrl, supabaseServiceKey })
-      : null;
+    // Always create SupabaseStorageClient - it will check environment variables if params not provided
+    // This allows it to use SUPABASE_SERVICE_ROLE_KEY as fallback
+    this.storageClient = new SupabaseStorageClient({ 
+      supabaseUrl, 
+      supabaseServiceKey,
+    });
     this.gammaClient = gammaApiKey ? new GammaClient({ 
       apiKey: gammaApiKey,
       storageClient: this.storageClient,

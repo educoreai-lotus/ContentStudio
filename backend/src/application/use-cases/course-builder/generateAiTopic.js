@@ -96,7 +96,8 @@ export async function generateAiTopic(skillCoverageItem, preferredLanguage) {
   const geminiApiKey = process.env.GEMINI_API_KEY;
   const heygenApiKey = process.env.HEYGEN_API_KEY;
   const supabaseUrl = process.env.SUPABASE_URL;
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY;
+  // Support both SUPABASE_SERVICE_KEY and SUPABASE_SERVICE_ROLE_KEY for compatibility
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
   const gammaApiKey = process.env.GAMMA_API; // Note: Environment variable is GAMMA_API, not GAMMA_API_KEY
 
   if (!openaiApiKey) {
