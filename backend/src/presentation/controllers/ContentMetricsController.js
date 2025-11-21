@@ -6,6 +6,16 @@ import { fillDevLab } from '../../application/services/fillers/fillDevLab.js';
 import { fillSkillsEngine } from '../../application/services/fillers/fillSkillsEngine.js';
 import { fillAnalytics } from '../../application/services/fillers/fillAnalytics.js';
 import { fillManagement } from '../../application/services/fillers/fillManagement.js';
+import { parseCourseRequest } from '../../application/use-cases/course-builder/parseCourseRequest.js';
+import { getPreferredLanguage } from '../../application/use-cases/course-builder/getPreferredLanguage.js';
+import { searchSuitableCourse } from '../../application/use-cases/course-builder/searchSuitableCourse.js';
+import { fetchArchivedCourseContent } from '../../application/use-cases/course-builder/fetchArchivedCourseContent.js';
+import { mapSkillCoverage } from '../../application/use-cases/course-builder/mapSkillCoverage.js';
+import { findStandaloneTopic } from '../../application/use-cases/topics/findStandaloneTopic.js';
+import { generateAiTopic } from '../../application/use-cases/course-builder/generateAiTopic.js';
+import { saveGeneratedTopicToDatabase } from '../../application/use-cases/topics/saveGeneratedTopicToDatabase.js';
+import { generateDevLabExercisesForTopic } from '../../application/use-cases/devlab/generateDevLabExercisesForTopic.js';
+import { buildFinalContentResponse } from '../../application/use-cases/content-response/buildFinalContentResponse.js';
 
 /**
  * Content Metrics Controller
@@ -197,8 +207,10 @@ export class ContentMetricsController {
     }
   }
 
+
   /**
    * Handle Course Builder format: stringified JSON with microservice_name, payload, response
+   * Orchestrates the full workflow using existing use-cases
    * @param {Object} requestData - Parsed request data
    * @param {Object} res - Express response object
    * @param {Function} next - Express next middleware
@@ -218,41 +230,173 @@ export class ContentMetricsController {
         requestData.response = null;
       }
 
-      logger.info('[ContentMetricsController] Processing Course Builder format', {
+      logger.info('[ContentMetricsController] Starting Course Builder workflow orchestration', {
         microservice_name: requestData.microservice_name,
         hasPayload: !!requestData.payload,
-        hasResponse: requestData.response !== undefined,
       });
 
-      // Fill the request data with topics
-      let filledData;
+      // Step 1: Parse the body
+      logger.info('[ContentMetricsController] Step 1: Parsing course request');
+      let parsedRequest;
       try {
-        filledData = await fillCourseBuilderByCompany(requestData);
-      } catch (fillError) {
-        logger.error('[ContentMetricsController] Fill function error for Course Builder', {
-          error: fillError.message,
-          stack: fillError.stack,
+        parsedRequest = parseCourseRequest(requestData);
+      } catch (parseError) {
+        logger.error('[ContentMetricsController] Failed to parse course request', {
+          error: parseError.message,
         });
-        // On error, set empty topics array
-        filledData = { ...requestData, response: [] };
+        const stringifiedData = buildFinalContentResponse(requestData, []);
+        return res.status(200).json({ response: stringifiedData });
       }
 
-      // Stringify the entire object
-      let stringifiedData;
-      try {
-        stringifiedData = JSON.stringify(filledData);
-      } catch (stringifyError) {
-        logger.error('[ContentMetricsController] Failed to stringify Course Builder response', {
-          error: stringifyError.message,
+      // Step 2: Request preferred language
+      logger.info('[ContentMetricsController] Step 2: Getting preferred language');
+      const preferredLanguage = await getPreferredLanguage(parsedRequest);
+      logger.info('[ContentMetricsController] Preferred language retrieved', {
+        preferred_language: preferredLanguage.preferred_language,
+      });
+
+      // Step 3: Try to find an ORGANIZATION-SPECIFIC course
+      logger.info('[ContentMetricsController] Step 3: Searching for suitable course');
+      const courseRow = await searchSuitableCourse(parsedRequest, preferredLanguage);
+      let courseTopics = [];
+      let courseContent = null;
+
+      // Step 4: If found AND status=archived → fetch ALL course topics + content
+      if (courseRow && courseRow.status === 'archived') {
+        logger.info('[ContentMetricsController] Step 4: Fetching archived course content', {
+          course_id: courseRow.course_id,
         });
-        return res.status(500).json({
-          error: 'Failed to stringify response',
-        });
+        courseContent = await fetchArchivedCourseContent(courseRow);
+        if (courseContent && Array.isArray(courseContent.topics)) {
+          courseTopics = courseContent.topics;
+          logger.info('[ContentMetricsController] Fetched course topics', {
+            topics_count: courseTopics.length,
+          });
+        }
+      } else {
+        logger.info('[ContentMetricsController] No suitable archived course found');
       }
 
-      // Return response in Course Builder format: { response: stringifiedData }
-      logger.info('[ContentMetricsController] Successfully filled Course Builder request', {
-        topicsCount: Array.isArray(filledData.response) ? filledData.response.length : 0,
+      // Step 5: Run mapSkillCoverage with initially empty standalone topics
+      logger.info('[ContentMetricsController] Step 5: Mapping skill coverage');
+      let skillCoverage = mapSkillCoverage(parsedRequest.skills, courseTopics, []);
+      logger.info('[ContentMetricsController] Initial skill coverage mapped', {
+        total_skills: skillCoverage.length,
+        found: skillCoverage.filter(s => s.status === 'found').length,
+        missing: skillCoverage.filter(s => s.status === 'missing').length,
+      });
+
+      // Step 6: For each missing skill, try to find standalone topic
+      logger.info('[ContentMetricsController] Step 6: Searching for standalone topics');
+      const standaloneTopics = [];
+      for (const coverageItem of skillCoverage) {
+        if (coverageItem.status === 'missing' && coverageItem.source === 'ai') {
+          logger.info('[ContentMetricsController] Searching standalone topic for skill', {
+            skill: coverageItem.skill,
+          });
+          const standaloneTopic = await findStandaloneTopic(
+            coverageItem.skill,
+            preferredLanguage.preferred_language
+          );
+          if (standaloneTopic) {
+            standaloneTopics.push(standaloneTopic);
+            logger.info('[ContentMetricsController] Found standalone topic', {
+              skill: coverageItem.skill,
+              topic_id: standaloneTopic.topic_id,
+            });
+          }
+        }
+      }
+
+      // Re-run mapSkillCoverage with standalone topics
+      if (standaloneTopics.length > 0) {
+        logger.info('[ContentMetricsController] Re-mapping skill coverage with standalone topics');
+        skillCoverage = mapSkillCoverage(parsedRequest.skills, courseTopics, standaloneTopics);
+      }
+
+      // Step 7: For skills STILL missing, generate AI topic and save to DB
+      logger.info('[ContentMetricsController] Step 7: Generating AI topics for missing skills');
+      const aiGeneratedTopics = [];
+      for (const coverageItem of skillCoverage) {
+        if (coverageItem.status === 'missing' && coverageItem.source === 'ai') {
+          logger.info('[ContentMetricsController] Generating AI topic for skill', {
+            skill: coverageItem.skill,
+          });
+          const generatedTopic = await generateAiTopic(coverageItem, preferredLanguage.preferred_language);
+          if (generatedTopic) {
+            // Ensure skills array is included for saving
+            if (!generatedTopic.skills || !Array.isArray(generatedTopic.skills)) {
+              generatedTopic.skills = [coverageItem.skill];
+            }
+            logger.info('[ContentMetricsController] Saving generated AI topic to database', {
+              skill: coverageItem.skill,
+            });
+            const saveResult = await saveGeneratedTopicToDatabase(
+              generatedTopic,
+              preferredLanguage.preferred_language
+            );
+            if (saveResult && saveResult.saved) {
+              logger.info('[ContentMetricsController] AI topic saved successfully', {
+                topic_id: saveResult.topic_id,
+                skill: coverageItem.skill,
+              });
+              // Fetch the saved topic to include in response
+              generatedTopic.topic_id = saveResult.topic_id;
+              aiGeneratedTopics.push(generatedTopic);
+            }
+          }
+        }
+      }
+
+      // Build resolved topics array (course + standalone + AI)
+      logger.info('[ContentMetricsController] Building resolved topics array');
+      const resolvedTopics = [];
+      
+      // Add course topics
+      for (const topic of courseTopics) {
+        resolvedTopics.push(topic);
+      }
+      
+      // Add standalone topics (avoid duplicates)
+      for (const topic of standaloneTopics) {
+        if (!resolvedTopics.find(t => t.topic_id === topic.topic_id)) {
+          resolvedTopics.push(topic);
+        }
+      }
+      
+      // Add AI generated topics
+      for (const topic of aiGeneratedTopics) {
+        resolvedTopics.push(topic);
+      }
+
+      logger.info('[ContentMetricsController] Resolved topics built', {
+        total_topics: resolvedTopics.length,
+        course_topics: courseTopics.length,
+        standalone_topics: standaloneTopics.length,
+        ai_topics: aiGeneratedTopics.length,
+      });
+
+      // Step 8: Generate DevLab exercises for each topic
+      logger.info('[ContentMetricsController] Step 8: Generating DevLab exercises');
+      for (const topic of resolvedTopics) {
+        if (topic.devlab_exercises === null || topic.devlab_exercises === undefined) {
+          logger.info('[ContentMetricsController] Generating DevLab exercises for topic', {
+            topic_id: topic.topic_id,
+          });
+          await generateDevLabExercisesForTopic(topic);
+        } else {
+          logger.info('[ContentMetricsController] Topic already has DevLab exercises', {
+            topic_id: topic.topic_id,
+          });
+        }
+      }
+
+      // Step 9: Build final response
+      logger.info('[ContentMetricsController] Step 9: Building final content response');
+      const stringifiedData = buildFinalContentResponse(requestData, resolvedTopics);
+
+      logger.info('[ContentMetricsController] Successfully completed Course Builder workflow', {
+        topicsCount: resolvedTopics.length,
         responseSize: stringifiedData.length,
       });
 
@@ -264,7 +408,9 @@ export class ContentMetricsController {
         error: error.message,
         stack: error.stack,
       });
-      next(error);
+      // On error, return empty response
+      const stringifiedData = buildFinalContentResponse(requestData, []);
+      return res.status(200).json({ response: stringifiedData });
     }
   }
 }
