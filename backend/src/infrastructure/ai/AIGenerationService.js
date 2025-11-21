@@ -558,96 +558,28 @@ This presentation should be educational and suitable for ${audience}.`;
    * @returns {string} Formatted text for avatar video (sent directly to HeyGen)
    */
   buildAvatarText(lessonData = {}) {
-    // ⚠️ VALIDATION: This function MUST be pure - no OpenAI calls allowed
-    // This is a pure function by design - no side effects, no external calls
-    // Validation is enforced via tests (AvatarVideoValidation.test.js)
-
-    // Sanitize all input to prevent injection
-    const sanitizedData = PromptSanitizer.sanitizeVariables({
-      lessonTopic: lessonData.lessonTopic || '',
-      lessonDescription: lessonData.lessonDescription || '',
-      skillsList: lessonData.skillsList || [],
-      trainerRequestText: lessonData.trainerRequestText || '',
-      transcriptText: lessonData.transcriptText || '',
-      audience: lessonData.audience || '',
-      musicTheme: lessonData.musicTheme || '',
-      avatarDescription: lessonData.avatarDescription || '',
-      voiceDescription: lessonData.voiceDescription || '',
-    });
-
-    const {
-      lessonTopic = '',
-      lessonDescription = '',
-      skillsList = [],
-      trainerRequestText = '',
-      transcriptText = '',
-      audience = '',
-      musicTheme = '',
-      avatarDescription = '',
-      voiceDescription = '',
-    } = sanitizedData;
-
-    // Ensure skillsList is an array
-    let skillsArray = [];
-    if (Array.isArray(skillsList)) {
-      skillsArray = skillsList;
-    } else if (typeof skillsList === 'string') {
-      skillsArray = skillsList.split(',').map(s => s.trim()).filter(Boolean);
-    }
-
-    // Build text from available data
-    const parts = [];
-
-    // Add context information if provided (for HeyGen to understand the video style)
-    if (audience) {
-      parts.push(`This lesson is designed for ${audience}.`);
-    }
-
-    if (lessonTopic) {
-      parts.push(`Today we'll learn about ${lessonTopic}.`);
-    }
-
-    if (lessonDescription) {
-      parts.push(lessonDescription);
-    }
-
-    if (transcriptText && transcriptText.trim()) {
-      // Use transcript text directly (first 500 chars to keep it concise)
-      const transcriptExcerpt = transcriptText.trim().substring(0, 500);
-      parts.push(transcriptExcerpt);
-    } else if (trainerRequestText && trainerRequestText.trim()) {
-      parts.push(trainerRequestText.trim());
-    }
-
-    if (skillsArray && skillsArray.length > 0) {
-      const skillsText = skillsArray.join(', ');
-      parts.push(`Key skills covered: ${skillsText}.`);
-    }
-
-    // Add style instructions at the end (for HeyGen to understand the tone)
-    if (musicTheme) {
-      parts.push(`Please use ${musicTheme} music theme.`);
-    }
-
-    if (avatarDescription) {
-      parts.push(`Avatar: ${avatarDescription}.`);
-    }
-
-    if (voiceDescription) {
-      parts.push(`Voice: ${voiceDescription}.`);
-    }
-
-    // Join all parts with spaces
-    const finalText = parts.filter(p => p && p.trim()).join(' ').trim();
-
-    // Fallback if no text available
-    if (!finalText || finalText.length === 0) {
+    // ⚠️ CRITICAL: Do NOT modify or rewrite the trainer's prompt
+    // ⚠️ CRITICAL: Do NOT add narration text or script text
+    // ⚠️ CRITICAL: Only return the trainer's exact prompt as-is
+    
+    // Sanitize only the trainer's prompt to prevent injection
+    const trainerPrompt = lessonData.prompt || lessonData.trainerRequestText || '';
+    
+    if (!trainerPrompt || typeof trainerPrompt !== 'string' || trainerPrompt.trim().length === 0) {
+      // Fallback: if no prompt provided, return minimal description
+      const lessonTopic = lessonData.lessonTopic || '';
       return lessonTopic 
-        ? `Welcome to the lesson about ${lessonTopic}.`
-        : 'Welcome to this lesson.';
+        ? `Lesson about ${lessonTopic}`
+        : 'EduCore lesson';
     }
-
-    return finalText;
+    
+    // Return trainer's prompt exactly as written (sanitized for security only)
+    const sanitizedPrompt = PromptSanitizer.sanitizeString(trainerPrompt.trim(), 'prompt', {
+      maxLength: 5000, // Reasonable limit
+      removeNewlines: false, // Keep newlines if trainer included them
+    });
+    
+    return sanitizedPrompt;
   }
 
   /**
@@ -774,8 +706,7 @@ This presentation should be educational and suitable for ${audience}.`;
     try {
       const videoResult = await this.heygenClient.generateVideo(avatarText, {
         language: config.language || 'en',
-        avatarId: config.avatarId,
-        voiceId: config.voiceId,
+        topicName: config.topicName, // For logging only
       });
 
       // Handle failed status - return partial success instead of throwing

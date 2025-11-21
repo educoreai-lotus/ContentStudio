@@ -1,6 +1,5 @@
 import axios from 'axios';
 import { createClient } from '@supabase/supabase-js';
-import { HEYGEN_CONFIG, DEFAULT_VOICE, DEFAULT_VOICE_ENGINE } from '../../config/heygen.js';
 
 /**
  * Heygen API Client
@@ -47,76 +46,41 @@ export class HeygenClient {
     }
 
     try {
-      // Use configuration for HeyGen defaults
-      const avatarId = config.avatarId || HEYGEN_CONFIG.DEFAULT_AVATAR_ID;
-      
-      // Get safe voice ID - override ElevenLabs voices with HeyGen default
-      const voiceConfig = HEYGEN_CONFIG.getVoiceConfig(
-        config.voiceId,
-        script,
-        config.speed || 1.0
-      );
-      
-      console.log(`[HeygenClient] Using default lecturer voice: ${DEFAULT_VOICE.lecturer}`);
-      
-      // Validate script before sending
+      // Validate prompt before sending
       if (!script || typeof script !== 'string' || script.trim().length === 0) {
-        console.error('[HeygenClient] Invalid script provided:', { script, type: typeof script, length: script?.length });
+        console.error('[Avatar Generation Error] HeyGen rejected the request. Possible invalid parameters: empty prompt');
         return {
           status: 'failed',
           videoId: null,
           script: script || '',
-          error: 'Script is empty or invalid',
-          errorCode: 'INVALID_SCRIPT',
-          errorDetail: 'The script (input_text) must be a non-empty string',
-          reason: 'Avatar video requires text content. Please provide lesson topic, description, or transcript.',
+          error: 'Prompt is empty or invalid',
+          errorCode: 'INVALID_PROMPT',
+          errorDetail: 'The prompt must be a non-empty string',
+          reason: 'Avatar video requires a prompt. Please provide a description.',
         };
       }
       
-      // Log the request payload for debugging
+      // ⚠️ CRITICAL: Minimal HeyGen request - only title and prompt
+      // ❌ Do NOT send voice_id, voice_engine, or voice selection
+      // ❌ Do NOT send avatar_id or character config (HeyGen handles this)
+      // ✅ Only send title and prompt
       const requestPayload = {
-        test: true,
-        caption: false,
         title: config.title || 'EduCore Lesson',
-        video_inputs: [
-          {
-            character: {
-              type: 'avatar',
-              avatar_id: avatarId,
-              avatar_style: config.avatarStyle || 'normal',
-            },
-            voice: voiceConfig,
-            background: {
-              type: 'color',
-              value: config.backgroundColor || '#FFFFFF',
-            },
-          },
-        ],
-        dimension: {
-          width: config.width || 1280,
-          height: config.height || 720,
-        },
+        prompt: script.trim(), // Trainer's exact prompt, unmodified
       };
       
-      console.log('[HeygenClient] Request payload:', JSON.stringify({
-        ...requestPayload,
-        video_inputs: requestPayload.video_inputs.map(input => ({
-          ...input,
-          voice: {
-            ...input.voice,
-            input_text: input.voice.input_text?.substring(0, 100) + (input.voice.input_text?.length > 100 ? '...' : ''),
-          },
-        })),
-      }, null, 2));
-      console.log('[HeygenClient] Full script length:', script.length);
-      console.log('[HeygenClient] Script preview:', script.substring(0, 200));
+      // High-level logging only
+      console.log('[Avatar Generation] Sending prompt to HeyGen for topic:', config.topicName || 'unknown');
+      console.log('[Avatar Generation] Video generation started...');
       
       // Step 1: Create video generation request
       const response = await this.client.post('/v2/video/generate', requestPayload);
 
-      const videoId = response.data.data.video_id;
-      console.log(`[HeygenClient] Video created successfully! Video ID: ${videoId}`);
-      console.log(`[HeygenClient] Full response:`, JSON.stringify(response.data, null, 2));
+      const videoId = response.data.data?.video_id;
+      if (!videoId) {
+        console.error('[Avatar Generation Error] HeyGen rejected the request. Possible invalid parameters.');
+        throw new Error('HeyGen did not return a video_id');
+      }
 
       // Step 2: Poll for video completion
       let pollResult;
@@ -228,34 +192,9 @@ export class HeygenClient {
       const errorDetail = this.sanitizeError(error);
       const is400Error = error.response?.status === 400 || error.response?.statusCode === 400;
       
-      // Log detailed error information for 400 errors
+      // High-level error logging only
       if (is400Error) {
-        console.error('[HeygenClient] 400 Bad Request - Detailed error info:', {
-          statusCode: error.response?.status || error.response?.statusCode,
-          errorCode: errorDetail.code,
-          errorMessage: errorDetail.message,
-          errorDetail: errorDetail.detail,
-          responseData: error.response?.data,
-          requestPayload: {
-            scriptLength: script?.length,
-            scriptPreview: script?.substring(0, 200),
-            voiceConfig: {
-              type: 'text',
-              input_text_length: script?.length,
-              voice_id: HEYGEN_CONFIG.getSafeVoiceId(config.voiceId),
-              voice_engine: DEFAULT_VOICE_ENGINE,
-            },
-            avatarId: config.avatarId || HEYGEN_CONFIG.DEFAULT_AVATAR_ID,
-          },
-        });
-      } else {
-        console.error('[HeygenClient] Video generation error:', {
-          statusCode: error.response?.status || error.response?.statusCode,
-          errorCode: errorDetail.code,
-          errorMessage: errorDetail.message,
-          errorDetail: errorDetail.detail,
-          is400Error,
-        });
+        console.error('[Avatar Generation Error] HeyGen rejected the request. Possible invalid parameters.');
       }
       
       // Return failed status - don't throw, allow other formats to continue

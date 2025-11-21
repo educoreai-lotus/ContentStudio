@@ -57,6 +57,7 @@ export class AIGenerationController {
       lessonDescription,
       language,
       skillsList: normalizedSkills,
+      prompt: body.prompt || '', // ⚠️ CRITICAL: Trainer's exact prompt for avatar video
       style: body.style,
       difficulty: body.difficulty,
       programming_language: body.programming_language,

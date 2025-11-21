@@ -371,29 +371,20 @@ ${basePrompt}`;
             ? promptVariables.skillsList.split(',').map(s => s.trim()).filter(Boolean)
             : [];
           
+          // ⚠️ CRITICAL: For avatar video, pass ONLY the trainer's prompt
+          // Do NOT modify, rewrite, or add narration text
+          // The prompt comes from: generationRequest.prompt (from frontend body.prompt)
           const lessonData = {
-            lessonTopic: promptVariables.lessonTopic,
-            lessonDescription: promptVariables.lessonDescription || prompt, // Use prompt as description if available
-            skillsList: skillsListArray, // Use array, not string
-            transcriptText: promptVariables.transcriptText || null,
-            trainerRequestText: promptVariables.trainerRequestText || null,
-            // HeyGen-specific parameters (optional - can be extracted from trainerRequestText or provided separately)
-            audience: generationRequest.audience || null,
-            musicTheme: generationRequest.musicTheme || null,
-            avatarDescription: generationRequest.avatarDescription || null,
-            voiceDescription: generationRequest.voiceDescription || null,
+            prompt: generationRequest.prompt || promptVariables.trainerRequestText || '', // Trainer's exact prompt
+            lessonTopic: promptVariables.lessonTopic, // For fallback only
           };
 
           // Generate avatar video - NO GPT, uses buildAvatarText()
-          // ⚠️ This calls buildAvatarText() which formats our prompt, then sends to HeyGen directly.
+          // ⚠️ This calls buildAvatarText() which returns the trainer's prompt as-is.
           // No OpenAI script generation occurs in this flow.
           const avatarResult = await this.aiGenerationService.generateAvatarVideo(lessonData, {
             language: promptVariables.language,
-            // Pass HeyGen-specific config if provided
-            audience: generationRequest.audience,
-            musicTheme: generationRequest.musicTheme,
-            avatarDescription: generationRequest.avatarDescription,
-            voiceDescription: generationRequest.voiceDescription,
+            topicName: promptVariables.lessonTopic, // For logging only
           });
           
           // Handle failed status - save as failed content instead of throwing
