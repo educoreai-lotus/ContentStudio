@@ -49,13 +49,31 @@ export async function getPreferredLanguage(parsedRequest) {
     }
 
     // Extract preferred_language from response
-    if (parsedResponse && parsedResponse.response && parsedResponse.response.preferred_language) {
-      return {
-        preferred_language: parsedResponse.response.preferred_language,
-      };
+    // Only return if it's a valid language code (not the template "..." value)
+    if (
+      parsedResponse &&
+      parsedResponse.response &&
+      parsedResponse.response.preferred_language &&
+      parsedResponse.response.preferred_language !== '...'
+    ) {
+      const language = String(parsedResponse.response.preferred_language).trim();
+      // Validate it's a valid language code (2-5 characters, alphanumeric or dash)
+      if (language && language.length >= 2 && language.length <= 5 && /^[a-z-]+$/i.test(language)) {
+        logger.info('[UseCase] Received preferred language from Directory', {
+          learner_id: parsedRequest.learner_id,
+          preferred_language: language.toLowerCase(),
+        });
+        return {
+          preferred_language: language.toLowerCase(),
+        };
+      }
     }
 
     // Fallback if Directory doesn't return valid preferred_language
+    logger.warn('[UseCase] Directory did not return valid preferred_language, using fallback', {
+      learner_id: parsedRequest.learner_id,
+      returned_value: parsedResponse?.response?.preferred_language || 'missing',
+    });
     return {
       preferred_language: 'en',
     };

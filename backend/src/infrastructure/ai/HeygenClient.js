@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { createClient } from '@supabase/supabase-js';
-import { HEYGEN_CONFIG, DEFAULT_VOICE, DEFAULT_VOICE_ENGINE } from '../../config/heygen.js';
+import { HEYGEN_CONFIG, DEFAULT_VOICE_ENGINE } from '../../config/heygen.js';
 
 /**
  * Heygen API Client
@@ -405,14 +405,17 @@ export class HeygenClient {
       // Use configuration for HeyGen defaults
       const avatarIdToUse = avatarId || HEYGEN_CONFIG.DEFAULT_AVATAR_ID;
       
-      // Get safe voice ID - always use DEFAULT_VOICE.lecturer
+      // Get voice configuration - HeyGen will use default voice if voice_id is not provided
       const voiceConfig = HEYGEN_CONFIG.getVoiceConfig(
         voiceId,
         script,
         1.0
       );
       
-      console.log(`[HeygenClient] Using default lecturer voice: ${DEFAULT_VOICE.lecturer}`);
+      console.log(`[HeygenClient] Using voice config:`, {
+        voice_id: voiceConfig.voice_id || 'default',
+        voice_engine: voiceConfig.voice_engine,
+      });
       
       const response = await this.client.post('/v2/video/generate', {
         test: true, // Set to true for faster testing (adds watermark)

@@ -56,11 +56,12 @@ export async function saveGeneratedTopicToDatabase(generatedTopic, preferredLang
     const skillsArray = generatedTopic.skills || [];
 
     // Build topic INSERT with parameterized query
+    // Note: In DB schema, fields are 'description' and 'language', not 'topic_description' and 'topic_language'
     const insertTopicSql = `
       INSERT INTO topics (
         topic_name,
-        topic_description,
-        topic_language,
+        description,
+        language,
         skills,
         trainer_id,
         course_id,
@@ -76,8 +77,8 @@ export async function saveGeneratedTopicToDatabase(generatedTopic, preferredLang
     // Execute topic INSERT with parameterized query
     const topicResult = await db.query(insertTopicSql, [
       generatedTopic.topic_name || '',
-      generatedTopic.topic_description || '',
-      topicLanguage, // Ensure language is passed correctly
+      generatedTopic.topic_description || '', // description field in DB
+      topicLanguage, // language field in DB - ensure language is passed correctly
       JSON.stringify(skillsArray), // Convert array to JSONB
       'system-auto',
       null, // course_id
@@ -97,7 +98,6 @@ export async function saveGeneratedTopicToDatabase(generatedTopic, preferredLang
       topic_id: topicId,
       topic_language: topicLanguage,
     });
-    logger.info('[UseCase] Topic saved successfully', { topic_id: topicId });
 
     // Step 2: Save contents
     let contentsSaved = 0;

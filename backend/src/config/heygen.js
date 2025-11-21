@@ -6,18 +6,10 @@
  * - ELEVENLABS: External ElevenLabs voice provider (not supported in this implementation)
  */
 
-// Default lecturer voice for all avatar videos
-export const DEFAULT_VOICE = {
-  lecturer: 'Sarah', // Professional female voice
-};
-
 // Default voice engine (must be HEYGEN)
 export const DEFAULT_VOICE_ENGINE = 'heygen';
 
 export const HEYGEN_CONFIG = {
-  // Default HeyGen voice ID - use DEFAULT_VOICE.lecturer
-  DEFAULT_VOICE_ID: DEFAULT_VOICE.lecturer,
-  
   // Default avatar ID
   DEFAULT_AVATAR_ID: 'Kristin_public_3_20240108',
   
@@ -48,28 +40,24 @@ export const HEYGEN_CONFIG = {
     return elevenLabsPattern.test(voiceId) || voiceId.length > 32;
   },
   
-  // Get safe voice ID - always use DEFAULT_VOICE.lecturer
-  getSafeVoiceId(voiceId) {
-    // Always use default lecturer voice
-    if (!voiceId || this.isElevenLabsVoice(voiceId) || voiceId !== DEFAULT_VOICE.lecturer) {
-      console.log(`[HeyGenConfig] Using default lecturer voice: ${DEFAULT_VOICE.lecturer}`);
-      return DEFAULT_VOICE.lecturer;
-    }
-    
-    return DEFAULT_VOICE.lecturer;
-  },
-  
   // Get voice configuration for API request
+  // Note: HeyGen will use default voice if voice_id is not provided
   getVoiceConfig(voiceId, script, speed = 1.0) {
-    const safeVoiceId = this.getSafeVoiceId(voiceId);
-    
-    return {
+    // Don't specify voice_id if it's invalid or not provided
+    // HeyGen will use the avatar's default voice
+    const voiceConfig = {
       type: 'text',
       input_text: script,
-      voice_id: safeVoiceId,
       voice_engine: DEFAULT_VOICE_ENGINE,
       speed: speed,
     };
+    
+    // Only add voice_id if provided and valid (not ElevenLabs format)
+    if (voiceId && typeof voiceId === 'string' && !this.isElevenLabsVoice(voiceId)) {
+      voiceConfig.voice_id = voiceId;
+    }
+    
+    return voiceConfig;
   },
 };
 
