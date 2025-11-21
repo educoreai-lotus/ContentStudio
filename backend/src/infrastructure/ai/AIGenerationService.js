@@ -566,11 +566,30 @@ This presentation should be educational and suitable for ${audience}.`;
     const trainerPrompt = lessonData.prompt || lessonData.trainerRequestText || '';
     
     if (!trainerPrompt || typeof trainerPrompt !== 'string' || trainerPrompt.trim().length === 0) {
-      // Fallback: if no prompt provided, return minimal description
+      // Fallback: if no prompt provided, build a comprehensive description from available data
       const lessonTopic = lessonData.lessonTopic || '';
-      return lessonTopic 
-        ? `Lesson about ${lessonTopic}`
-        : 'EduCore lesson';
+      const lessonDescription = lessonData.lessonDescription || '';
+      const skillsList = Array.isArray(lessonData.skillsList) && lessonData.skillsList.length > 0
+        ? lessonData.skillsList.join(', ')
+        : '';
+      
+      // Build a meaningful prompt for HeyGen
+      let fallbackText = '';
+      if (lessonTopic) {
+        fallbackText = `Welcome to this lesson about ${lessonTopic}.`;
+        if (lessonDescription) {
+          fallbackText += ` ${lessonDescription}`;
+        }
+        if (skillsList) {
+          fallbackText += ` We will cover: ${skillsList}.`;
+        }
+      } else if (lessonDescription) {
+        fallbackText = lessonDescription;
+      } else {
+        fallbackText = 'Welcome to this EduCore lesson.';
+      }
+      
+      return fallbackText;
     }
     
     // Return trainer's prompt exactly as written (sanitized for security only)

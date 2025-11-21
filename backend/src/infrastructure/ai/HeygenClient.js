@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { createClient } from '@supabase/supabase-js';
+import { HEYGEN_CONFIG, DEFAULT_VOICE, DEFAULT_VOICE_ENGINE } from '../../config/heygen.js';
 
 /**
  * Heygen API Client
@@ -60,21 +61,49 @@ export class HeygenClient {
         };
       }
       
-      // ⚠️ CRITICAL: Minimal HeyGen request - only title and prompt
-      // ❌ Do NOT send voice_id, voice_engine, or voice selection
-      // ❌ Do NOT send avatar_id or character config (HeyGen handles this)
-      // ✅ Only send title and prompt
+      // ⚠️ CRITICAL: HeyGen API v2 requires video_inputs format
+      // Use default avatar and voice from config
+      const avatarId = HEYGEN_CONFIG.DEFAULT_AVATAR_ID;
+      const voiceConfig = HEYGEN_CONFIG.getVoiceConfig(null, script.trim(), 1.0);
+      
       const requestPayload = {
         title: config.title || 'EduCore Lesson',
-        prompt: script.trim(), // Trainer's exact prompt, unmodified
+        video_inputs: [
+          {
+            character: {
+              type: 'avatar',
+              avatar_id: avatarId,
+              avatar_style: 'normal',
+            },
+            voice: voiceConfig,
+            background: {
+              type: 'color',
+              value: '#FFFFFF',
+            },
+          },
+        ],
+        dimension: {
+          width: 1280,
+          height: 720,
+        },
       };
       
       // High-level logging only
       console.log('[Avatar Generation] Sending prompt to HeyGen for topic:', config.topicName || 'unknown');
       console.log('[Avatar Generation] Video generation started...');
+      console.log('[Avatar Generation] Request payload:', {
+        title: requestPayload.title,
+        avatar_id: avatarId,
+        voice_id: voiceConfig.voice_id,
+        scriptLength: script.trim().length,
+        scriptPreview: script.trim().substring(0, 100),
+      });
       
       // Step 1: Create video generation request
       const response = await this.client.post('/v2/video/generate', requestPayload);
+      
+      console.log('[Avatar Generation] HeyGen response status:', response.status);
+      console.log('[Avatar Generation] HeyGen response data:', JSON.stringify(response.data, null, 2));
 
       const videoId = response.data.data?.video_id;
       if (!videoId) {
@@ -191,6 +220,18 @@ export class HeygenClient {
       // Never throw - return failed status instead
       const errorDetail = this.sanitizeError(error);
       const is400Error = error.response?.status === 400 || error.response?.statusCode === 400;
+      
+      // Detailed error logging for debugging
+      console.error('[Avatar Generation Error] HeyGen request failed:', {
+        status: error.response?.status || error.response?.statusCode,
+        statusText: error.response?.statusText,
+        errorData: error.response?.data,
+        errorMessage: error.message,
+        requestPayload: {
+          title: config.title || 'EduCore Lesson',
+          promptLength: script?.trim()?.length || 0,
+        },
+      });
       
       // High-level error logging only
       if (is400Error) {
