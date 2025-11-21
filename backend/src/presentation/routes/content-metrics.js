@@ -9,19 +9,13 @@ const contentMetricsController = new ContentMetricsController();
  * 
  * Receives requests from other microservices to fill content metrics
  * 
- * Request format:
- * {
- *   "serviceName": "<MicroserviceName>",
- *   "payload": "<stringified JSON>"
- * }
+ * Request format (body is ALWAYS a stringified JSON):
+ * "{\"microservice_name\":\"CourseBuilder\",\"payload\":{},\"response\":{\"course\":[]}}"
  * 
- * Response format:
- * {
- *   "serviceName": "<same serviceName>",
- *   "payload": "<stringified filled JSON>"
- * }
+ * Response format (returns stringified JSON):
+ * "{\"microservice_name\":\"CourseBuilder\",\"payload\":{},\"response\":{\"course\":[...]}}"
  */
-router.post('/', (req, res, next) => {
+router.post('/', express.text({ type: 'application/json' }), (req, res, next) => {
   contentMetricsController.fillContentMetrics(req, res, next);
 });
 

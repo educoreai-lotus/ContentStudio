@@ -31,8 +31,8 @@ export class ContentMetricsController {
    */
   async fillContentMetrics(req, res, next) {
     try {
-      // Check if request body is a stringified JSON (Course Builder format)
-      let requestBody = req.body;
+      // ALWAYS treat req.body as a STRING and manually parse it
+      let requestBody;
       if (typeof req.body === 'string') {
         try {
           requestBody = JSON.parse(req.body);
@@ -45,10 +45,29 @@ export class ContentMetricsController {
             error: 'Invalid JSON in request body',
           });
         }
+      } else {
+        // If body is already parsed (shouldn't happen, but handle it)
+        requestBody = req.body;
       }
 
       // Check if this is Course Builder format (has microservice_name instead of serviceName)
-      if (requestBody.microservice_name === 'course-builder' || requestBody.microservice_name === 'CourseBuilder') {
+      if (requestBody.microservice_name === 'course-builder' || requestBody.microservice_name === 'CourseBuilder' || requestBody.microservice_name === 'Course Builder') {
+        // Validate Course Builder format structure
+        if (!requestBody.microservice_name || !requestBody.payload || requestBody.response === undefined) {
+          logger.error('[ContentMetricsController] Invalid Course Builder format - missing required fields');
+          return res.status(400).json({
+            error: 'Invalid Course Builder format - microservice_name, payload, and response are required',
+          });
+        }
+
+        // Ensure response.course exists
+        if (!requestBody.response || typeof requestBody.response !== 'object') {
+          requestBody.response = { course: [] };
+        }
+        if (!requestBody.response.hasOwnProperty('course')) {
+          requestBody.response.course = [];
+        }
+
         return await this.handleCourseBuilderFormat(requestBody, res, next);
       }
 
@@ -244,8 +263,10 @@ export class ContentMetricsController {
         logger.error('[ContentMetricsController] Failed to parse course request', {
           error: parseError.message,
         });
-        const stringifiedData = buildFinalContentResponse(requestData, []);
-        return res.status(200).json({ response: stringifiedData });
+        // On error, set empty array and return stringified original
+        requestData.response.course = [];
+        const stringifiedData = JSON.stringify(requestData);
+        return res.status(200).send(stringifiedData);
       }
 
       // Step 2: Request preferred language
@@ -391,26 +412,31 @@ export class ContentMetricsController {
         }
       }
 
-      // Step 9: Build final response
-      logger.info('[ContentMetricsController] Step 9: Building final content response');
-      const stringifiedData = buildFinalContentResponse(requestData, resolvedTopics);
+      // Step 9: Set resolved topics in original request
+      logger.info('[ContentMetricsController] Step 9: Setting resolved topics in response');
+      requestData.response.course = resolvedTopics;
+
+      // Stringify the entire original request object
+      const stringifiedData = JSON.stringify(requestData);
 
       logger.info('[ContentMetricsController] Successfully completed Course Builder workflow', {
         topicsCount: resolvedTopics.length,
         responseSize: stringifiedData.length,
       });
 
-      return res.status(200).json({
-        response: stringifiedData,
-      });
+      // Return the stringified original object EXACTLY (not wrapped)
+      res.setHeader('Content-Type', 'application/json');
+      return res.status(200).send(stringifiedData);
     } catch (error) {
       logger.error('[ContentMetricsController] Unexpected error in Course Builder format handler', {
         error: error.message,
         stack: error.stack,
       });
-      // On error, return empty response
-      const stringifiedData = buildFinalContentResponse(requestData, []);
-      return res.status(200).json({ response: stringifiedData });
+      // On error, set empty array and return stringified original
+      requestData.response.course = [];
+      const stringifiedData = JSON.stringify(requestData);
+      res.setHeader('Content-Type', 'application/json');
+      return res.status(200).send(stringifiedData);
     }
   }
 }
