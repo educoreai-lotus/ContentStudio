@@ -184,8 +184,13 @@ export async function generateAiTopic(skillCoverageItem, preferredLanguage) {
         content_type: 'text_audio',
         content_data: ContentDataCleaner.cleanTextAudioData(rawTextAudioData),
       });
+      logger.info('[UseCase] Text/audio generated successfully', { skill: skillName });
     } catch (error) {
-      logger.warn('[UseCase] Failed to generate text_audio', { error: error.message });
+      logger.warn('[UseCase] Failed to generate text_audio', { 
+        error: error.message,
+        stack: error.stack,
+        skill: skillName 
+      });
     }
 
     // 2. Generate code (type 2)
@@ -206,8 +211,13 @@ export async function generateAiTopic(skillCoverageItem, preferredLanguage) {
         content_type: 'code',
         content_data: ContentDataCleaner.cleanCodeData(rawCodeData),
       });
+      logger.info('[UseCase] Code example generated successfully', { skill: skillName });
     } catch (error) {
-      logger.warn('[UseCase] Failed to generate code', { error: error.message });
+      logger.warn('[UseCase] Failed to generate code', { 
+        error: error.message,
+        stack: error.stack,
+        skill: skillName 
+      });
     }
 
     // 3. Generate presentation (type 3)
@@ -245,8 +255,13 @@ export async function generateAiTopic(skillCoverageItem, preferredLanguage) {
         content_type: 'presentation',
         content_data: ContentDataCleaner.cleanPresentationData(rawPresentationData),
       });
+      logger.info('[UseCase] Presentation generated successfully', { skill: skillName });
     } catch (error) {
-      logger.warn('[UseCase] Failed to generate presentation', { error: error.message });
+      logger.warn('[UseCase] Failed to generate presentation', { 
+        error: error.message,
+        stack: error.stack,
+        skill: skillName 
+      });
     }
 
     // 4. Generate audio (type 4)
@@ -270,8 +285,13 @@ export async function generateAiTopic(skillCoverageItem, preferredLanguage) {
         content_type: 'audio',
         content_data: ContentDataCleaner.cleanAudioData(rawAudioData),
       });
+      logger.info('[UseCase] Audio narration generated successfully', { skill: skillName });
     } catch (error) {
-      logger.warn('[UseCase] Failed to generate audio', { error: error.message });
+      logger.warn('[UseCase] Failed to generate audio', { 
+        error: error.message,
+        stack: error.stack,
+        skill: skillName 
+      });
     }
 
     // 5. Generate mind_map (type 5)
@@ -289,8 +309,13 @@ export async function generateAiTopic(skillCoverageItem, preferredLanguage) {
         content_type: 'mind_map',
         content_data: ContentDataCleaner.cleanMindMapData(mindMap),
       });
+      logger.info('[UseCase] Mind map generated successfully', { skill: skillName });
     } catch (error) {
-      logger.warn('[UseCase] Failed to generate mind_map', { error: error.message });
+      logger.warn('[UseCase] Failed to generate mind_map', { 
+        error: error.message,
+        stack: error.stack,
+        skill: skillName 
+      });
     }
 
     // 6. Generate avatar_video (type 6)
@@ -310,18 +335,31 @@ export async function generateAiTopic(skillCoverageItem, preferredLanguage) {
           content_type: 'avatar_video',
           content_data: ContentDataCleaner.cleanAvatarVideoData(avatarResult),
         });
+        logger.info('[UseCase] Avatar video generated successfully', { skill: skillName });
       } else {
         logger.warn('[UseCase] Avatar video generation failed', {
           error: avatarResult.error,
+          skill: skillName,
         });
       }
     } catch (error) {
-      logger.warn('[UseCase] Failed to generate avatar_video', { error: error.message });
+      logger.warn('[UseCase] Failed to generate avatar_video', { 
+        error: error.message,
+        stack: error.stack,
+        skill: skillName 
+      });
     }
 
     // Build topic object
     const topicName = `${skillName} - Complete Guide`;
     const topicDescription = `A comprehensive lesson covering ${skillName} with all essential formats.`;
+
+    logger.info('[UseCase] AI topic generation completed', {
+      skill: skillName,
+      language,
+      contents_count: contents.length,
+      content_types: contents.map(c => c.content_type),
+    });
 
     return {
       topic_id: null,

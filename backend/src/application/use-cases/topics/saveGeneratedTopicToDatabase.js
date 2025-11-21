@@ -95,6 +95,7 @@ export async function saveGeneratedTopicToDatabase(generatedTopic, preferredLang
 - template_id MUST be NULL.
 - status MUST be 'archived' (string literal).
 - devlab_exercises MUST be NULL.
+- topic_language MUST be '${topicData.topic_language}' (string literal, use single quotes).
 - skills must be saved as JSONB array using the exact format provided: ${skillsArrayFormat}
 - Use the skills value AS-IS in the INSERT query (it's already in PostgreSQL ARRAY format).
 - usage_count should default to 0 (will be incremented later).
@@ -169,17 +170,33 @@ Return only the SQL INSERT query with RETURNING topic_id. Do NOT return any expl
         const rawContentData = content.content_data || {};
         const cleanedContentData = ContentDataCleaner.clean(rawContentData, contentTypeId);
 
+        // Stringify content_data for SQL - this ensures proper JSON escaping
+        const contentDataJsonString = JSON.stringify(cleanedContentData);
+        
+        // Escape single quotes for SQL (double them)
+        const escapedJsonString = contentDataJsonString.replace(/'/g, "''");
+        
         const contentData = {
           topic_id: topicId,
           content_type_id: contentTypeId,
-          content_data: cleanedContentData,
+          content_data_json_string: contentDataJsonString,
           generation_method_id: 5,
         };
+
+        // Show a truncated example if JSON is too long
+        const jsonExample = contentDataJsonString.length > 200 
+          ? contentDataJsonString.substring(0, 200) + '...' 
+          : contentDataJsonString;
 
         const contentBusinessRules = `- INSERT into "content" table.
 - topic_id must match the saved topic_id (${topicId}).
 - content_type_id must be ${contentTypeId} (from content_types lookup).
-- content_data must be saved as JSONB.
+- content_data must be saved as JSONB type.
+- CRITICAL: Use the content_data_json_string value from REQUEST DATA.
+- CRITICAL: In SQL, wrap the JSON string in single quotes and cast to JSONB: '...'::jsonb
+- CRITICAL: Escape ALL single quotes inside the JSON string by doubling them (' becomes '')
+- Example format: content_data = '${escapedJsonString.substring(0, 100)}...'::jsonb
+- The full JSON string is in content_data_json_string field - use it EXACTLY as provided, but escape single quotes.
 - generation_method_id MUST be 5 (full_ai_generated).
 - quality_check_status should default to NULL.
 - quality_check_data should default to NULL.`;
@@ -235,10 +252,12 @@ Return only the SQL INSERT query. Do NOT return any explanations.`;
           content_type: contentTypeName,
         });
       } catch (contentError) {
-        logger.warn('[UseCase] Failed to save content, continuing', {
+        logger.error('[UseCase] Failed to save content, continuing', {
           error: contentError.message,
+          error_stack: contentError.stack,
           content_type: content.content_type,
           topic_id: topicId,
+          content_data_size: JSON.stringify(content.content_data || {}).length,
         });
         // Continue with next content (transaction-like logic - log only)
       }
