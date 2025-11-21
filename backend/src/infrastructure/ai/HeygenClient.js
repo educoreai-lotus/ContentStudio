@@ -29,6 +29,41 @@ export class HeygenClient {
   }
 
   /**
+   * Get default voice_id from HeyGen API
+   * Falls back to environment variable or returns null if unavailable
+   * @private
+   * @returns {Promise<string|null>} Default voice_id or null
+   */
+  async getDefaultVoiceId() {
+    try {
+      // Try environment variable first (fastest)
+      if (process.env.HEYGEN_VOICE_ID) {
+        return process.env.HEYGEN_VOICE_ID;
+      }
+      
+      // Try to get from HeyGen API (slower but more reliable)
+      try {
+        const response = await this.client.get('/v2/voices');
+        const voices = response.data?.data?.voices || [];
+        if (voices && voices.length > 0) {
+          // Use first available voice_id
+          const defaultVoice = voices.find(v => v.status === 'active') || voices[0];
+          if (defaultVoice?.voice_id) {
+            return defaultVoice.voice_id;
+          }
+        }
+      } catch (apiError) {
+        console.warn('[HeygenClient] Failed to fetch voices from API, using fallback:', apiError.message);
+      }
+      
+      return null;
+    } catch (error) {
+      console.warn('[HeygenClient] Error getting default voice_id:', error.message);
+      return null;
+    }
+  }
+
+  /**
    * Generate avatar video from script
    * 
    * ⚠️ IMPORTANT: The 'script' parameter is our formatted prompt (topic, description, skills, etc.),
@@ -64,7 +99,19 @@ export class HeygenClient {
       // ⚠️ CRITICAL: HeyGen API v2 requires video_inputs format
       // Use default avatar and voice from config
       const avatarId = HEYGEN_CONFIG.DEFAULT_AVATAR_ID;
-      const voiceConfig = HEYGEN_CONFIG.getVoiceConfig(null, script.trim(), 1.0);
+      
+      // Get default voice_id if not provided (required by API)
+      let defaultVoiceId = process.env.HEYGEN_VOICE_ID || null;
+      if (!defaultVoiceId) {
+        // Try to get from HeyGen API (only if not cached)
+        try {
+          defaultVoiceId = await this.getDefaultVoiceId();
+        } catch (error) {
+          console.warn('[HeygenClient] Failed to get default voice_id from API:', error.message);
+        }
+      }
+      
+      const voiceConfig = HEYGEN_CONFIG.getVoiceConfig(defaultVoiceId, script.trim(), 1.0);
       
       const requestPayload = {
         title: config.title || 'EduCore Lesson',
@@ -94,7 +141,7 @@ export class HeygenClient {
       console.log('[Avatar Generation] Request payload:', {
         title: requestPayload.title,
         avatar_id: avatarId,
-        voice_id: voiceConfig.voice_id,
+        voice_id: voiceConfig.text?.voice_id || voiceConfig.voice_id || 'not provided',
         scriptLength: script.trim().length,
         scriptPreview: script.trim().substring(0, 100),
       });

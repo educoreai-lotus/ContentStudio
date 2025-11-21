@@ -265,37 +265,8 @@ export async function generateAiTopic(skillCoverageItem, preferredLanguage) {
       });
     }
 
-    // 4. Generate audio (type 4)
-    try {
-      const audioPrompt = promptVariables.lessonDescription || promptVariables.lessonTopic;
-      const audio = await aiGenerationService.generateAudio(audioPrompt, {
-        voice: 'alloy',
-        model: 'tts-1',
-        format: 'mp3',
-        language: promptVariables.language,
-      });
-
-      const rawAudioData = {
-        audioUrl: audio.audioUrl,
-        audioFormat: audio.format,
-        audioDuration: audio.duration,
-        audioVoice: audio.voice,
-      };
-
-      contents.push({
-        content_type: 'audio',
-        content_data: ContentDataCleaner.cleanAudioData(rawAudioData),
-      });
-      logger.info('[UseCase] Audio narration generated successfully', { skill: skillName });
-    } catch (error) {
-      logger.warn('[UseCase] Failed to generate audio', { 
-        error: error.message,
-        stack: error.stack,
-        skill: skillName 
-      });
-    }
-
-    // 5. Generate mind_map (type 5)
+    // 4. Generate mind_map (type 5)
+    // NOTE: Audio is already included in text_audio (type 1), so we don't generate separate audio content
     try {
       const mindMapPrompt = promptVariables.lessonDescription || promptVariables.lessonTopic;
       const mindMap = await aiGenerationService.generateMindMap(mindMapPrompt, {
@@ -319,7 +290,7 @@ export async function generateAiTopic(skillCoverageItem, preferredLanguage) {
       });
     }
 
-    // 6. Generate avatar_video (type 6)
+    // 5. Generate avatar_video (type 6)
     try {
       const lessonData = {
         prompt: `A comprehensive lesson about ${skillName}. Cover essential concepts, best practices, and real-world applications.`,
@@ -372,7 +343,6 @@ export async function generateAiTopic(skillCoverageItem, preferredLanguage) {
         'text_audio',
         'code',
         'presentation',
-        'audio',
         'mind_map',
         'avatar_video',
       ],

@@ -13,6 +13,10 @@ export const HEYGEN_CONFIG = {
   // Default avatar ID
   DEFAULT_AVATAR_ID: 'Kristin_public_3_20240108',
   
+  // Default voice ID for HeyGen API (required field)
+  // Can be overridden via HEYGEN_VOICE_ID environment variable
+  DEFAULT_VOICE_ID: process.env.HEYGEN_VOICE_ID || null,
+  
   // Supported voice engines - only HEYGEN is supported
   SUPPORTED_VOICE_ENGINES: ['heygen'],
   
@@ -41,20 +45,60 @@ export const HEYGEN_CONFIG = {
   },
   
   // Get voice configuration for API request
-  // Note: HeyGen will use default voice if voice_id is not provided
+  // CRITICAL: HeyGen API v2 REQUIRES voice_id field in voice.text.voice_id
+  // According to HeyGen API v2 docs, the structure is:
+  // voice: {
+  //   type: 'text',
+  //   text: {
+  //     input_text: "...",
+  //     voice_id: "...", // REQUIRED
+  //     voice_engine: "heygen",
+  //     speed: 1.0
+  //   }
+  // }
   getVoiceConfig(voiceId, script, speed = 1.0) {
-    // Don't specify voice_id if it's invalid or not provided
-    // HeyGen will use the avatar's default voice
+    // Resolve voice_id: use provided, fallback to env var, or use default
+    let resolvedVoiceId = voiceId || this.DEFAULT_VOICE_ID || process.env.HEYGEN_VOICE_ID;
+    
+    // CRITICAL: HeyGen API requires voice_id field - it's mandatory
+    // We must provide a valid voice_id or the API will reject the request
+    if (!resolvedVoiceId || typeof resolvedVoiceId !== 'string' || resolvedVoiceId.trim().length === 0) {
+      // No voice_id provided - HeyGen API requires it
+      // Return voice config without voice_id - caller will need to handle this
+      // But we'll still include it as undefined so the field exists in the structure
+      console.warn('[HeyGen Config] No voice_id provided - HeyGen API may reject this request. Set HEYGEN_VOICE_ID environment variable.');
+    }
+    
+    // Build voice config according to HeyGen API v2 structure
+    // The voice object contains a 'text' object with voice_id inside
     const voiceConfig = {
       type: 'text',
-      input_text: script,
-      voice_engine: DEFAULT_VOICE_ENGINE,
-      speed: speed,
+      text: {
+        input_text: script,
+        voice_engine: DEFAULT_VOICE_ENGINE,
+        speed: speed,
+      },
     };
     
-    // Only add voice_id if provided and valid (not ElevenLabs format)
-    if (voiceId && typeof voiceId === 'string' && !this.isElevenLabsVoice(voiceId)) {
-      voiceConfig.voice_id = voiceId;
+    // CRITICAL: HeyGen API requires voice_id field - it's mandatory
+    // Always add voice_id, even if it's not valid - API will reject with clear error
+    if (resolvedVoiceId && typeof resolvedVoiceId === 'string' && resolvedVoiceId.trim().length > 0) {
+      if (this.isElevenLabsVoice(resolvedVoiceId)) {
+        // ElevenLabs voice ID detected - HeyGen API doesn't support this
+        console.warn('[HeyGen Config] ElevenLabs voice_id detected - HeyGen API may reject:', resolvedVoiceId);
+        // Still add it - API will give clearer error
+        voiceConfig.text.voice_id = resolvedVoiceId.trim();
+      } else {
+        // Valid HeyGen voice_id format
+        voiceConfig.text.voice_id = resolvedVoiceId.trim();
+      }
+    } else {
+      // No voice_id provided - HeyGen API requires it
+      // Don't add the field at all - let caller handle this
+      // This will cause API to reject with clear error message
+      console.error('[HeyGen Config] CRITICAL: voice_id is required but not provided. Set HEYGEN_VOICE_ID environment variable or provide voiceId parameter.');
+      // Still return the config without voice_id - API will reject but at least structure is correct
+      // This allows the caller to see the error and handle it appropriately
     }
     
     return voiceConfig;
