@@ -292,12 +292,16 @@ export async function generateAiTopic(skillCoverageItem, preferredLanguage) {
 
     // 5. Generate avatar_video (type 6)
     try {
-      const lessonData = {
-        prompt: `A comprehensive lesson about ${skillName}. Cover essential concepts, best practices, and real-world applications.`,
-        lessonTopic: promptVariables.lessonTopic,
-      };
+      // Send ONLY minimal required fields to HeyGen: prompt, topic, description, skills
+      // ⚠️ CRITICAL: prompt is trainer's exact text, unmodified
+      const trainerPrompt = `A comprehensive lesson about ${skillName}. Cover essential concepts, best practices, and real-world applications.`;
 
-      const avatarResult = await aiGenerationService.generateAvatarVideo(lessonData, {
+      const avatarResult = await aiGenerationService.generateAvatarVideo({
+        prompt: trainerPrompt, // Trainer's exact text, unmodified
+        topic: promptVariables.lessonTopic,
+        description: promptVariables.lessonDescription,
+        skills: promptVariables.skillsListArray,
+      }, {
         language: promptVariables.language,
         topicName: promptVariables.lessonTopic,
       });

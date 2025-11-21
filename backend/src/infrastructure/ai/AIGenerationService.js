@@ -532,103 +532,23 @@ This presentation should be educational and suitable for ${audience}.`;
   }
 
   /**
-   * Build avatar text from lesson data - NO GPT, pure function
+  /**
+   * Generate avatar video
    * 
-   * ⚠️ CRITICAL: This function MUST NEVER call OpenAI or any LLM.
-   * The avatar narration must come ONLY from HeyGen using our formatted prompt.
-   * 
-   * This is a pure function that formats lesson data into text for HeyGen.
-   * HeyGen will generate the narration directly from this text.
-   * 
-   * ❌ FORBIDDEN: Do NOT call OpenAI to generate:
-   * - "video script"
-   * - "narration text"
-   * - "summary of the topic to speak"
-   * - Any text intended to be spoken by the avatar
-   * 
-   * ✅ REQUIRED: Use ONLY our internal prompt components:
-   * - topic_name
-   * - lesson_description
-   * - trainer_prompt (or transcript_text)
+   * ⚠️ CRITICAL: This function sends ONLY the minimal required fields to HeyGen:
+   * - title
+   * - prompt (trainer's exact text, unmodified)
+   * - topic
+   * - description
    * - skills
    * 
-   * @param {Object} lessonData - Lesson data
-   * @param {string} lessonData.lessonTopic - Topic name
-   * @param {string} lessonData.lessonDescription - Topic description
-   * @param {Array} lessonData.skillsList - Skills list
-   * @param {string} lessonData.trainerRequestText - Optional trainer request
-   * @param {string} lessonData.transcriptText - Optional transcript text
-   * @returns {string} Formatted text for avatar video (sent directly to HeyGen)
-   */
-  buildAvatarText(lessonData = {}) {
-    // ⚠️ CRITICAL: Do NOT modify or rewrite the trainer's prompt
-    // ⚠️ CRITICAL: Do NOT add narration text or script text
-    // ⚠️ CRITICAL: Only return the trainer's exact prompt as-is
-    
-    // Sanitize only the trainer's prompt to prevent injection
-    const trainerPrompt = lessonData.prompt || lessonData.trainerRequestText || '';
-    
-    if (!trainerPrompt || typeof trainerPrompt !== 'string' || trainerPrompt.trim().length === 0) {
-      // Fallback: if no prompt provided, build a comprehensive description from available data
-      const lessonTopic = lessonData.lessonTopic || '';
-      const lessonDescription = lessonData.lessonDescription || '';
-      const skillsList = Array.isArray(lessonData.skillsList) && lessonData.skillsList.length > 0
-        ? lessonData.skillsList.join(', ')
-        : '';
-      
-      // Build a meaningful prompt for HeyGen
-      let fallbackText = '';
-      if (lessonTopic) {
-        fallbackText = `Welcome to this lesson about ${lessonTopic}.`;
-        if (lessonDescription) {
-          fallbackText += ` ${lessonDescription}`;
-        }
-        if (skillsList) {
-          fallbackText += ` We will cover: ${skillsList}.`;
-        }
-      } else if (lessonDescription) {
-        fallbackText = lessonDescription;
-      } else {
-        fallbackText = 'Welcome to this EduCore lesson.';
-      }
-      
-      return fallbackText;
-    }
-    
-    // Return trainer's prompt exactly as written (sanitized for security only)
-    const sanitizedPrompt = PromptSanitizer.sanitizeString(trainerPrompt.trim(), 'prompt', {
-      maxLength: 5000, // Reasonable limit
-      removeNewlines: false, // Keep newlines if trainer included them
-    });
-    
-    return sanitizedPrompt;
-  }
-
-  /**
-   * Generate avatar video - NO GPT, uses buildAvatarText()
+   * NO voice, voice_id, video_inputs, script generation, or avatar selection
    * 
-   * ⚠️ CRITICAL: This function MUST NEVER call OpenAI or any LLM for script generation.
-   * The avatar narration must come ONLY from HeyGen using our formatted prompt.
-   * 
-   * ❌ FORBIDDEN: Do NOT:
-   * - Request OpenAI to generate "video script" or "narration text"
-   * - Forward OpenAI text output to HeyGen
-   * - Use any LLM-generated text for avatar narration
-   * 
-   * ✅ REQUIRED: 
-   * - Use buildAvatarText() to format our prompt (topic, description, skills, trainer_prompt/transcript)
-   * - Send formatted text directly to HeyGen API
-   * - Let HeyGen generate the narration independently
-   * 
-   * @param {string|Object} prompt - Prompt or lesson data object (NOT OpenAI-generated script)
-   * @param {Object} config - Configuration
+   * @param {string|Object} prompt - Trainer's exact prompt (unmodified) or lesson data object
+   * @param {Object} config - Configuration with topic, description, skills
    * @returns {Promise<Object>} Avatar video result
    */
   async generateAvatarVideo(prompt, config = {}) {
-    // ⚠️ VALIDATION: Ensure no OpenAI script generation occurs
-    // This function MUST NOT call OpenAI to generate narration text
-    // Validation is enforced via tests (AvatarVideoValidation.test.js)
-    // Code structure prevents OpenAI calls - pure function + direct HeyGen call
 
     if (!this.heygenClient) {
       // Don't throw - return failed status
@@ -651,79 +571,56 @@ This presentation should be educational and suitable for ${audience}.`;
       };
     }
 
-    // Extract lesson data from prompt (can be object or string)
-    let lessonData = {};
+    // Extract data - ONLY use trainer's exact prompt, topic, description, skills
+    // ⚠️ CRITICAL: Do NOT modify, rewrite, or generate any text
+    // ⚠️ CRITICAL: Use ONLY data from frontend + DB, unmodified
+    
+    let trainerPrompt = '';
+    let topic = '';
+    let description = '';
+    let skills = [];
+
     if (typeof prompt === 'object' && prompt !== null) {
-      lessonData = prompt;
+      // If prompt is object, extract trainer's exact prompt
+      trainerPrompt = prompt.prompt || prompt.trainerPrompt || prompt.trainerRequestText || '';
+      topic = prompt.topic || prompt.topicName || prompt.lessonTopic || '';
+      description = prompt.description || prompt.topicDescription || prompt.lessonDescription || '';
+      skills = Array.isArray(prompt.skills) ? prompt.skills : 
+               (Array.isArray(prompt.skillsList) ? prompt.skillsList : []);
     } else if (typeof prompt === 'string') {
-      // If prompt is a string, try to parse it or use as description
-      lessonData = {
-        lessonDescription: prompt,
-        ...config,
-      };
+      // If prompt is string, use it as trainer's exact text
+      trainerPrompt = prompt.trim();
+      topic = config.topicName || config.lessonTopic || '';
+      description = config.topicDescription || config.lessonDescription || '';
+      skills = Array.isArray(config.skills) ? config.skills : 
+               (Array.isArray(config.skillsList) ? config.skillsList : []);
     }
 
-    // Merge config into lessonData
-    lessonData = {
-      ...lessonData,
-      lessonTopic: config.lessonTopic || lessonData.lessonTopic,
-      lessonDescription: config.lessonDescription || lessonData.lessonDescription,
-      skillsList: config.skillsList || lessonData.skillsList || [],
-      trainerRequestText: config.trainerRequestText || lessonData.trainerRequestText,
-      transcriptText: config.transcriptText || lessonData.transcriptText,
-      // HeyGen-specific parameters for better video generation
-      audience: config.audience || lessonData.audience || '',
-      musicTheme: config.musicTheme || lessonData.musicTheme || '',
-      avatarDescription: config.avatarDescription || lessonData.avatarDescription || '',
-      voiceDescription: config.voiceDescription || lessonData.voiceDescription || '',
-    };
+    // Merge config (only if not already set)
+    trainerPrompt = trainerPrompt || config.trainerPrompt || config.trainerRequestText || '';
+    topic = topic || config.topicName || config.lessonTopic || '';
+    description = description || config.topicDescription || config.lessonDescription || '';
+    skills = skills.length > 0 ? skills : 
+             (Array.isArray(config.skills) ? config.skills : 
+              (Array.isArray(config.skillsList) ? config.skillsList : []));
 
-    // Build avatar text - NO GPT, pure function
-    // ⚠️ CRITICAL: This MUST be a pure function that formats our prompt data.
-    // Do NOT call OpenAI here. HeyGen will generate narration from this text.
-    const avatarText = this.buildAvatarText(lessonData);
-
-    // ⚠️ VALIDATION: Ensure text is from our prompt, not OpenAI-generated
-    // Check that text contains expected prompt components (topic, skills, description)
-    // This is a lightweight validation to detect if OpenAI text was accidentally passed
-    if (avatarText && avatarText.length > 0) {
-      const hasExpectedComponents = 
-        (lessonData.lessonTopic && avatarText.includes(lessonData.lessonTopic)) ||
-        (lessonData.lessonDescription && avatarText.includes(lessonData.lessonDescription)) ||
-        (lessonData.trainerRequestText && avatarText.includes(lessonData.trainerRequestText)) ||
-        (lessonData.transcriptText && avatarText.includes(lessonData.transcriptText?.substring(0, 50))) ||
-        avatarText.includes('Welcome to'); // Fallback text
-
-      if (!hasExpectedComponents && process.env.NODE_ENV !== 'production') {
-        console.warn('[AIGenerationService] ⚠️ Avatar text validation: Text may not contain expected prompt components');
-      }
-    }
-
-    if (!avatarText || avatarText.trim().length === 0) {
+    // Validate trainer prompt is provided
+    if (!trainerPrompt || trainerPrompt.trim().length === 0) {
       return {
-        script: '',
         videoUrl: null,
         videoId: null,
         language: config.language || 'en',
         duration_seconds: 0,
         status: 'failed',
         fallback: false,
-        error: 'No text available for avatar video',
-        errorCode: 'NO_TEXT',
-        reason: 'Avatar video requires lesson content. Please provide lesson topic or description.',
-        metadata: {
-          generation_status: 'failed',
-          error_code: 'NO_TEXT',
-          error_message: 'No text available for avatar video',
-        },
+        error: 'Trainer prompt is required',
+        errorCode: 'NO_PROMPT',
+        reason: 'Avatar video requires trainer prompt. Please provide prompt text.',
       };
     }
 
-    // Generate video using Heygen - NO GPT, direct call
-    // ⚠️ CRITICAL: avatarText is our formatted prompt, NOT OpenAI-generated script.
-    // HeyGen receives our prompt and generates narration independently.
-    // Do NOT inject OpenAI text here.
-    // Validation: Tests ensure OpenAI is never called (see AvatarVideoValidation.test.js)
+    // Generate video using Heygen - send ONLY minimal required fields
+    // ⚠️ CRITICAL: trainerPrompt is trainer's exact text, unmodified
 
     try {
       const videoResult = await this.heygenClient.generateVideo(avatarText, {
@@ -734,7 +631,6 @@ This presentation should be educational and suitable for ${audience}.`;
       // Handle failed status - return partial success instead of throwing
       if (videoResult.status === 'failed') {
         return {
-          script: avatarText,
           videoUrl: null,
           videoId: videoResult.videoId || null,
           language: config.language || 'en',
@@ -743,7 +639,7 @@ This presentation should be educational and suitable for ${audience}.`;
           fallback: false,
           error: videoResult.error || videoResult.errorMessage || 'Avatar video generation failed',
           errorCode: videoResult.errorCode || 'UNKNOWN_ERROR',
-          reason: videoResult.reason || 'Avatar video failed due to unsupported voice engine. Please choose another voice.',
+          reason: videoResult.reason || 'Avatar video generation failed',
           metadata: {
             generation_status: 'failed',
             error_code: videoResult.errorCode || 'UNKNOWN_ERROR',
@@ -754,7 +650,6 @@ This presentation should be educational and suitable for ${audience}.`;
       }
 
       return {
-        script: avatarText,
         videoUrl: videoResult.videoUrl,
         videoId: videoResult.videoId,
         language: config.language || 'en',
@@ -771,7 +666,6 @@ This presentation should be educational and suitable for ${audience}.`;
     } catch (error) {
       // Never throw - return failed status
       return {
-        script: avatarText,
         videoUrl: null,
         videoId: null,
         language: config.language || 'en',
@@ -780,7 +674,7 @@ This presentation should be educational and suitable for ${audience}.`;
         fallback: false,
         error: error.message || 'Avatar video generation failed',
         errorCode: 'GENERATION_ERROR',
-        reason: 'Avatar video failed due to an error. Please try again or choose another voice.',
+        reason: 'Avatar video generation failed',
         metadata: {
           generation_status: 'failed',
           error_code: 'GENERATION_ERROR',

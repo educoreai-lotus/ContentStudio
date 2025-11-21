@@ -1,10 +1,18 @@
 import axios from 'axios';
 import { createClient } from '@supabase/supabase-js';
-import { HEYGEN_CONFIG, DEFAULT_VOICE_ENGINE } from '../../config/heygen.js';
 
 /**
  * Heygen API Client
  * Generates avatar videos using Heygen API
+ * 
+ * IMPORTANT: This client sends ONLY the minimal required fields:
+ * - title
+ * - prompt (trainer's exact text, unmodified)
+ * - topic
+ * - description
+ * - skills
+ * 
+ * NO voice, voice_id, video_inputs, script generation, or avatar selection
  */
 export class HeygenClient {
   constructor({ apiKey }) {
@@ -29,128 +37,63 @@ export class HeygenClient {
   }
 
   /**
-   * Get default voice_id from HeyGen API
-   * Falls back to environment variable or returns null if unavailable
-   * @private
-   * @returns {Promise<string|null>} Default voice_id or null
-   */
-  async getDefaultVoiceId() {
-    try {
-      // Try environment variable first (fastest)
-      if (process.env.HEYGEN_VOICE_ID) {
-        return process.env.HEYGEN_VOICE_ID;
-      }
-      
-      // Try to get from HeyGen API (slower but more reliable)
-      try {
-        const response = await this.client.get('/v2/voices');
-        const voices = response.data?.data?.voices || [];
-        if (voices && voices.length > 0) {
-          // Use first available voice_id
-          const defaultVoice = voices.find(v => v.status === 'active') || voices[0];
-          if (defaultVoice?.voice_id) {
-            return defaultVoice.voice_id;
-          }
-        }
-      } catch (apiError) {
-        console.warn('[HeygenClient] Failed to fetch voices from API, using fallback:', apiError.message);
-      }
-      
-      return null;
-    } catch (error) {
-      console.warn('[HeygenClient] Error getting default voice_id:', error.message);
-      return null;
-    }
-  }
-
-  /**
-   * Generate avatar video from script
+   * Generate avatar video
    * 
-   * ⚠️ IMPORTANT: The 'script' parameter is our formatted prompt (topic, description, skills, etc.),
-   * NOT an OpenAI-generated narration text. HeyGen generates the narration independently.
-   * 
-   * ❌ FORBIDDEN: Do NOT pass OpenAI-generated "video script" or "narration text" here.
-   * ✅ REQUIRED: Pass our internal prompt (formatted by buildAvatarText()).
-   * 
-   * @param {string} script - Our formatted prompt (NOT OpenAI-generated script)
+   * @param {Object} data - Video data
+   * @param {string} data.prompt - Trainer's exact prompt (unmodified)
+   * @param {string} data.topic - Topic name
+   * @param {string} data.description - Topic description
+   * @param {Array<string>} data.skills - Skills array
    * @param {Object} config - Video configuration
    * @returns {Promise<Object>} Video data with URL
    */
-  async generateVideo(script, config = {}) {
+  async generateVideo(data, config = {}) {
     if (!this.client) {
       throw new Error('Heygen client not configured');
     }
 
     try {
-      // Validate prompt before sending
-      if (!script || typeof script !== 'string' || script.trim().length === 0) {
-        console.error('[Avatar Generation Error] HeyGen rejected the request. Possible invalid parameters: empty prompt');
+      // Validate required fields
+      if (!data || typeof data !== 'object') {
+        console.error('[Avatar Generation Error] HeyGen rejected the request. Possible invalid parameters.');
         return {
           status: 'failed',
           videoId: null,
-          script: script || '',
-          error: 'Prompt is empty or invalid',
-          errorCode: 'INVALID_PROMPT',
-          errorDetail: 'The prompt must be a non-empty string',
-          reason: 'Avatar video requires a prompt. Please provide a description.',
+          error: 'Invalid data provided',
+          errorCode: 'INVALID_DATA',
+          errorDetail: 'Data must be an object with prompt, topic, description, and skills',
         };
       }
-      
-      // ⚠️ CRITICAL: HeyGen API v2 requires video_inputs format
-      // Use default avatar and voice from config
-      const avatarId = HEYGEN_CONFIG.DEFAULT_AVATAR_ID;
-      
-      // Get default voice_id if not provided (required by API)
-      let defaultVoiceId = process.env.HEYGEN_VOICE_ID || null;
-      if (!defaultVoiceId) {
-        // Try to get from HeyGen API (only if not cached)
-        try {
-          defaultVoiceId = await this.getDefaultVoiceId();
-        } catch (error) {
-          console.warn('[HeygenClient] Failed to get default voice_id from API:', error.message);
-        }
+
+      const { prompt, topic, description, skills } = data;
+
+      // Validate prompt (trainer's exact text)
+      if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
+        console.error('[Avatar Generation Error] HeyGen rejected the request. Possible invalid parameters.');
+        return {
+          status: 'failed',
+          videoId: null,
+          error: 'Prompt is required',
+          errorCode: 'INVALID_PROMPT',
+          errorDetail: 'The prompt must be a non-empty string',
+        };
       }
-      
-      const voiceConfig = HEYGEN_CONFIG.getVoiceConfig(defaultVoiceId, script.trim(), 1.0);
-      
+
+      // Build minimal request payload - ONLY allowed fields
       const requestPayload = {
         title: config.title || 'EduCore Lesson',
-        video_inputs: [
-          {
-            character: {
-              type: 'avatar',
-              avatar_id: avatarId,
-              avatar_style: 'normal',
-            },
-            voice: voiceConfig,
-            background: {
-              type: 'color',
-              value: '#FFFFFF',
-            },
-          },
-        ],
-        dimension: {
-          width: 1280,
-          height: 720,
-        },
+        prompt: prompt.trim(), // Trainer's exact text, unmodified
+        topic: topic || '',
+        description: description || '',
+        skills: Array.isArray(skills) ? skills : [],
       };
-      
-      // High-level logging only
-      console.log('[Avatar Generation] Sending prompt to HeyGen for topic:', config.topicName || 'unknown');
+
+      // Minimal logging - only allowed messages
+      console.log('[Avatar Generation] Sending prompt to HeyGen');
       console.log('[Avatar Generation] Video generation started...');
-      console.log('[Avatar Generation] Request payload:', {
-        title: requestPayload.title,
-        avatar_id: avatarId,
-        voice_id: voiceConfig.text?.voice_id || voiceConfig.voice_id || 'not provided',
-        scriptLength: script.trim().length,
-        scriptPreview: script.trim().substring(0, 100),
-      });
-      
-      // Step 1: Create video generation request
+
+      // Create video generation request
       const response = await this.client.post('/v2/video/generate', requestPayload);
-      
-      console.log('[Avatar Generation] HeyGen response status:', response.status);
-      console.log('[Avatar Generation] HeyGen response data:', JSON.stringify(response.data, null, 2));
 
       const videoId = response.data.data?.video_id;
       if (!videoId) {
@@ -158,7 +101,7 @@ export class HeygenClient {
         throw new Error('HeyGen did not return a video_id');
       }
 
-      // Step 2: Poll for video completion
+      // Poll for video completion
       let pollResult;
       try {
         pollResult = await this.pollVideoStatus(
@@ -167,37 +110,23 @@ export class HeygenClient {
           config.pollInterval || 5000,
         );
       } catch (pollError) {
-        // If video generation failed permanently, return failed status instead of throwing
         if (pollError.status === 'failed' || (pollError.message && pollError.message.includes('Video generation failed'))) {
-          const errorDetail = this.sanitizeError(pollError);
-          console.error('[HeygenClient] Video generation failed permanently:', {
-            videoId,
-            errorCode: errorDetail.code,
-            errorMessage: errorDetail.message,
-            errorDetail: errorDetail.detail,
-          });
-          
-          // Return failed status instead of throwing - this allows other formats to continue
           return {
             status: 'failed',
             videoId,
-            script,
-            error: errorDetail.message,
-            errorCode: errorDetail.code,
-            errorDetail: errorDetail.detail,
-            reason: this.getTrainerFriendlyError(errorDetail),
+            error: pollError.errorMessage || pollError.message,
+            errorCode: pollError.errorCode || 'UNKNOWN_ERROR',
+            errorDetail: pollError.errorDetail || pollError.message,
           };
         }
-        
-        // If polling timeout/error but not a permanent failure, return fallback URL
+
+        // Timeout - return fallback URL
         const fallbackUrl = pollError.videoUrl || `https://app.heygen.com/share/${videoId}`;
-        console.warn('[HeygenClient] Video not ready within polling window, returning fallback URL:', fallbackUrl);
         return {
           videoUrl: fallbackUrl,
           heygenVideoUrl: fallbackUrl,
           videoId,
           duration: config.duration || 15,
-          script,
           status: pollError.status || 'processing',
           fallback: true,
         };
@@ -205,14 +134,11 @@ export class HeygenClient {
 
       const heygenVideoUrl = pollResult.videoUrl;
 
-      // Step 3: Download and upload to Supabase Storage
-      console.log(`[HeygenClient] Downloading video from Heygen...`);
+      // Download and upload to Supabase Storage
       try {
         const videoBuffer = await this.downloadVideo(heygenVideoUrl);
-        console.log(`[HeygenClient] Video downloaded (${videoBuffer.length} bytes)`);
+        let storageUrl = null;
 
-        console.log(`[HeygenClient] Uploading to Supabase Storage...`);
-        let storageUrl = null; // Start with null, not Heygen URL
         try {
           const uploadedUrl = await this.uploadToStorage({
             fileBuffer: videoBuffer,
@@ -221,42 +147,32 @@ export class HeygenClient {
           });
           if (uploadedUrl) {
             storageUrl = uploadedUrl;
-            console.log(`[HeygenClient] Video uploaded to Supabase Storage: ${storageUrl}`);
           } else {
-            console.warn('[HeygenClient] uploadToStorage returned null, using Heygen URL as fallback');
             storageUrl = heygenVideoUrl;
           }
         } catch (uploadErr) {
-          console.warn('[HeygenClient] Upload to Supabase failed, using Heygen URL as fallback:', uploadErr.message);
-          storageUrl = heygenVideoUrl; // Fallback to Heygen URL only if upload fails
-        }
-
-        // Ensure we always return a valid URL
-        if (!storageUrl) {
-          console.warn('[HeygenClient] No storage URL available, using Heygen URL as final fallback');
           storageUrl = heygenVideoUrl;
         }
 
-        console.log(`[HeygenClient] Returning video URL: ${storageUrl} (${storageUrl.startsWith('http') ? 'Full URL' : 'Path'})`);
+        if (!storageUrl) {
+          storageUrl = heygenVideoUrl;
+        }
 
         return {
-          videoUrl: storageUrl, // This should be Supabase public URL if upload succeeded, otherwise Heygen URL
-          heygenVideoUrl: heygenVideoUrl, // Always keep original Heygen URL for reference
+          videoUrl: storageUrl,
+          heygenVideoUrl: heygenVideoUrl,
           videoId,
           duration: config.duration || 15,
-          script,
           status: 'completed',
-          fallback: storageUrl === heygenVideoUrl, // Mark as fallback if we're using Heygen URL
+          fallback: storageUrl === heygenVideoUrl,
         };
       } catch (downloadErr) {
         const fallbackUrl = `https://app.heygen.com/share/${videoId}`;
-        console.warn('[HeygenClient] Failed to download/upload video; returning fallback URL:', fallbackUrl, downloadErr.message);
         return {
           videoUrl: fallbackUrl,
           heygenVideoUrl: heygenVideoUrl,
           videoId,
           duration: config.duration || 15,
-          script,
           status: 'processing',
           fallback: true,
           error: downloadErr.message,
@@ -264,36 +180,18 @@ export class HeygenClient {
       }
 
     } catch (error) {
-      // Never throw - return failed status instead
-      const errorDetail = this.sanitizeError(error);
       const is400Error = error.response?.status === 400 || error.response?.statusCode === 400;
       
-      // Detailed error logging for debugging
-      console.error('[Avatar Generation Error] HeyGen request failed:', {
-        status: error.response?.status || error.response?.statusCode,
-        statusText: error.response?.statusText,
-        errorData: error.response?.data,
-        errorMessage: error.message,
-        requestPayload: {
-          title: config.title || 'EduCore Lesson',
-          promptLength: script?.trim()?.length || 0,
-        },
-      });
-      
-      // High-level error logging only
       if (is400Error) {
         console.error('[Avatar Generation Error] HeyGen rejected the request. Possible invalid parameters.');
       }
-      
-      // Return failed status - don't throw, allow other formats to continue
+
       return {
         status: 'failed',
         videoId: null,
-        script,
-        error: errorDetail.message,
-        errorCode: errorDetail.code,
-        errorDetail: errorDetail.detail,
-        reason: this.getTrainerFriendlyError(errorDetail),
+        error: error.message || 'Video generation failed',
+        errorCode: error.response?.data?.error_code || 'UNKNOWN_ERROR',
+        errorDetail: error.response?.data?.error_message || error.message,
       };
     }
   }
@@ -304,37 +202,20 @@ export class HeygenClient {
    * @returns {Promise<{status: string, videoUrl: string}>} Video status data
    */
   async pollVideoStatus(videoId, maxAttempts = 60, interval = 3000) {
-    console.log(`[HeygenClient] Starting to poll for video ${videoId}`);
-    
-      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
       try {
-        // Heygen API v1 endpoint for status
         const response = await this.client.get(`/v1/video_status.get?video_id=${videoId}`);
         const status = response.data.data.status;
 
-        console.log(`[HeygenClient] Poll attempt ${attempt + 1}: status = ${status}`);
-
         if (status === 'completed') {
           const videoUrl = response.data.data.video_url;
-          console.log(`[HeygenClient] Video completed! URL: ${videoUrl}`);
           return { status, videoUrl };
         } else if (status === 'failed') {
-          // Get error message from response if available
           const errorData = response.data.data || {};
           const errorMessage = errorData.error_message || errorData.error || 'Video generation failed';
           const errorCode = errorData.error_code || 'UNKNOWN_ERROR';
           const errorDetail = errorData.error_detail || errorMessage;
           
-          console.error(`[HeygenClient] Video generation failed: ${errorMessage}`, {
-            videoId,
-            attempt: attempt + 1,
-            errorCode,
-            errorDetail,
-            responseData: errorData,
-          });
-          
-          // Return failed status instead of throwing - this allows other formats to continue
-          // Don't throw - return failed status so caller can handle gracefully
           return {
             status: 'failed',
             videoUrl: null,
@@ -344,24 +225,19 @@ export class HeygenClient {
           };
         }
 
-        // Wait before next poll (only if status is 'processing' or other non-final status)
         await new Promise(resolve => setTimeout(resolve, interval));
       } catch (error) {
-        // If video failed, don't retry - throw immediately
         if (error.status === 'failed' || (error.message && error.message.includes('Video generation failed'))) {
-          console.error(`[HeygenClient] Video generation failed permanently, stopping polling:`, error.message);
           throw error;
         }
         
-        // If we get a 404 or network error, the video might still be processing
-        console.error(`[HeygenClient] Poll attempt ${attempt + 1} failed:`, error.response?.data || error.message);
-        
-        // Don't throw on last attempt - just continue to retry
         if (attempt === maxAttempts - 1) {
-          console.warn(`[HeygenClient] Timeout reached. Video ${videoId} may still be processing.`);
+          const timeoutError = new Error(`Video ${videoId} not ready after polling`);
+          timeoutError.status = 'processing';
+          timeoutError.videoUrl = `https://app.heygen.com/share/${videoId}`;
+          throw timeoutError;
         }
-        
-        // Wait before retry
+
         await new Promise(resolve => setTimeout(resolve, interval));
       }
     }
@@ -387,7 +263,6 @@ export class HeygenClient {
       }
 
       if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-        console.warn('[HeygenClient] Supabase not configured, returning Heygen URL');
         return null;
       }
 
@@ -413,11 +288,9 @@ export class HeygenClient {
       );
 
       if (error) {
-        console.error('[HeygenClient] Supabase upload error:', error);
         throw error;
       }
 
-      // Get public URL
       const { data: urlData } = supabase.storage
         .from('media')
         .getPublicUrl(filePath);
@@ -425,99 +298,13 @@ export class HeygenClient {
       const publicUrl = urlData?.publicUrl;
       
       if (!publicUrl) {
-        console.error('[HeygenClient] Failed to get public URL from Supabase');
         throw new Error('Failed to get public URL from Supabase storage');
       }
 
-      console.log(`[HeygenClient] Video uploaded successfully to Supabase: ${publicUrl}`);
-      
       return publicUrl;
     } catch (error) {
-      console.error('[HeygenClient] Storage upload error:', error.message);
       throw new Error(`Failed to upload video to storage: ${error.message}`);
     }
-  }
-
-  /**
-   * Create video (alias for generateVideo step 1)
-   * @param {Object} options - Video options
-   * @returns {Promise<Object>} Video ID
-   */
-  async createVideo({ script, language, avatarId, voiceId }) {
-    if (!this.client) {
-      throw new Error('Heygen client not configured');
-    }
-
-    try {
-      // Use configuration for HeyGen defaults
-      const avatarIdToUse = avatarId || HEYGEN_CONFIG.DEFAULT_AVATAR_ID;
-      
-      // Get voice configuration - HeyGen will use default voice if voice_id is not provided
-      const voiceConfig = HEYGEN_CONFIG.getVoiceConfig(
-        voiceId,
-        script,
-        1.0
-      );
-      
-      console.log(`[HeygenClient] Using voice config:`, {
-        voice_id: voiceConfig.voice_id || 'default',
-        voice_engine: voiceConfig.voice_engine,
-      });
-      
-      const response = await this.client.post('/v2/video/generate', {
-        test: true, // Set to true for faster testing (adds watermark)
-        caption: false,
-        title: 'EduCore Lesson',
-        video_inputs: [
-          {
-            character: {
-              type: 'avatar',
-              avatar_id: avatarIdToUse,
-              avatar_style: 'normal',
-            },
-            voice: voiceConfig,
-            background: {
-              type: 'color',
-              value: '#FFFFFF',
-            },
-          },
-        ],
-        dimension: {
-          width: 1280,
-          height: 720,
-        },
-      });
-
-      return {
-        videoId: response.data.data.video_id,
-      };
-    } catch (error) {
-      // Never throw - return failed status
-      const errorDetail = this.sanitizeError(error);
-      console.error('[HeygenClient] Create video error:', {
-        statusCode: error.response?.status || error.response?.statusCode,
-        errorCode: errorDetail.code,
-        errorMessage: errorDetail.message,
-      });
-      
-      // Return failed status instead of throwing
-      return {
-        status: 'failed',
-        videoId: null,
-        error: errorDetail.message,
-        errorCode: errorDetail.code,
-        reason: this.getTrainerFriendlyError(errorDetail),
-      };
-    }
-  }
-
-  /**
-   * Wait for video to be ready
-   * @param {string} videoId - Video ID
-   * @returns {Promise<string>} Video URL
-   */
-  async waitForVideo(videoId) {
-    return await this.pollVideoStatus(videoId);
   }
 
   /**
@@ -542,97 +329,7 @@ export class HeygenClient {
       }
       return buffer;
     } catch (error) {
-      console.error('[HeygenClient] Download video error:', error.message);
       throw new Error(`Failed to download video: ${error.message}`);
     }
   }
-
-  /**
-   * Sanitize error object to extract safe error information
-   * @param {Error|Object} error - Error object
-   * @returns {Object} Sanitized error information
-   */
-  sanitizeError(error) {
-    if (!error) {
-      return {
-        code: 'UNKNOWN_ERROR',
-        message: 'Unknown error occurred',
-        detail: 'Unknown error occurred',
-      };
-    }
-
-    // Extract error code
-    const code = error.errorCode || error.code || error.response?.data?.error_code || 'UNKNOWN_ERROR';
-
-    // Extract error message
-    let message = 'Video generation failed';
-    if (error.errorMessage) {
-      message = String(error.errorMessage);
-    } else if (error.message) {
-      message = String(error.message);
-    } else if (error.response?.data?.error_message) {
-      message = String(error.response.data.error_message);
-    } else if (error.response?.data?.error) {
-      message = String(error.response.data.error);
-    }
-
-    // Extract error detail
-    let detail = message;
-    if (error.errorDetail) {
-      detail = String(error.errorDetail);
-    } else if (error.response?.data?.error_detail) {
-      detail = String(error.response.data.error_detail);
-    } else if (error.response?.data?.data?.error_detail) {
-      detail = String(error.response.data.data.error_detail);
-    }
-
-    // Ensure we never return [object Object]
-    if (message === '[object Object]') {
-      message = 'Video generation failed';
-    }
-    if (detail === '[object Object]') {
-      detail = message;
-    }
-
-    return {
-      code,
-      message: message.substring(0, 500), // Limit message length
-      detail: detail.substring(0, 1000), // Limit detail length
-    };
-  }
-
-  /**
-   * Get trainer-friendly error message
-   * @param {Object} errorDetail - Sanitized error information
-   * @returns {string} Trainer-friendly error message
-   */
-  getTrainerFriendlyError(errorDetail) {
-    if (!errorDetail) {
-      return 'Avatar video failed due to unsupported voice engine. Please choose another voice.';
-    }
-
-    const { code, message, detail } = errorDetail;
-
-    // Check for common error patterns and provide friendly messages
-    if (code && code.includes('VOICE') || message.toLowerCase().includes('voice')) {
-      return 'Avatar video failed due to unsupported voice engine. Please choose another voice.';
-    }
-
-    if (code && code.includes('ELEVENLABS') || message.toLowerCase().includes('elevenlabs')) {
-      return 'Avatar video failed due to unsupported voice engine. Please choose another voice.';
-    }
-
-    if (code && code.includes('PROVIDER') || message.toLowerCase().includes('provider')) {
-      return 'Avatar video failed due to unsupported voice engine. Please choose another voice.';
-    }
-
-    // Use sanitized message if it's short and clear
-    if (message && message.length < 200 && !message.includes('[object')) {
-      return message;
-    }
-
-    // Default friendly message
-    return 'Avatar video failed due to unsupported voice engine. Please choose another voice.';
-  }
 }
-
