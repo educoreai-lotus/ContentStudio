@@ -624,16 +624,13 @@ This presentation should be educational and suitable for ${audience}.`;
 
     try {
       const videoResult = await this.heygenClient.generateVideo({
-        prompt: trainerPrompt.trim(), // Trainer's exact text, unmodified
-        topic: topic,
-        description: description,
-        skills: skills,
-      }, {
         title: 'EduCore Lesson',
+        prompt: trainerPrompt.trim(), // Trainer's exact text, unmodified
+        topic,
+        description,
+        skills,
         language: config.language || 'en',
         duration: 15,
-        pollAttempts: 120,
-        pollInterval: 5000,
       });
 
       // Handle failed status - return partial success instead of throwing

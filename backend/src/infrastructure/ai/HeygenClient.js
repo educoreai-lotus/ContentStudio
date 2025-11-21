@@ -39,35 +39,37 @@ export class HeygenClient {
   /**
    * Generate avatar video
    * 
-   * @param {Object} data - Video data
-   * @param {string} data.prompt - Trainer's exact prompt (unmodified)
-   * @param {string} data.topic - Topic name
-   * @param {string} data.description - Topic description
-   * @param {Array<string>} data.skills - Skills array
-   * @param {Object} config - Video configuration
+   * @param {Object} payload - Complete request payload
+   * @param {string} payload.title - Video title (default: 'EduCore Lesson')
+   * @param {string} payload.prompt - Trainer's exact prompt (unmodified) - REQUIRED
+   * @param {string} payload.topic - Topic name
+   * @param {string} payload.description - Topic description
+   * @param {Array<string>} payload.skills - Skills array
+   * @param {string} payload.language - Language code (default: 'en')
+   * @param {number} payload.duration - Video duration in seconds (default: 15)
    * @returns {Promise<Object>} Video data with URL
    */
-  async generateVideo(data, config = {}) {
+  async generateVideo(payload) {
     if (!this.client) {
       throw new Error('Heygen client not configured');
     }
 
     try {
       // Validate required fields
-      if (!data || typeof data !== 'object') {
+      if (!payload || typeof payload !== 'object') {
         console.error('[Avatar Generation Error] HeyGen rejected the request. Possible invalid parameters.');
         return {
           status: 'failed',
           videoId: null,
-          error: 'Invalid data provided',
-          errorCode: 'INVALID_DATA',
-          errorDetail: 'Data must be an object with prompt, topic, description, and skills',
+          error: 'Invalid payload provided',
+          errorCode: 'INVALID_PAYLOAD',
+          errorDetail: 'Payload must be an object with prompt, topic, description, and skills',
         };
       }
 
-      const { prompt, topic, description, skills } = data;
+      const { prompt, topic, description, skills, title, language, duration } = payload;
 
-      // Validate prompt (trainer's exact text)
+      // Validate prompt (trainer's exact text) - REQUIRED
       if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
         console.error('[Avatar Generation Error] HeyGen rejected the request. Possible invalid parameters.');
         return {
@@ -81,11 +83,13 @@ export class HeygenClient {
 
       // Build minimal request payload - ONLY allowed fields
       const requestPayload = {
-        title: config.title || 'EduCore Lesson',
+        title: title || 'EduCore Lesson',
         prompt: prompt.trim(), // Trainer's exact text, unmodified
         topic: topic || '',
         description: description || '',
         skills: Array.isArray(skills) ? skills : [],
+        language: language || 'en',
+        duration: duration || 15,
       };
 
       // Minimal logging - only allowed messages
@@ -106,8 +110,8 @@ export class HeygenClient {
       try {
         pollResult = await this.pollVideoStatus(
           videoId,
-          config.pollAttempts || 120,
-          config.pollInterval || 5000,
+          120, // maxAttempts
+          5000, // interval
         );
       } catch (pollError) {
         if (pollError.status === 'failed' || (pollError.message && pollError.message.includes('Video generation failed'))) {
@@ -126,7 +130,7 @@ export class HeygenClient {
           videoUrl: fallbackUrl,
           heygenVideoUrl: fallbackUrl,
           videoId,
-          duration: config.duration || 15,
+          duration: requestPayload.duration || 15,
           status: pollError.status || 'processing',
           fallback: true,
         };
@@ -162,7 +166,7 @@ export class HeygenClient {
           videoUrl: storageUrl,
           heygenVideoUrl: heygenVideoUrl,
           videoId,
-          duration: config.duration || 15,
+          duration: requestPayload.duration || 15,
           status: 'completed',
           fallback: storageUrl === heygenVideoUrl,
         };
@@ -172,7 +176,7 @@ export class HeygenClient {
           videoUrl: fallbackUrl,
           heygenVideoUrl: heygenVideoUrl,
           videoId,
-          duration: config.duration || 15,
+          duration: requestPayload.duration || 15,
           status: 'processing',
           fallback: true,
           error: downloadErr.message,
