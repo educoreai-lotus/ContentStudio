@@ -97,7 +97,7 @@ export async function generateAiTopic(skillCoverageItem, preferredLanguage) {
   const heygenApiKey = process.env.HEYGEN_API_KEY;
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY;
-  const gammaApiKey = process.env.GAMMA_API_KEY;
+  const gammaApiKey = process.env.GAMMA_API; // Note: Environment variable is GAMMA_API, not GAMMA_API_KEY
 
   if (!openaiApiKey) {
     logger.error('[UseCase] OpenAI API key not configured');
