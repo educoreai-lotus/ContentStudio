@@ -66,8 +66,19 @@ export class GeminiClient {
     const topic_title = options.topic_title || topicText || 'Untitled Topic';
     const skills = Array.isArray(options.skills) ? options.skills : [];
     const trainer_prompt = options.trainer_prompt || options.lessonDescription || '';
+    const language = options.language || 'en';
+
+    // Build language preservation instruction
+    const languageInstruction = language && language !== 'en' 
+      ? `IMPORTANT: Do NOT translate. Use the exact language provided (${language}). 
+ALL node labels and descriptions MUST be in ${language}. 
+Preserve all original text, terminology, and linguistic style. 
+Edge labels (explains, relates-to, depends-on, part-of, similar-to, leads-to) may remain in English for consistency.`
+      : '';
 
     const prompt = `You are an expert educational Knowledge-Graph MindMap Generator.
+
+${languageInstruction}
 
 Your task is to convert:
 • the topic_title: "${topic_title}"

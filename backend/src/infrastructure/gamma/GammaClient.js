@@ -2,6 +2,12 @@ import axios from 'axios';
 import { logger } from '../logging/Logger.js';
 
 /**
+ * RTL (Right-to-Left) languages supported by Gamma
+ * This list can be extended automatically if Gamma adds RTL support for more languages
+ */
+export const RTL_LANGUAGES = ['ar', 'he', 'fa', 'ur'];
+
+/**
  * Language mapper for Gamma API
  * Maps various language inputs to Gamma's supported language codes
  */
@@ -10,14 +16,58 @@ const LANGUAGE_MAP = {
   'english': 'en',
   'en': 'en',
   'eng': 'en',
+  'en-us': 'en',
+  'en-gb': 'en',
   // Hebrew variants
   'hebrew': 'he',
   'he': 'he',
   'heb': 'he',
+  'he-il': 'he',
   // Arabic variants
   'arabic': 'ar',
   'ar': 'ar',
   'ara': 'ar',
+  'ar-sa': 'ar',
+  'ar-eg': 'ar',
+  // Persian/Farsi variants
+  'persian': 'fa',
+  'farsi': 'fa',
+  'fa': 'fa',
+  'fa-ir': 'fa',
+  // Urdu variants
+  'urdu': 'ur',
+  'ur': 'ur',
+  'ur-pk': 'ur',
+  // Spanish variants
+  'spanish': 'es',
+  'es': 'es',
+  'es-es': 'es',
+  'es-mx': 'es',
+  // French variants
+  'french': 'fr',
+  'fr': 'fr',
+  'fr-fr': 'fr',
+  // German variants
+  'german': 'de',
+  'de': 'de',
+  'de-de': 'de',
+  // Italian variants
+  'italian': 'it',
+  'it': 'it',
+  'it-it': 'it',
+  // Japanese variants
+  'japanese': 'ja',
+  'ja': 'ja',
+  'ja-jp': 'ja',
+  // Chinese variants
+  'chinese': 'zh',
+  'zh': 'zh',
+  'zh-cn': 'zh',
+  'zh-tw': 'zh',
+  // Korean variants
+  'korean': 'ko',
+  'ko': 'ko',
+  'ko-kr': 'ko',
 };
 
 /**
@@ -25,13 +75,73 @@ const LANGUAGE_MAP = {
  * @param {string} language - Language input (can be "English", "english", "en", "EN", etc.)
  * @returns {string} Normalized language code (defaults to "en")
  */
-function normalizeLanguage(language) {
+export function normalizeLanguage(language) {
   if (!language || typeof language !== 'string') {
     return 'en';
   }
 
   const normalized = language.toLowerCase().trim();
-  return LANGUAGE_MAP[normalized] || 'en';
+  
+  // Check direct mapping first
+  if (LANGUAGE_MAP[normalized]) {
+    return LANGUAGE_MAP[normalized];
+  }
+  
+  // Extract base language code (e.g., 'en' from 'en-US')
+  const baseCode = normalized.split('-')[0].split('_')[0];
+  
+  // Check if base code exists in map
+  if (LANGUAGE_MAP[baseCode]) {
+    return LANGUAGE_MAP[baseCode];
+  }
+  
+  // If base code is 2-3 characters, use it directly
+  if (baseCode.length >= 2 && baseCode.length <= 3) {
+    return baseCode;
+  }
+  
+  // Default to English
+  return 'en';
+}
+
+/**
+ * Check if a language is RTL (Right-to-Left)
+ * @param {string} language - Language code
+ * @returns {boolean} True if language is RTL
+ */
+export function isRTL(language) {
+  if (!language || typeof language !== 'string') {
+    return false;
+  }
+  
+  const normalized = normalizeLanguage(language);
+  return RTL_LANGUAGES.includes(normalized.toLowerCase());
+}
+
+/**
+ * Build language rules instruction text to inject into Gamma requests
+ * This ensures Gamma generates content in the exact language without translation
+ * @param {string} language - Language code
+ * @returns {string} Language rules instruction text
+ */
+export function buildLanguageRules(language) {
+  const normalizedLang = normalizeLanguage(language);
+  const rtl = isRTL(language);
+  const direction = rtl ? 'RIGHT-TO-LEFT' : 'LEFT-TO-RIGHT';
+  
+  return `IMPORTANT — LANGUAGE RULES:
+
+1) Do NOT translate the text. Keep all content in the exact original language.
+
+2) The presentation MUST be fully written in ${normalizedLang}.
+
+3) If ${normalizedLang} is an RTL language, you MUST use ${direction} layout.
+
+4) All elements (titles, bullets, paragraphs, tables) MUST follow the selected language direction.
+
+5) Do NOT mix English words unless they are programming syntax or technical names.
+
+6) The tone must stay educational and clear, suitable for teaching.`;
 }
 
 /**
@@ -90,17 +200,36 @@ export class GammaClient {
     const { topicName = 'presentation', language = 'en', audience = 'beginner developers' } = options;
 
     try {
-      logger.info('[GammaClient] Generating presentation with Gamma Public API', { topicName, language, inputTextLength: inputText.length });
-
-      // Step 1: POST to create generation job with correct payload structure
-      // Gamma Public API v1.0 requires specific payload format
       // Normalize language to Gamma's supported codes
       const normalizedLanguage = normalizeLanguage(language);
+      const rtl = isRTL(language);
       
+      logger.info('[GammaClient] Generating presentation with Gamma Public API', { 
+        topicName, 
+        language, 
+        normalizedLanguage,
+        isRTL: rtl,
+        inputTextLength: inputText.length 
+      });
+
+      // Step 1: Build language rules instruction
+      // CRITICAL: Inject language rules BEFORE the actual content to ensure Gamma follows them
+      const languageRules = buildLanguageRules(language);
+      
+      // Step 2: Combine language rules with input text
+      // Language rules must come FIRST to ensure Gamma processes them correctly
+      const enhancedInputText = `${languageRules}
+
+---
+
+${inputText.trim()}`;
+
+      // Step 3: POST to create generation job with correct payload structure
+      // Gamma Public API v1.0 requires specific payload format
       // Build payload according to Gamma Public API v1.0 specification
       // MANDATORY: exportAs must be "pptx" to get PPTX download URL
       const payload = {
-        inputText: inputText.trim(),
+        inputText: enhancedInputText,
         textMode: 'generate',
         format: 'presentation',
         exportAs: 'pptx', // MANDATORY: Request PPTX export
@@ -121,6 +250,7 @@ export class GammaClient {
       logger.info('[GammaClient] Sending payload to Gamma API', { 
         inputTextLength: payload.inputText.length,
         language: normalizedLanguage,
+        isRTL: rtl,
         audience: payload.textOptions.audience
       });
 

@@ -7,6 +7,12 @@ import { SupabaseStorageClient } from '../storage/SupabaseStorageClient.js';
 import { GammaClient } from '../gamma/GammaClient.js';
 import { PromptSanitizer } from '../security/PromptSanitizer.js';
 import { logger } from '../logging/Logger.js';
+import {
+  getValidatedLanguage,
+  getTTSVoiceForLanguage,
+  isTTSVoiceAvailable,
+  buildLanguagePreservationInstruction,
+} from './LanguageValidator.js';
 
 /**
  * AI Generation Service Implementation
@@ -76,12 +82,20 @@ export class AIGenerationService extends IAIGenerationService {
       throw new Error('OpenAI client not configured');
     }
 
+    // Validate language - DO NOT default to English silently
+    const languageValidation = getValidatedLanguage(config.language);
+    if (!languageValidation.valid) {
+      throw new Error(`Language validation failed: ${languageValidation.message}`);
+    }
+    const language = languageValidation.language;
+
     // Sanitize and wrap user prompt to prevent injection
     const sanitizedPrompt = PromptSanitizer.sanitizePrompt(prompt);
     const wrappedPrompt = PromptSanitizer.wrapUserInput(sanitizedPrompt);
     
-    const systemPrompt = this.buildSystemPrompt('text', config);
-    const fullPrompt = this.buildTextPrompt(wrappedPrompt, config);
+    // Build system prompt with language preservation instruction
+    const systemPrompt = this.buildSystemPrompt('text', config, language);
+    const fullPrompt = this.buildTextPrompt(wrappedPrompt, config, language);
 
     return await this.openaiClient.generateText(fullPrompt, {
       systemPrompt,
@@ -140,6 +154,16 @@ Generate the code now:`;
   }
 
   async generateMindMap(topicText, config = {}) {
+    // Validate language - DO NOT default to English silently
+    const languageValidation = getValidatedLanguage(config.language);
+    if (!languageValidation.valid) {
+      throw new Error(`Language validation failed: ${languageValidation.message}`);
+    }
+    const language = languageValidation.language;
+
+    // Build language preservation instruction
+    const languageInstruction = buildLanguagePreservationInstruction(language);
+
     // Sanitize input to prevent injection
     const sanitizedTopicText = PromptSanitizer.sanitizePrompt(topicText);
     
@@ -149,6 +173,7 @@ Generate the code now:`;
         // Sanitize config before passing to Gemini
         const sanitizedConfig = {
           ...config,
+          language, // Pass language to Gemini client
           topic_title: config.topic_title ? PromptSanitizer.sanitizeString(config.topic_title, 'topic_title') : undefined,
           trainer_prompt: config.trainer_prompt ? PromptSanitizer.sanitizePrompt(config.trainer_prompt) : undefined,
           lessonDescription: config.lessonDescription ? PromptSanitizer.sanitizePrompt(config.lessonDescription) : undefined,
@@ -186,7 +211,10 @@ Generate the code now:`;
 
 You are an expert educational Knowledge-Graph MindMap Generator.
 
-Your task is to convert the following user inputs into a clear, professional conceptual MindMap:
+${languageInstruction}
+
+Your task is to convert the following user inputs into a clear, professional conceptual MindMap.
+ALL node labels, descriptions, and content MUST be in ${language}. Do NOT translate to English.
 
 Topic Title:
 ${wrappedTopicTitle}
@@ -276,7 +304,10 @@ Return ONLY the JSON.`;
     const response = await this.openaiClient.generateText(prompt, {
       systemPrompt: `${mindMapSystemSecurity}
 
-You are an expert educational Knowledge-Graph MindMap Generator. Create radial, non-hierarchical mind maps with semantic connections.`,
+You are an expert educational Knowledge-Graph MindMap Generator. Create radial, non-hierarchical mind maps with semantic connections.
+
+${languageInstruction}
+ALL node labels and descriptions MUST be in ${language}. Edge labels (explains, relates-to, etc.) may remain in English for consistency.`,
       temperature: 0.3,
       max_tokens: 4000, // Increased for more concepts
     });
@@ -296,26 +327,36 @@ You are an expert educational Knowledge-Graph MindMap Generator. Create radial, 
     throw new Error('Invalid JSON response from OpenAI');
   }
 
-  buildSystemPrompt(contentType, config) {
+  buildSystemPrompt(contentType, config, language = null) {
     const style = config.style || 'educational';
     const difficulty = config.difficulty || 'intermediate';
 
     const basePrompt = `You are an expert educational content creator. Create ${style} content suitable for ${difficulty} level learners. 
 The content should be clear, well-structured, and engaging.`;
 
+    // Add language preservation instruction if language is provided
+    const languageInstruction = language ? buildLanguagePreservationInstruction(language) : '';
+
     // Add security instruction for handling wrapped user input
     const securityInstruction = PromptSanitizer.getSystemInstruction();
 
     return `${securityInstruction}
 
-${basePrompt}`;
+${basePrompt}
+
+${languageInstruction}`;
   }
 
-  buildTextPrompt(prompt, config) {
+  buildTextPrompt(prompt, config, language = null) {
     const style = config.style || 'educational';
     const sections = config.sections || [];
 
     let fullPrompt = prompt;
+
+    // Add language preservation reminder
+    if (language) {
+      fullPrompt = `${buildLanguagePreservationInstruction(language)}\n\n${fullPrompt}`;
+    }
 
     if (sections.length > 0) {
       fullPrompt += `\n\nStructure the content with the following sections: ${sections.join(', ')}`;
@@ -355,20 +396,46 @@ ${basePrompt}`;
       throw new Error('TTS client not configured');
     }
 
-    // If text is too long, summarize it first
+    // Validate language - DO NOT default to English silently
+    const languageValidation = getValidatedLanguage(config.language);
+    if (!languageValidation.valid) {
+      throw new Error(`Language validation failed: ${languageValidation.message}`);
+    }
+    const language = languageValidation.language;
+
+    // Check if TTS voice is available for this language
+    if (!isTTSVoiceAvailable(language)) {
+      return {
+        error: 'VOICE_NOT_AVAILABLE',
+        errorCode: 'VOICE_NOT_AVAILABLE',
+        message: `TTS voice not available for language: ${language}. Cannot generate audio.`,
+        language,
+        text, // Return original text for reference
+      };
+    }
+
+    // Get appropriate voice for language
+    const voice = getTTSVoiceForLanguage(language, config.voice);
+
+    // If text is too long, summarize it first (preserving language)
     let textToConvert = text;
     if (text.length > 4000) {
-      // Summarize long text for audio
-      const summaryPrompt = `Summarize the following text in a clear, concise way suitable for audio narration (max 4000 characters):\n\n${text}`;
+      // Summarize long text for audio (in the same language)
+      const languageInstruction = buildLanguagePreservationInstruction(language);
+      const summaryPrompt = `${languageInstruction}
+
+Summarize the following text in a clear, concise way suitable for audio narration (max 4000 characters). Keep the summary in ${language}:
+
+${text}`;
       textToConvert = await this.openaiClient.generateText(summaryPrompt, {
-        systemPrompt: 'You are a content summarizer. Create clear, concise summaries suitable for audio narration.',
+        systemPrompt: `You are a content summarizer. Create clear, concise summaries suitable for audio narration. ${buildLanguagePreservationInstruction(language)}`,
         temperature: 0.5,
         max_tokens: 2000,
       });
     }
 
     const audioData = await this.ttsClient.generateAudioWithMetadata(textToConvert, {
-      voice: config.voice || 'alloy',
+      voice,
       model: config.model || 'tts-1',
       format: config.format || 'mp3',
       speed: config.speed || 1.0,
