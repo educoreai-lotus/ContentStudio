@@ -1,18 +1,17 @@
 import axios from 'axios';
 import { createClient } from '@supabase/supabase-js';
+import { getVoiceIdForLanguage } from './heygenVoicesConfig.js';
 
 /**
  * Heygen API Client
- * Generates avatar videos using Heygen API
+ * Generates avatar videos using Heygen API v2
  * 
- * IMPORTANT: This client sends ONLY the minimal required fields:
+ * IMPORTANT: This client uses HeyGen API v2 format:
  * - title
  * - prompt (trainer's exact text, unmodified)
- * - topic
- * - description
- * - skills
+ * - video_inputs with character (avatar_id) and voice (voice_id, input_text)
  * 
- * NO voice, voice_id, video_inputs, script generation, or avatar selection
+ * Voice ID is automatically selected from config based on language
  */
 export class HeygenClient {
   constructor({ apiKey }) {
@@ -40,14 +39,15 @@ export class HeygenClient {
    * Generate avatar video
    * 
    * ⚠️ CRITICAL: 
-   * - Use endpoint: POST /v1/video.create (NOT /v2/video/generate - returns 400 error)
-   * - HeyGen V1 API requires: title, prompt, and avatar_id (default public avatar)
-   * - We use 'sophia-public' as default avatar (NOT voice selection - HeyGen decides voice automatically)
-   * - We do NOT specify: voice_id, voice_engine, narration, text_reader (these would be voice selection)
+   * - Use endpoint: POST /v2/video/generate (HeyGen API v2)
+   * - HeyGen V2 API requires: title, video_inputs with character (avatar_id) and voice (voice_id, input_text)
+   * - We use 'sophia-public' as default avatar
+   * - Voice ID is automatically selected from config based on language parameter
    * 
    * @param {Object} payload - Request payload
    * @param {string} payload.title - Video title (default: 'EduCore Lesson')
    * @param {string} payload.prompt - Trainer's exact prompt (unmodified) - REQUIRED
+   * @param {string} payload.language - Language code (e.g., 'en', 'ar', 'he', 'en-US') - REQUIRED
    * @param {number} payload.duration - Video duration in seconds (default: 15) - used for response only
    * @returns {Promise<Object>} Video data with URL
    */
@@ -83,26 +83,56 @@ export class HeygenClient {
         };
       }
 
-      // Build minimal request payload - HeyGen V1 API requirement
-      // ⚠️ CRITICAL: HeyGen V1 requires avatar_id (default avatar, no voice selection)
-      // We use default public avatar 'sophia-public' - this is NOT voice selection
-      // We do NOT specify: voice_id, voice_engine, narration, text_reader
-      // Only avatar_id to tell HeyGen which avatar to use (HeyGen decides voice automatically)
+      // Get language from payload (required)
+      const language = payload.language || 'en';
+      
+      // Get voice ID for language
+      const voiceId = getVoiceIdForLanguage(language);
+
+      // Check if voice ID is available - fail immediately without calling HeyGen API
+      if (!voiceId) {
+        console.error('[Avatar Generation Error] Voice ID not found for language:', language);
+        return {
+          status: 'failed',
+          videoId: null,
+          error: 'HEYGEN_VOICE_NOT_FOUND',
+          errorCode: 'HEYGEN_VOICE_NOT_FOUND',
+          errorDetail: `No voice ID configured for language: ${language}`,
+        };
+      }
+
+      // Build v2 API request payload
       const requestPayload = {
         title: title || 'EduCore Lesson',
-        prompt: prompt.trim(), // Trainer's exact text, unmodified
-        avatar_id: 'sophia-public', // Default public avatar (required by HeyGen V1)
+        video_inputs: [
+          {
+            character: {
+              type: 'avatar',
+              avatar_id: 'sophia-public',
+              avatar_style: 'normal',
+            },
+            voice: {
+              type: 'text',
+              input_text: prompt.trim(), // Trainer's exact text, unmodified
+              voice_id: voiceId,
+              speed: 1.0,
+            },
+          },
+        ],
+        dimension: {
+          width: 1280,
+          height: 720,
+        },
       };
 
       // Log request payload for debugging
       console.log('[Avatar Generation] Sending request to HeyGen:', JSON.stringify(requestPayload, null, 2));
 
       // Create video generation request
-      // ⚠️ CRITICAL: Use /v1/video.create endpoint, NOT /v2/video/generate
-      // /v2/video/generate always returns 400 Bad Request → Invalid Parameters
+      // ⚠️ CRITICAL: Use /v2/video/generate endpoint (HeyGen API v2)
       let response;
       try {
-        response = await this.client.post('/v1/video.create', requestPayload);
+        response = await this.client.post('/v2/video/generate', requestPayload);
       } catch (error) {
         // Extract detailed error information from HeyGen response
         const errorMessage = error.response?.data?.message || error.message || 'Unknown error';
@@ -125,7 +155,8 @@ export class HeygenClient {
         };
       }
 
-      const videoId = response.data.data?.video_id;
+      // Extract video_id from v2 API response
+      const videoId = response.data?.data?.video_id || response.data?.video_id;
       if (!videoId) {
         console.error('[Avatar Generation Error] HeyGen did not return video_id:', JSON.stringify(response.data, null, 2));
         return {
@@ -227,7 +258,7 @@ export class HeygenClient {
         statusText: error.response?.statusText || 'Unknown',
         errorMessage: errorMessage,
         errorData: JSON.stringify(errorData, null, 2),
-        requestURL: `${this.baseURL}/v1/video.create`,
+        requestURL: `${this.baseURL}/v2/video/generate`,
         requestPayload: requestPayload || payload || 'Not available',
       });
 
@@ -249,9 +280,8 @@ export class HeygenClient {
   async pollVideoStatus(videoId, maxAttempts = 60, interval = 3000) {
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       try {
-        // ⚠️ CRITICAL: Use /v1/video-status.get (with hyphen, NOT underscore)
-        // /v1/video_status.get does not exist and will return 404
-        const response = await this.client.get(`/v1/video-status.get?video_id=${videoId}`);
+        // ⚠️ CRITICAL: Use /v1/video_status.get (with underscore, NOT hyphen)
+        const response = await this.client.get(`/v1/video_status.get?video_id=${videoId}`);
         const status = response.data.data.status;
 
         if (status === 'completed') {

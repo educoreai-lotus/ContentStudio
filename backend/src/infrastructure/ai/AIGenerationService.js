@@ -622,12 +622,15 @@ This presentation should be educational and suitable for ${audience}.`;
     // Generate video using Heygen - send ONLY minimal required fields
     // ⚠️ CRITICAL: trainerPrompt is trainer's exact text, unmodified
 
+    // Extract language from config (required for voice selection)
+    const language = config.language || 'en';
+
     try {
-      // HeyGen v2 API accepts ONLY title and prompt
-      // All other fields (topic, description, skills, language, duration) cause 400 error
+      // HeyGen v2 API requires: title, prompt, language (for voice_id selection)
       const videoResult = await this.heygenClient.generateVideo({
         title: 'EduCore Lesson',
         prompt: trainerPrompt.trim(), // Trainer's exact text, unmodified
+        language: language, // Required for voice_id selection
         duration: 15, // Used for response only, not sent to API
       });
 
