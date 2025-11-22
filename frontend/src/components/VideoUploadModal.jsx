@@ -166,21 +166,50 @@ export const VideoUploadModal = ({ open, onClose, topicId, theme = 'day-mode', o
       }
     } catch (error) {
       setCurrentStatus(null);
-      const errorMessage =
-        error?.error?.message || error?.message || 'Failed to transcribe video';
       
-      addMessage({
-        message: 'Transcription failed',
-        timestamp: new Date().toISOString(),
-      });
+      // Check if this is a quality check failure
+      if (error?.errorCode === 'QUALITY_CHECK_FAILED' && error?.quality_check) {
+        const qualityCheck = error.quality_check;
+        const errorMessage = error?.error || 'Video transcript failed quality check';
+        
+        addMessage({
+          message: 'Quality check failed',
+          timestamp: new Date().toISOString(),
+        });
 
-      showPopup({
-        type: 'error',
-        title: 'Transcription Failed',
-        message: 'Failed to transcribe video',
-        reason: errorMessage,
-        guidance: 'Please try another video or check your internet connection.',
-      });
+        // Build detailed quality check message
+        const qualityDetails = [
+          `Relevance: ${qualityCheck.relevance_score}/100`,
+          `Originality: ${qualityCheck.originality_score}/100`,
+          `Difficulty Alignment: ${qualityCheck.difficulty_alignment_score}/100`,
+          `Consistency: ${qualityCheck.consistency_score}/100`,
+        ].join(' | ');
+
+        showPopup({
+          type: 'error',
+          title: 'Quality Check Failed',
+          message: errorMessage,
+          reason: qualityCheck.feedback_summary || qualityDetails,
+          guidance: 'Please ensure your video content is relevant to the lesson topic and original.',
+        });
+      } else {
+        // Generic transcription error
+        const errorMessage =
+          error?.error || error?.error?.message || error?.message || 'Failed to transcribe video';
+        
+        addMessage({
+          message: 'Transcription failed',
+          timestamp: new Date().toISOString(),
+        });
+
+        showPopup({
+          type: 'error',
+          title: 'Transcription Failed',
+          message: 'Failed to transcribe video',
+          reason: errorMessage,
+          guidance: 'Please try another video or check your internet connection.',
+        });
+      }
     } finally {
       setLoading(false);
     }
