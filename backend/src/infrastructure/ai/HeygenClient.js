@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { createClient } from '@supabase/supabase-js';
 import { getVoiceIdForLanguage } from './heygenVoicesConfig.js';
+import { getAvatarId } from './heygenAvatarConfig.js';
 
 /**
  * Heygen API Client
@@ -18,6 +19,8 @@ export class HeygenClient {
     if (!apiKey) {
       console.warn('[HeygenClient] API key not provided - avatar video generation will be disabled');
       this.client = null;
+      this.avatarId = null;
+      this.avatarValidated = false;
       return;
     }
 
@@ -33,6 +36,64 @@ export class HeygenClient {
       maxContentLength: Infinity,
       maxBodyLength: Infinity,
     });
+
+    // Load avatar ID from config
+    this.avatarId = getAvatarId();
+    this.avatarValidated = false;
+
+    // Validate avatar on startup (async, non-blocking)
+    this.validateAvatar().catch(error => {
+      console.error('[HeygenClient] Failed to validate avatar on startup:', error.message);
+    });
+  }
+
+  /**
+   * Validate that configured avatar exists in HeyGen API
+   * Called once on startup to ensure avatar is available
+   * @returns {Promise<boolean>} True if avatar is valid, false otherwise
+   */
+  async validateAvatar() {
+    if (!this.client || !this.avatarId) {
+      this.avatarValidated = false;
+      return false;
+    }
+
+    try {
+      const response = await this.client.get('/v1/avatar.list');
+      
+      // Handle different response structures
+      let avatars = [];
+      if (response.data?.data?.avatars) {
+        avatars = response.data.data.avatars;
+      } else if (response.data?.data) {
+        avatars = Array.isArray(response.data.data) ? response.data.data : [];
+      } else if (response.data?.avatars) {
+        avatars = response.data.avatars;
+      } else if (Array.isArray(response.data)) {
+        avatars = response.data;
+      }
+
+      // Check if configured avatar_id exists in the list
+      const avatarExists = avatars.some(avatar => {
+        const avatarId = avatar.avatar_id || avatar.id;
+        return avatarId === this.avatarId;
+      });
+
+      if (!avatarExists) {
+        console.warn(`[HeyGen] Configured avatar not found (${this.avatarId}), skipping avatar generation`);
+        this.avatarValidated = false;
+        return false;
+      }
+
+      this.avatarValidated = true;
+      console.log(`[HeyGen] Avatar validated successfully: ${this.avatarId}`);
+      return true;
+    } catch (error) {
+      console.warn('[HeyGen] Failed to validate avatar (API error):', error.message);
+      // Don't fail completely - allow generation to proceed, but mark as unvalidated
+      this.avatarValidated = false;
+      return false;
+    }
   }
 
   /**
@@ -41,7 +102,7 @@ export class HeygenClient {
    * ⚠️ CRITICAL: 
    * - Use endpoint: POST /v2/video/generate (HeyGen API v2)
    * - HeyGen V2 API requires: title, video_inputs with character (avatar_id) and voice (voice_id, input_text)
-   * - We use 'sophia-public' as default avatar
+   * - Avatar ID is loaded from config/heygen-avatar.json
    * - Voice ID is automatically selected from config based on language parameter
    * 
    * @param {Object} payload - Request payload
@@ -83,6 +144,35 @@ export class HeygenClient {
         };
       }
 
+      // Check if avatar is available - fail immediately without calling HeyGen API
+      if (!this.avatarId) {
+        console.error('[Avatar Generation Error] Avatar ID not configured');
+        return {
+          status: 'failed',
+          videoId: null,
+          error: 'NO_AVAILABLE_AVATAR',
+          errorCode: 'NO_AVAILABLE_AVATAR',
+          errorDetail: 'Avatar ID not configured. Please run fetch-heygen-avatar.js script.',
+        };
+      }
+
+      // Check if avatar was validated and found to be invalid
+      // If validation hasn't run yet, we'll proceed (validation is async)
+      // But if it ran and failed, we should not proceed
+      if (this.avatarValidated === false && this.avatarId) {
+        // Re-validate synchronously if not yet validated
+        const isValid = await this.validateAvatar();
+        if (!isValid) {
+          return {
+            status: 'failed',
+            videoId: null,
+            error: 'NO_AVAILABLE_AVATAR',
+            errorCode: 'NO_AVAILABLE_AVATAR',
+            errorDetail: `Configured avatar (${this.avatarId}) not found in HeyGen API`,
+          };
+        }
+      }
+
       // Get language from payload (required)
       const language = payload.language || 'en';
       
@@ -108,7 +198,7 @@ export class HeygenClient {
           {
             character: {
               type: 'avatar',
-              avatar_id: 'sophia-public',
+              avatar_id: this.avatarId,
               avatar_style: 'normal',
             },
             voice: {
