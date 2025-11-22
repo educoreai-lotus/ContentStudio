@@ -228,14 +228,29 @@ export class ContentMetricsController {
    * @param {Function} next - Express next middleware
    */
   async handleCourseBuilderFormat(requestData, res, next) {
+    // Set longer timeout for this endpoint (10 minutes)
+    // This endpoint can take a long time due to AI content generation
+    req.setTimeout(10 * 60 * 1000); // 10 minutes
+    res.setTimeout(10 * 60 * 1000); // 10 minutes
+    
+    // Send keep-alive headers to prevent connection timeout
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('Keep-Alive', 'timeout=600, max=1000');
+    
+    // Send initial response headers to keep connection alive
+    res.writeHead(200, {
+      'Content-Type': 'application/json',
+      'Connection': 'keep-alive',
+      'Keep-Alive': 'timeout=600, max=1000',
+    });
+    
     try {
       // Validate structure (already validated in fillContentMetrics, but double-check)
       if (!requestData.payload || typeof requestData.payload !== 'object') {
         logger.error('[ContentMetricsController] Invalid Course Builder format - missing or invalid payload');
         requestData.response = { error: 'Invalid Course Builder format - payload is required' };
         const errorStringified = JSON.stringify(requestData);
-        res.setHeader('Content-Type', 'application/json');
-        return res.status(200).send(errorStringified);
+        return res.end(errorStringified);
       }
 
       // Ensure response.course exists
@@ -422,8 +437,16 @@ export class ContentMetricsController {
       });
 
       // Return the stringified original object EXACTLY (not wrapped)
-      res.setHeader('Content-Type', 'application/json');
-      return res.status(200).send(stringifiedData);
+      // Use res.end() instead of res.send() to ensure response is sent even if connection closes
+      try {
+        res.end(stringifiedData);
+      } catch (sendError) {
+        // If response already sent or connection closed, log but don't throw
+        logger.warn('[ContentMetricsController] Failed to send response (connection may have closed)', {
+          error: sendError.message,
+        });
+      }
+      return;
     } catch (error) {
       logger.error('[ContentMetricsController] Unexpected error in Course Builder format handler', {
         error: error.message,
@@ -432,8 +455,14 @@ export class ContentMetricsController {
       // On error, set empty array and return stringified original
       requestData.response.course = [];
       const stringifiedData = JSON.stringify(requestData);
-      res.setHeader('Content-Type', 'application/json');
-      return res.status(200).send(stringifiedData);
+      try {
+        res.end(stringifiedData);
+      } catch (sendError) {
+        logger.warn('[ContentMetricsController] Failed to send error response (connection may have closed)', {
+          error: sendError.message,
+        });
+      }
+      return;
     }
   }
 }
