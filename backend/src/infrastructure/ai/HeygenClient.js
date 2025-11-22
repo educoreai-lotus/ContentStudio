@@ -426,7 +426,7 @@ export class HeygenClient {
             },
             voice: {
               type: 'text',
-              input_text: prompt.trim(), // Trainer's exact text, unmodified - no translation
+              input_text: finalPrompt, // Use truncated prompt if needed to prevent 180s limit
               voice_id: voiceId,
             },
           },
