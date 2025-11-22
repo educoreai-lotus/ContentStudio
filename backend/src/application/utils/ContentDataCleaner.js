@@ -250,7 +250,24 @@ export class ContentDataCleaner {
       cleaned.duration_seconds = contentData.duration_seconds;
     }
 
-    // Remove: status (redundant - can be inferred from videoUrl presence)
+    // Keep status and reason for skipped/failed states (needed for proper error handling)
+    if (contentData.status === 'skipped' || contentData.status === 'failed') {
+      cleaned.status = contentData.status;
+      if (contentData.reason) {
+        cleaned.reason = contentData.reason;
+      }
+    }
+    // Also keep error fields for failed status
+    if (contentData.status === 'failed') {
+      if (contentData.error) {
+        cleaned.error = contentData.error;
+      }
+      if (contentData.errorCode) {
+        cleaned.errorCode = contentData.errorCode;
+      }
+    }
+
+    // Remove: status is now kept for skipped/failed, but removed for success (can be inferred from videoUrl presence)
     // Remove: language (redundant - stored in topics table)
     // Remove: fallback (technical flag, not needed for display)
 
