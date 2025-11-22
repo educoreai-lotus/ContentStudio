@@ -158,11 +158,137 @@ export class VideoTranscriptionService {
       throw new Error(`Audio file not found: ${audioFilePath}`);
     }
 
+    // OpenAI Whisper API limit: 25MB (26214400 bytes)
+    const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB in bytes
+    const fileStats = fs.statSync(audioFilePath);
+    const fileSize = fileStats.size;
+    let audioFileToUse = audioFilePath;
+    let tempTrimmedFile = null;
+
     try {
-      logger.info('[VideoTranscriptionService] Transcribing with Whisper', { audioFilePath });
+      logger.info('[VideoTranscriptionService] Transcribing with Whisper', { 
+        audioFilePath,
+        fileSize,
+        fileSizeMB: (fileSize / (1024 * 1024)).toFixed(2),
+      });
+
+      // If file is larger than 25MB, trim it using ffmpeg
+      if (fileSize > MAX_FILE_SIZE) {
+        logger.warn('[VideoTranscriptionService] File exceeds 25MB limit, trimming using ffmpeg', {
+          originalSize: fileSize,
+          originalSizeMB: (fileSize / (1024 * 1024)).toFixed(2),
+          maxSize: MAX_FILE_SIZE,
+        });
+
+        // Use ffmpeg to trim the file to approximately 25MB
+        // We'll estimate duration based on file size ratio and trim accordingly
+        // For MP3 at 16kHz mono, ~1MB per minute is a rough estimate
+        // So 25MB ≈ 25 minutes, but we'll be conservative and use 20 minutes
+        const tempDir = process.env.UPLOAD_DIR 
+          ? path.join(process.env.UPLOAD_DIR, 'temp')
+          : '/app/uploads/temp';
+        
+        if (!fs.existsSync(tempDir)) {
+          fs.mkdirSync(tempDir, { recursive: true });
+        }
+
+        tempTrimmedFile = path.join(tempDir, `trimmed_${Date.now()}_${path.basename(audioFilePath)}`);
+        
+        // Use ffmpeg to trim to first 20 minutes (conservative estimate for 25MB)
+        // -t 1200: duration in seconds (20 minutes)
+        // -acodec copy: copy audio codec (faster, no re-encoding)
+        const isWindows = process.platform === 'win32';
+        const escapePathForShell = (filePath) => isWindows 
+          ? filePath.replace(/"/g, '\\"')
+          : filePath.replace(/'/g, "'\"'\"'");
+        const quote = isWindows ? '"' : "'";
+        const escapedInputPath = escapePathForShell(audioFilePath);
+        const escapedOutputPath = escapePathForShell(tempTrimmedFile);
+        
+        // Try to trim to 20 minutes first (conservative estimate)
+        // If still too large, we'll retry with smaller duration
+        let trimDuration = 1200; // 20 minutes in seconds
+        let trimmedSize = MAX_FILE_SIZE + 1; // Initialize to force first attempt
+        
+        while (trimmedSize > MAX_FILE_SIZE && trimDuration > 60) {
+          const command = `ffmpeg -y -i ${quote}${escapedInputPath}${quote} -t ${trimDuration} -acodec copy ${quote}${escapedOutputPath}${quote}`;
+          
+          logger.info('[VideoTranscriptionService] Trimming audio file with ffmpeg', {
+            trimDuration,
+            trimDurationMinutes: (trimDuration / 60).toFixed(1),
+            command,
+          });
+          
+          try {
+            const execOptions = {
+              timeout: 300000, // 5 minutes timeout
+              maxBuffer: 10 * 1024 * 1024, // 10MB buffer
+            };
+            
+            if (!isWindows) {
+              execOptions.shell = '/bin/bash';
+            }
+            
+            await execAsync(command, execOptions);
+            
+            // Check if file was created and its size
+            if (fs.existsSync(tempTrimmedFile)) {
+              trimmedSize = fs.statSync(tempTrimmedFile).size;
+              
+              logger.info('[VideoTranscriptionService] Trimmed file created', {
+                trimmedSize,
+                trimmedSizeMB: (trimmedSize / (1024 * 1024)).toFixed(2),
+                trimDuration,
+              });
+              
+              // If still too large, reduce duration by 25% and retry
+              if (trimmedSize > MAX_FILE_SIZE) {
+                logger.warn('[VideoTranscriptionService] Trimmed file still too large, reducing duration', {
+                  trimmedSize,
+                  trimDuration,
+                });
+                
+                // Clean up and retry with smaller duration
+                if (fs.existsSync(tempTrimmedFile)) {
+                  fs.unlinkSync(tempTrimmedFile);
+                }
+                
+                trimDuration = Math.floor(trimDuration * 0.75); // Reduce by 25%
+              } else {
+                // File size is acceptable
+                break;
+              }
+            } else {
+              throw new Error('FFmpeg did not create trimmed file');
+            }
+          } catch (trimError) {
+            logger.error('[VideoTranscriptionService] Failed to trim file with ffmpeg', {
+              error: trimError.message,
+              trimDuration,
+            });
+            throw new Error(`Failed to trim audio file: ${trimError.message}`);
+          }
+        }
+        
+        if (trimmedSize > MAX_FILE_SIZE) {
+          logger.warn('[VideoTranscriptionService] Could not trim file to under 25MB, using trimmed file anyway', {
+            trimmedSize,
+            trimmedSizeMB: (trimmedSize / (1024 * 1024)).toFixed(2),
+          });
+        }
+
+        audioFileToUse = tempTrimmedFile;
+        
+        logger.info('[VideoTranscriptionService] File trimmed successfully', {
+          trimmedSize,
+          trimmedSizeMB: (trimmedSize / (1024 * 1024)).toFixed(2),
+          trimmedFilePath: tempTrimmedFile,
+          finalDuration: trimDuration,
+        });
+      }
 
       // Read file as stream
-      const fileStream = fs.createReadStream(audioFilePath);
+      const fileStream = fs.createReadStream(audioFileToUse);
 
       // Use the OpenAI client's transcribeAudio method
       const transcript = await this.openaiClient.transcribeAudio(fileStream, {
@@ -170,17 +296,42 @@ export class VideoTranscriptionService {
       });
 
       logger.info('[VideoTranscriptionService] Whisper transcription completed', {
-        audioFilePath,
+        audioFilePath: audioFileToUse,
+        originalFilePath: audioFilePath,
+        wasTrimmed: !!tempTrimmedFile,
         length: transcript.length,
       });
 
       return transcript;
     } catch (error) {
       logger.error('[VideoTranscriptionService] Whisper transcription failed', {
-        audioFilePath,
+        audioFilePath: audioFileToUse,
+        originalFilePath: audioFilePath,
         error: error.message,
       });
+      
+      // Check if error is 413 (file too large) and we haven't trimmed yet
+      if (error.message.includes('413') || error.message.includes('Maximum content size limit')) {
+        if (!tempTrimmedFile) {
+          logger.warn('[VideoTranscriptionService] Received 413 error, file may need more aggressive trimming');
+          // Could retry with smaller size, but for now just throw
+        }
+      }
+      
       throw new Error(`Failed to transcribe audio: ${error.message}`);
+    } finally {
+      // Clean up trimmed file if it was created
+      if (tempTrimmedFile && fs.existsSync(tempTrimmedFile)) {
+        try {
+          fs.unlinkSync(tempTrimmedFile);
+          logger.info('[VideoTranscriptionService] Cleaned up trimmed file', { tempTrimmedFile });
+        } catch (cleanupError) {
+          logger.warn('[VideoTranscriptionService] Failed to cleanup trimmed file', {
+            tempTrimmedFile,
+            error: cleanupError.message,
+          });
+        }
+      }
     }
   }
 
