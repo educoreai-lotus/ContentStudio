@@ -453,6 +453,22 @@ export class HeygenClient {
       }
 
       // Build v2 API request payload (matching HeyGen v2 format)
+      // Map language code to HeyGen language format (e.g., 'he' -> 'he', 'ar' -> 'ar', 'en' -> 'en')
+      const heygenLanguageMap = {
+        'he': 'he',
+        'ar': 'ar',
+        'ru': 'ru',
+        'es': 'es',
+        'fr': 'fr',
+        'de': 'de',
+        'it': 'it',
+        'ko': 'ko',
+        'ja': 'ja',
+        'zh': 'zh',
+        'en': 'en',
+      };
+      const heygenLanguage = heygenLanguageMap[language] || language;
+
       const requestPayload = {
         title: title || 'EduCore Lesson',
         video_inputs: [
@@ -466,6 +482,7 @@ export class HeygenClient {
               type: 'text',
               input_text: finalPrompt, // Use truncated prompt if needed to prevent 180s limit
               voice_id: voiceId,
+              language: heygenLanguage, // Explicitly set language for HeyGen
             },
           },
         ],
@@ -474,6 +491,13 @@ export class HeygenClient {
           height: 720,
         },
       };
+
+      console.log('[HeyGen] Request payload with language', {
+        language,
+        heygenLanguage,
+        voiceId,
+        hasLanguageInVoice: !!requestPayload.video_inputs[0].voice.language,
+      });
 
       // Log request payload for debugging
       console.log('[Avatar Generation] Sending request to HeyGen:', JSON.stringify(requestPayload, null, 2));
