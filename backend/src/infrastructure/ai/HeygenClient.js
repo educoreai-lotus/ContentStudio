@@ -867,14 +867,9 @@ export class HeygenClient {
       }
 
       if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-        console.warn('[HeyGen] Supabase credentials not configured, cannot upload to storage');
+        console.warn('[HeyGen] Supabase not configured, returning null');
         return null;
       }
-
-      console.log('[HeyGen] Initializing Supabase client for storage upload', {
-        supabaseUrl: process.env.SUPABASE_URL ? 'configured' : 'missing',
-        serviceKey: process.env.SUPABASE_SERVICE_ROLE_KEY ? 'configured' : 'missing',
-      });
 
       const supabase = createClient(
         process.env.SUPABASE_URL,
@@ -887,12 +882,6 @@ export class HeygenClient {
         fileBuffer.byteOffset + fileBuffer.byteLength,
       );
 
-      console.log('[HeyGen] Uploading to Supabase Storage', {
-        filePath,
-        bufferSize: arrayBuffer.byteLength,
-        contentType,
-      });
-
       const { data, error } = await supabase.storage.from('media').upload(
         filePath,
         arrayBuffer,
@@ -904,19 +893,11 @@ export class HeygenClient {
       );
 
       if (error) {
-        console.error('[HeyGen] Supabase storage upload error', {
-          error: error.message,
-          errorCode: error.statusCode,
-          filePath,
-        });
+        console.error('[HeyGen] Supabase upload error:', error);
         throw error;
       }
 
-      console.log('[HeyGen] File uploaded to Supabase Storage', {
-        filePath,
-        uploadData: data,
-      });
-
+      // Get public URL
       const { data: urlData } = supabase.storage
         .from('media')
         .getPublicUrl(filePath);
@@ -924,21 +905,15 @@ export class HeygenClient {
       const publicUrl = urlData?.publicUrl;
       
       if (!publicUrl) {
-        console.error('[HeyGen] Failed to get public URL from Supabase', {
-          filePath,
-          urlData,
-        });
+        console.error('[HeyGen] Failed to get public URL from Supabase');
         throw new Error('Failed to get public URL from Supabase storage');
       }
 
-      console.log('[HeyGen] Got public URL from Supabase Storage', { publicUrl });
+      console.log(`[HeyGen] Video uploaded successfully to Supabase: ${publicUrl}`);
+      
       return publicUrl;
     } catch (error) {
-      console.error('[HeyGen] uploadToStorage failed', {
-        error: error.message,
-        stack: error.stack,
-        fileName,
-      });
+      console.error('[HeyGen] Storage upload error:', error.message);
       throw new Error(`Failed to upload video to storage: ${error.message}`);
     }
   }
@@ -950,83 +925,22 @@ export class HeygenClient {
    */
   async downloadVideo(videoUrl) {
     try {
-      console.log('[HeyGen] Starting video download', { videoUrl });
-      
-      // If URL is a share URL, we cannot download directly
-      if (videoUrl && videoUrl.includes('/share/')) {
-        throw new Error('Share URLs cannot be downloaded directly. Need direct download URL from HeyGen API.');
-      }
-
-      // If URL is an API endpoint, we need to use authenticated request
-      let requestConfig = {
+      const response = await axios.get(videoUrl, {
         responseType: 'arraybuffer',
         maxContentLength: Infinity,
         maxBodyLength: Infinity,
-        timeout: 120000, // 120 seconds timeout for video download
-      };
-
-      // If it's an API endpoint, add authentication headers
-      if (videoUrl && videoUrl.includes('api.heygen.com')) {
-        if (!this.apiKey) {
-          throw new Error('API key required for authenticated download requests');
-        }
-        requestConfig.headers = {
-          'X-Api-Key': this.apiKey,
-        };
-        console.log('[HeyGen] Using authenticated request for API download endpoint');
-      }
-
-      const response = await axios.get(videoUrl, requestConfig);
-      
-      const contentType = response.headers['content-type'];
-      const contentLength = response.headers['content-length'];
-      console.log('[HeyGen] Video download response received', {
-        contentType,
-        contentLength,
-        contentLengthMB: contentLength ? (parseInt(contentLength) / 1024 / 1024).toFixed(2) : 'unknown',
-        status: response.status,
-        videoUrl,
       });
-      
-      // Check if we got actual video data
-      if (response.status !== 200) {
-        throw new Error(`Download failed with status ${response.status}`);
+      const contentType = response.headers['content-type'];
+      if (!contentType || !contentType.includes('video')) {
+        throw new Error(`Unexpected content type received: ${contentType || 'unknown'}`);
       }
-
-      // Some servers may not set content-type correctly, but we should have data
-      if (contentType && !contentType.includes('video') && !contentType.includes('application/octet-stream')) {
-        console.warn('[HeyGen] Unexpected content type in download response', {
-          contentType,
-          videoUrl,
-        });
-        // Check if we got HTML (error page) instead of video
-        const bufferStart = Buffer.from(response.data.slice(0, 100));
-        const bufferStartStr = bufferStart.toString('utf-8');
-        if (bufferStartStr.includes('<html') || bufferStartStr.includes('<!DOCTYPE')) {
-          throw new Error('Received HTML instead of video file - URL may be incorrect');
-        }
-      }
-      
       const buffer = Buffer.from(response.data);
       if (!buffer || buffer.length === 0) {
         throw new Error('Downloaded video buffer is empty');
       }
-      
-      console.log('[HeyGen] Video downloaded successfully', {
-        bufferSize: buffer.length,
-        bufferSizeMB: (buffer.length / 1024 / 1024).toFixed(2),
-      });
-      
       return buffer;
     } catch (error) {
-      console.error('[HeyGen] Video download failed', {
-        error: error.message,
-        stack: error.stack,
-        videoUrl,
-        responseStatus: error.response?.status,
-        responseHeaders: error.response?.headers,
-        responseDataPreview: error.response?.data ? Buffer.from(error.response.data.slice(0, 200)).toString('utf-8') : null,
-      });
+      console.error('[HeyGen] Download video error:', error.message);
       throw new Error(`Failed to download video: ${error.message}`);
     }
   }
