@@ -232,6 +232,7 @@ export function getVoiceConfig(language) {
     }
 
     // Try full language name mapping (e.g., 'en' -> 'english')
+    // This maps normalized language codes to full language names in the config
     const fullNameMap = {
       'ar': 'arabic',
       'he': 'hebrew',
@@ -244,6 +245,9 @@ export function getVoiceConfig(language) {
       'pt': 'portuguese',
       'ja': 'japanese',
       'zh': 'chinese',
+      'fa': 'persian', // Persian/Farsi
+      'ur': 'urdu',
+      // Add more mappings as needed for other languages in heygen-voices.json
     };
 
     const fullName = fullNameMap[normalizedLang];
