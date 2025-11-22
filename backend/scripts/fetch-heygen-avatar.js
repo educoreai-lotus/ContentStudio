@@ -12,7 +12,13 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const HEYGEN_API_KEY = process.env.HEYGEN_API_KEY;
-const HEYGEN_AVATAR_API_URL = 'https://api.heygen.com/v1/avatar.list';
+// Try multiple possible endpoints for avatar listing
+const HEYGEN_AVATAR_API_URLS = [
+  'https://api.heygen.com/v2/avatars',
+  'https://api.heygen.com/v1/avatars',
+  'https://api.heygen.com/v1/avatar.list',
+  'https://api.heygen.com/v2/avatar.list',
+];
 const CONFIG_PATH = path.join(__dirname, '../config/heygen-avatar.json');
 
 /**
@@ -24,41 +30,85 @@ async function fetchAvatars() {
     process.exit(1);
   }
 
-  try {
-    console.log('🔍 Fetching avatars from HeyGen API...');
-    const response = await axios.get(HEYGEN_AVATAR_API_URL, {
-      headers: {
-        'X-Api-Key': HEYGEN_API_KEY,
-        'Accept': 'application/json',
-      },
-      timeout: 30000,
-    });
+  // Try multiple endpoints until one works
+  let lastError = null;
+  for (const url of HEYGEN_AVATAR_API_URLS) {
+    try {
+      console.log(`🔍 Trying endpoint: ${url}...`);
+      const response = await axios.get(url, {
+        headers: {
+          'X-Api-Key': HEYGEN_API_KEY,
+          'Accept': 'application/json',
+        },
+        timeout: 30000,
+      });
 
-    // Handle different response structures
-    let avatars = [];
-    if (response.data?.data?.avatars) {
-      avatars = response.data.data.avatars;
-    } else if (response.data?.data) {
-      avatars = Array.isArray(response.data.data) ? response.data.data : [];
-    } else if (response.data?.avatars) {
-      avatars = response.data.avatars;
-    } else if (Array.isArray(response.data)) {
-      avatars = response.data;
-    } else {
-      console.error('❌ Unexpected response structure:', JSON.stringify(response.data, null, 2));
-      return null;
-    }
+      // Handle different response structures
+      let avatars = [];
+      if (response.data?.data?.avatars) {
+        avatars = response.data.data.avatars;
+      } else if (response.data?.data) {
+        avatars = Array.isArray(response.data.data) ? response.data.data : [];
+      } else if (response.data?.avatars) {
+        avatars = response.data.avatars;
+      } else if (Array.isArray(response.data)) {
+        avatars = response.data;
+      } else {
+        console.warn(`⚠️ Unexpected response structure from ${url}, trying next endpoint...`);
+        lastError = new Error('Unexpected response structure');
+        continue;
+      }
 
-    console.log(`✅ Found ${avatars.length} avatars`);
-    return avatars;
-  } catch (error) {
-    console.error('❌ Failed to fetch avatars:', error.message);
-    if (error.response) {
-      console.error('Response status:', error.response.status);
-      console.error('Response data:', JSON.stringify(error.response.data, null, 2));
+      if (avatars.length === 0) {
+        console.warn(`⚠️ No avatars found from ${url}, trying next endpoint...`);
+        lastError = new Error('No avatars in response');
+        continue;
+      }
+
+      console.log(`✅ Found ${avatars.length} avatars from ${url}`);
+      return avatars;
+    } catch (error) {
+      console.warn(`⚠️ Endpoint ${url} failed: ${error.response?.status || error.message}`);
+      lastError = error;
+      // Continue to next endpoint
+      continue;
     }
-    return null;
   }
+
+  // All endpoints failed
+  console.error('\n❌ All avatar list endpoints failed');
+  if (lastError?.response) {
+    console.error('Last error status:', lastError.response.status);
+    console.error('Last error data:', JSON.stringify(lastError.response.data, null, 2));
+  }
+  
+  // If we get 403, suggest manual avatar selection
+  if (lastError?.response?.status === 403) {
+    console.error('\n💡 The avatar.list endpoint is not accessible (403 Forbidden).');
+    console.error('   HeyGen may have restricted avatar listing access.');
+    console.error('\n📝 Manual Avatar Setup Required:');
+    console.error('   Since the API endpoint is not accessible, you need to manually set an avatar ID.');
+    console.error('   Steps:');
+    console.error('   1. Get a public avatar ID from HeyGen dashboard or contact HeyGen support');
+    console.error('   2. Create config/heygen-avatar.json manually with this structure:');
+    console.error('      {');
+    console.error('        "avatar_id": "YOUR_AVATAR_ID_HERE",');
+    console.error('        "name": "Avatar Name",');
+    console.error('        "gender": "female",');
+    console.error('        "style": "professional",');
+    console.error('        "score": 0,');
+    console.error('        "selectedAt": "' + new Date().toISOString() + '",');
+    console.error('        "source": "manual",');
+    console.error('        "criteria": {');
+    console.error('          "mustBePublic": true,');
+    console.error('          "mustBeFemaleOrNeutral": true,');
+    console.error('          "mustBeProfessionalNeutralOrNatural": true,');
+    console.error('          "mustNotBeChildCartoonFantasyRobotDramatic": true');
+    console.error('        }');
+    console.error('      }');
+  }
+  
+  return null;
 }
 
 /**

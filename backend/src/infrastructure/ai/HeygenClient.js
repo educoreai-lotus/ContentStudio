@@ -59,18 +59,44 @@ export class HeygenClient {
     }
 
     try {
-      const response = await this.client.get('/v1/avatar.list');
-      
-      // Handle different response structures
+      // Try multiple endpoints for avatar validation
+      const endpoints = ['/v1/avatar.list', '/v1/avatars', '/v2/avatars', '/v2/avatar.list'];
       let avatars = [];
-      if (response.data?.data?.avatars) {
-        avatars = response.data.data.avatars;
-      } else if (response.data?.data) {
-        avatars = Array.isArray(response.data.data) ? response.data.data : [];
-      } else if (response.data?.avatars) {
-        avatars = response.data.avatars;
-      } else if (Array.isArray(response.data)) {
-        avatars = response.data;
+      let validationSucceeded = false;
+
+      for (const endpoint of endpoints) {
+        try {
+          const response = await this.client.get(endpoint);
+          
+          // Handle different response structures
+          if (response.data?.data?.avatars) {
+            avatars = response.data.data.avatars;
+          } else if (response.data?.data) {
+            avatars = Array.isArray(response.data.data) ? response.data.data : [];
+          } else if (response.data?.avatars) {
+            avatars = response.data.avatars;
+          } else if (Array.isArray(response.data)) {
+            avatars = response.data;
+          }
+
+          if (avatars.length > 0) {
+            validationSucceeded = true;
+            break; // Found avatars, exit loop
+          }
+        } catch (endpointError) {
+          // Try next endpoint
+          continue;
+        }
+      }
+
+      // If we couldn't fetch avatars list (403 or other errors), skip validation
+      // This allows manual avatar configuration to work
+      if (!validationSucceeded) {
+        console.warn('[HeyGen] Could not fetch avatar list for validation (endpoint may be restricted). Proceeding with configured avatar.');
+        // Mark as validated to allow generation to proceed
+        // The actual API call will fail if avatar is invalid
+        this.avatarValidated = true;
+        return true;
       }
 
       // Check if configured avatar_id exists in the list
@@ -90,6 +116,13 @@ export class HeygenClient {
       return true;
     } catch (error) {
       console.warn('[HeyGen] Failed to validate avatar (API error):', error.message);
+      // If validation fails due to 403 or other API restrictions, allow generation to proceed
+      // The actual video generation will fail if avatar is invalid
+      if (error.response?.status === 403) {
+        console.warn('[HeyGen] Avatar list endpoint is restricted (403). Proceeding with configured avatar - validation will occur during video generation.');
+        this.avatarValidated = true; // Allow to proceed
+        return true;
+      }
       // Don't fail completely - allow generation to proceed, but mark as unvalidated
       this.avatarValidated = false;
       return false;
@@ -158,11 +191,14 @@ export class HeygenClient {
 
       // Check if avatar was validated and found to be invalid
       // If validation hasn't run yet, we'll proceed (validation is async)
-      // But if it ran and failed, we should not proceed
+      // But if it ran and explicitly failed (not just unvalidated), we should not proceed
+      // Note: If validation couldn't run due to 403, avatarValidated will be true (allowing generation)
       if (this.avatarValidated === false && this.avatarId) {
         // Re-validate synchronously if not yet validated
         const isValid = await this.validateAvatar();
-        if (!isValid) {
+        if (!isValid && this.avatarValidated === false) {
+          // Only fail if validation explicitly failed (avatar not found)
+          // If validation couldn't run (403), avatarValidated will be true
           return {
             status: 'failed',
             videoId: null,

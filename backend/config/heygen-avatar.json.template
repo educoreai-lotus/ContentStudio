@@ -1,0 +1,16 @@
+{
+  "avatar_id": "REPLACE_WITH_ACTUAL_AVATAR_ID",
+  "name": "Avatar Name",
+  "gender": "female",
+  "style": "professional",
+  "score": 0,
+  "selectedAt": "2025-11-22T00:00:00.000Z",
+  "source": "manual",
+  "criteria": {
+    "mustBePublic": true,
+    "mustBeFemaleOrNeutral": true,
+    "mustBeProfessionalNeutralOrNatural": true,
+    "mustNotBeChildCartoonFantasyRobotDramatic": true
+  }
+}
+
