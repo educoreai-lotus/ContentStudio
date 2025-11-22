@@ -196,12 +196,8 @@ export class HeygenClient {
         };
       }
 
-      // Special handling for forced avatar Anna
-      if (this.avatarId === 'anna-public') {
-        // For Anna, we skip validation and allow API call
-        // If API returns 404/403, we'll return skipped status
-        console.log('[HeyGen] Using forced avatar Anna, proceeding to API call.');
-      } else {
+      // Note: anna-public is now skipped earlier in the flow, so we don't need special handling here
+      if (this.avatarId && this.avatarId !== 'anna-public') {
         // Check if avatar was validated and found to be invalid
         // If validation hasn't run yet, we'll proceed (validation is async)
         // But if it ran and explicitly failed (not just unvalidated), we should not proceed
