@@ -21,10 +21,12 @@ let cachedAvatarConfig = null;
 export function loadHeygenAvatarConfig() {
   // Return cached config if already loaded
   if (cachedAvatarConfig !== null) {
+    console.log('[HeygenAvatarConfig] Using cached avatar config:', cachedAvatarConfig?.avatar_id);
     return cachedAvatarConfig;
   }
 
   try {
+    console.log('[HeygenAvatarConfig] Loading avatar config from:', AVATAR_CONFIG_PATH);
     if (!fs.existsSync(AVATAR_CONFIG_PATH)) {
       console.warn('[HeygenAvatarConfig] Avatar config file not found:', AVATAR_CONFIG_PATH);
       cachedAvatarConfig = null;
@@ -35,7 +37,7 @@ export function loadHeygenAvatarConfig() {
     const config = JSON.parse(configContent);
     
     cachedAvatarConfig = config;
-    console.log('[HeygenAvatarConfig] Avatar configuration loaded successfully');
+    console.log('[HeygenAvatarConfig] Avatar configuration loaded successfully. Avatar ID:', config?.avatar_id);
     
     return config;
   } catch (error) {
