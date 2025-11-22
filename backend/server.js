@@ -69,38 +69,17 @@ app.get('/api/logo/:theme', (req, res) => {
 // Health check endpoint
 // Must respond quickly to pass Docker/Railway health checks
 // Server is considered healthy if it can respond, even if DB is not ready yet
-let dbCache = null;
-app.get('/health', async (req, res) => {
+// This endpoint MUST be defined BEFORE any middleware that might block it
+app.get('/health', (req, res) => {
   try {
-    // Quick health check - server is up
-    const healthStatus = {
+    // Quick health check - server is up (synchronous, no async operations)
+    res.status(200).json({
       status: 'ok',
       timestamp: new Date().toISOString(),
       server: 'running',
-    };
-    
-    // Optionally check DB (but don't fail if it's not ready)
-    // Use cached import to avoid repeated dynamic imports
-    try {
-      if (!dbCache) {
-        const dbModule = await import('./src/infrastructure/database/DatabaseConnection.js');
-        dbCache = dbModule.db;
-      }
-      
-      const isConnected = await Promise.race([
-        dbCache.testConnection(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 1000))
-      ]).catch(() => false);
-      
-      healthStatus.database = isConnected ? 'connected' : 'connecting';
-    } catch (error) {
-      healthStatus.database = 'not_ready';
-    }
-    
-    res.status(200).json(healthStatus);
+    });
   } catch (error) {
     // Even if there's an error, return 200 to pass health check
-    // The server is running, which is what matters for Docker/Railway
     res.status(200).json({ 
       status: 'ok', 
       timestamp: new Date().toISOString(),
@@ -227,35 +206,52 @@ async function initializeDatabase() {
 
 // Start server immediately, initialize DB in background
 function startServer() {
-  // Start the Express server immediately (don't wait for DB)
-  app.listen(PORT, async () => {
-    logger.info(`🚀 Content Studio Backend running on port ${PORT}`, {
-      environment: process.env.NODE_ENV || 'development',
-      logLevel: process.env.LOG_LEVEL || 'INFO',
-    });
-    
-    // Initialize database in the background (non-blocking)
-    initializeDatabase().catch(error => {
-      logger.error('Background database initialization failed', { 
-        error: error.message 
+  try {
+    // Start the Express server immediately (don't wait for DB)
+    const server = app.listen(PORT, '0.0.0.0', async () => {
+      console.log(`🚀 Content Studio Backend running on port ${PORT}`);
+      logger.info(`🚀 Content Studio Backend running on port ${PORT}`, {
+        environment: process.env.NODE_ENV || 'development',
+        logLevel: process.env.LOG_LEVEL || 'INFO',
       });
-    });
-    
-    // Start background jobs (if enabled)
-    if (process.env.ENABLE_BACKGROUND_JOBS !== 'false') {
-      try {
-        const { getJobScheduler } = await import('./src/infrastructure/jobs/JobScheduler.js');
-        const scheduler = getJobScheduler();
-        await scheduler.start();
-        logger.info('Background jobs scheduler started');
-      } catch (error) {
-        logger.error('Failed to start background jobs scheduler', { error: error.message });
-        logger.warn('Continuing without background jobs...');
+      
+      // Initialize database in the background (non-blocking)
+      initializeDatabase().catch(error => {
+        console.error('Background database initialization failed:', error.message);
+        logger.error('Background database initialization failed', { 
+          error: error.message 
+        });
+      });
+      
+      // Start background jobs (if enabled)
+      if (process.env.ENABLE_BACKGROUND_JOBS !== 'false') {
+        try {
+          const { getJobScheduler } = await import('./src/infrastructure/jobs/JobScheduler.js');
+          const scheduler = getJobScheduler();
+          await scheduler.start();
+          logger.info('Background jobs scheduler started');
+        } catch (error) {
+          logger.error('Failed to start background jobs scheduler', { error: error.message });
+          logger.warn('Continuing without background jobs...');
+        }
+      } else {
+        logger.info('Background jobs disabled (ENABLE_BACKGROUND_JOBS=false)');
       }
-    } else {
-      logger.info('Background jobs disabled (ENABLE_BACKGROUND_JOBS=false)');
-    }
-  });
+    });
+
+    // Handle server errors
+    server.on('error', (error) => {
+      console.error('❌ Server error:', error);
+      if (error.code === 'EADDRINUSE') {
+        console.error(`Port ${PORT} is already in use`);
+      }
+      process.exit(1);
+    });
+  } catch (error) {
+    console.error('❌ Failed to start server:', error);
+    logger.error('Failed to start server', { error: error.message, stack: error.stack });
+    process.exit(1);
+  }
 }
 
 // Start the application
