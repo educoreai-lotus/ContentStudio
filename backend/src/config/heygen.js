@@ -65,18 +65,36 @@ function loadVoicesConfig() {
   }
 
   try {
+    console.log('[HeyGenConfig] Attempting to load voices config from:', VOICES_CONFIG_PATH);
     if (!fs.existsSync(VOICES_CONFIG_PATH)) {
+      console.warn('[HeyGenConfig] Voices config file not found at:', VOICES_CONFIG_PATH);
       cachedVoicesConfig = null;
       return null;
     }
 
     const configContent = fs.readFileSync(VOICES_CONFIG_PATH, 'utf8');
     const config = JSON.parse(configContent);
+    
+    // Validate config structure
+    if (!config || typeof config !== 'object') {
+      console.error('[HeyGenConfig] Invalid voices config: not an object');
+      cachedVoicesConfig = null;
+      return null;
+    }
+    
+    if (!config.defaultVoices || typeof config.defaultVoices !== 'object') {
+      console.error('[HeyGenConfig] Invalid voices config: defaultVoices missing or not an object');
+      console.error('[HeyGenConfig] Config keys:', Object.keys(config));
+      cachedVoicesConfig = null;
+      return null;
+    }
+    
     cachedVoicesConfig = config;
-    console.log('[HeyGenConfig] Voices config loaded from file');
+    console.log('[HeyGenConfig] Voices config loaded successfully. Languages available:', Object.keys(config.defaultVoices).length);
     return config;
   } catch (error) {
     console.error('[HeyGenConfig] Failed to load voices config:', error.message);
+    console.error('[HeyGenConfig] Error stack:', error.stack);
     cachedVoicesConfig = null;
     return null;
   }
@@ -152,6 +170,30 @@ function normalizeLanguageCode(language) {
 export function getVoiceConfig(language) {
   const config = loadVoicesConfig();
   const normalizedLang = normalizeLanguageCode(language);
+
+  // Debug: Log what we're working with
+  if (!config) {
+    console.error('[HeyGenConfig] getVoiceConfig: config is null - voices config file may not exist or failed to load');
+    // Fallback to default
+    console.log(`[HeyGenConfig] Using default lecturer voice due to missing config for language: ${language} (normalized: ${normalizedLang})`);
+    return {
+      voice_id: DEFAULT_VOICE.lecturer,
+      language: 'en',
+      source: 'default',
+    };
+  }
+
+  if (!config.defaultVoices) {
+    console.error('[HeyGenConfig] getVoiceConfig: config.defaultVoices is missing');
+    console.error('[HeyGenConfig] Config structure:', Object.keys(config));
+    // Fallback to default
+    console.log(`[HeyGenConfig] Using default lecturer voice due to missing defaultVoices for language: ${language} (normalized: ${normalizedLang})`);
+    return {
+      voice_id: DEFAULT_VOICE.lecturer,
+      language: 'en',
+      source: 'default',
+    };
+  }
 
   // Try to find voice in config
   if (config?.defaultVoices) {
