@@ -12,7 +12,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Default avatar ID (fallback if config file doesn't exist)
-const DEFAULT_AVATAR_ID = 'anna-public';
+// Note: anna-public is no longer available. This will be overridden by config file if it exists.
+const DEFAULT_AVATAR_ID = null; // No default - must use config file
 
 // Default voice ID for lecturer (Sarah) - fallback when language voice not found
 // This should be a valid English voice ID from HeyGen
@@ -130,12 +131,9 @@ export function getSafeAvatarId() {
     return config.avatar_id;
   }
 
-  // Fallback to default
-  if (DEFAULT_AVATAR_ID) {
-    console.log('[HeyGenConfig] Using default avatar ID:', DEFAULT_AVATAR_ID);
-    return DEFAULT_AVATAR_ID;
-  }
-
+  // No fallback - config file is required
+  // If no config file exists, return null (will skip avatar generation)
+  console.warn('[HeyGenConfig] No avatar config file found and no default avatar ID. Avatar generation will be skipped.');
   return null;
 }
 
