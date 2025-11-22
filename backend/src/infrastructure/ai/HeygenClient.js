@@ -294,6 +294,9 @@ export class HeygenClient {
         };
       }
 
+      // Get language from payload (needed for language preservation)
+      const language = payload.language || 'en';
+      
       // HeyGen has a limit of 180 seconds per video
       // Approximate: ~10 characters per second of speech = ~1800 characters max
       // To be safe, we'll limit to 1500 characters (approximately 150 seconds)
@@ -314,6 +317,36 @@ export class HeygenClient {
         console.log('[HeyGen] Prompt truncated', {
           originalLength: prompt.length,
           truncatedLength: finalPrompt.length,
+        });
+      }
+
+      // Add language preservation instruction for non-English languages
+      // HeyGen may translate text automatically, so we need to explicitly tell it not to
+      if (language && language !== 'en' && !language.startsWith('en-')) {
+        const languageNames = {
+          'he': 'Hebrew',
+          'ar': 'Arabic',
+          'ru': 'Russian',
+          'es': 'Spanish',
+          'fr': 'French',
+          'de': 'German',
+          'it': 'Italian',
+          'ko': 'Korean',
+          'ja': 'Japanese',
+          'zh': 'Chinese',
+        };
+        const languageName = languageNames[language] || language;
+        
+        // Prepend instruction to preserve language - HeyGen should speak the text as-is
+        // Note: This instruction is added to the text itself, not as a separate field
+        const languageInstruction = `[Speak this text in ${languageName}, do NOT translate to English. Read the following text exactly as written:]\n\n`;
+        finalPrompt = languageInstruction + finalPrompt;
+        
+        console.log('[HeyGen] Added language preservation instruction', {
+          language,
+          languageName,
+          instructionLength: languageInstruction.length,
+          finalPromptLength: finalPrompt.length,
         });
       }
 
@@ -385,12 +418,17 @@ export class HeygenClient {
         }
       }
 
-      // Get language from payload (required)
-      const language = payload.language || 'en';
-      
       // Get voice configuration (with fallback to default lecturer)
+      // Use the language from payload (already extracted above)
       const voiceConfig = getVoiceConfig(language);
       const voiceId = voiceConfig.voice_id;
+      
+      console.log('[HeyGen] Voice configuration selected', {
+        language,
+        voiceId,
+        voiceLanguage: voiceConfig.language,
+        source: voiceConfig.source,
+      });
 
       // Validate avatar and voice before sending request
       // Note: anna-public check is already done earlier, so we don't need to check again here
