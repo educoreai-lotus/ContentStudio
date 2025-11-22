@@ -136,11 +136,13 @@ export class PromptSanitizer {
     }
 
     if (variables.language) {
-      // Language should be a simple ISO code
+      // Language should be a simple ISO code (e.g., 'en', 'ru', 'ar', 'he')
+      // Don't use removeInjectionPatterns for language codes - they're too short and might be filtered incorrectly
       sanitized.language = this.sanitizeString(variables.language, 'language', {
         maxLength: 50,
         removeNewlines: true,
-      }).toLowerCase();
+        removeInjectionPatterns: false, // Language codes are safe, don't filter them
+      }).toLowerCase().trim();
     }
 
     if (variables.skillsList) {
