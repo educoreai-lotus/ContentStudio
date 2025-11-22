@@ -514,13 +514,47 @@ export class HeygenClient {
         };
       }
 
+      // Check if video generation failed
+      if (pollResult.status === 'failed') {
+        console.error('[HeyGen] Video generation failed during polling', {
+          videoId,
+          errorMessage: pollResult.errorMessage,
+          errorCode: pollResult.errorCode,
+          errorDetail: pollResult.errorDetail,
+        });
+        return {
+          status: 'failed',
+          videoId,
+          error: pollResult.errorMessage || 'Video generation failed',
+          errorCode: pollResult.errorCode || 'UNKNOWN_ERROR',
+          errorDetail: pollResult.errorDetail || pollResult.errorMessage,
+        };
+      }
+
+      // Video must be completed to have a URL
+      if (pollResult.status !== 'completed') {
+        console.warn('[HeyGen] Video status is not completed', {
+          videoId,
+          status: pollResult.status,
+        });
+        const fallbackUrl = `https://app.heygen.com/share/${videoId}`;
+        return {
+          videoUrl: fallbackUrl,
+          heygenVideoUrl: fallbackUrl,
+          videoId,
+          duration: duration || 15,
+          status: pollResult.status || 'processing',
+          fallback: true,
+          error: `Video status: ${pollResult.status}`,
+        };
+      }
+
       const heygenVideoUrl = pollResult.videoUrl;
       
       console.log('[HeyGen] Video generation completed, starting download and storage upload', {
         videoId,
         heygenVideoUrl,
         isShareUrl: heygenVideoUrl?.includes('/share/'),
-        pollResult,
       });
 
       // Validate that we have a video URL
@@ -529,15 +563,12 @@ export class HeygenClient {
           videoId,
           pollResult,
         });
-        const fallbackUrl = `https://app.heygen.com/share/${videoId}`;
         return {
-          videoUrl: fallbackUrl,
-          heygenVideoUrl: fallbackUrl,
+          status: 'failed',
           videoId,
-          duration: duration || 15,
-          status: 'processing',
-          fallback: true,
           error: 'No video URL returned from HeyGen API',
+          errorCode: 'MISSING_VIDEO_URL',
+          errorDetail: 'Video status is completed but no URL was provided',
         };
       }
 
