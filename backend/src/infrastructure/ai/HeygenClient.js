@@ -520,7 +520,26 @@ export class HeygenClient {
         videoId,
         heygenVideoUrl,
         isShareUrl: heygenVideoUrl?.includes('/share/'),
+        pollResult,
       });
+
+      // Validate that we have a video URL
+      if (!heygenVideoUrl) {
+        console.error('[HeyGen] No video URL returned from poll - cannot download', {
+          videoId,
+          pollResult,
+        });
+        const fallbackUrl = `https://app.heygen.com/share/${videoId}`;
+        return {
+          videoUrl: fallbackUrl,
+          heygenVideoUrl: fallbackUrl,
+          videoId,
+          duration: duration || 15,
+          status: 'processing',
+          fallback: true,
+          error: 'No video URL returned from HeyGen API',
+        };
+      }
 
       // Download and upload to Supabase Storage
       try {
@@ -662,16 +681,60 @@ export class HeygenClient {
       try {
         // ⚠️ CRITICAL: Use /v1/video_status.get (with underscore, NOT hyphen)
         const response = await this.client.get(`/v1/video_status.get?video_id=${videoId}`);
-        const status = response.data.data.status;
+        const responseData = response.data?.data || {};
+        const status = responseData.status;
 
         if (status === 'completed') {
-          const videoUrl = response.data.data.video_url;
-          return { status, videoUrl };
+          // Log all available fields to understand the response structure
+          console.log('[HeyGen] Video status completed - checking for video URL', {
+            videoId,
+            attempt: attempt + 1,
+            allFields: Object.keys(responseData),
+            video_url: responseData.video_url,
+            download_url: responseData.download_url,
+            share_url: responseData.share_url,
+            video_download_url: responseData.video_download_url,
+            fullResponse: JSON.stringify(responseData, null, 2),
+          });
+
+          // Try multiple possible field names for the video URL
+          const videoUrl = responseData.video_url 
+            || responseData.download_url 
+            || responseData.video_download_url
+            || responseData.share_url
+            || (responseData.video && responseData.video.url)
+            || null;
+
+          if (!videoUrl) {
+            console.error('[HeyGen] No video URL found in completed response', {
+              videoId,
+              responseData,
+            });
+            // Fallback to share URL if no direct URL found
+            const fallbackShareUrl = `https://app.heygen.com/share/${videoId}`;
+            console.warn('[HeyGen] Using fallback share URL', { fallbackShareUrl });
+            return { status, videoUrl: fallbackShareUrl, isFallback: true };
+          }
+
+          console.log('[HeyGen] Found video URL from poll response', {
+            videoId,
+            videoUrl,
+            isShareUrl: videoUrl.includes('/share/'),
+          });
+
+          return { status, videoUrl, isFallback: videoUrl.includes('/share/') };
         } else if (status === 'failed') {
-          const errorData = response.data.data || {};
+          const errorData = responseData || {};
           const errorMessage = errorData.error_message || errorData.error || 'Video generation failed';
           const errorCode = errorData.error_code || 'UNKNOWN_ERROR';
           const errorDetail = errorData.error_detail || errorMessage;
+          
+          console.error('[HeyGen] Video generation failed', {
+            videoId,
+            errorMessage,
+            errorCode,
+            errorDetail,
+          });
           
           return {
             status: 'failed',
@@ -680,6 +743,16 @@ export class HeygenClient {
             errorCode,
             errorDetail,
           };
+        }
+
+        // Log progress for long-running polls
+        if (attempt % 10 === 0) {
+          console.log('[HeyGen] Polling video status', {
+            videoId,
+            attempt: attempt + 1,
+            maxAttempts,
+            status,
+          });
         }
 
         await new Promise(resolve => setTimeout(resolve, interval));
