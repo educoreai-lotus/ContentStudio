@@ -701,6 +701,24 @@ This presentation should be educational and suitable for ${audience}.`;
         duration: 15, // Used for response only, not sent to API
       });
 
+      // Handle skipped status - avatar unavailable, but continue normally
+      if (videoResult.status === 'skipped') {
+        console.log('[AIGenerationService] Avatar video generation skipped:', videoResult.reason || 'forced_avatar_unavailable');
+        return {
+          videoUrl: null,
+          videoId: null,
+          language: config.language || 'en',
+          duration_seconds: 0,
+          status: 'skipped',
+          fallback: false,
+          reason: videoResult.reason || 'forced_avatar_unavailable',
+          metadata: {
+            generation_status: 'skipped',
+            reason: videoResult.reason || 'forced_avatar_unavailable',
+          },
+        };
+      }
+
       // Handle failed status - return partial success instead of throwing
       if (videoResult.status === 'failed') {
         return {

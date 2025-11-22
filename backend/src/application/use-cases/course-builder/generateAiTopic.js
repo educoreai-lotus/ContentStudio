@@ -312,6 +312,11 @@ export async function generateAiTopic(skillCoverageItem, preferredLanguage) {
           content_data: ContentDataCleaner.cleanAvatarVideoData(avatarResult),
         });
         logger.info('[UseCase] Avatar video generated successfully', { skill: skillName });
+      } else if (avatarResult.status === 'skipped') {
+        logger.info('[UseCase] Avatar video generation skipped', {
+          reason: avatarResult.reason || 'forced_avatar_unavailable',
+          skill: skillName,
+        });
       } else {
         logger.warn('[UseCase] Avatar video generation failed', {
           error: avatarResult.error,

@@ -105,6 +105,13 @@ export class HeygenClient {
         return avatarId === this.avatarId;
       });
 
+      // Special handling for forced avatar Anna
+      if (this.avatarId === 'anna-public' && !avatarExists) {
+        console.log('[HeyGen] Forced avatar Anna unavailable, skipping video generation.');
+        this.avatarValidated = true; // Mark as validated to allow skip (not fail)
+        return true; // Return true to allow skip flow
+      }
+
       if (!avatarExists) {
         console.warn(`[HeyGen] Configured avatar not found (${this.avatarId}), skipping avatar generation`);
         this.avatarValidated = false;
@@ -177,39 +184,46 @@ export class HeygenClient {
         };
       }
 
-      // Check if avatar is available - fail immediately without calling HeyGen API
+      // Check if avatar is available
       if (!this.avatarId) {
-        console.error('[Avatar Generation Error] Avatar ID not configured');
+        // If Anna is forced but not configured, skip silently
+        console.log('[HeyGen] Avatar ID not configured, skipping video generation.');
         return {
-          status: 'failed',
+          status: 'skipped',
           videoId: null,
-          error: 'NO_AVAILABLE_AVATAR',
-          errorCode: 'NO_AVAILABLE_AVATAR',
-          errorDetail: 'Avatar ID not configured. Please run fetch-heygen-avatar.js script.',
+          videoUrl: null,
+          reason: 'forced_avatar_unavailable',
         };
       }
 
-      // Check if avatar was validated and found to be invalid
-      // If validation hasn't run yet, we'll proceed (validation is async)
-      // But if it ran and explicitly failed (not just unvalidated), we should not proceed
-      // Note: If validation couldn't run due to 403, avatarValidated will be true (allowing generation)
-      // IMPORTANT: If API is restricted (403), we allow generation to proceed and let HeyGen API validate
-      if (this.avatarValidated === false && this.avatarId) {
-        // Re-validate synchronously if not yet validated
-        const isValid = await this.validateAvatar();
-        // Only fail if validation explicitly failed (avatar not found in list)
-        // If validation couldn't run (403), avatarValidated will be true, so we proceed
-        if (!isValid && this.avatarValidated === false) {
-          // Validation explicitly failed - avatar not in list
-          return {
-            status: 'failed',
-            videoId: null,
-            error: 'NO_AVAILABLE_AVATAR',
-            errorCode: 'NO_AVAILABLE_AVATAR',
-            errorDetail: `Configured avatar (${this.avatarId}) not found in HeyGen API. Please update config/heygen-avatar.json with a valid avatar ID. Contact HeyGen support for available public avatar IDs.`,
-          };
+      // Special handling for forced avatar Anna
+      if (this.avatarId === 'anna-public') {
+        // For Anna, we skip validation and allow API call
+        // If API returns 404/403, we'll return skipped status
+        console.log('[HeyGen] Using forced avatar Anna, proceeding to API call.');
+      } else {
+        // Check if avatar was validated and found to be invalid
+        // If validation hasn't run yet, we'll proceed (validation is async)
+        // But if it ran and explicitly failed (not just unvalidated), we should not proceed
+        // Note: If validation couldn't run due to 403, avatarValidated will be true (allowing generation)
+        // IMPORTANT: If API is restricted (403), we allow generation to proceed and let HeyGen API validate
+        if (this.avatarValidated === false && this.avatarId) {
+          // Re-validate synchronously if not yet validated
+          const isValid = await this.validateAvatar();
+          // Only fail if validation explicitly failed (avatar not found in list)
+          // If validation couldn't run (403), avatarValidated will be true, so we proceed
+          if (!isValid && this.avatarValidated === false) {
+            // Validation explicitly failed - avatar not in list
+            return {
+              status: 'failed',
+              videoId: null,
+              error: 'NO_AVAILABLE_AVATAR',
+              errorCode: 'NO_AVAILABLE_AVATAR',
+              errorDetail: `Configured avatar (${this.avatarId}) not found in HeyGen API. Please update config/heygen-avatar.json with a valid avatar ID. Contact HeyGen support for available public avatar IDs.`,
+            };
+          }
+          // If validation couldn't run (403), avatarValidated is now true, so we proceed to API call
         }
-        // If validation couldn't run (403), avatarValidated is now true, so we proceed to API call
       }
 
       // Get language from payload (required)
@@ -267,12 +281,25 @@ export class HeygenClient {
         const errorMessage = error.response?.data?.message || error.message || 'Unknown error';
         const errorDetails = error.response?.data || {};
         
-        // Check if error is avatar_not_found - provide helpful message
+        // Check if error is avatar_not_found or 403 Forbidden
         const isAvatarNotFound = 
           errorMessage.toLowerCase().includes('avatar') && 
           (errorMessage.toLowerCase().includes('not found') || 
            errorMessage.toLowerCase().includes('invalid') ||
            error.response?.status === 404);
+        
+        const isForbidden = error.response?.status === 403;
+        
+        // Special handling for forced avatar Anna
+        if (this.avatarId === 'anna-public' && (isAvatarNotFound || isForbidden)) {
+          console.log('[HeyGen] Forced avatar Anna unavailable, skipping video generation.');
+          return {
+            status: 'skipped',
+            videoId: null,
+            videoUrl: null,
+            reason: 'forced_avatar_unavailable',
+          };
+        }
         
         console.error('[Avatar Generation Error] HeyGen API error:', {
           status: error.response?.status,
@@ -282,7 +309,7 @@ export class HeygenClient {
           requestPayload: requestPayload,
         });
 
-        // If avatar not found, provide helpful error message
+        // If avatar not found, provide helpful error message (only for non-Anna avatars)
         if (isAvatarNotFound) {
           console.error(`[Avatar Generation Error] Avatar "${this.avatarId}" not found. Error details:`, {
             heyGenMessage: errorMessage,

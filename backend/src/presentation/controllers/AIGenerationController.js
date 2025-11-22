@@ -107,11 +107,20 @@ export class AIGenerationController {
       // Check if content generation failed (especially for avatar_video)
       // For avatar_video, check if videoUrl is null/undefined or error exists (status removed)
       const isAvatarVideo = content.content_type_id === 6; // avatar_video
+      // Check if avatar video was skipped (not failed)
+      const isSkipped = isAvatarVideo && content.content_data?.status === 'skipped';
+      
+      // Check if avatar video failed (not skipped)
       const isFailed = isAvatarVideo 
-        ? (!content.content_data?.videoUrl || content.content_data?.error)
+        ? (!isSkipped && (!content.content_data?.videoUrl || content.content_data?.error))
         : content.content_data?.status === 'failed';
       
-      if (isFailed && isAvatarVideo) {
+      // If skipped, log and continue (don't return error)
+      if (isSkipped) {
+        console.log('[AI Generation] Avatar video generation skipped:', content.content_data?.reason || 'forced_avatar_unavailable');
+        // Continue normally - don't return error
+      } else if (isFailed && isAvatarVideo) {
+        // Only return error if actually failed (not skipped)
         const errorMessage = content.content_data?.reason || 
                             content.content_data?.error || 
                             'Avatar video generation failed';

@@ -387,8 +387,18 @@ ${basePrompt}`;
             topicName: promptVariables.lessonTopic, // For logging only
           });
           
-          // Handle failed status - save as failed content instead of throwing
-          if (avatarResult.status === 'failed') {
+          // Handle skipped status differently from failed
+          if (avatarResult.status === 'skipped') {
+            contentData = {
+              script: avatarResult.script || null,
+              videoUrl: null,
+              videoId: null,
+              status: 'skipped',
+              reason: avatarResult.reason || 'forced_avatar_unavailable',
+              // No error fields for skipped status
+            };
+            // Don't break - continue to save skipped content (not failed)
+          } else if (avatarResult.status === 'failed') {
             // Create failed content data structure (without status - removed for consistency)
             const failedMetadata = {};
             if (avatarResult.metadata?.heygen_video_url) {
