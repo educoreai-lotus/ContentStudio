@@ -196,6 +196,17 @@ export class HeygenClient {
         };
       }
 
+      // Skip anna-public immediately (no longer available) - MUST be checked before any validation
+      if (this.avatarId === 'anna-public') {
+        console.log('[HeyGen] Avatar anna-public is no longer available, skipping video generation.');
+        return {
+          status: 'skipped',
+          videoId: null,
+          videoUrl: null,
+          reason: 'avatar_no_longer_available',
+        };
+      }
+
       // Note: anna-public is now skipped earlier in the flow, so we don't need special handling here
       if (this.avatarId && this.avatarId !== 'anna-public') {
         // Check if avatar was validated and found to be invalid
@@ -230,6 +241,7 @@ export class HeygenClient {
       const voiceId = voiceConfig.voice_id;
 
       // Validate avatar and voice before sending request
+      // Note: anna-public check is already done earlier, so we don't need to check again here
       if (!this.avatarId) {
         console.log('[HeyGen] Skipping avatar generation - reason: Avatar ID not configured');
         return {
@@ -237,17 +249,6 @@ export class HeygenClient {
           videoId: null,
           videoUrl: null,
           reason: 'avatar_not_configured',
-        };
-      }
-
-      // Skip anna-public immediately (no longer available)
-      if (this.avatarId === 'anna-public') {
-        console.log('[HeyGen] Avatar anna-public is no longer available, skipping video generation.');
-        return {
-          status: 'skipped',
-          videoId: null,
-          videoUrl: null,
-          reason: 'avatar_no_longer_available',
         };
       }
 
