@@ -380,8 +380,9 @@ ${basePrompt}`;
           // ⚠️ CRITICAL: For avatar video, pass ONLY the trainer's prompt
           // Do NOT modify, rewrite, or add narration text
           // The prompt comes from: generationRequest.prompt (from frontend body.prompt)
+          // For VideoToLesson flow, use transcriptText as fallback if no prompt is provided
           const lessonData = {
-            prompt: generationRequest.prompt || promptVariables.trainerRequestText || '', // Trainer's exact prompt
+            prompt: generationRequest.prompt || promptVariables.trainerRequestText || promptVariables.transcriptText || '', // Trainer's exact prompt or transcript
             lessonTopic: promptVariables.lessonTopic, // For fallback only
           };
 

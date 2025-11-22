@@ -664,7 +664,8 @@ This presentation should be educational and suitable for ${audience}.`;
     }
 
     // Merge config (only if not already set)
-    trainerPrompt = trainerPrompt || config.trainerPrompt || config.trainerRequestText || '';
+    // For VideoToLesson flow, use transcriptText as fallback if no prompt is provided
+    trainerPrompt = trainerPrompt || config.trainerPrompt || config.trainerRequestText || config.transcriptText || '';
     topic = topic || config.topicName || config.lessonTopic || '';
     description = description || config.topicDescription || config.lessonDescription || '';
     skills = skills.length > 0 ? skills : 
