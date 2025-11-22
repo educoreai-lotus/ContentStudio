@@ -334,8 +334,11 @@ export class VideoToLessonController {
       
       if (this.contentGenerationOrchestrator && transcriptText) {
         try {
+          const generationStartTime = Date.now();
           logger.info('[VideoToLessonController] Starting automatic content generation from transcript', {
             transcriptLength: transcriptText.length,
+            topic_id: parseInt(topic_id),
+            startTime: new Date().toISOString(),
           });
 
           // Get trainer_id from request body or authentication
@@ -361,18 +364,39 @@ export class VideoToLessonController {
             onProgress,
           });
 
+          const generationDuration = Date.now() - generationStartTime;
           logger.info('[VideoToLessonController] All content formats generated successfully', {
             topic_id: generatedContent.topic_id,
             formatsCount: Object.keys(generatedContent.content_formats).length,
             progressEventsCount: progressEvents.length,
+            duration: `${generationDuration}ms (${Math.round(generationDuration / 1000)}s)`,
           });
         } catch (orchestratorError) {
           logger.error('[VideoToLessonController] Content generation failed', {
             error: orchestratorError.message,
             stack: orchestratorError.stack,
+            topic_id: parseInt(topic_id),
+            transcriptLength: transcriptText.length,
           });
-          // Continue with transcription result even if generation fails
-          // The error is logged but not thrown, so the transcription result is still returned
+          
+          // Check if response was already sent
+          if (res.headersSent) {
+            logger.warn('[VideoToLessonController] Response already sent, cannot return content generation error');
+            return;
+          }
+          
+          // Return error response for content generation failure
+          // This is different from transcription failure - transcription succeeded but content generation failed
+          return res.status(500).json({
+            success: false,
+            error: `Content generation failed: ${orchestratorError.message}`,
+            errorCode: 'CONTENT_GENERATION_ERROR',
+            details: {
+              message: orchestratorError.message,
+              topic_id: parseInt(topic_id),
+              transcriptLength: transcriptText.length,
+            },
+          });
         }
       }
 

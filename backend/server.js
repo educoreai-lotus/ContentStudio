@@ -15,6 +15,10 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Increase body parser limits for large video files
+app.use(express.json({ limit: '100mb' }));
+app.use(express.urlencoded({ extended: true, limit: '100mb' }));
+
 // Middleware
 // CORS configuration
 const corsOptions = {
@@ -208,7 +212,11 @@ async function initializeDatabase() {
 function startServer() {
   try {
     // Start the Express server immediately (don't wait for DB)
+    // Set longer timeout for video transcription requests (20 minutes)
+    // Video transcription can take a long time (downloading, processing, quality check, content generation)
     const server = app.listen(PORT, '0.0.0.0', async () => {
+      // Set server timeout to 20 minutes (1200000 ms) for long-running requests
+      server.timeout = 20 * 60 * 1000; // 20 minutes
       console.log(`🚀 Content Studio Backend running on port ${PORT}`);
       logger.info(`🚀 Content Studio Backend running on port ${PORT}`, {
         environment: process.env.NODE_ENV || 'development',
