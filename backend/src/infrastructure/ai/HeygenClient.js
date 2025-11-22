@@ -542,119 +542,14 @@ export class HeygenClient {
       }
 
       // Download and upload to Supabase Storage
+      console.log(`[HeyGen] Downloading video from Heygen...`);
       try {
-        // Check if URL is a share URL - if so, we need to get the actual download URL
-        let downloadUrl = heygenVideoUrl;
-        if (heygenVideoUrl && heygenVideoUrl.includes('/share/')) {
-          // Share URL format: https://app.heygen.com/share/{videoId}
-          // We need to get the actual video download URL from HeyGen API
-          console.log('[HeyGen] Share URL detected, attempting to get download URL from HeyGen API');
-          try {
-            // Try multiple API endpoints to get the download URL
-            // First, try video_status.get again (maybe it has more fields now)
-            const videoDetailsResponse = await this.client.get(`/v1/video_status.get?video_id=${videoId}`);
-            const videoDetails = videoDetailsResponse.data?.data || {};
-            
-            console.log('[HeyGen] Video details from API', {
-              videoId,
-              allFields: Object.keys(videoDetails),
-              video_url: videoDetails.video_url,
-              download_url: videoDetails.download_url,
-              video_download_url: videoDetails.video_download_url,
-              share_url: videoDetails.share_url,
-              fullResponse: JSON.stringify(videoDetails, null, 2),
-            });
-            
-            // Try to find a direct download URL (not a share URL)
-            if (videoDetails.download_url && !videoDetails.download_url.includes('/share/')) {
-              downloadUrl = videoDetails.download_url;
-              console.log('[HeyGen] Found download URL from download_url field', { downloadUrl });
-            } else if (videoDetails.video_download_url && !videoDetails.video_download_url.includes('/share/')) {
-              downloadUrl = videoDetails.video_download_url;
-              console.log('[HeyGen] Found download URL from video_download_url field', { downloadUrl });
-            } else if (videoDetails.video_url && !videoDetails.video_url.includes('/share/')) {
-              downloadUrl = videoDetails.video_url;
-              console.log('[HeyGen] Found download URL from video_url field', { downloadUrl });
-            } else {
-              // Try to construct download URL from share URL
-              // Some APIs use a pattern like: https://cdn.heygen.com/videos/{videoId}.mp4
-              // Or: https://app.heygen.com/api/v1/video/download?video_id={videoId}
-              console.log('[HeyGen] No direct download URL found, trying alternative methods');
-              
-              // Try HeyGen CDN URL pattern
-              const cdnUrl = `https://cdn.heygen.com/videos/${videoId}.mp4`;
-              console.log('[HeyGen] Attempting to use CDN URL pattern', { cdnUrl });
-              
-              // Try to verify if CDN URL exists by making a HEAD request
-              try {
-                const headResponse = await axios.head(cdnUrl, { timeout: 5000 });
-                if (headResponse.status === 200) {
-                  downloadUrl = cdnUrl;
-                  console.log('[HeyGen] CDN URL verified and will be used', { downloadUrl });
-                } else {
-                  console.warn('[HeyGen] CDN URL returned non-200 status', { status: headResponse.status });
-                }
-              } catch (cdnErr) {
-                console.warn('[HeyGen] CDN URL not accessible', { error: cdnErr.message });
-                
-                // Try API download endpoint - HeyGen may have a download endpoint
-              // Try different possible endpoints
-              const possibleEndpoints = [
-                `https://api.heygen.com/v1/video/${videoId}/download`,
-                `https://api.heygen.com/v1/video/download?video_id=${videoId}`,
-                `https://api.heygen.com/v2/video/${videoId}/download`,
-              ];
-              
-              let foundEndpoint = false;
-              for (const endpoint of possibleEndpoints) {
-                try {
-                  console.log('[HeyGen] Testing download endpoint', { endpoint });
-                  const testResponse = await axios.head(endpoint, {
-                    headers: { 'X-Api-Key': this.apiKey },
-                    timeout: 5000,
-                    validateStatus: (status) => status < 500, // Don't throw on 404/403
-                  });
-                  
-                  if (testResponse.status === 200 || testResponse.status === 302) {
-                    downloadUrl = endpoint;
-                    foundEndpoint = true;
-                    console.log('[HeyGen] Found working download endpoint', { downloadUrl, status: testResponse.status });
-                    break;
-                  }
-                } catch (endpointErr) {
-                  // Continue to next endpoint
-                  continue;
-                }
-              }
-              
-              if (!foundEndpoint) {
-                console.warn('[HeyGen] No working download endpoint found, will skip download');
-                throw new Error('No download URL available - only share URL is provided by HeyGen');
-              }
-              }
-            }
-          } catch (detailsErr) {
-            console.error('[HeyGen] Failed to get video details for download URL', { 
-              error: detailsErr.message,
-              stack: detailsErr.stack,
-            });
-          }
-        }
-
-        console.log('[HeyGen] Downloading video from URL', { downloadUrl });
-        const videoBuffer = await this.downloadVideo(downloadUrl);
-        console.log('[HeyGen] Video downloaded successfully', { 
-          bufferSize: videoBuffer.length,
-          bufferSizeMB: (videoBuffer.length / 1024 / 1024).toFixed(2),
-        });
-        
-        let storageUrl = null;
+        const videoBuffer = await this.downloadVideo(heygenVideoUrl);
+        console.log(`[HeyGen] Video downloaded (${videoBuffer.length} bytes)`);
+        console.log(`[HeyGen] Uploading to Supabase Storage...`);
+        let storageUrl = null; // Start with null, not Heygen URL
 
         try {
-          console.log('[HeyGen] Uploading video to Supabase Storage', {
-            fileName: `avatar_${videoId}.mp4`,
-            bufferSize: videoBuffer.length,
-          });
           const uploadedUrl = await this.uploadToStorage({
             fileBuffer: videoBuffer,
             fileName: `avatar_${videoId}.mp4`,
@@ -662,45 +557,30 @@ export class HeygenClient {
           });
           if (uploadedUrl) {
             storageUrl = uploadedUrl;
-            console.log('[HeyGen] Video uploaded to Supabase Storage successfully', { storageUrl });
+            console.log(`[HeyGen] Video uploaded to Supabase Storage: ${storageUrl}`);
           } else {
-            console.warn('[HeyGen] Upload returned null, using HeyGen URL as fallback');
+            console.warn('[HeyGen] uploadToStorage returned null, using Heygen URL as fallback');
             storageUrl = heygenVideoUrl;
           }
         } catch (uploadErr) {
-          console.error('[HeyGen] Failed to upload video to storage', {
-            error: uploadErr.message,
-            stack: uploadErr.stack,
-          });
-          storageUrl = heygenVideoUrl;
+          console.warn('[HeyGen] Upload to Supabase failed, using Heygen URL as fallback:', uploadErr.message);
+          storageUrl = heygenVideoUrl; // Fallback to Heygen URL only if upload fails
         }
 
+        // Ensure we always return a valid URL
         if (!storageUrl) {
-          console.warn('[HeyGen] Storage URL is null, using HeyGen URL as fallback');
+          console.warn('[HeyGen] No storage URL available, using Heygen URL as final fallback');
           storageUrl = heygenVideoUrl;
         }
 
-        const isFallback = storageUrl === heygenVideoUrl || storageUrl?.includes('/share/');
-        if (isFallback) {
-          console.warn('[HeyGen] Using HeyGen share URL as fallback (video not saved to storage)', {
-            storageUrl,
-            heygenVideoUrl,
-          });
-        } else {
-          console.log('[HeyGen] Video successfully saved to Supabase Storage', {
-            storageUrl,
-            heygenVideoUrl,
-          });
-        }
-
+        console.log(`[HeyGen] Returning video URL: ${storageUrl} (${storageUrl.startsWith('http') ? 'Full URL' : 'Path'})`);
         return {
-          videoUrl: storageUrl,
-          heygenVideoUrl: heygenVideoUrl,
+          videoUrl: storageUrl, // This should be Supabase public URL if upload succeeded, otherwise Heygen URL
+          heygenVideoUrl: heygenVideoUrl, // Always keep original Heygen URL for reference
           videoId,
           duration: duration || 15,
           status: 'completed',
-          fallback: isFallback,
-          storagePath: isFallback ? null : `avatar_videos/avatar_${videoId}.mp4`,
+          fallback: storageUrl === heygenVideoUrl, // Mark as fallback if we're using Heygen URL
         };
       } catch (downloadErr) {
         console.error('[HeyGen] Failed to download or upload video', {
