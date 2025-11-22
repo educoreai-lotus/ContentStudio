@@ -169,6 +169,7 @@ function normalizeLanguageCode(language) {
     'zh': 'zh', 'zh-cn': 'zh', 'zh-tw': 'zh', 'chinese': 'zh', 'zho': 'zh',
     'fa': 'fa', 'persian': 'fa', 'fas': 'fa',
     'ur': 'ur', 'urdu': 'ur', 'urd': 'ur',
+    'ru': 'ru', 'ru-ru': 'ru', 'russian': 'ru', 'rus': 'ru',
   };
 
   if (languageMap[langLower]) {
@@ -247,6 +248,7 @@ export function getVoiceConfig(language) {
       'zh': 'chinese',
       'fa': 'persian', // Persian/Farsi
       'ur': 'urdu',
+      'ru': 'russian',
       // Add more mappings as needed for other languages in heygen-voices.json
     };
 
