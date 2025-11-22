@@ -165,21 +165,48 @@ export class AIGenerationController {
         });
       }
 
+      // Determine actual status for logging
+      let actualStatus = 'success';
+      if (isAvatarVideo) {
+        if (isSkipped || hasSkippedReason) {
+          actualStatus = 'skipped';
+        } else if (content.content_data?.videoUrl) {
+          actualStatus = 'success';
+        } else {
+          actualStatus = 'failed';
+        }
+      } else {
+        actualStatus = content.content_data?.status || 'success';
+      }
+
       console.log('[AI Generation] Content generated successfully:', {
         hasContentData: !!content.content_data,
         contentType: content.content_type_id,
         topicId: content.topic_id,
-        // Status removed for avatar_video - check videoUrl/error instead
-        status: isAvatarVideo ? (content.content_data?.videoUrl ? 'success' : 'failed') : (content.content_data?.status || 'success'),
+        status: actualStatus,
       });
 
       const responseData = ContentDTO.toContentResponse(content);
       const isResponseAvatarVideo = responseData.content_type_id === 6;
+      
+      // Determine actual status for response logging
+      let responseStatus = 'success';
+      if (isResponseAvatarVideo) {
+        if (isSkipped || hasSkippedReason) {
+          responseStatus = 'skipped';
+        } else if (responseData.content_data?.videoUrl) {
+          responseStatus = 'success';
+        } else {
+          responseStatus = 'failed';
+        }
+      } else {
+        responseStatus = responseData.content_data?.status || 'success';
+      }
+      
       console.log('[AI Generation] Response data prepared:', {
         hasContentData: !!responseData.content_data,
         contentDataKeys: responseData.content_data ? Object.keys(responseData.content_data) : [],
-        // Status removed for avatar_video - check videoUrl/error instead
-        status: isResponseAvatarVideo ? (responseData.content_data?.videoUrl ? 'success' : 'failed') : (responseData.content_data?.status || 'success'),
+        status: responseStatus,
       });
 
       res.status(201).json({
