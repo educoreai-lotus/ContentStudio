@@ -308,7 +308,7 @@ export default function TopicContentManager() {
                 </div>
                 <div className="flex-1 w-full">
                   <h2
-                    className={`font-bold text-xl mb-1 ${
+                    className={`font-bold text-2xl md:text-3xl mb-1 ${
                       theme === 'day-mode' ? 'text-gray-900' : 'text-white'
                     }`}
                   >
