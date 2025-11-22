@@ -259,11 +259,16 @@ export class HeygenClient {
         title: title || 'EduCore Lesson',
         video_inputs: [
           {
-            type: 'avatar',
-            avatar_id: this.avatarId,
-            avatar_style: 'normal',
-            voice_id: voiceId,
-            input_text: prompt.trim(), // Trainer's exact text, unmodified - no translation
+            character: {
+              type: 'avatar',
+              avatar_id: this.avatarId,
+              avatar_style: 'normal',
+            },
+            voice: {
+              type: 'text',
+              input_text: prompt.trim(), // Trainer's exact text, unmodified - no translation
+              voice_id: voiceId,
+            },
           },
         ],
         dimension: {
