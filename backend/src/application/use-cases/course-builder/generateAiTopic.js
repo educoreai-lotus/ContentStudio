@@ -135,6 +135,13 @@ export async function generateAiTopic(skillCoverageItem, preferredLanguage) {
     skillsListArray: [skillName],
   };
 
+  // Log language to ensure it's passed correctly
+  logger.info('[UseCase] Language set for AI generation', {
+    preferredLanguage,
+    promptVariablesLanguage: promptVariables.language,
+    skill: skillName,
+  });
+
   // Build prompts using existing templates
   const wrappedVariables = {
     lessonTopic: PromptSanitizer.wrapUserInput(promptVariables.lessonTopic),
@@ -295,6 +302,12 @@ export async function generateAiTopic(skillCoverageItem, preferredLanguage) {
       // Send ONLY minimal required fields to HeyGen: prompt, topic, description, skills
       // ⚠️ CRITICAL: prompt is trainer's exact text, unmodified
       const trainerPrompt = `A comprehensive lesson about ${skillName}. Cover essential concepts, best practices, and real-world applications.`;
+
+      // Log language before calling generateAvatarVideo
+      logger.info('[UseCase] Calling generateAvatarVideo with language', {
+        language: promptVariables.language,
+        skill: skillName,
+      });
 
       const avatarResult = await aiGenerationService.generateAvatarVideo({
         prompt: trainerPrompt, // Trainer's exact text, unmodified

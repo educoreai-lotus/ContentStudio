@@ -692,6 +692,14 @@ This presentation should be educational and suitable for ${audience}.`;
     // Extract language from config (required for voice selection)
     const language = config.language || 'en';
 
+    // Log language to ensure it's passed correctly
+    console.log('[AIGenerationService] generateAvatarVideo language check:', {
+      configLanguage: config.language,
+      extractedLanguage: language,
+      hasConfig: !!config,
+      configKeys: config ? Object.keys(config) : [],
+    });
+
     try {
       // HeyGen v2 API requires: title, prompt, language (for voice_id selection)
       const videoResult = await this.heygenClient.generateVideo({
