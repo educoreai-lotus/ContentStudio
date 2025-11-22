@@ -63,7 +63,7 @@ async function fetchAvatars() {
 
 /**
  * Select the best avatar based on criteria
- * Criteria: female, natural/neutral/professional, public
+ * Criteria: public, female OR neutral, professional/neutral/natural, NOT child/cartoon/fantasy/robot/dramatic
  */
 function selectAvatar(avatars) {
   if (!avatars || avatars.length === 0) {
@@ -73,14 +73,12 @@ function selectAvatar(avatars) {
   // Filter for public avatars
   const publicAvatars = avatars.filter(avatar => {
     // Check if avatar is public (not premium/private)
-    // Common indicators: is_public, public, access_level, etc.
     const isPublic = 
       avatar.is_public === true ||
       avatar.public === true ||
       avatar.access_level === 'public' ||
       avatar.access_level === 'free' ||
       (avatar.premium === false && avatar.private === false) ||
-      // If no access indicators, assume public if not explicitly marked as premium/private
       (!avatar.premium && !avatar.private && !avatar.is_premium && !avatar.is_private);
     
     return isPublic;
@@ -88,68 +86,81 @@ function selectAvatar(avatars) {
 
   console.log(`📊 Found ${publicAvatars.length} public avatars`);
 
-  // Filter for female avatars
-  const femaleAvatars = publicAvatars.filter(avatar => {
-    const gender = (avatar.gender || avatar.sex || '').toLowerCase();
-    return gender === 'female' || gender === 'f' || gender === 'woman' || gender === 'girl';
-  });
-
-  console.log(`👩 Found ${femaleAvatars.length} female public avatars`);
-
-  // If no female avatars, use all public avatars
-  const candidates = femaleAvatars.length > 0 ? femaleAvatars : publicAvatars;
-
-  if (candidates.length === 0) {
-    console.warn('⚠️ No suitable avatars found matching criteria');
+  if (publicAvatars.length === 0) {
+    console.warn('⚠️ No public avatars found');
     return null;
   }
 
-  // Score avatars based on style keywords (natural, neutral, professional)
-  const styleKeywords = ['natural', 'neutral', 'professional', 'normal', 'standard'];
-  const scoredAvatars = candidates.map(avatar => {
+  // Score avatars based on new rules
+  const scoredAvatars = publicAvatars.map(avatar => {
     let score = 0;
     const name = (avatar.name || avatar.avatar_name || '').toLowerCase();
     const style = (avatar.style || avatar.avatar_style || '').toLowerCase();
     const description = (avatar.description || '').toLowerCase();
-    const combined = `${name} ${style} ${description}`;
+    const category = (avatar.category || avatar.categories || '').toLowerCase();
+    const gender = (avatar.gender || avatar.sex || '').toLowerCase();
+    const combined = `${name} ${style} ${description} ${category}`;
 
-    // Check for style keywords
-    styleKeywords.forEach(keyword => {
-      if (combined.includes(keyword)) {
-        score += 2;
+    // ⭐ Avatar scoring rules:
+    
+    // +20 for professional / neutral / natural
+    if (combined.includes('professional')) {
+      score += 20;
+    }
+    if (combined.includes('neutral')) {
+      score += 20;
+    }
+    if (combined.includes('natural')) {
+      score += 20;
+    }
+
+    // +10 for female or neutral gender
+    if (gender === 'female' || gender === 'f' || gender === 'woman' || gender === 'girl') {
+      score += 10;
+    }
+    if (gender === 'neutral' || gender === 'n' || gender === 'unisex') {
+      score += 10;
+    }
+
+    // -100 if child/cartoon/robot/character (disqualify)
+    const disqualifiers = ['child', 'cartoon', 'fantasy', 'robot', 'dramatic', 'character', 'kid', 'baby', 'toddler'];
+    disqualifiers.forEach(disqualifier => {
+      if (combined.includes(disqualifier)) {
+        score -= 100;
       }
     });
-
-    // Prefer avatars with neutral/professional in name
-    if (name.includes('neutral') || name.includes('professional')) {
-      score += 3;
-    }
-
-    // Prefer avatars with 'natural' in name
-    if (name.includes('natural')) {
-      score += 2;
-    }
 
     return { avatar, score };
   });
 
+  // Filter out disqualified avatars (score < 0)
+  const qualifiedAvatars = scoredAvatars.filter(item => item.score >= 0);
+
+  if (qualifiedAvatars.length === 0) {
+    console.warn('⚠️ No avatars found matching all criteria (all were disqualified)');
+    return null;
+  }
+
   // Sort by score (highest first)
-  scoredAvatars.sort((a, b) => b.score - a.score);
+  qualifiedAvatars.sort((a, b) => b.score - a.score);
 
   // Select the highest scored avatar
-  const selected = scoredAvatars[0].avatar;
+  const selected = qualifiedAvatars[0].avatar;
+  const selectedScore = qualifiedAvatars[0].score;
 
-  console.log(`✅ Selected avatar: ${selected.name || selected.avatar_name || selected.avatar_id}`);
+  console.log(`\n✅ Selected avatar:`);
+  console.log(`   Name: ${selected.name || selected.avatar_name || selected.avatar_id}`);
   console.log(`   ID: ${selected.avatar_id || selected.id}`);
   console.log(`   Gender: ${selected.gender || selected.sex || 'unknown'}`);
   console.log(`   Style: ${selected.style || selected.avatar_style || 'unknown'}`);
+  console.log(`   Score: ${selectedScore}`);
 
   return {
     avatar_id: selected.avatar_id || selected.id,
     name: selected.name || selected.avatar_name || selected.avatar_id,
     gender: selected.gender || selected.sex || 'unknown',
     style: selected.style || selected.avatar_style || 'unknown',
-    score: scoredAvatars[0].score,
+    score: selectedScore,
   };
 }
 
@@ -167,8 +178,15 @@ function saveAvatarConfig(selectedAvatar) {
     name: selectedAvatar.name,
     gender: selectedAvatar.gender,
     style: selectedAvatar.style,
+    score: selectedAvatar.score,
     selectedAt: new Date().toISOString(),
     source: 'HeyGen API v1/avatar.list',
+    criteria: {
+      mustBePublic: true,
+      mustBeFemaleOrNeutral: true,
+      mustBeProfessionalNeutralOrNatural: true,
+      mustNotBeChildCartoonFantasyRobotDramatic: true,
+    },
   };
 
   // Ensure config directory exists
@@ -210,6 +228,13 @@ async function main() {
   }
 
   console.log('\n✅ Avatar selection completed successfully!');
+  console.log('\n📋 FINAL SELECTION:');
+  console.log(`   Avatar Name: ${selectedAvatar.name}`);
+  console.log(`   Avatar ID: ${selectedAvatar.avatar_id}`);
+  console.log(`   Gender: ${selectedAvatar.gender}`);
+  console.log(`   Style: ${selectedAvatar.style}`);
+  console.log(`   Score: ${selectedAvatar.score}`);
+  console.log(`\n💾 Config saved to: ${CONFIG_PATH}`);
 }
 
 // Run if executed directly
