@@ -148,6 +148,105 @@ export class HeygenClient {
   }
 
   /**
+   * Find a fallback avatar when configured avatar is not available
+   * Selects a female, natural/neutral/professional, public avatar
+   * @returns {Promise<string|null>} Fallback avatar ID or null if none found
+   */
+  async findFallbackAvatar() {
+    if (!this.client) {
+      return null;
+    }
+
+    try {
+      // Try multiple endpoints for avatar listing
+      const endpoints = ['/v1/avatar.list', '/v1/avatars', '/v2/avatars', '/v2/avatar.list'];
+      let avatars = [];
+
+      for (const endpoint of endpoints) {
+        try {
+          const response = await this.client.get(endpoint);
+          
+          // Handle different response structures
+          if (response.data?.data?.avatars) {
+            avatars = response.data.data.avatars;
+          } else if (response.data?.data) {
+            avatars = Array.isArray(response.data.data) ? response.data.data : [];
+          } else if (response.data?.avatars) {
+            avatars = response.data.avatars;
+          } else if (Array.isArray(response.data)) {
+            avatars = response.data;
+          }
+
+          if (avatars.length > 0) {
+            break; // Found avatars, exit loop
+          }
+        } catch (endpointError) {
+          // Try next endpoint
+          continue;
+        }
+      }
+
+      if (avatars.length === 0) {
+        console.warn('[HeyGen] No avatars found in API response');
+        return null;
+      }
+
+      // Filter and score avatars: female/neutral, professional/natural, public
+      const scoredAvatars = avatars
+        .map(avatar => {
+          const avatarId = avatar.avatar_id || avatar.id;
+          const name = avatar.name || avatar.avatar_name || '';
+          const gender = (avatar.gender || '').toLowerCase();
+          const style = (avatar.style || avatar.avatar_style || '').toLowerCase();
+          const categories = (avatar.categories || []).map(c => c.toLowerCase());
+          const isPublic = avatar.is_public !== false && avatar.public !== false;
+
+          if (!isPublic) return null;
+
+          let score = 0;
+          
+          // Score by style: professional/neutral/natural
+          if (style.includes('professional') || style.includes('neutral') || style.includes('natural')) {
+            score += 20;
+          }
+          
+          // Score by gender: female or neutral
+          if (gender === 'female' || gender === 'neutral') {
+            score += 10;
+          }
+          
+          // Penalize unwanted categories
+          const unwantedCategories = ['child', 'cartoon', 'fantasy', 'robot', 'dramatic', 'character'];
+          if (categories.some(cat => unwantedCategories.some(unwanted => cat.includes(unwanted)))) {
+            score -= 100;
+          }
+          
+          // Penalize if name contains unwanted keywords
+          const nameLower = name.toLowerCase();
+          if (unwantedCategories.some(unwanted => nameLower.includes(unwanted))) {
+            score -= 100;
+          }
+
+          return { avatarId, name, score };
+        })
+        .filter(avatar => avatar !== null && avatar.score > 0)
+        .sort((a, b) => b.score - a.score);
+
+      if (scoredAvatars.length === 0) {
+        console.warn('[HeyGen] No suitable fallback avatar found');
+        return null;
+      }
+
+      const selectedAvatar = scoredAvatars[0];
+      console.log(`[HeyGen] Selected fallback avatar: ${selectedAvatar.name} (${selectedAvatar.avatarId}) with score: ${selectedAvatar.score}`);
+      return selectedAvatar.avatarId;
+    } catch (error) {
+      console.warn('[HeyGen] Failed to find fallback avatar:', error.message);
+      return null;
+    }
+  }
+
+  /**
    * Generate avatar video
    * 
    * ⚠️ CRITICAL: 
@@ -206,15 +305,35 @@ export class HeygenClient {
         };
       }
 
-      // Skip anna-public immediately (no longer available) - MUST be checked before any validation
+      // If anna-public is configured but not available, try to find a fallback avatar
       if (this.avatarId === 'anna-public') {
-        console.log('[HeyGen] Avatar anna-public is no longer available, skipping video generation.');
-        return {
-          status: 'skipped',
-          videoId: null,
-          videoUrl: null,
-          reason: 'avatar_no_longer_available',
-        };
+        console.log('[HeyGen] Avatar anna-public is no longer available. Attempting to find a fallback avatar...');
+        
+        // Try to validate and find an alternative avatar
+        try {
+          const fallbackAvatar = await this.findFallbackAvatar();
+          if (fallbackAvatar) {
+            console.log(`[HeyGen] Using fallback avatar: ${fallbackAvatar}`);
+            this.avatarId = fallbackAvatar;
+            // Continue with fallback avatar
+          } else {
+            console.log('[HeyGen] No fallback avatar found, skipping video generation.');
+            return {
+              status: 'skipped',
+              videoId: null,
+              videoUrl: null,
+              reason: 'avatar_no_longer_available',
+            };
+          }
+        } catch (error) {
+          console.log('[HeyGen] Could not find fallback avatar, skipping video generation:', error.message);
+          return {
+            status: 'skipped',
+            videoId: null,
+            videoUrl: null,
+            reason: 'avatar_no_longer_available',
+          };
+        }
       }
 
       // Note: anna-public is now skipped earlier in the flow, so we don't need special handling here
