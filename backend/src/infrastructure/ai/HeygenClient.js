@@ -240,6 +240,17 @@ export class HeygenClient {
         };
       }
 
+      // Skip anna-public immediately (no longer available)
+      if (this.avatarId === 'anna-public') {
+        console.log('[HeyGen] Avatar anna-public is no longer available, skipping video generation.');
+        return {
+          status: 'skipped',
+          videoId: null,
+          videoUrl: null,
+          reason: 'avatar_no_longer_available',
+        };
+      }
+
       if (!voiceId) {
         console.log('[HeyGen] Skipping avatar generation - reason: Voice ID not available');
         return {
