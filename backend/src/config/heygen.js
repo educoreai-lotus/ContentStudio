@@ -38,12 +38,19 @@ function loadAvatarConfig() {
   }
 
   try {
-    if (!fs.existsSync(AVATAR_CONFIG_PATH)) {
-      cachedAvatarConfig = null;
-      return null;
+    // Try primary path first
+    let configPath = AVATAR_CONFIG_PATH;
+    if (!fs.existsSync(configPath)) {
+      // Try alternative path
+      if (fs.existsSync(ALTERNATIVE_AVATAR_PATH)) {
+        configPath = ALTERNATIVE_AVATAR_PATH;
+      } else {
+        cachedAvatarConfig = null;
+        return null;
+      }
     }
 
-    const configContent = fs.readFileSync(AVATAR_CONFIG_PATH, 'utf8');
+    const configContent = fs.readFileSync(configPath, 'utf8');
     const config = JSON.parse(configContent);
     cachedAvatarConfig = config;
     console.log('[HeyGenConfig] Avatar config loaded from file:', config?.avatar_id);
@@ -65,14 +72,26 @@ function loadVoicesConfig() {
   }
 
   try {
-    console.log('[HeyGenConfig] Attempting to load voices config from:', VOICES_CONFIG_PATH);
-    if (!fs.existsSync(VOICES_CONFIG_PATH)) {
-      console.warn('[HeyGenConfig] Voices config file not found at:', VOICES_CONFIG_PATH);
-      cachedVoicesConfig = null;
-      return null;
+    // Try primary path first
+    let configPath = VOICES_CONFIG_PATH;
+    console.log('[HeyGenConfig] Attempting to load voices config from:', configPath);
+    
+    if (!fs.existsSync(configPath)) {
+      // Try alternative path
+      console.log('[HeyGenConfig] Primary path not found, trying alternative:', ALTERNATIVE_VOICES_PATH);
+      if (fs.existsSync(ALTERNATIVE_VOICES_PATH)) {
+        configPath = ALTERNATIVE_VOICES_PATH;
+        console.log('[HeyGenConfig] Found voices config at alternative path');
+      } else {
+        console.warn('[HeyGenConfig] Voices config file not found at either path:');
+        console.warn('  Primary:', VOICES_CONFIG_PATH);
+        console.warn('  Alternative:', ALTERNATIVE_VOICES_PATH);
+        cachedVoicesConfig = null;
+        return null;
+      }
     }
 
-    const configContent = fs.readFileSync(VOICES_CONFIG_PATH, 'utf8');
+    const configContent = fs.readFileSync(configPath, 'utf8');
     const config = JSON.parse(configContent);
     
     // Validate config structure
