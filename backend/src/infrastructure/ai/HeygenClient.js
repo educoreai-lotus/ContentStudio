@@ -39,8 +39,10 @@ export class HeygenClient {
   /**
    * Generate avatar video
    * 
-   * ⚠️ CRITICAL: HeyGen v2 API accepts ONLY title and prompt
-   * All other fields (topic, description, skills, language, duration) cause 400 error
+   * ⚠️ CRITICAL: 
+   * - Use endpoint: POST /v1/video.create (NOT /v2/video/generate - returns 400 error)
+   * - HeyGen API accepts ONLY title and prompt
+   * - All other fields (topic, description, skills, language, duration) cause 400 error
    * 
    * @param {Object} payload - Request payload
    * @param {string} payload.title - Video title (default: 'EduCore Lesson')
