@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { createClient } from '@supabase/supabase-js';
-import { getSafeAvatarId, getVoiceConfig } from '../config/heygen.js';
+import { getSafeAvatarId, getVoiceConfig } from '../../config/heygen.js';
 
 /**
  * Heygen API Client
