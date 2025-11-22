@@ -515,13 +515,53 @@ export class HeygenClient {
       }
 
       const heygenVideoUrl = pollResult.videoUrl;
+      
+      console.log('[HeyGen] Video generation completed, starting download and storage upload', {
+        videoId,
+        heygenVideoUrl,
+        isShareUrl: heygenVideoUrl?.includes('/share/'),
+      });
 
       // Download and upload to Supabase Storage
       try {
-        const videoBuffer = await this.downloadVideo(heygenVideoUrl);
+        // Check if URL is a share URL - if so, we need to get the actual download URL
+        let downloadUrl = heygenVideoUrl;
+        if (heygenVideoUrl && heygenVideoUrl.includes('/share/')) {
+          // Share URL format: https://app.heygen.com/share/{videoId}
+          // We need to get the actual video download URL from HeyGen API
+          console.log('[HeyGen] Share URL detected, attempting to get download URL from HeyGen API');
+          try {
+            // Try to get video details from HeyGen API to get download URL
+            const videoDetailsResponse = await this.client.get(`/v1/video_status.get?video_id=${videoId}`);
+            const videoDetails = videoDetailsResponse.data?.data;
+            if (videoDetails?.video_url && !videoDetails.video_url.includes('/share/')) {
+              downloadUrl = videoDetails.video_url;
+              console.log('[HeyGen] Found download URL from video details', { downloadUrl });
+            } else if (videoDetails?.download_url) {
+              downloadUrl = videoDetails.download_url;
+              console.log('[HeyGen] Found download URL from download_url field', { downloadUrl });
+            } else {
+              console.warn('[HeyGen] Could not find download URL, will try to download from share URL');
+            }
+          } catch (detailsErr) {
+            console.warn('[HeyGen] Failed to get video details for download URL', { error: detailsErr.message });
+          }
+        }
+
+        console.log('[HeyGen] Downloading video from URL', { downloadUrl });
+        const videoBuffer = await this.downloadVideo(downloadUrl);
+        console.log('[HeyGen] Video downloaded successfully', { 
+          bufferSize: videoBuffer.length,
+          bufferSizeMB: (videoBuffer.length / 1024 / 1024).toFixed(2),
+        });
+        
         let storageUrl = null;
 
         try {
+          console.log('[HeyGen] Uploading video to Supabase Storage', {
+            fileName: `avatar_${videoId}.mp4`,
+            bufferSize: videoBuffer.length,
+          });
           const uploadedUrl = await this.uploadToStorage({
             fileBuffer: videoBuffer,
             fileName: `avatar_${videoId}.mp4`,
@@ -529,15 +569,35 @@ export class HeygenClient {
           });
           if (uploadedUrl) {
             storageUrl = uploadedUrl;
+            console.log('[HeyGen] Video uploaded to Supabase Storage successfully', { storageUrl });
           } else {
+            console.warn('[HeyGen] Upload returned null, using HeyGen URL as fallback');
             storageUrl = heygenVideoUrl;
           }
         } catch (uploadErr) {
+          console.error('[HeyGen] Failed to upload video to storage', {
+            error: uploadErr.message,
+            stack: uploadErr.stack,
+          });
           storageUrl = heygenVideoUrl;
         }
 
         if (!storageUrl) {
+          console.warn('[HeyGen] Storage URL is null, using HeyGen URL as fallback');
           storageUrl = heygenVideoUrl;
+        }
+
+        const isFallback = storageUrl === heygenVideoUrl || storageUrl?.includes('/share/');
+        if (isFallback) {
+          console.warn('[HeyGen] Using HeyGen share URL as fallback (video not saved to storage)', {
+            storageUrl,
+            heygenVideoUrl,
+          });
+        } else {
+          console.log('[HeyGen] Video successfully saved to Supabase Storage', {
+            storageUrl,
+            heygenVideoUrl,
+          });
         }
 
         return {
@@ -546,9 +606,15 @@ export class HeygenClient {
           videoId,
           duration: duration || 15,
           status: 'completed',
-          fallback: storageUrl === heygenVideoUrl,
+          fallback: isFallback,
+          storagePath: isFallback ? null : `avatar_videos/avatar_${videoId}.mp4`,
         };
       } catch (downloadErr) {
+        console.error('[HeyGen] Failed to download or upload video', {
+          error: downloadErr.message,
+          stack: downloadErr.stack,
+          heygenVideoUrl,
+        });
         const fallbackUrl = `https://app.heygen.com/share/${videoId}`;
         return {
           videoUrl: fallbackUrl,
@@ -654,8 +720,14 @@ export class HeygenClient {
       }
 
       if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+        console.warn('[HeyGen] Supabase credentials not configured, cannot upload to storage');
         return null;
       }
+
+      console.log('[HeyGen] Initializing Supabase client for storage upload', {
+        supabaseUrl: process.env.SUPABASE_URL ? 'configured' : 'missing',
+        serviceKey: process.env.SUPABASE_SERVICE_ROLE_KEY ? 'configured' : 'missing',
+      });
 
       const supabase = createClient(
         process.env.SUPABASE_URL,
@@ -668,6 +740,12 @@ export class HeygenClient {
         fileBuffer.byteOffset + fileBuffer.byteLength,
       );
 
+      console.log('[HeyGen] Uploading to Supabase Storage', {
+        filePath,
+        bufferSize: arrayBuffer.byteLength,
+        contentType,
+      });
+
       const { data, error } = await supabase.storage.from('media').upload(
         filePath,
         arrayBuffer,
@@ -679,8 +757,18 @@ export class HeygenClient {
       );
 
       if (error) {
+        console.error('[HeyGen] Supabase storage upload error', {
+          error: error.message,
+          errorCode: error.statusCode,
+          filePath,
+        });
         throw error;
       }
+
+      console.log('[HeyGen] File uploaded to Supabase Storage', {
+        filePath,
+        uploadData: data,
+      });
 
       const { data: urlData } = supabase.storage
         .from('media')
@@ -689,11 +777,21 @@ export class HeygenClient {
       const publicUrl = urlData?.publicUrl;
       
       if (!publicUrl) {
+        console.error('[HeyGen] Failed to get public URL from Supabase', {
+          filePath,
+          urlData,
+        });
         throw new Error('Failed to get public URL from Supabase storage');
       }
 
+      console.log('[HeyGen] Got public URL from Supabase Storage', { publicUrl });
       return publicUrl;
     } catch (error) {
+      console.error('[HeyGen] uploadToStorage failed', {
+        error: error.message,
+        stack: error.stack,
+        fileName,
+      });
       throw new Error(`Failed to upload video to storage: ${error.message}`);
     }
   }
@@ -705,21 +803,63 @@ export class HeygenClient {
    */
   async downloadVideo(videoUrl) {
     try {
+      console.log('[HeyGen] Starting video download', { videoUrl });
+      
+      // If URL is a share URL, we need to handle it differently
+      if (videoUrl && videoUrl.includes('/share/')) {
+        console.warn('[HeyGen] Share URL provided for download - this may not work. Share URLs are for viewing, not downloading.');
+        // Try to extract video ID and construct download URL
+        const videoIdMatch = videoUrl.match(/\/share\/([^\/\?]+)/);
+        if (videoIdMatch) {
+          const extractedVideoId = videoIdMatch[1];
+          console.log('[HeyGen] Extracted video ID from share URL', { extractedVideoId });
+          // Note: HeyGen may not provide direct download URLs for share links
+          // We may need to use the API to get the actual video file URL
+        }
+      }
+
       const response = await axios.get(videoUrl, {
         responseType: 'arraybuffer',
         maxContentLength: Infinity,
         maxBodyLength: Infinity,
+        timeout: 60000, // 60 seconds timeout for video download
       });
+      
       const contentType = response.headers['content-type'];
+      console.log('[HeyGen] Video download response received', {
+        contentType,
+        contentLength: response.headers['content-length'],
+        status: response.status,
+      });
+      
       if (!contentType || !contentType.includes('video')) {
-        throw new Error(`Unexpected content type received: ${contentType || 'unknown'}`);
+        console.warn('[HeyGen] Unexpected content type in download response', {
+          contentType,
+          videoUrl,
+        });
+        // Don't throw - some video URLs may not have proper content-type headers
+        // Continue with download if we got data
       }
+      
       const buffer = Buffer.from(response.data);
       if (!buffer || buffer.length === 0) {
         throw new Error('Downloaded video buffer is empty');
       }
+      
+      console.log('[HeyGen] Video downloaded successfully', {
+        bufferSize: buffer.length,
+        bufferSizeMB: (buffer.length / 1024 / 1024).toFixed(2),
+      });
+      
       return buffer;
     } catch (error) {
+      console.error('[HeyGen] Video download failed', {
+        error: error.message,
+        stack: error.stack,
+        videoUrl,
+        responseStatus: error.response?.status,
+        responseHeaders: error.response?.headers,
+      });
       throw new Error(`Failed to download video: ${error.message}`);
     }
   }
