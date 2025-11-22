@@ -88,17 +88,47 @@ export class HeygenClient {
         prompt: prompt.trim(), // Trainer's exact text, unmodified
       };
 
-      // Minimal logging - only allowed messages
-      console.log('[Avatar Generation] Sending prompt to HeyGen');
-      console.log('[Avatar Generation] Video generation started...');
+      // Log request payload for debugging
+      console.log('[Avatar Generation] Sending request to HeyGen:', JSON.stringify(requestPayload, null, 2));
 
       // Create video generation request
-      const response = await this.client.post('/v2/video/generate', requestPayload);
+      // ⚠️ CRITICAL: Use /v1/video.create endpoint, NOT /v2/video/generate
+      // /v2/video/generate always returns 400 Bad Request → Invalid Parameters
+      let response;
+      try {
+        response = await this.client.post('/v1/video.create', requestPayload);
+      } catch (error) {
+        // Extract detailed error information from HeyGen response
+        const errorMessage = error.response?.data?.message || error.message || 'Unknown error';
+        const errorDetails = error.response?.data || {};
+        
+        console.error('[Avatar Generation Error] HeyGen API error:', {
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          message: errorMessage,
+          details: errorDetails,
+          requestPayload: requestPayload,
+        });
+
+        return {
+          status: 'failed',
+          videoId: null,
+          error: errorMessage,
+          errorCode: error.response?.status === 400 ? 'INVALID_REQUEST' : 'API_ERROR',
+          errorDetail: JSON.stringify(errorDetails),
+        };
+      }
 
       const videoId = response.data.data?.video_id;
       if (!videoId) {
-        console.error('[Avatar Generation Error] HeyGen rejected the request. Possible invalid parameters.');
-        throw new Error('HeyGen did not return a video_id');
+        console.error('[Avatar Generation Error] HeyGen did not return video_id:', JSON.stringify(response.data, null, 2));
+        return {
+          status: 'failed',
+          videoId: null,
+          error: 'HeyGen did not return a video_id',
+          errorCode: 'MISSING_VIDEO_ID',
+          errorDetail: JSON.stringify(response.data),
+        };
       }
 
       // Poll for video completion
@@ -181,18 +211,26 @@ export class HeygenClient {
       }
 
     } catch (error) {
-      const is400Error = error.response?.status === 400 || error.response?.statusCode === 400;
+      // Extract detailed error information from HeyGen response
+      const errorStatus = error.response?.status || error.status || 500;
+      const errorData = error.response?.data || {};
+      const errorMessage = errorData.message || errorData.error_message || error.message || 'Video generation failed';
       
-      if (is400Error) {
-        console.error('[Avatar Generation Error] HeyGen rejected the request. Possible invalid parameters.');
-      }
+      console.error('[Avatar Generation Error] HeyGen API error details:', {
+        status: errorStatus,
+        statusText: error.response?.statusText || 'Unknown',
+        errorMessage: errorMessage,
+        errorData: JSON.stringify(errorData, null, 2),
+        requestURL: `${this.baseURL}/v1/video.create`,
+        requestPayload: requestPayload || payload || 'Not available',
+      });
 
       return {
         status: 'failed',
         videoId: null,
-        error: error.message || 'Video generation failed',
-        errorCode: error.response?.data?.error_code || 'UNKNOWN_ERROR',
-        errorDetail: error.response?.data?.error_message || error.message,
+        error: errorMessage,
+        errorCode: errorData.error_code || errorData.code || (errorStatus === 400 ? 'INVALID_REQUEST' : 'API_ERROR'),
+        errorDetail: JSON.stringify(errorData),
       };
     }
   }
