@@ -1,7 +1,6 @@
 import axios from 'axios';
 import { createClient } from '@supabase/supabase-js';
-import { getVoiceIdForLanguage } from './heygenVoicesConfig.js';
-import { getAvatarId } from './heygenAvatarConfig.js';
+import { getSafeAvatarId, getVoiceConfig } from '../config/heygen.js';
 
 /**
  * Heygen API Client
@@ -37,14 +36,16 @@ export class HeygenClient {
       maxBodyLength: Infinity,
     });
 
-    // Load avatar ID from config
-    this.avatarId = getAvatarId();
+    // Load avatar ID from config (with fallback to default)
+    this.avatarId = getSafeAvatarId();
     this.avatarValidated = false;
 
     // Validate avatar on startup (async, non-blocking)
-    this.validateAvatar().catch(error => {
-      console.error('[HeygenClient] Failed to validate avatar on startup:', error.message);
-    });
+    if (this.avatarId) {
+      this.validateAvatar().catch(error => {
+        console.error('[HeygenClient] Failed to validate avatar on startup:', error.message);
+      });
+    }
   }
 
   /**
@@ -105,11 +106,11 @@ export class HeygenClient {
         return avatarId === this.avatarId;
       });
 
-      // Special handling for forced avatar Anna
-      if (this.avatarId === 'anna-public' && !avatarExists) {
-        console.log('[HeyGen] Forced avatar Anna unavailable, skipping video generation.');
-        this.avatarValidated = true; // Mark as validated to allow skip (not fail)
-        return true; // Return true to allow skip flow
+      // If avatar not found, mark as invalid (will skip generation)
+      if (!avatarExists) {
+        console.log(`[HeyGen] Avatar not found: ${this.avatarId} — skipping video generation`);
+        this.avatarValidated = false;
+        return false;
       }
 
       if (!avatarExists) {
@@ -186,8 +187,7 @@ export class HeygenClient {
 
       // Check if avatar is available
       if (!this.avatarId) {
-        // If Anna is forced but not configured, skip silently
-        console.log('[HeyGen] Avatar ID not configured, skipping video generation.');
+        console.log('[HeyGen] Skipping avatar generation - reason: Avatar ID not configured');
         return {
           status: 'skipped',
           videoId: null,
@@ -229,37 +229,41 @@ export class HeygenClient {
       // Get language from payload (required)
       const language = payload.language || 'en';
       
-      // Get voice ID for language
-      const voiceId = getVoiceIdForLanguage(language);
+      // Get voice configuration (with fallback to default lecturer)
+      const voiceConfig = getVoiceConfig(language);
+      const voiceId = voiceConfig.voice_id;
 
-      // Check if voice ID is available - fail immediately without calling HeyGen API
-      if (!voiceId) {
-        console.error('[Avatar Generation Error] Voice ID not found for language:', language);
+      // Validate avatar and voice before sending request
+      if (!this.avatarId) {
+        console.log('[HeyGen] Skipping avatar generation - reason: Avatar ID not configured');
         return {
-          status: 'failed',
+          status: 'skipped',
           videoId: null,
-          error: 'HEYGEN_VOICE_NOT_FOUND',
-          errorCode: 'HEYGEN_VOICE_NOT_FOUND',
-          errorDetail: `No voice ID configured for language: ${language}`,
+          videoUrl: null,
+          reason: 'avatar_not_configured',
         };
       }
 
-      // Build v2 API request payload
+      if (!voiceId) {
+        console.log('[HeyGen] Skipping avatar generation - reason: Voice ID not available');
+        return {
+          status: 'skipped',
+          videoId: null,
+          videoUrl: null,
+          reason: 'voice_not_available',
+        };
+      }
+
+      // Build v2 API request payload (matching HeyGen v2 format)
       const requestPayload = {
         title: title || 'EduCore Lesson',
         video_inputs: [
           {
-            character: {
-              type: 'avatar',
-              avatar_id: this.avatarId,
-              avatar_style: 'normal',
-            },
-            voice: {
-              type: 'text',
-              input_text: prompt.trim(), // Trainer's exact text, unmodified
-              voice_id: voiceId,
-              speed: 1.0,
-            },
+            type: 'avatar',
+            avatar_id: this.avatarId,
+            avatar_style: 'normal',
+            voice_id: voiceId,
+            input_text: prompt.trim(), // Trainer's exact text, unmodified - no translation
           },
         ],
         dimension: {
@@ -272,10 +276,10 @@ export class HeygenClient {
       console.log('[Avatar Generation] Sending request to HeyGen:', JSON.stringify(requestPayload, null, 2));
 
       // Create video generation request
-      // ⚠️ CRITICAL: Use /v2/video/generate endpoint (HeyGen API v2)
+      // ⚠️ CRITICAL: Use /v2/video.generate endpoint (HeyGen API v2)
       let response;
       try {
-        response = await this.client.post('/v2/video/generate', requestPayload);
+        response = await this.client.post('/v2/video.generate', requestPayload);
       } catch (error) {
         // Extract detailed error information from HeyGen response
         const errorMessage = error.response?.data?.message || error.message || 'Unknown error';
@@ -290,14 +294,14 @@ export class HeygenClient {
         
         const isForbidden = error.response?.status === 403;
         
-        // Special handling for forced avatar Anna
-        if (this.avatarId === 'anna-public' && (isAvatarNotFound || isForbidden)) {
-          console.log('[HeyGen] Forced avatar Anna unavailable, skipping video generation.');
+        // Handle avatar not found - skip gracefully
+        if (isAvatarNotFound || isForbidden) {
+          console.log(`[HeyGen] Avatar not found: ${this.avatarId} — skipping video generation`);
           return {
             status: 'skipped',
             videoId: null,
             videoUrl: null,
-            reason: 'forced_avatar_unavailable',
+            reason: 'avatar_not_found',
           };
         }
         
@@ -309,25 +313,9 @@ export class HeygenClient {
           requestPayload: requestPayload,
         });
 
-        // If avatar not found, provide helpful error message (only for non-Anna avatars)
-        if (isAvatarNotFound) {
-          console.error(`[Avatar Generation Error] Avatar "${this.avatarId}" not found. Error details:`, {
-            heyGenMessage: errorMessage,
-            heyGenStatus: error.response?.status,
-            heyGenDetails: errorDetails,
-          });
-          
-          return {
-            status: 'failed',
-            videoId: null,
-            error: 'NO_AVAILABLE_AVATAR',
-            errorCode: 'NO_AVAILABLE_AVATAR',
-            errorDetail: `Avatar ID "${this.avatarId}" not found or no longer available. Please update config/heygen-avatar.json with a valid avatar ID. Contact HeyGen support for available public avatar IDs.`,
-            heyGenError: errorMessage,
-            heyGenStatus: error.response?.status,
-            suggestion: 'Try contacting HeyGen support or check HeyGen dashboard for available public avatar IDs. The avatar may have been removed (as mentioned in July 2025 updates).',
-          };
-        }
+        // Avatar not found already handled above - this handles other API errors
+        // Return generic error for other API failures (but don't crash)
+        console.error('[HeyGen] API error (non-avatar):', errorMessage);
 
         return {
           status: 'failed',
