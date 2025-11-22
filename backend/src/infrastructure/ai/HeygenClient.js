@@ -41,8 +41,9 @@ export class HeygenClient {
    * 
    * ⚠️ CRITICAL: 
    * - Use endpoint: POST /v1/video.create (NOT /v2/video/generate - returns 400 error)
-   * - HeyGen API accepts ONLY title and prompt
-   * - All other fields (topic, description, skills, language, duration) cause 400 error
+   * - HeyGen V1 API requires: title, prompt, and avatar_id (default public avatar)
+   * - We use 'sophia-public' as default avatar (NOT voice selection - HeyGen decides voice automatically)
+   * - We do NOT specify: voice_id, voice_engine, narration, text_reader (these would be voice selection)
    * 
    * @param {Object} payload - Request payload
    * @param {string} payload.title - Video title (default: 'EduCore Lesson')
@@ -82,12 +83,15 @@ export class HeygenClient {
         };
       }
 
-      // Build minimal request payload - ONLY title and prompt (HeyGen v2 API requirement)
-      // According to HeyGen Docs (V2 Video): accepts only title & prompt
-      // All other fields cause 400 error
+      // Build minimal request payload - HeyGen V1 API requirement
+      // ⚠️ CRITICAL: HeyGen V1 requires avatar_id (default avatar, no voice selection)
+      // We use default public avatar 'sophia-public' - this is NOT voice selection
+      // We do NOT specify: voice_id, voice_engine, narration, text_reader
+      // Only avatar_id to tell HeyGen which avatar to use (HeyGen decides voice automatically)
       const requestPayload = {
         title: title || 'EduCore Lesson',
         prompt: prompt.trim(), // Trainer's exact text, unmodified
+        avatar_id: 'sophia-public', // Default public avatar (required by HeyGen V1)
       };
 
       // Log request payload for debugging
@@ -245,7 +249,9 @@ export class HeygenClient {
   async pollVideoStatus(videoId, maxAttempts = 60, interval = 3000) {
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       try {
-        const response = await this.client.get(`/v1/video_status.get?video_id=${videoId}`);
+        // ⚠️ CRITICAL: Use /v1/video-status.get (with hyphen, NOT underscore)
+        // /v1/video_status.get does not exist and will return 404
+        const response = await this.client.get(`/v1/video-status.get?video_id=${videoId}`);
         const status = response.data.data.status;
 
         if (status === 'completed') {
