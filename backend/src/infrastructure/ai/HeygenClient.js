@@ -193,20 +193,23 @@ export class HeygenClient {
       // If validation hasn't run yet, we'll proceed (validation is async)
       // But if it ran and explicitly failed (not just unvalidated), we should not proceed
       // Note: If validation couldn't run due to 403, avatarValidated will be true (allowing generation)
+      // IMPORTANT: If API is restricted (403), we allow generation to proceed and let HeyGen API validate
       if (this.avatarValidated === false && this.avatarId) {
         // Re-validate synchronously if not yet validated
         const isValid = await this.validateAvatar();
+        // Only fail if validation explicitly failed (avatar not found in list)
+        // If validation couldn't run (403), avatarValidated will be true, so we proceed
         if (!isValid && this.avatarValidated === false) {
-          // Only fail if validation explicitly failed (avatar not found)
-          // If validation couldn't run (403), avatarValidated will be true
-        return {
-          status: 'failed',
-          videoId: null,
-          error: 'NO_AVAILABLE_AVATAR',
-          errorCode: 'NO_AVAILABLE_AVATAR',
-          errorDetail: `Configured avatar (${this.avatarId}) not found in HeyGen API. Please update config/heygen-avatar.json with a valid avatar ID from HeyGen support or dashboard.`,
-        };
+          // Validation explicitly failed - avatar not in list
+          return {
+            status: 'failed',
+            videoId: null,
+            error: 'NO_AVAILABLE_AVATAR',
+            errorCode: 'NO_AVAILABLE_AVATAR',
+            errorDetail: `Configured avatar (${this.avatarId}) not found in HeyGen API. Please update config/heygen-avatar.json with a valid avatar ID. Contact HeyGen support for available public avatar IDs.`,
+          };
         }
+        // If validation couldn't run (403), avatarValidated is now true, so we proceed to API call
       }
 
       // Get language from payload (required)
