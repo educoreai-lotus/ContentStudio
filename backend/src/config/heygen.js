@@ -155,9 +155,10 @@ export function getVoiceConfig(language) {
 
   // Try to find voice in config
   if (config?.defaultVoices) {
-    // Try normalized code first
+    // Try normalized code first (e.g., 'en', 'ar', 'he')
     let voiceId = config.defaultVoices[normalizedLang];
     
+    // If found and not null, return it
     if (voiceId) {
       return {
         voice_id: voiceId,
@@ -166,7 +167,7 @@ export function getVoiceConfig(language) {
       };
     }
 
-    // Try full language name mapping
+    // Try full language name mapping (e.g., 'en' -> 'english')
     const fullNameMap = {
       'ar': 'arabic',
       'he': 'hebrew',
@@ -184,6 +185,7 @@ export function getVoiceConfig(language) {
     const fullName = fullNameMap[normalizedLang];
     if (fullName) {
       voiceId = config.defaultVoices[fullName];
+      // Check if voiceId exists and is not null
       if (voiceId) {
         return {
           voice_id: voiceId,

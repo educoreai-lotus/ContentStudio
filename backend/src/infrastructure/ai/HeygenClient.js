@@ -276,10 +276,10 @@ export class HeygenClient {
       console.log('[Avatar Generation] Sending request to HeyGen:', JSON.stringify(requestPayload, null, 2));
 
       // Create video generation request
-      // ⚠️ CRITICAL: Use /v2/video.generate endpoint (HeyGen API v2)
+      // ⚠️ CRITICAL: Use /v2/video/generate endpoint (HeyGen API v2)
       let response;
       try {
-        response = await this.client.post('/v2/video.generate', requestPayload);
+        response = await this.client.post('/v2/video/generate', requestPayload);
       } catch (error) {
         // Extract detailed error information from HeyGen response
         const errorMessage = error.response?.data?.message || error.message || 'Unknown error';
