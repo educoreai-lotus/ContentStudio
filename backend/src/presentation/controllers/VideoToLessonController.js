@@ -40,10 +40,20 @@ const upload = multer({
  * Video-to-Lesson Controller
  */
 export class VideoToLessonController {
-  constructor({ videoToLessonUseCase, videoTranscriptionService, contentGenerationOrchestrator }) {
+  constructor({ 
+    videoToLessonUseCase, 
+    videoTranscriptionService, 
+    contentGenerationOrchestrator,
+    qualityCheckService,
+    topicRepository,
+    courseRepository,
+  }) {
     this.videoToLessonUseCase = videoToLessonUseCase;
     this.videoTranscriptionService = videoTranscriptionService;
     this.contentGenerationOrchestrator = contentGenerationOrchestrator;
+    this.qualityCheckService = qualityCheckService;
+    this.topicRepository = topicRepository;
+    this.courseRepository = courseRepository;
     this.upload = upload;
   }
 
@@ -150,7 +160,127 @@ export class VideoToLessonController {
       // Extract transcript text
       const transcriptText = transcriptionResult.transcript;
 
-      // Step 2: Generate all lesson formats using ContentGenerationOrchestrator
+      // Step 2: Quality check - verify transcript relevance to topic and skills
+      const { topic_id, topic_name, course_id } = req.body;
+
+      // Validate topic_id before proceeding
+      if (!topic_id) {
+        logger.warn('[VideoToLessonController] Topic ID not provided, skipping quality check and content generation', {
+          hasTopicId: !!req.body.topic_id,
+        });
+        throw new Error('Topic ID is required for quality check and content generation. Please provide topic_id in request body.');
+      }
+
+      // Perform quality check on transcript
+      if (this.qualityCheckService && this.topicRepository && transcriptText) {
+        try {
+          logger.info('[VideoToLessonController] Starting quality check on transcript', {
+            transcriptLength: transcriptText.length,
+            topic_id: parseInt(topic_id),
+          });
+
+          // Fetch topic and course data for quality check
+          const topic = await this.topicRepository.findById(parseInt(topic_id));
+          if (!topic) {
+            throw new Error(`Topic not found: ${topic_id}`);
+          }
+
+          let courseName = null;
+          if (topic.course_id && this.courseRepository) {
+            const course = await this.courseRepository.findById(topic.course_id);
+            courseName = course?.course_name || null;
+          }
+
+          // Extract skills from topic
+          const skills = Array.isArray(topic.skills) ? topic.skills : (topic.skills ? [topic.skills] : []);
+
+          // Perform quality check evaluation
+          const evaluationResult = await this.qualityCheckService.evaluateContentWithOpenAI({
+            courseName: courseName || 'General Course',
+            topicName: topic.topic_name || topic_name || 'Untitled Topic',
+            skills: skills,
+            contentText: transcriptText,
+            statusMessages: null, // No status messages for API call
+          });
+
+          logger.info('[VideoToLessonController] Quality check completed', {
+            topic_id: parseInt(topic_id),
+            relevance_score: evaluationResult.relevance_score || evaluationResult.relevance,
+            originality_score: evaluationResult.originality_score,
+            difficulty_alignment_score: evaluationResult.difficulty_alignment_score,
+            consistency_score: evaluationResult.consistency_score,
+          });
+
+          // Validate scores - reject if relevance < 60 or originality < 75
+          const relevanceScore = evaluationResult.relevance_score || evaluationResult.relevance || 100;
+          if (relevanceScore < 60) {
+            const errorMsg = `Video transcript failed quality check: Content is not relevant to the lesson topic (Relevance: ${relevanceScore}/100). ${evaluationResult.feedback_summary || 'The video transcript does not match the lesson topic. Please ensure your video is directly related to the topic.'}`;
+            logger.warn('[VideoToLessonController] Quality check failed - relevance too low', {
+              topic_id: parseInt(topic_id),
+              relevance_score: relevanceScore,
+              feedback: evaluationResult.feedback_summary,
+            });
+            return res.status(400).json({
+              success: false,
+              error: errorMsg,
+              errorCode: 'QUALITY_CHECK_FAILED',
+              quality_check: {
+                relevance_score: relevanceScore,
+                originality_score: evaluationResult.originality_score,
+                difficulty_alignment_score: evaluationResult.difficulty_alignment_score,
+                consistency_score: evaluationResult.consistency_score,
+                feedback_summary: evaluationResult.feedback_summary,
+              },
+            });
+          }
+
+          if (evaluationResult.originality_score < 75) {
+            const errorMsg = `Video transcript failed quality check: Content appears to be copied or plagiarized (Originality: ${evaluationResult.originality_score}/100). ${evaluationResult.feedback_summary || 'Please ensure your video content is original and not copied from other sources.'}`;
+            logger.warn('[VideoToLessonController] Quality check failed - originality too low', {
+              topic_id: parseInt(topic_id),
+              originality_score: evaluationResult.originality_score,
+              feedback: evaluationResult.feedback_summary,
+            });
+            return res.status(400).json({
+              success: false,
+              error: errorMsg,
+              errorCode: 'QUALITY_CHECK_FAILED',
+              quality_check: {
+                relevance_score: relevanceScore,
+                originality_score: evaluationResult.originality_score,
+                difficulty_alignment_score: evaluationResult.difficulty_alignment_score,
+                consistency_score: evaluationResult.consistency_score,
+                feedback_summary: evaluationResult.feedback_summary,
+              },
+            });
+          }
+
+          logger.info('[VideoToLessonController] Quality check passed, proceeding with content generation', {
+            topic_id: parseInt(topic_id),
+            relevance_score: relevanceScore,
+            originality_score: evaluationResult.originality_score,
+          });
+        } catch (qualityCheckError) {
+          logger.error('[VideoToLessonController] Quality check failed with error', {
+            topic_id: parseInt(topic_id),
+            error: qualityCheckError.message,
+            stack: qualityCheckError.stack,
+          });
+          // If quality check service fails, we should still allow content generation
+          // But log the error for debugging
+          logger.warn('[VideoToLessonController] Quality check error, but continuing with content generation', {
+            error: qualityCheckError.message,
+          });
+        }
+      } else {
+        logger.warn('[VideoToLessonController] Quality check service not available, skipping quality check', {
+          hasQualityCheckService: !!this.qualityCheckService,
+          hasTopicRepository: !!this.topicRepository,
+          hasTranscript: !!transcriptText,
+        });
+      }
+
+      // Step 3: Generate all lesson formats using ContentGenerationOrchestrator
       let generatedContent = null;
       const progressEvents = [];
       
@@ -162,15 +292,6 @@ export class VideoToLessonController {
 
           // Get trainer_id from request body or authentication
           const trainer_id = req.body.trainer_id || req.auth?.trainer?.trainer_id || null;
-          const { topic_id, topic_name, course_id } = req.body;
-
-          // Validate topic_id before proceeding
-          if (!topic_id) {
-            logger.warn('[VideoToLessonController] Topic ID not provided, skipping content generation', {
-              hasTopicId: !!req.body.topic_id,
-            });
-            throw new Error('Topic ID is required for content generation. Please provide topic_id in request body.');
-          }
 
           // Progress callback to collect events
           const onProgress = (format, status, message) => {

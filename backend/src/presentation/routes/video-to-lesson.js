@@ -105,6 +105,9 @@ const initServices = async () => {
       videoToLessonUseCase,
       videoTranscriptionService,
       contentGenerationOrchestrator,
+      qualityCheckService,
+      topicRepository,
+      courseRepository,
     });
 
     return videoToLessonController;
