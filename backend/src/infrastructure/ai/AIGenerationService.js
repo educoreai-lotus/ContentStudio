@@ -409,11 +409,23 @@ ${languageInstruction}`;
     }
 
     // Validate language - DO NOT default to English silently
+    logger.info('[AIGenerationService] Validating language for audio generation', {
+      config_language: config.language,
+      config_keys: Object.keys(config),
+    });
     const languageValidation = getValidatedLanguage(config.language);
     if (!languageValidation.valid) {
+      logger.error('[AIGenerationService] Language validation failed for audio', {
+        error: languageValidation.message,
+        original: languageValidation.original,
+      });
       throw new Error(`Language validation failed: ${languageValidation.message}`);
     }
     const language = languageValidation.language;
+    logger.info('[AIGenerationService] Language validated successfully for audio', {
+      original: languageValidation.original,
+      normalized: language,
+    });
 
     // Check if TTS voice is available for this language
     if (!isTTSVoiceAvailable(language)) {
