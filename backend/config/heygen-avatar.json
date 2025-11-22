@@ -1,10 +1,10 @@
 {
-  "avatar_id": "sara-public",
-  "name": "Sara (Public Avatar)",
+  "avatar_id": "emma-public",
+  "name": "Emma (Public Avatar)",
   "gender": "female",
   "style": "professional",
   "score": 0,
-  "selectedAt": "2025-11-22T10:00:00.000Z",
+  "selectedAt": "2025-11-22T11:00:00.000Z",
   "source": "manual_placeholder",
   "criteria": {
     "mustBePublic": true,
@@ -12,6 +12,6 @@
     "mustBeProfessionalNeutralOrNatural": true,
     "mustNotBeChildCartoonFantasyRobotDramatic": true
   },
-  "note": "This is a placeholder avatar ID. If video generation fails with 'avatar_not_found', replace with a valid avatar ID from HeyGen support or dashboard."
+  "note": "This is a placeholder avatar ID. If video generation fails with 'avatar_not_found', you need to: 1) Contact HeyGen support for a valid public avatar ID, 2) Check HeyGen dashboard for available avatars, 3) Update this file with the correct avatar_id. The avatars Anna, Emylee, Lwandile, and Burak were removed in July 2025."
 }
 
