@@ -199,13 +199,13 @@ export class HeygenClient {
         if (!isValid && this.avatarValidated === false) {
           // Only fail if validation explicitly failed (avatar not found)
           // If validation couldn't run (403), avatarValidated will be true
-          return {
-            status: 'failed',
-            videoId: null,
-            error: 'NO_AVAILABLE_AVATAR',
-            errorCode: 'NO_AVAILABLE_AVATAR',
-            errorDetail: `Configured avatar (${this.avatarId}) not found in HeyGen API`,
-          };
+        return {
+          status: 'failed',
+          videoId: null,
+          error: 'NO_AVAILABLE_AVATAR',
+          errorCode: 'NO_AVAILABLE_AVATAR',
+          errorDetail: `Configured avatar (${this.avatarId}) not found in HeyGen API. Please update config/heygen-avatar.json with a valid avatar ID from HeyGen support or dashboard.`,
+        };
         }
       }
 
@@ -264,6 +264,13 @@ export class HeygenClient {
         const errorMessage = error.response?.data?.message || error.message || 'Unknown error';
         const errorDetails = error.response?.data || {};
         
+        // Check if error is avatar_not_found - provide helpful message
+        const isAvatarNotFound = 
+          errorMessage.toLowerCase().includes('avatar') && 
+          (errorMessage.toLowerCase().includes('not found') || 
+           errorMessage.toLowerCase().includes('invalid') ||
+           error.response?.status === 404);
+        
         console.error('[Avatar Generation Error] HeyGen API error:', {
           status: error.response?.status,
           statusText: error.response?.statusText,
@@ -271,6 +278,18 @@ export class HeygenClient {
           details: errorDetails,
           requestPayload: requestPayload,
         });
+
+        // If avatar not found, provide helpful error message
+        if (isAvatarNotFound) {
+          return {
+            status: 'failed',
+            videoId: null,
+            error: 'NO_AVAILABLE_AVATAR',
+            errorCode: 'NO_AVAILABLE_AVATAR',
+            errorDetail: `Avatar ID "${this.avatarId}" not found or no longer available. Please update config/heygen-avatar.json with a valid avatar ID. Contact HeyGen support for available public avatar IDs.`,
+            heyGenError: errorMessage,
+          };
+        }
 
         return {
           status: 'failed',

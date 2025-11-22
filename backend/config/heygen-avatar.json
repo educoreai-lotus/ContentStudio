@@ -1,0 +1,17 @@
+{
+  "avatar_id": "sara-public",
+  "name": "Sara (Public Avatar)",
+  "gender": "female",
+  "style": "professional",
+  "score": 0,
+  "selectedAt": "2025-11-22T10:00:00.000Z",
+  "source": "manual_placeholder",
+  "criteria": {
+    "mustBePublic": true,
+    "mustBeFemaleOrNeutral": true,
+    "mustBeProfessionalNeutralOrNatural": true,
+    "mustNotBeChildCartoonFantasyRobotDramatic": true
+  },
+  "note": "This is a placeholder avatar ID. If video generation fails with 'avatar_not_found', replace with a valid avatar ID from HeyGen support or dashboard."
+}
+
