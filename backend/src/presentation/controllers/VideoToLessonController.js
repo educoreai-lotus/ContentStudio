@@ -231,6 +231,13 @@ export class VideoToLessonController {
               relevance_score: relevanceScore,
               feedback: evaluationResult.feedback_summary,
             });
+            
+            // Check if response was already sent
+            if (res.headersSent) {
+              logger.warn('[VideoToLessonController] Response already sent, cannot return quality check error');
+              return;
+            }
+            
             return res.status(400).json({
               success: false,
               error: errorMsg,
@@ -252,6 +259,13 @@ export class VideoToLessonController {
               originality_score: evaluationResult.originality_score,
               feedback: evaluationResult.feedback_summary,
             });
+            
+            // Check if response was already sent
+            if (res.headersSent) {
+              logger.warn('[VideoToLessonController] Response already sent, cannot return quality check error');
+              return;
+            }
+            
             return res.status(400).json({
               success: false,
               error: errorMsg,
@@ -387,7 +401,22 @@ export class VideoToLessonController {
         stack: error.stack,
       });
 
-      next(error);
+      // Check if response was already sent (e.g., from quality check)
+      if (res.headersSent) {
+        logger.warn('[VideoToLessonController] Response already sent, skipping error handler');
+        return;
+      }
+
+      // Return error response instead of calling next(error) to avoid generic error handler
+      return res.status(500).json({
+        success: false,
+        error: error.message || 'Transcription failed',
+        errorCode: 'TRANSCRIPTION_ERROR',
+        details: {
+          message: error.message,
+          stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+        },
+      });
     }
   }
 
