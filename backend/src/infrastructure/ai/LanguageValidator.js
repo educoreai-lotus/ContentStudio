@@ -98,6 +98,12 @@ export function normalizeLanguageCode(language) {
     'ur': 'ur',
     'ur-pk': 'ur',
     'urdu': 'ur',
+    
+    // Russian variants
+    'ru': 'ru',
+    'ru-ru': 'ru',
+    'russian': 'ru',
+    'rus': 'ru',
   };
 
   // Check direct mapping first
@@ -179,6 +185,7 @@ export const OPENAI_TTS_VOICES = {
   'pt': ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'],
   'fa': ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'],
   'ur': ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'],
+  'ru': ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'], // Russian - use any voice
 };
 
 /**

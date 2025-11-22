@@ -155,11 +155,23 @@ Generate the code now:`;
 
   async generateMindMap(topicText, config = {}) {
     // Validate language - DO NOT default to English silently
+    logger.info('[AIGenerationService] Validating language for mind map generation', {
+      config_language: config.language,
+      config_keys: Object.keys(config),
+    });
     const languageValidation = getValidatedLanguage(config.language);
     if (!languageValidation.valid) {
+      logger.error('[AIGenerationService] Language validation failed for mind map', {
+        error: languageValidation.message,
+        original: languageValidation.original,
+      });
       throw new Error(`Language validation failed: ${languageValidation.message}`);
     }
     const language = languageValidation.language;
+    logger.info('[AIGenerationService] Language validated successfully for mind map', {
+      original: languageValidation.original,
+      normalized: language,
+    });
 
     // Build language preservation instruction
     const languageInstruction = buildLanguagePreservationInstruction(language);

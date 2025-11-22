@@ -138,6 +138,8 @@ export async function generateAiTopic(skillCoverageItem, preferredLanguage) {
   // Log language to ensure it's passed correctly
   logger.info('[UseCase] Language set for AI generation', {
     preferredLanguage,
+    language_before_sanitize: language,
+    sanitized_language: sanitizedInput.language,
     promptVariablesLanguage: promptVariables.language,
     skill: skillName,
   });

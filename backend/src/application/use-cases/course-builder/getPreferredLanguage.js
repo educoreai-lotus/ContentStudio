@@ -75,7 +75,7 @@ export async function getPreferredLanguage(parsedRequest) {
       returned_value: parsedResponse?.response?.preferred_language || 'missing',
     });
     return {
-      preferred_language: 'en',
+      preferred_language: 'he', // Default to Hebrew if Directory doesn't return valid language
     };
   } catch (error) {
     // Fallback on any error (Directory unreachable, invalid response, etc.)
@@ -84,7 +84,7 @@ export async function getPreferredLanguage(parsedRequest) {
       learner_id: parsedRequest.learner_id,
     });
     return {
-      preferred_language: 'en',
+      preferred_language: 'he', // Default to Hebrew if Directory is unreachable
     };
   }
 }
