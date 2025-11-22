@@ -194,8 +194,10 @@ export function getVoiceConfig(language) {
         };
       } else {
         // Log why it failed (for debugging)
-        console.log(`[HeyGenConfig] Voice lookup: normalizedLang=${normalizedLang}, fullName=${fullName}, voiceId=${voiceId} (null or undefined)`);
+        console.log(`[HeyGenConfig] Voice lookup failed: normalizedLang=${normalizedLang}, fullName=${fullName}, voiceId=${voiceId} (null or undefined). Available keys: ${Object.keys(config.defaultVoices).slice(0, 10).join(', ')}...`);
       }
+    } else {
+      console.log(`[HeyGenConfig] No fullName mapping for normalizedLang=${normalizedLang}`);
     }
   } else {
     console.log(`[HeyGenConfig] Voices config not loaded or defaultVoices missing`);
