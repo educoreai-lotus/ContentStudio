@@ -234,11 +234,20 @@ export class VideoToLessonController {
             
             // Check if response was already sent
             if (res.headersSent) {
-              logger.warn('[VideoToLessonController] Response already sent, cannot return quality check error');
+              logger.warn('[VideoToLessonController] Response already sent, cannot return quality check error', {
+                headersSent: res.headersSent,
+                statusCode: res.statusCode,
+              });
               return;
             }
             
-            return res.status(400).json({
+            logger.info('[VideoToLessonController] Returning quality check failure response', {
+              statusCode: 400,
+              errorCode: 'QUALITY_CHECK_FAILED',
+              relevance_score: relevanceScore,
+            });
+            
+            const errorResponse = {
               success: false,
               error: errorMsg,
               errorCode: 'QUALITY_CHECK_FAILED',
@@ -249,7 +258,13 @@ export class VideoToLessonController {
                 consistency_score: evaluationResult.consistency_score,
                 feedback_summary: evaluationResult.feedback_summary,
               },
+            };
+            
+            logger.info('[VideoToLessonController] Sending quality check error response', {
+              response: JSON.stringify(errorResponse),
             });
+            
+            return res.status(400).json(errorResponse);
           }
 
           if (evaluationResult.originality_score < 75) {
