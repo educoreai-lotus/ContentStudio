@@ -192,8 +192,13 @@ export function getVoiceConfig(language) {
           language: normalizedLang,
           source: 'config',
         };
+      } else {
+        // Log why it failed (for debugging)
+        console.log(`[HeyGenConfig] Voice lookup: normalizedLang=${normalizedLang}, fullName=${fullName}, voiceId=${voiceId} (null or undefined)`);
       }
     }
+  } else {
+    console.log(`[HeyGenConfig] Voices config not loaded or defaultVoices missing`);
   }
 
   // Fallback to default lecturer voice (Sarah)

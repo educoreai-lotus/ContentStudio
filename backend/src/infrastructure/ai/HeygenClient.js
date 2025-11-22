@@ -299,9 +299,10 @@ export class HeygenClient {
         
         const isForbidden = error.response?.status === 403;
         
-        // Handle avatar not found - skip gracefully
+        // Handle avatar not found - skip gracefully (especially for forced avatar Anna)
         if (isAvatarNotFound || isForbidden) {
-          console.log(`[HeyGen] Avatar not found: ${this.avatarId} — skipping video generation`);
+          const errorMsg = error.response?.data?.error?.message || errorMessage;
+          console.log(`[HeyGen] Avatar not found: ${this.avatarId} — skipping video generation. Error: ${errorMsg}`);
           return {
             status: 'skipped',
             videoId: null,
