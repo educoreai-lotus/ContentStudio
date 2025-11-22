@@ -87,26 +87,6 @@ app.get('/api/logo/:theme', (req, res) => {
     }
   });
 });
-// Must respond quickly to pass Docker/Railway health checks
-// Server is considered healthy if it can respond, even if DB is not ready yet
-// This endpoint MUST be defined BEFORE any middleware that might block it
-app.get('/health', (req, res) => {
-  try {
-    // Quick health check - server is up (synchronous, no async operations)
-    res.status(200).json({
-      status: 'ok',
-      timestamp: new Date().toISOString(),
-      server: 'running',
-    });
-  } catch (error) {
-    // Even if there's an error, return 200 to pass health check
-    res.status(200).json({ 
-      status: 'ok', 
-      timestamp: new Date().toISOString(),
-      server: 'running'
-    });
-  }
-});
 
 // Routes
 import coursesRouter from './src/presentation/routes/courses.js';
