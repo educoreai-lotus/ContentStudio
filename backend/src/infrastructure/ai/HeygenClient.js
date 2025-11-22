@@ -550,20 +550,94 @@ export class HeygenClient {
           // We need to get the actual video download URL from HeyGen API
           console.log('[HeyGen] Share URL detected, attempting to get download URL from HeyGen API');
           try {
-            // Try to get video details from HeyGen API to get download URL
+            // Try multiple API endpoints to get the download URL
+            // First, try video_status.get again (maybe it has more fields now)
             const videoDetailsResponse = await this.client.get(`/v1/video_status.get?video_id=${videoId}`);
-            const videoDetails = videoDetailsResponse.data?.data;
-            if (videoDetails?.video_url && !videoDetails.video_url.includes('/share/')) {
-              downloadUrl = videoDetails.video_url;
-              console.log('[HeyGen] Found download URL from video details', { downloadUrl });
-            } else if (videoDetails?.download_url) {
+            const videoDetails = videoDetailsResponse.data?.data || {};
+            
+            console.log('[HeyGen] Video details from API', {
+              videoId,
+              allFields: Object.keys(videoDetails),
+              video_url: videoDetails.video_url,
+              download_url: videoDetails.download_url,
+              video_download_url: videoDetails.video_download_url,
+              share_url: videoDetails.share_url,
+              fullResponse: JSON.stringify(videoDetails, null, 2),
+            });
+            
+            // Try to find a direct download URL (not a share URL)
+            if (videoDetails.download_url && !videoDetails.download_url.includes('/share/')) {
               downloadUrl = videoDetails.download_url;
               console.log('[HeyGen] Found download URL from download_url field', { downloadUrl });
+            } else if (videoDetails.video_download_url && !videoDetails.video_download_url.includes('/share/')) {
+              downloadUrl = videoDetails.video_download_url;
+              console.log('[HeyGen] Found download URL from video_download_url field', { downloadUrl });
+            } else if (videoDetails.video_url && !videoDetails.video_url.includes('/share/')) {
+              downloadUrl = videoDetails.video_url;
+              console.log('[HeyGen] Found download URL from video_url field', { downloadUrl });
             } else {
-              console.warn('[HeyGen] Could not find download URL, will try to download from share URL');
+              // Try to construct download URL from share URL
+              // Some APIs use a pattern like: https://cdn.heygen.com/videos/{videoId}.mp4
+              // Or: https://app.heygen.com/api/v1/video/download?video_id={videoId}
+              console.log('[HeyGen] No direct download URL found, trying alternative methods');
+              
+              // Try HeyGen CDN URL pattern
+              const cdnUrl = `https://cdn.heygen.com/videos/${videoId}.mp4`;
+              console.log('[HeyGen] Attempting to use CDN URL pattern', { cdnUrl });
+              
+              // Try to verify if CDN URL exists by making a HEAD request
+              try {
+                const headResponse = await axios.head(cdnUrl, { timeout: 5000 });
+                if (headResponse.status === 200) {
+                  downloadUrl = cdnUrl;
+                  console.log('[HeyGen] CDN URL verified and will be used', { downloadUrl });
+                } else {
+                  console.warn('[HeyGen] CDN URL returned non-200 status', { status: headResponse.status });
+                }
+              } catch (cdnErr) {
+                console.warn('[HeyGen] CDN URL not accessible', { error: cdnErr.message });
+                
+                // Try API download endpoint - HeyGen may have a download endpoint
+              // Try different possible endpoints
+              const possibleEndpoints = [
+                `https://api.heygen.com/v1/video/${videoId}/download`,
+                `https://api.heygen.com/v1/video/download?video_id=${videoId}`,
+                `https://api.heygen.com/v2/video/${videoId}/download`,
+              ];
+              
+              let foundEndpoint = false;
+              for (const endpoint of possibleEndpoints) {
+                try {
+                  console.log('[HeyGen] Testing download endpoint', { endpoint });
+                  const testResponse = await axios.head(endpoint, {
+                    headers: { 'X-Api-Key': this.apiKey },
+                    timeout: 5000,
+                    validateStatus: (status) => status < 500, // Don't throw on 404/403
+                  });
+                  
+                  if (testResponse.status === 200 || testResponse.status === 302) {
+                    downloadUrl = endpoint;
+                    foundEndpoint = true;
+                    console.log('[HeyGen] Found working download endpoint', { downloadUrl, status: testResponse.status });
+                    break;
+                  }
+                } catch (endpointErr) {
+                  // Continue to next endpoint
+                  continue;
+                }
+              }
+              
+              if (!foundEndpoint) {
+                console.warn('[HeyGen] No working download endpoint found, will skip download');
+                throw new Error('No download URL available - only share URL is provided by HeyGen');
+              }
+              }
             }
           } catch (detailsErr) {
-            console.warn('[HeyGen] Failed to get video details for download URL', { error: detailsErr.message });
+            console.error('[HeyGen] Failed to get video details for download URL', { 
+              error: detailsErr.message,
+              stack: detailsErr.stack,
+            });
           }
         }
 
@@ -878,40 +952,59 @@ export class HeygenClient {
     try {
       console.log('[HeyGen] Starting video download', { videoUrl });
       
-      // If URL is a share URL, we need to handle it differently
+      // If URL is a share URL, we cannot download directly
       if (videoUrl && videoUrl.includes('/share/')) {
-        console.warn('[HeyGen] Share URL provided for download - this may not work. Share URLs are for viewing, not downloading.');
-        // Try to extract video ID and construct download URL
-        const videoIdMatch = videoUrl.match(/\/share\/([^\/\?]+)/);
-        if (videoIdMatch) {
-          const extractedVideoId = videoIdMatch[1];
-          console.log('[HeyGen] Extracted video ID from share URL', { extractedVideoId });
-          // Note: HeyGen may not provide direct download URLs for share links
-          // We may need to use the API to get the actual video file URL
-        }
+        throw new Error('Share URLs cannot be downloaded directly. Need direct download URL from HeyGen API.');
       }
 
-      const response = await axios.get(videoUrl, {
+      // If URL is an API endpoint, we need to use authenticated request
+      let requestConfig = {
         responseType: 'arraybuffer',
         maxContentLength: Infinity,
         maxBodyLength: Infinity,
-        timeout: 60000, // 60 seconds timeout for video download
-      });
+        timeout: 120000, // 120 seconds timeout for video download
+      };
+
+      // If it's an API endpoint, add authentication headers
+      if (videoUrl && videoUrl.includes('api.heygen.com')) {
+        if (!this.apiKey) {
+          throw new Error('API key required for authenticated download requests');
+        }
+        requestConfig.headers = {
+          'X-Api-Key': this.apiKey,
+        };
+        console.log('[HeyGen] Using authenticated request for API download endpoint');
+      }
+
+      const response = await axios.get(videoUrl, requestConfig);
       
       const contentType = response.headers['content-type'];
+      const contentLength = response.headers['content-length'];
       console.log('[HeyGen] Video download response received', {
         contentType,
-        contentLength: response.headers['content-length'],
+        contentLength,
+        contentLengthMB: contentLength ? (parseInt(contentLength) / 1024 / 1024).toFixed(2) : 'unknown',
         status: response.status,
+        videoUrl,
       });
       
-      if (!contentType || !contentType.includes('video')) {
+      // Check if we got actual video data
+      if (response.status !== 200) {
+        throw new Error(`Download failed with status ${response.status}`);
+      }
+
+      // Some servers may not set content-type correctly, but we should have data
+      if (contentType && !contentType.includes('video') && !contentType.includes('application/octet-stream')) {
         console.warn('[HeyGen] Unexpected content type in download response', {
           contentType,
           videoUrl,
         });
-        // Don't throw - some video URLs may not have proper content-type headers
-        // Continue with download if we got data
+        // Check if we got HTML (error page) instead of video
+        const bufferStart = Buffer.from(response.data.slice(0, 100));
+        const bufferStartStr = bufferStart.toString('utf-8');
+        if (bufferStartStr.includes('<html') || bufferStartStr.includes('<!DOCTYPE')) {
+          throw new Error('Received HTML instead of video file - URL may be incorrect');
+        }
       }
       
       const buffer = Buffer.from(response.data);
@@ -932,6 +1025,7 @@ export class HeygenClient {
         videoUrl,
         responseStatus: error.response?.status,
         responseHeaders: error.response?.headers,
+        responseDataPreview: error.response?.data ? Buffer.from(error.response.data.slice(0, 200)).toString('utf-8') : null,
       });
       throw new Error(`Failed to download video: ${error.message}`);
     }
