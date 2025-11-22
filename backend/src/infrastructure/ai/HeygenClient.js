@@ -281,6 +281,12 @@ export class HeygenClient {
 
         // If avatar not found, provide helpful error message
         if (isAvatarNotFound) {
+          console.error(`[Avatar Generation Error] Avatar "${this.avatarId}" not found. Error details:`, {
+            heyGenMessage: errorMessage,
+            heyGenStatus: error.response?.status,
+            heyGenDetails: errorDetails,
+          });
+          
           return {
             status: 'failed',
             videoId: null,
@@ -288,6 +294,8 @@ export class HeygenClient {
             errorCode: 'NO_AVAILABLE_AVATAR',
             errorDetail: `Avatar ID "${this.avatarId}" not found or no longer available. Please update config/heygen-avatar.json with a valid avatar ID. Contact HeyGen support for available public avatar IDs.`,
             heyGenError: errorMessage,
+            heyGenStatus: error.response?.status,
+            suggestion: 'Try contacting HeyGen support or check HeyGen dashboard for available public avatar IDs. The avatar may have been removed (as mentioned in July 2025 updates).',
           };
         }
 
