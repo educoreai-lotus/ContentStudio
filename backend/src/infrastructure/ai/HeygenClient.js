@@ -294,6 +294,29 @@ export class HeygenClient {
         };
       }
 
+      // HeyGen has a limit of 180 seconds per video
+      // Approximate: ~10 characters per second of speech = ~1800 characters max
+      // To be safe, we'll limit to 1500 characters (approximately 150 seconds)
+      const MAX_PROMPT_LENGTH = 1500;
+      let finalPrompt = prompt.trim();
+      let wasTruncated = false;
+
+      if (finalPrompt.length > MAX_PROMPT_LENGTH) {
+        console.warn('[HeyGen] Prompt is too long, truncating to prevent video generation failure', {
+          originalLength: finalPrompt.length,
+          maxLength: MAX_PROMPT_LENGTH,
+        });
+        // Truncate at word boundary to avoid cutting words
+        const truncated = finalPrompt.substring(0, MAX_PROMPT_LENGTH);
+        const lastSpace = truncated.lastIndexOf(' ');
+        finalPrompt = lastSpace > 0 ? truncated.substring(0, lastSpace) + '...' : truncated + '...';
+        wasTruncated = true;
+        console.log('[HeyGen] Prompt truncated', {
+          originalLength: prompt.length,
+          truncatedLength: finalPrompt.length,
+        });
+      }
+
       // Check if avatar is available
       if (!this.avatarId) {
         console.log('[HeyGen] Skipping avatar generation - reason: Avatar ID not configured');
