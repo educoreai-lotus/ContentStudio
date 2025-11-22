@@ -168,7 +168,11 @@ export class VideoToLessonController {
         logger.warn('[VideoToLessonController] Topic ID not provided, skipping quality check and content generation', {
           hasTopicId: !!req.body.topic_id,
         });
-        throw new Error('Topic ID is required for quality check and content generation. Please provide topic_id in request body.');
+        return res.status(400).json({
+          success: false,
+          error: 'Topic ID is required for quality check and content generation. Please provide topic_id in request body.',
+          errorCode: 'TOPIC_ID_REQUIRED',
+        });
       }
 
       // Perform quality check on transcript
@@ -182,7 +186,14 @@ export class VideoToLessonController {
           // Fetch topic and course data for quality check
           const topic = await this.topicRepository.findById(parseInt(topic_id));
           if (!topic) {
-            throw new Error(`Topic not found: ${topic_id}`);
+            logger.warn('[VideoToLessonController] Topic not found for quality check', {
+              topic_id: parseInt(topic_id),
+            });
+            return res.status(404).json({
+              success: false,
+              error: `Topic not found: ${topic_id}`,
+              errorCode: 'TOPIC_NOT_FOUND',
+            });
           }
 
           let courseName = null;
@@ -266,10 +277,18 @@ export class VideoToLessonController {
             error: qualityCheckError.message,
             stack: qualityCheckError.stack,
           });
-          // If quality check service fails, we should still allow content generation
-          // But log the error for debugging
-          logger.warn('[VideoToLessonController] Quality check error, but continuing with content generation', {
-            error: qualityCheckError.message,
+          
+          // If quality check throws an error (not a validation failure), return error response
+          // This could happen if topic not found, API error, etc.
+          const errorMsg = qualityCheckError.message || 'Quality check failed';
+          return res.status(400).json({
+            success: false,
+            error: errorMsg,
+            errorCode: 'QUALITY_CHECK_ERROR',
+            details: {
+              message: qualityCheckError.message,
+              topic_id: parseInt(topic_id),
+            },
           });
         }
       } else {
