@@ -159,11 +159,12 @@ export async function generateAiTopic(skillCoverageItem, preferredLanguage) {
 
   try {
     const contents = [];
+    let text = null; // Declare text outside try block so it's accessible later
 
     // 1. Generate text_audio (type 1)
     try {
       const textPromptWithSecurity = `${securityInstruction}\n\n${textPrompt}`;
-      const text = await aiGenerationService.generateText(textPromptWithSecurity, {
+      text = await aiGenerationService.generateText(textPromptWithSecurity, {
         language: promptVariables.language,
         temperature: 0.7,
         max_tokens: 2000,
