@@ -302,6 +302,8 @@ export async function generateAiTopic(skillCoverageItem, preferredLanguage) {
 
     // 5. Generate avatar_video (type 6)
     try {
+      logger.info('[UseCase] Starting avatar video generation', { skill: skillName });
+      
       // Use the generated text content (in the correct language) as the prompt for HeyGen
       // This ensures HeyGen speaks the actual lesson content, not a generic English prompt
       // Note: 'text' variable is defined in the text_audio generation block above
@@ -312,9 +314,14 @@ export async function generateAiTopic(skillCoverageItem, preferredLanguage) {
         language: promptVariables.language,
         skill: skillName,
         promptLength: trainerPrompt.length,
+        hasText: !!text,
+        textType: typeof text,
         promptSource: text?.content ? 'generated_text_content' : text ? 'generated_text' : promptVariables.lessonDescription ? 'lessonDescription' : 'fallback',
+        promptPreview: trainerPrompt.substring(0, 100),
       });
 
+      logger.info('[UseCase] About to call aiGenerationService.generateAvatarVideo', { skill: skillName });
+      
       const avatarResult = await aiGenerationService.generateAvatarVideo({
         prompt: trainerPrompt, // Use generated text content in the correct language
         topic: promptVariables.lessonTopic,
@@ -323,6 +330,13 @@ export async function generateAiTopic(skillCoverageItem, preferredLanguage) {
       }, {
         language: promptVariables.language,
         topicName: promptVariables.lessonTopic,
+      });
+
+      logger.info('[UseCase] Avatar video generation completed', {
+        skill: skillName,
+        status: avatarResult?.status,
+        hasVideoUrl: !!avatarResult?.videoUrl,
+        hasVideoId: !!avatarResult?.videoId,
       });
 
       if (avatarResult.status !== 'failed') {
