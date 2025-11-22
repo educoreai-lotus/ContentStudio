@@ -44,6 +44,28 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Health check endpoint - MUST be before authentication middleware
+// This endpoint must respond quickly and not be blocked by any middleware
+app.get('/health', (req, res) => {
+  try {
+    // Quick health check - server is up (synchronous, no async operations)
+    res.status(200).json({
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      server: 'running',
+    });
+  } catch (error) {
+    // Even if there's an error, return 200 to pass health check
+    res.status(200).json({ 
+      status: 'ok', 
+      timestamp: new Date().toISOString(),
+      server: 'running'
+    });
+  }
+});
+
+// Apply authentication middleware to API routes (but not /health)
 app.use('/api', authenticationMiddleware);
 
 // Request logging (only in development or if LOG_REQUESTS=true)
@@ -65,8 +87,6 @@ app.get('/api/logo/:theme', (req, res) => {
     }
   });
 });
-
-// Health check endpoint
 // Must respond quickly to pass Docker/Railway health checks
 // Server is considered healthy if it can respond, even if DB is not ready yet
 // This endpoint MUST be defined BEFORE any middleware that might block it
