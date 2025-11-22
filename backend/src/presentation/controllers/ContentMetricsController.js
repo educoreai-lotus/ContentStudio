@@ -228,21 +228,12 @@ export class ContentMetricsController {
    * @param {Function} next - Express next middleware
    */
   async handleCourseBuilderFormat(requestData, res, next) {
-    // Set longer timeout for this endpoint (10 minutes)
+    // Note: Server timeout is set at server level (20 minutes in server.js)
     // This endpoint can take a long time due to AI content generation
-    req.setTimeout(10 * 60 * 1000); // 10 minutes
-    res.setTimeout(10 * 60 * 1000); // 10 minutes
     
     // Send keep-alive headers to prevent connection timeout
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('Keep-Alive', 'timeout=600, max=1000');
-    
-    // Send initial response headers to keep connection alive
-    res.writeHead(200, {
-      'Content-Type': 'application/json',
-      'Connection': 'keep-alive',
-      'Keep-Alive': 'timeout=600, max=1000',
-    });
     
     try {
       // Validate structure (already validated in fillContentMetrics, but double-check)
@@ -250,6 +241,7 @@ export class ContentMetricsController {
         logger.error('[ContentMetricsController] Invalid Course Builder format - missing or invalid payload');
         requestData.response = { error: 'Invalid Course Builder format - payload is required' };
         const errorStringified = JSON.stringify(requestData);
+        res.setHeader('Content-Type', 'application/json');
         return res.end(errorStringified);
       }
 
