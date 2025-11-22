@@ -41,10 +41,13 @@ export class HeygenClient {
     this.avatarValidated = false;
 
     // Validate avatar on startup (async, non-blocking)
-    if (this.avatarId) {
+    // Skip validation for anna-public (no longer available)
+    if (this.avatarId && this.avatarId !== 'anna-public') {
       this.validateAvatar().catch(error => {
         console.error('[HeygenClient] Failed to validate avatar on startup:', error.message);
       });
+    } else if (this.avatarId === 'anna-public') {
+      console.log('[HeyGen] Skipping startup validation for anna-public (no longer available)');
     }
   }
 
@@ -55,6 +58,13 @@ export class HeygenClient {
    */
   async validateAvatar() {
     if (!this.client || !this.avatarId) {
+      this.avatarValidated = false;
+      return false;
+    }
+
+    // Skip validation for anna-public (no longer available)
+    if (this.avatarId === 'anna-public') {
+      console.log('[HeyGen] Skipping validation for anna-public (no longer available)');
       this.avatarValidated = false;
       return false;
     }
