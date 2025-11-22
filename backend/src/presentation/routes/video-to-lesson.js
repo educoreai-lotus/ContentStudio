@@ -12,6 +12,7 @@ import { ContentGenerationOrchestrator } from '../../application/services/Conten
 import { PromptTemplateService } from '../../infrastructure/services/PromptTemplateService.js';
 import { PromptTemplateRepository } from '../../infrastructure/database/repositories/PromptTemplateRepository.js';
 import { QualityCheckService } from '../../infrastructure/ai/QualityCheckService.js';
+import { ContentHistoryService } from '../../application/services/ContentHistoryService.js';
 
 const router = express.Router();
 
@@ -42,6 +43,7 @@ let contentGenerationOrchestrator = null;
 let videoToLessonController = null;
 let promptTemplateService = null;
 let qualityCheckService = null;
+let contentHistoryService = null;
 
 // Initialize repositories and services asynchronously
 const initServices = async () => {
@@ -54,6 +56,7 @@ const initServices = async () => {
     contentRepository = await RepositoryFactory.getContentRepository();
     const courseRepository = await RepositoryFactory.getCourseRepository();
     const qualityCheckRepository = await RepositoryFactory.getQualityCheckRepository();
+    const contentVersionRepository = await RepositoryFactory.getContentVersionRepository();
 
     // Initialize PromptTemplateService
     const promptTemplateRepository = new PromptTemplateRepository();
@@ -71,6 +74,12 @@ const initServices = async () => {
           courseRepository,
         })
       : null;
+
+    // Initialize ContentHistoryService
+    contentHistoryService = new ContentHistoryService({
+      contentRepository,
+      contentHistoryRepository: contentVersionRepository,
+    });
 
     // Initialize use case
     videoToLessonUseCase = new VideoToLessonUseCase({
@@ -97,6 +106,7 @@ const initServices = async () => {
           topicRepository,
           promptTemplateService,
           qualityCheckService,
+          contentHistoryService,
         })
       : null;
 

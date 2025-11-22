@@ -1,6 +1,7 @@
 import { logger } from '../../infrastructure/logging/Logger.js';
 import { GenerateContentUseCase } from '../use-cases/GenerateContentUseCase.js';
 import { Content } from '../../domain/entities/Content.js';
+import { ContentDataCleaner } from '../utils/ContentDataCleaner.js';
 
 /**
  * Content Generation Orchestrator
@@ -15,6 +16,7 @@ export class ContentGenerationOrchestrator {
     topicRepository,
     promptTemplateService,
     qualityCheckService,
+    contentHistoryService,
   }) {
     this.aiGenerationService = aiGenerationService;
     this.openaiClient = openaiClient;
@@ -22,6 +24,7 @@ export class ContentGenerationOrchestrator {
     this.topicRepository = topicRepository;
     this.promptTemplateService = promptTemplateService;
     this.qualityCheckService = qualityCheckService;
+    this.contentHistoryService = contentHistoryService;
 
     // Initialize GenerateContentUseCase with existing dependencies
     this.generateContentUseCase = new GenerateContentUseCase({
@@ -155,13 +158,76 @@ export class ContentGenerationOrchestrator {
         // Override generation_method_id to 'video_to_lesson' (instead of 'ai_assisted')
         generatedContent.generation_method_id = 'video_to_lesson';
 
+        // Step: Check if content already exists for this topic and type
+        // If exists, save to history before creating/updating new content
+        let existingContent = null;
+        try {
+          existingContent = await this.contentRepository.findLatestByTopicAndType(
+            generationRequest.topic_id,
+            format.id
+          );
+          
+          if (existingContent && this.contentHistoryService) {
+            logger.info(`[ContentGenerationOrchestrator] Existing content found for ${format.label}, saving to history...`, {
+              format: format.name,
+              existing_content_id: existingContent.content_id,
+              topic_id: generationRequest.topic_id,
+              content_type_id: format.id,
+            });
+
+            try {
+              await this.contentHistoryService.saveVersion(existingContent, { force: true });
+              logger.info(`[ContentGenerationOrchestrator] Successfully saved previous version to history for ${format.label}`, {
+                format: format.name,
+                content_id: existingContent.content_id,
+              });
+            } catch (historyError) {
+              logger.error(`[ContentGenerationOrchestrator] Failed to save previous version to history for ${format.label}`, {
+                format: format.name,
+                error: historyError.message,
+                stack: historyError.stack,
+              });
+              // Continue with content creation even if history save fails
+            }
+          }
+        } catch (findError) {
+          logger.warn(`[ContentGenerationOrchestrator] Could not check for existing content for ${format.label}`, {
+            format: format.name,
+            error: findError.message,
+          });
+          // Continue with content creation
+        }
+
         // Save to database (even if failed, save it with failed status)
         logger.info(`[ContentGenerationOrchestrator] Saving ${format.label} to database...`, {
           format: format.name,
           isFailed,
+          hasExistingContent: !!existingContent,
         });
 
-        const savedContent = await this.contentRepository.create(generatedContent);
+        // If existing content found, update it instead of creating new
+        let savedContent;
+        if (existingContent) {
+          // Update existing content with new generated content
+          const cleanedContentData = ContentDataCleaner.clean(
+            generatedContent.content_data,
+            format.id
+          );
+          
+          savedContent = await this.contentRepository.update(existingContent.content_id, {
+            content_data: cleanedContentData,
+            generation_method_id: 'video_to_lesson',
+            updated_at: new Date(),
+          });
+          
+          logger.info(`[ContentGenerationOrchestrator] Updated existing content for ${format.label}`, {
+            format: format.name,
+            content_id: savedContent.content_id,
+          });
+        } else {
+          // Create new content
+          savedContent = await this.contentRepository.create(generatedContent);
+        }
 
         const formatDuration = Date.now() - formatStartTime;
 
