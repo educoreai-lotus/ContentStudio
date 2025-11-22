@@ -22,8 +22,13 @@ const DEFAULT_VOICE = {
 };
 
 // Paths to config files
+// __dirname is backend/src/config, so we need to go up 2 levels to backend/, then into config/
 const AVATAR_CONFIG_PATH = path.join(__dirname, '../../../config/heygen-avatar.json');
 const VOICES_CONFIG_PATH = path.join(__dirname, '../../../config/heygen-voices.json');
+
+// Also try alternative paths in case the file structure is different (e.g., in Docker/Railway)
+const ALTERNATIVE_VOICES_PATH = path.join(process.cwd(), 'config', 'heygen-voices.json');
+const ALTERNATIVE_AVATAR_PATH = path.join(process.cwd(), 'config', 'heygen-avatar.json');
 
 // In-memory caches
 let cachedAvatarConfig = null;
