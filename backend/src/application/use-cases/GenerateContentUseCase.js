@@ -179,11 +179,17 @@ ${basePrompt}`;
     }
 
     // For presentation (type 3), we don't need a prompt builder - we use Gamma API directly
+    // For audio (type 4), we use transcript (lessonDescription) as prompt directly
     // For mind_map (type 5), we use transcript as prompt directly (like presentation)
     // For avatar_video (type 6), we don't need a prompt builder - we use buildAvatarText() and HeyGen directly
-    // For other types, build prompt if not provided
-    if (!prompt && generationRequest.content_type_id !== 3 && generationRequest.content_type_id !== 5 && generationRequest.content_type_id !== 6) {
+    // For other types (text, code), build prompt if not provided
+    if (!prompt && generationRequest.content_type_id !== 3 && generationRequest.content_type_id !== 4 && generationRequest.content_type_id !== 5 && generationRequest.content_type_id !== 6) {
       prompt = this.buildPrompt(generationRequest.content_type_id, promptVariables);
+    }
+
+    // For audio (type 4), use transcript (lessonDescription) as prompt if not provided
+    if (!prompt && generationRequest.content_type_id === 4) {
+      prompt = promptVariables.lessonDescription || promptVariables.transcriptText || '';
     }
 
     // For mind_map (type 5), use transcript (lessonDescription) as prompt if not provided
@@ -195,7 +201,7 @@ ${basePrompt}`;
     // Note: User inputs are already wrapped in delimiters by buildPrompt()
     // For presentation (type 3), prompt is not needed - we use Gamma API directly
     // For avatar_video (type 6), prompt is not needed - we use buildAvatarText() and HeyGen directly
-    // For mind_map (type 5), sanitize the transcript prompt
+    // For audio (type 4) and mind_map (type 5), sanitize the transcript prompt
     if (prompt && generationRequest.content_type_id !== 3 && generationRequest.content_type_id !== 6) {
       prompt = PromptSanitizer.sanitizePrompt(prompt);
     }

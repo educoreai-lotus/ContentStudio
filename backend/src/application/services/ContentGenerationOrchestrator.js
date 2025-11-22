@@ -148,7 +148,9 @@ export class ContentGenerationOrchestrator {
         });
 
         // Check if avatar_video failed (by checking if videoUrl is null/undefined, since status is removed)
-        const isFailed = format.name === 'avatar_video' && (!generatedContent.content_data?.videoUrl || generatedContent.content_data?.error);
+        // Also check if status is 'skipped' - skipped should not be treated as failed
+        const isSkipped = format.name === 'avatar_video' && generatedContent.content_data?.status === 'skipped';
+        const isFailed = format.name === 'avatar_video' && !isSkipped && (!generatedContent.content_data?.videoUrl || generatedContent.content_data?.error);
 
         // Override generation_method_id to 'video_to_lesson' (instead of 'ai_assisted')
         generatedContent.generation_method_id = 'video_to_lesson';
@@ -163,7 +165,28 @@ export class ContentGenerationOrchestrator {
 
         const formatDuration = Date.now() - formatStartTime;
 
-        if (isFailed) {
+        if (isSkipped) {
+          // Emit progress: skipped
+          const reason = generatedContent.content_data?.reason || 'Avatar video skipped';
+          onProgress(format.name, 'skipped', `[AI] Skipped: ${format.label} - ${reason}`);
+          logger.info(`[ContentGenerationOrchestrator] ⏭️ Avatar video skipped but saved to database`, {
+            format: format.name,
+            content_id: savedContent.content_id,
+            reason,
+            duration: `${formatDuration}ms`,
+          });
+
+          // Return skipped result - but don't throw, allow other formats to continue
+          results[format.name] = {
+            content_id: savedContent.content_id,
+            format: format.name,
+            content_type_id: format.id,
+            generated: false,
+            status: 'skipped',
+            reason,
+            content_data: savedContent.content_data,
+          };
+        } else if (isFailed) {
           // Emit progress: failed
           const reason = generatedContent.content_data?.reason || 'Avatar video generation failed';
           onProgress(format.name, 'failed', `[AI] Failed: ${format.label} - ${reason}`);
