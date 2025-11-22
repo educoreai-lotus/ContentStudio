@@ -320,35 +320,9 @@ export class HeygenClient {
         });
       }
 
-      // Add language preservation instruction for non-English languages
-      // HeyGen may translate text automatically, so we need to explicitly tell it not to
-      if (language && language !== 'en' && !language.startsWith('en-')) {
-        const languageNames = {
-          'he': 'Hebrew',
-          'ar': 'Arabic',
-          'ru': 'Russian',
-          'es': 'Spanish',
-          'fr': 'French',
-          'de': 'German',
-          'it': 'Italian',
-          'ko': 'Korean',
-          'ja': 'Japanese',
-          'zh': 'Chinese',
-        };
-        const languageName = languageNames[language] || language;
-        
-        // Prepend instruction to preserve language - HeyGen should speak the text as-is
-        // Note: This instruction is added to the text itself, not as a separate field
-        const languageInstruction = `[Speak this text in ${languageName}, do NOT translate to English. Read the following text exactly as written:]\n\n`;
-        finalPrompt = languageInstruction + finalPrompt;
-        
-        console.log('[HeyGen] Added language preservation instruction', {
-          language,
-          languageName,
-          instructionLength: languageInstruction.length,
-          finalPromptLength: finalPrompt.length,
-        });
-      }
+      // Note: We rely on the language field in voice object and voice_id selection
+      // to ensure HeyGen speaks in the correct language
+      // We do NOT add language instructions to the text itself, as HeyGen will read them aloud
 
       // Check if avatar is available
       if (!this.avatarId) {
