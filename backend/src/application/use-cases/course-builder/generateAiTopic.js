@@ -301,18 +301,20 @@ export async function generateAiTopic(skillCoverageItem, preferredLanguage) {
 
     // 5. Generate avatar_video (type 6)
     try {
-      // Send ONLY minimal required fields to HeyGen: prompt, topic, description, skills
-      // ⚠️ CRITICAL: prompt is trainer's exact text, unmodified
-      const trainerPrompt = `A comprehensive lesson about ${skillName}. Cover essential concepts, best practices, and real-world applications.`;
+      // Use the generated text content (in the correct language) as the prompt for HeyGen
+      // This ensures HeyGen speaks the actual lesson content, not a generic English prompt
+      const trainerPrompt = textResult?.content || textResult?.text || promptVariables.lessonDescription || `A comprehensive lesson about ${skillName}. Cover essential concepts, best practices, and real-world applications.`;
 
-      // Log language before calling generateAvatarVideo
+      // Log language and prompt source before calling generateAvatarVideo
       logger.info('[UseCase] Calling generateAvatarVideo with language', {
         language: promptVariables.language,
         skill: skillName,
+        promptLength: trainerPrompt.length,
+        promptSource: textResult?.content ? 'generated_text' : textResult?.text ? 'generated_text_alt' : promptVariables.lessonDescription ? 'lessonDescription' : 'fallback',
       });
 
       const avatarResult = await aiGenerationService.generateAvatarVideo({
-        prompt: trainerPrompt, // Trainer's exact text, unmodified
+        prompt: trainerPrompt, // Use generated text content in the correct language
         topic: promptVariables.lessonTopic,
         description: promptVariables.lessonDescription,
         skills: promptVariables.skillsListArray,
