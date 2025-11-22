@@ -456,7 +456,7 @@ export class HeygenClient {
               type: 'text',
               input_text: finalPrompt, // Use truncated prompt if needed to prevent 180s limit
               voice_id: voiceId,
-              language: heygenLanguage, // Explicitly set language for HeyGen
+              language_code: heygenLanguage, // Explicitly set language code for HeyGen
             },
           },
         ],
@@ -470,7 +470,7 @@ export class HeygenClient {
         language,
         heygenLanguage,
         voiceId,
-        hasLanguageInVoice: !!requestPayload.video_inputs[0].voice.language,
+        hasLanguageInVoice: !!requestPayload.video_inputs[0].voice.language_code,
       });
 
       // Log request payload for debugging
