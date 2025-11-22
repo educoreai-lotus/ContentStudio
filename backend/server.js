@@ -129,9 +129,6 @@ import debugRouter from './src/presentation/routes/debug.js';
 import contentMetricsRouter from './src/presentation/routes/content-metrics.js';
 import exercisesRouter from './src/presentation/routes/exercises.js';
 import { errorHandler } from './src/presentation/middleware/errorHandler.js';
-import { requestLogger } from './src/presentation/middleware/requestLogger.js';
-import { authenticationMiddleware } from './src/presentation/middleware/authentication.js';
-import { logger } from './src/infrastructure/logging/Logger.js';
 
 app.use('/api/courses', coursesRouter);
 app.use('/api/topics', topicsRouter);
