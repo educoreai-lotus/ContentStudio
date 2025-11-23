@@ -408,6 +408,11 @@ ${languageInstruction}`;
       throw new Error('TTS client not configured');
     }
 
+    // Remove user input markers from text before generating audio
+    if (text && typeof text === 'string') {
+      text = PromptSanitizer.removeUserInputMarkers(text);
+    }
+
     // Validate language - DO NOT default to English silently
     logger.info('[AIGenerationService] Validating language for audio generation', {
       config_language: config.language,

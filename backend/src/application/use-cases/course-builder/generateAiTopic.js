@@ -170,6 +170,11 @@ export async function generateAiTopic(skillCoverageItem, preferredLanguage) {
         max_tokens: 2000,
       });
 
+      // Remove user input markers from generated text before using it
+      if (text && typeof text === 'string') {
+        text = PromptSanitizer.removeUserInputMarkers(text);
+      }
+
       // Auto-generate audio for text
       let audioData = null;
       try {
@@ -307,7 +312,12 @@ export async function generateAiTopic(skillCoverageItem, preferredLanguage) {
       // Use the generated text content (in the correct language) as the prompt for HeyGen
       // This ensures HeyGen speaks the actual lesson content, not a generic English prompt
       // Note: 'text' variable is defined in the text_audio generation block above
-      const trainerPrompt = text?.content || text || promptVariables.lessonDescription || `A comprehensive lesson about ${skillName}. Cover essential concepts, best practices, and real-world applications.`;
+      let trainerPrompt = text?.content || text || promptVariables.lessonDescription || `A comprehensive lesson about ${skillName}. Cover essential concepts, best practices, and real-world applications.`;
+      
+      // Remove user input markers from prompt before sending to HeyGen
+      if (trainerPrompt && typeof trainerPrompt === 'string') {
+        trainerPrompt = PromptSanitizer.removeUserInputMarkers(trainerPrompt);
+      }
 
       // Log language and prompt source before calling generateAvatarVideo
       logger.info('[UseCase] Calling generateAvatarVideo with language', {

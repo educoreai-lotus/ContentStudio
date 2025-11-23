@@ -261,6 +261,25 @@ ${sanitized}
   }
 
   /**
+   * Remove user input markers from text
+   * This is used to clean generated text before using it for audio/video generation
+   * @param {string} text - Text that may contain markers
+   * @returns {string} Cleaned text without markers
+   */
+  static removeUserInputMarkers(text) {
+    if (!text || typeof text !== 'string') {
+      return text || '';
+    }
+    
+    // Remove START_USER_INPUT and END_USER_INPUT markers and any whitespace around them
+    return text
+      .replace(/<<START_USER_INPUT>>/gi, '')
+      .replace(/<<END_USER_INPUT>>/gi, '')
+      .replace(/\n\s*\n\s*\n/g, '\n\n') // Remove extra blank lines
+      .trim();
+  }
+
+  /**
    * Escape special characters that could break prompt structure
    * This is a conservative approach - only escapes if really needed
    * @param {string} text - Text to escape
