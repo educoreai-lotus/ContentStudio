@@ -347,28 +347,46 @@ export class ContentMetricsController {
           logger.info('[ContentMetricsController] Generating AI topic for skill', {
             skill: coverageItem.skill,
           });
-          const generatedTopic = await generateAiTopic(coverageItem, preferredLanguage.preferred_language);
-          if (generatedTopic) {
-            // Ensure skills array is included for saving
-            if (!generatedTopic.skills || !Array.isArray(generatedTopic.skills)) {
-              generatedTopic.skills = [coverageItem.skill];
-            }
-            logger.info('[ContentMetricsController] Saving generated AI topic to database', {
-              skill: coverageItem.skill,
-            });
-            const saveResult = await saveGeneratedTopicToDatabase(
-              generatedTopic,
-              preferredLanguage.preferred_language
-            );
-            if (saveResult && saveResult.saved) {
-              logger.info('[ContentMetricsController] AI topic saved successfully', {
-                topic_id: saveResult.topic_id,
+          try {
+            const generatedTopic = await generateAiTopic(coverageItem, preferredLanguage.preferred_language);
+            if (generatedTopic) {
+              // Ensure skills array is included for saving
+              if (!generatedTopic.skills || !Array.isArray(generatedTopic.skills)) {
+                generatedTopic.skills = [coverageItem.skill];
+              }
+              logger.info('[ContentMetricsController] Saving generated AI topic to database', {
                 skill: coverageItem.skill,
               });
-              // Fetch the saved topic to include in response
-              generatedTopic.topic_id = saveResult.topic_id;
-              aiGeneratedTopics.push(generatedTopic);
+              try {
+                const saveResult = await saveGeneratedTopicToDatabase(
+                  generatedTopic,
+                  preferredLanguage.preferred_language
+                );
+                if (saveResult && saveResult.saved) {
+                  logger.info('[ContentMetricsController] AI topic saved successfully', {
+                    topic_id: saveResult.topic_id,
+                    skill: coverageItem.skill,
+                  });
+                  // Fetch the saved topic to include in response
+                  generatedTopic.topic_id = saveResult.topic_id;
+                  aiGeneratedTopics.push(generatedTopic);
+                }
+              } catch (saveError) {
+                logger.error('[ContentMetricsController] Failed to save generated AI topic', {
+                  skill: coverageItem.skill,
+                  error: saveError.message,
+                  stack: saveError.stack,
+                });
+                // Continue to next skill even if save failed
+              }
             }
+          } catch (generateError) {
+            logger.error('[ContentMetricsController] Failed to generate AI topic', {
+              skill: coverageItem.skill,
+              error: generateError.message,
+              stack: generateError.stack,
+            });
+            // Continue to next skill even if generation failed - don't crash the entire request
           }
         }
       }
