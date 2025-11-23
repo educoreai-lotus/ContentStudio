@@ -822,7 +822,7 @@ export class HeygenClient {
     throw timeoutError;
   }
 
-  /**
+    /**
    * Upload video to Supabase Storage
    * @param {Object} params
    * @param {Buffer} params.fileBuffer - Binary video buffer
@@ -830,64 +830,9 @@ export class HeygenClient {
    * @param {string} params.contentType - MIME type
    * @returns {Promise<string>} Supabase storage path
    */
-  async uploadToStorage({ fileBuffer, fileName, contentType = 'video/mp4' }) {
-    try {
-      if (!fileBuffer || !(fileBuffer instanceof Buffer) || fileBuffer.length === 0) {
-        throw new Error('Invalid video buffer received for upload');
-      }
-
-      if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-        console.warn('[HeyGen] Supabase not configured, returning null');
-        return null;
-      }
-
-      const supabase = createClient(
-        process.env.SUPABASE_URL,
-        process.env.SUPABASE_SERVICE_ROLE_KEY
-      );
-
-      const filePath = `avatar_videos/${fileName}`;
-      const arrayBuffer = fileBuffer.buffer.slice(
-        fileBuffer.byteOffset,
-        fileBuffer.byteOffset + fileBuffer.byteLength,
-      );
-
-      const { data, error } = await supabase.storage.from('media').upload(
-        filePath,
-        arrayBuffer,
-        {
-          contentType,
-          cacheControl: '3600',
-          upsert: true,
-        },
-      );
-
-      if (error) {
-        console.error('[HeyGen] Supabase upload error:', error);
-        throw error;
-      }
-
-      // Get public URL
-      const { data: urlData } = supabase.storage
-        .from('media')
-        .getPublicUrl(filePath);
-
-      const publicUrl = urlData?.publicUrl;
-      
-      if (!publicUrl) {
-        console.error('[HeyGen] Failed to get public URL from Supabase');
-        throw new Error('Failed to get public URL from Supabase storage');
-      }
-
-      console.log(`[HeyGen] Video uploaded successfully to Supabase: ${publicUrl}`);
-      
-      return publicUrl;
-    } catch (error) {
-      console.error('[HeyGen] Storage upload error:', error.message);
-      throw new Error(`Failed to upload video to storage: ${error.message}`);
+    async uploadToStorage({ fileBuffer, fileName, contentType = 'video/mp4' }) {
     }
-  }
-
+  
   /**
    * Download video from URL
    * @param {string} videoUrl - Video URL
