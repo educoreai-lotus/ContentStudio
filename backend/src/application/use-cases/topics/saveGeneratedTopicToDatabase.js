@@ -19,9 +19,10 @@ const CONTENT_TYPE_MAP = {
  * 
  * @param {Object} generatedTopic - Full topic object from generateAiTopic
  * @param {string} preferredLanguage - Preferred language code
+ * @param {string|null} trainerId - Trainer ID from authenticated context (optional, defaults to null)
  * @returns {Promise<Object|null>} Response object with saved status or null
  */
-export async function saveGeneratedTopicToDatabase(generatedTopic, preferredLanguage) {
+export async function saveGeneratedTopicToDatabase(generatedTopic, preferredLanguage, trainerId = null) {
   // Validation
   if (!generatedTopic || typeof generatedTopic !== 'object') {
     logger.warn('[UseCase] Invalid generatedTopic provided');
@@ -75,6 +76,17 @@ export async function saveGeneratedTopicToDatabase(generatedTopic, preferredLang
       RETURNING topic_id
     `;
 
+    // Determine trainer_id: use provided trainerId, or fallback to 'system-auto'
+    const finalTrainerId = trainerId || 'system-auto';
+
+    // Log warning if using fallback
+    if (!trainerId) {
+      logger.warn('[UseCase] Missing trainer_id for generated topic. Using system-auto fallback.', {
+        topic_name: generatedTopic.topic_name,
+        preferred_language: preferredLanguage,
+      });
+    }
+
     // Execute topic INSERT with parameterized query
     // Pass skillsArray directly - pg driver will convert to PostgreSQL array automatically
     const topicResult = await db.query(insertTopicSql, [
@@ -82,7 +94,7 @@ export async function saveGeneratedTopicToDatabase(generatedTopic, preferredLang
       generatedTopic.topic_description || '', // description field in DB
       topicLanguage, // language field in DB - ensure language is passed correctly
       skillsArray, // PostgreSQL array - pg driver handles conversion automatically
-      'system-auto',
+      finalTrainerId, // Use real trainer_id or fallback to 'system-auto'
       null, // course_id
       null, // template_id
       5, // generation_methods_id

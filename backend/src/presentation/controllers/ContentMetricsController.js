@@ -95,7 +95,7 @@ export class ContentMetricsController {
           requestBody.response.course = [];
         }
 
-        return await this.handleCourseBuilderFormat(requestBody, res, next);
+        return await this.handleCourseBuilderFormat(requestBody, res, next, req);
       }
 
       // Handle other services using requester_service
@@ -226,8 +226,9 @@ export class ContentMetricsController {
    * @param {Object} requestData - Parsed request data (with requester_service, payload, response)
    * @param {Object} res - Express response object
    * @param {Function} next - Express next middleware
+   * @param {Object} req - Express request object (for accessing trainer_id)
    */
-  async handleCourseBuilderFormat(requestData, res, next) {
+  async handleCourseBuilderFormat(requestData, res, next, req) {
     // Note: Server timeout is set at server level (20 minutes in server.js)
     // This endpoint can take a long time due to AI content generation
     
@@ -358,9 +359,13 @@ export class ContentMetricsController {
                 skill: coverageItem.skill,
               });
               try {
+                // Extract trainer_id from request authentication context
+                const trainerId = req?.auth?.trainer?.trainer_id || null;
+                
                 const saveResult = await saveGeneratedTopicToDatabase(
                   generatedTopic,
-                  preferredLanguage.preferred_language
+                  preferredLanguage.preferred_language,
+                  trainerId
                 );
                 if (saveResult && saveResult.saved) {
                   logger.info('[ContentMetricsController] AI topic saved successfully', {

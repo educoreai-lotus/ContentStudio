@@ -278,7 +278,8 @@ export default function TopicContentManager() {
               if (topicDetails?.course_id) {
                 navigate(`/courses/${topicDetails.course_id}`);
               } else {
-                navigate(-1); // Fallback to previous page if course_id not available
+                // Standalone topic - navigate to courses list
+                navigate('/courses');
               }
             }}
             className={`mb-4 px-4 py-2 rounded-lg ${
@@ -288,7 +289,7 @@ export default function TopicContentManager() {
             }`}
           >
             <i className="fas fa-arrow-left mr-2"></i>
-            Back to Course
+            {topicDetails?.course_id ? 'Back to Course' : 'Back to Courses'}
           </button>
 
           {/* Topic Information Banner */}
