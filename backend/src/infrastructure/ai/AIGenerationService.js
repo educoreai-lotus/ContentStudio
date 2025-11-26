@@ -810,6 +810,9 @@ This presentation should be educational and suitable for ${audience}.`;
         fileType: storageMetadata?.fileType || 'video/mp4',
         storagePath: storageMetadata?.storagePath || null,
         uploadedAt: storageMetadata?.uploadedAt || null,
+        // Include file integrity data if available
+        sha256Hash: storageMetadata?.sha256Hash || null,
+        digitalSignature: storageMetadata?.digitalSignature || null,
         metadata: {
           heygen_video_url: videoResult.heygenVideoUrl,
           generation_status: videoResult.status || 'completed',

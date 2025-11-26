@@ -241,6 +241,9 @@ ${basePrompt}`;
             audioFormat: audioData?.format,
             audioDuration: audioData?.duration,
             audioVoice: audioData?.voice,
+            // Include file integrity data if available
+            sha256Hash: audioData?.sha256Hash || null,
+            digitalSignature: audioData?.digitalSignature || null,
           };
           
           // Clean content data: remove audioText (duplicate) and metadata (redundant)

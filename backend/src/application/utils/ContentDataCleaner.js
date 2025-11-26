@@ -37,6 +37,14 @@ export class ContentDataCleaner {
     if (contentData.audioDuration !== undefined && contentData.audioDuration !== null) {
       cleaned.audioDuration = contentData.audioDuration;
     }
+    
+    // Keep file integrity data (hash and signature) for audio file
+    if (contentData.sha256Hash) {
+      cleaned.sha256Hash = contentData.sha256Hash;
+    }
+    if (contentData.digitalSignature) {
+      cleaned.digitalSignature = contentData.digitalSignature;
+    }
 
     // Explicitly remove redundant fields
     // audioText is removed (duplicate of text)
@@ -284,6 +292,14 @@ export class ContentDataCleaner {
     }
     if (contentData.uploadedAt) {
       cleaned.uploadedAt = contentData.uploadedAt;
+    }
+    
+    // Keep file integrity data (hash and signature) for video file
+    if (contentData.sha256Hash) {
+      cleaned.sha256Hash = contentData.sha256Hash;
+    }
+    if (contentData.digitalSignature) {
+      cleaned.digitalSignature = contentData.digitalSignature;
     }
 
     // Keep status and reason for skipped/failed states (needed for proper error handling)

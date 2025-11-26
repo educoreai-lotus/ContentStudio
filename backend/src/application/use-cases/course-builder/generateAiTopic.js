@@ -194,6 +194,9 @@ export async function generateAiTopic(skillCoverageItem, preferredLanguage) {
         audioFormat: audioData?.format,
         audioDuration: audioData?.duration,
         audioVoice: audioData?.voice,
+        // Include file integrity data if available
+        sha256Hash: audioData?.sha256Hash || null,
+        digitalSignature: audioData?.digitalSignature || null,
       };
 
       contents.push({
