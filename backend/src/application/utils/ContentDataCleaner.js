@@ -108,6 +108,14 @@ export class ContentDataCleaner {
     if (contentData.storagePath) {
       cleaned.storagePath = contentData.storagePath;
     }
+    
+    // Keep file integrity data (hash and signature)
+    if (contentData.sha256Hash) {
+      cleaned.sha256Hash = contentData.sha256Hash;
+    }
+    if (contentData.digitalSignature) {
+      cleaned.digitalSignature = contentData.digitalSignature;
+    }
 
     // Keep only essential metadata, remove topic/skills/language metadata
     // DO NOT include presentationUrl or storagePath in metadata - they're top-level fields
@@ -184,6 +192,14 @@ export class ContentDataCleaner {
     if (contentData.audioDuration !== undefined && contentData.audioDuration !== null) {
       cleaned.audioDuration = contentData.audioDuration;
     }
+    
+    // Keep file integrity data (hash and signature)
+    if (contentData.sha256Hash) {
+      cleaned.sha256Hash = contentData.sha256Hash;
+    }
+    if (contentData.digitalSignature) {
+      cleaned.digitalSignature = contentData.digitalSignature;
+    }
 
     // Remove: text (duplicate, not needed for playback)
     // Remove: audio buffer (not needed, we have URL)
@@ -225,7 +241,7 @@ export class ContentDataCleaner {
   /**
    * Clean content_data for avatar video content type
    * Removes: status, redundant metadata, language (duplicate), fallback flag, error (if null)
-   * Keeps: script, videoUrl, videoId, duration, heygen_video_url
+   * Keeps: script, videoUrl, videoId, duration, fileUrl, fileName, fileSize, fileType, storagePath, uploadedAt, heygen_video_url
    * 
    * @param {Object} contentData - Raw content data
    * @returns {Object} Cleaned content data
@@ -248,6 +264,26 @@ export class ContentDataCleaner {
     }
     if (contentData.duration_seconds !== undefined) {
       cleaned.duration_seconds = contentData.duration_seconds;
+    }
+
+    // Keep storage metadata fields (required for proper file management)
+    if (contentData.fileUrl) {
+      cleaned.fileUrl = contentData.fileUrl;
+    }
+    if (contentData.fileName) {
+      cleaned.fileName = contentData.fileName;
+    }
+    if (contentData.fileSize !== undefined && contentData.fileSize !== null) {
+      cleaned.fileSize = contentData.fileSize;
+    }
+    if (contentData.fileType) {
+      cleaned.fileType = contentData.fileType;
+    }
+    if (contentData.storagePath) {
+      cleaned.storagePath = contentData.storagePath;
+    }
+    if (contentData.uploadedAt) {
+      cleaned.uploadedAt = contentData.uploadedAt;
     }
 
     // Keep status and reason for skipped/failed states (needed for proper error handling)

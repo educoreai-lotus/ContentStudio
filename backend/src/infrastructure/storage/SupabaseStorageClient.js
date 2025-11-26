@@ -1,4 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
+import { FileIntegrityService } from '../security/FileIntegrityService.js';
+import { logger } from '../logging/Logger.js';
 
 /**
  * Supabase Storage Client
@@ -27,6 +29,7 @@ export class SupabaseStorageClient {
     this.client = createClient(supabaseUrl, resolvedKey);
     // Use bucket name from parameter, env var, or default to 'media' (Railway default)
     this.bucketName = bucketName || process.env.SUPABASE_BUCKET_NAME || 'media';
+    this.integrityService = new FileIntegrityService();
   }
 
   /**
@@ -69,9 +72,32 @@ export class SupabaseStorageClient {
         .from(this.bucketName)
         .getPublicUrl(filePath);
 
+      // Generate file hash and digital signature
+      let integrityData = { sha256Hash: null, digitalSignature: null };
+      try {
+        integrityData = await this.integrityService.generateHashAndSignature(fileBuffer);
+        if (integrityData.sha256Hash && integrityData.digitalSignature) {
+          logger.info('[SupabaseStorageClient] File integrity protection applied', {
+            fileName,
+            hasHash: !!integrityData.sha256Hash,
+            hasSignature: !!integrityData.digitalSignature,
+          });
+        } else {
+          logger.warn('[SupabaseStorageClient] File integrity protection not available (private key not configured)');
+        }
+      } catch (integrityError) {
+        logger.warn('[SupabaseStorageClient] Failed to generate file integrity data', {
+          error: integrityError.message,
+          fileName,
+        });
+        // Continue without integrity protection - upload still succeeds
+      }
+
       return {
         url: urlData.publicUrl,
         path: filePath,
+        sha256Hash: integrityData.sha256Hash,
+        digitalSignature: integrityData.digitalSignature,
       };
     } catch (error) {
       throw new Error(`Failed to upload file to Supabase: ${error.message}`);

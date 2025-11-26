@@ -1,6 +1,7 @@
 import { db } from '../../../infrastructure/database/DatabaseConnection.js';
 import { logger } from '../../../infrastructure/logging/Logger.js';
 import { ContentDataCleaner } from '../../utils/ContentDataCleaner.js';
+import { AvatarVideoStorageService } from '../../../infrastructure/storage/AvatarVideoStorageService.js';
 
 // Content type name to ID mapping
 const CONTENT_TYPE_MAP = {
@@ -115,8 +116,11 @@ export async function saveGeneratedTopicToDatabase(generatedTopic, preferredLang
 
     // Step 2: Save contents
     let contentsSaved = 0;
+    const storageService = new AvatarVideoStorageService();
     
     for (const content of generatedTopic.contents) {
+      let storagePathToRollback = null;
+      
       try {
         const contentTypeName = content.content_type;
         const contentTypeId = CONTENT_TYPE_MAP[contentTypeName];
@@ -129,6 +133,15 @@ export async function saveGeneratedTopicToDatabase(generatedTopic, preferredLang
         // Clean content_data before saving
         const rawContentData = content.content_data || {};
         const cleanedContentData = ContentDataCleaner.clean(rawContentData, contentTypeId);
+
+        // For avatar video, extract storage path for potential rollback
+        if (contentTypeName === 'avatar_video' && cleanedContentData.storagePath) {
+          storagePathToRollback = cleanedContentData.storagePath;
+          logger.info('[UseCase] Avatar video content detected, will rollback storage if DB save fails', {
+            storagePath: storagePathToRollback,
+            topic_id: topicId,
+          });
+        }
 
         // Use parameterized query for JSONB to avoid SQL injection and escaping issues
         const insertContentSql = `
@@ -153,15 +166,40 @@ export async function saveGeneratedTopicToDatabase(generatedTopic, preferredLang
         logger.info('[UseCase] Content saved successfully', {
           topic_id: topicId,
           content_type: contentTypeName,
+          hasStoragePath: !!storagePathToRollback,
         });
+        
+        // Clear rollback path on success
+        storagePathToRollback = null;
       } catch (contentError) {
-        logger.error('[UseCase] Failed to save content, continuing', {
+        logger.error('[UseCase] Failed to save content', {
           error: contentError.message,
           error_stack: contentError.stack,
           content_type: content.content_type,
           topic_id: topicId,
           content_data_size: JSON.stringify(content.content_data || {}).length,
         });
+        
+        // Rollback: Delete file from Supabase Storage if DB save failed for avatar video
+        if (storagePathToRollback && contentTypeName === 'avatar_video') {
+          logger.warn('[UseCase] Rolling back avatar video storage due to DB save failure', {
+            storagePath: storagePathToRollback,
+            topic_id: topicId,
+          });
+          try {
+            await storageService.deleteVideoFromStorage(storagePathToRollback);
+            logger.info('[UseCase] Avatar video file deleted from storage (rollback successful)', {
+              storagePath: storagePathToRollback,
+            });
+          } catch (rollbackError) {
+            logger.error('[UseCase] Failed to rollback avatar video storage', {
+              error: rollbackError.message,
+              storagePath: storagePathToRollback,
+            });
+            // Don't throw - rollback failure is logged but doesn't break the flow
+          }
+        }
+        
         // Continue with next content (transaction-like logic - log only)
       }
     }

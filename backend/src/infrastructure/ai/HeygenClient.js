@@ -1,6 +1,6 @@
 import axios from 'axios';
-import { createClient } from '@supabase/supabase-js';
 import { getSafeAvatarId, getVoiceConfig } from '../../config/heygen.js';
+import { AvatarVideoStorageService } from '../storage/AvatarVideoStorageService.js';
 
 /**
  * Heygen API Client
@@ -35,6 +35,9 @@ export class HeygenClient {
       maxContentLength: Infinity,
       maxBodyLength: Infinity,
     });
+
+    // Initialize storage service
+    this.storageService = new AvatarVideoStorageService();
 
     // Load avatar ID from config (with fallback to default)
     this.avatarId = getSafeAvatarId();
@@ -637,19 +640,28 @@ export class HeygenClient {
         const videoBuffer = await this.downloadVideo(heygenVideoUrl);
         console.log(`[HeyGen] Video downloaded (${videoBuffer.length} bytes)`);
         console.log(`[HeyGen] Uploading to Supabase Storage...`);
-        let storageUrl = null; // Start with null, not Heygen URL
+        
+        let storageMetadata = null;
+        let storageUrl = null;
 
         try {
-          const uploadedUrl = await this.uploadToStorage({
-            fileBuffer: videoBuffer,
-            fileName: `avatar_${videoId}.mp4`,
-            contentType: 'video/mp4',
-          });
-          if (uploadedUrl) {
-            storageUrl = uploadedUrl;
-            console.log(`[HeyGen] Video uploaded to Supabase Storage: ${storageUrl}`);
+          // Use new storage service to get full metadata
+          storageMetadata = await this.storageService.uploadVideoToStorage(
+            videoBuffer,
+            `avatar_${videoId}.mp4`,
+            'video/mp4'
+          );
+          
+          if (storageMetadata && storageMetadata.fileUrl) {
+            storageUrl = storageMetadata.fileUrl;
+            console.log(`[HeyGen] Video uploaded to Supabase Storage with full metadata`, {
+              fileUrl: storageMetadata.fileUrl,
+              fileName: storageMetadata.fileName,
+              fileSize: storageMetadata.fileSize,
+              storagePath: storageMetadata.storagePath,
+            });
           } else {
-            console.warn('[HeyGen] uploadToStorage returned null, using Heygen URL as fallback');
+            console.warn('[HeyGen] Storage service returned incomplete metadata, using Heygen URL as fallback');
             storageUrl = heygenVideoUrl;
           }
         } catch (uploadErr) {
@@ -663,14 +675,16 @@ export class HeygenClient {
           storageUrl = heygenVideoUrl;
         }
 
-        console.log(`[HeyGen] Returning video URL: ${storageUrl} (${storageUrl.startsWith('http') ? 'Full URL' : 'Path'})`);
+        console.log(`[HeyGen] Returning video result with metadata`);
         return {
-          videoUrl: storageUrl, // This should be Supabase public URL if upload succeeded, otherwise Heygen URL
+          videoUrl: storageUrl, // Supabase public URL if upload succeeded, otherwise Heygen URL
           heygenVideoUrl: heygenVideoUrl, // Always keep original Heygen URL for reference
           videoId,
           duration: duration || 15,
           status: 'completed',
           fallback: storageUrl === heygenVideoUrl, // Mark as fallback if we're using Heygen URL
+          // Include full storage metadata if available
+          storageMetadata: storageMetadata || null,
         };
       } catch (downloadErr) {
         console.error('[HeyGen] Failed to download or upload video', {
@@ -822,16 +836,24 @@ export class HeygenClient {
     throw timeoutError;
   }
 
-    /**
-   * Upload video to Supabase Storage
+  /**
+   * Upload video to Supabase Storage (DEPRECATED - use AvatarVideoStorageService)
+   * @deprecated Use AvatarVideoStorageService.uploadVideoToStorage() instead
    * @param {Object} params
    * @param {Buffer} params.fileBuffer - Binary video buffer
    * @param {string} params.fileName - File name for storage
    * @param {string} params.contentType - MIME type
-   * @returns {Promise<string>} Supabase storage path
+   * @returns {Promise<string>} Supabase public URL
    */
-    async uploadToStorage({ fileBuffer, fileName, contentType = 'video/mp4' }) {
-    }
+  async uploadToStorage({ fileBuffer, fileName, contentType = 'video/mp4' }) {
+    // Delegate to storage service for backward compatibility
+    const metadata = await this.storageService.uploadVideoToStorage(
+      fileBuffer,
+      fileName,
+      contentType
+    );
+    return metadata.fileUrl;
+  }
   
   /**
    * Download video from URL

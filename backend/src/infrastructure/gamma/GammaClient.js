@@ -319,6 +319,8 @@ ${inputText.trim()}`;
 
       let finalPresentationUrl = null;
       let storagePath = null;
+      let sha256Hash = null;
+      let digitalSignature = null;
 
       // MANDATORY: Download PPTX file immediately (URL expires)
       try {
@@ -350,11 +352,16 @@ ${inputText.trim()}`;
         if (uploadResult.url && uploadResult.path) {
           finalPresentationUrl = uploadResult.url;
           storagePath = uploadResult.path;
+          // Extract integrity data from upload result
+          sha256Hash = uploadResult.sha256Hash || null;
+          digitalSignature = uploadResult.digitalSignature || null;
           logger.info('[GammaClient] PPTX downloaded and uploaded to Supabase Storage successfully', { 
             storagePath, 
             url: finalPresentationUrl,
             fileSize: fileBuffer.length,
-            contentType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+            contentType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            hasHash: !!sha256Hash,
+            hasSignature: !!digitalSignature,
           });
         } else {
           throw new Error('PPTX uploaded but no URL or path returned from storage');
@@ -394,6 +401,8 @@ ${inputText.trim()}`;
       return {
         presentationUrl: finalPresentationUrl,
         storagePath,
+        sha256Hash: sha256Hash,
+        digitalSignature: digitalSignature,
         rawResponse: {
           generationId,
           status: result.status,

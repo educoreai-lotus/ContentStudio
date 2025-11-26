@@ -472,6 +472,8 @@ ${text}`;
 
     // Upload audio to Supabase Storage
     let audioUrl = null;
+    let audioSha256Hash = null;
+    let audioDigitalSignature = null;
     if (this.storageClient && audioData.audio) {
       try {
         const fileName = `audio_${Date.now()}.${audioData.format}`;
@@ -481,7 +483,14 @@ ${text}`;
           `audio/${audioData.format}`
         );
         audioUrl = uploadResult.url;
-        console.log('[AIGenerationService] Audio uploaded to storage:', audioUrl);
+        // Extract integrity data from upload result
+        audioSha256Hash = uploadResult.sha256Hash || null;
+        audioDigitalSignature = uploadResult.digitalSignature || null;
+        console.log('[AIGenerationService] Audio uploaded to storage:', {
+          audioUrl,
+          hasHash: !!audioSha256Hash,
+          hasSignature: !!audioDigitalSignature,
+        });
       } catch (uploadError) {
         console.warn('[AIGenerationService] Failed to upload audio to storage:', uploadError.message);
       }
@@ -494,6 +503,9 @@ ${text}`;
       duration: audioData.duration,
       voice: audioData.voice,
       text: textToConvert,
+      // Include file integrity data if available
+      sha256Hash: audioSha256Hash,
+      digitalSignature: audioDigitalSignature,
       metadata: {
         original_text_length: text.length,
         converted_text_length: textToConvert.length,
@@ -605,6 +617,9 @@ This presentation should be educational and suitable for ${audience}.`;
       presentationUrl: gammaResult.presentationUrl, // Must be Supabase Storage URL
       storagePath: gammaResult.storagePath, // Required storage path
       format: 'gamma',
+      // Include file integrity data if available
+      sha256Hash: gammaResult.sha256Hash || null,
+      digitalSignature: gammaResult.digitalSignature || null,
       metadata: {
         generated_at: new Date().toISOString(),
         language,
@@ -778,6 +793,9 @@ This presentation should be educational and suitable for ${audience}.`;
         };
       }
 
+      // Extract storage metadata if available
+      const storageMetadata = videoResult.storageMetadata || null;
+      
       return {
         videoUrl: videoResult.videoUrl,
         videoId: videoResult.videoId,
@@ -785,11 +803,20 @@ This presentation should be educational and suitable for ${audience}.`;
         duration_seconds: videoResult.duration || 15,
         status: videoResult.status || 'completed',
         fallback: !!videoResult.fallback,
+        // Include full storage metadata if available
+        fileUrl: storageMetadata?.fileUrl || videoResult.videoUrl,
+        fileName: storageMetadata?.fileName || null,
+        fileSize: storageMetadata?.fileSize || null,
+        fileType: storageMetadata?.fileType || 'video/mp4',
+        storagePath: storageMetadata?.storagePath || null,
+        uploadedAt: storageMetadata?.uploadedAt || null,
         metadata: {
           heygen_video_url: videoResult.heygenVideoUrl,
           generation_status: videoResult.status || 'completed',
           storage_fallback: !!videoResult.fallback,
           error: videoResult.error || null,
+          // Include storage metadata in metadata object for backward compatibility
+          storage_metadata: storageMetadata || null,
         },
       };
     } catch (error) {
