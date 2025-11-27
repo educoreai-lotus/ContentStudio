@@ -11,12 +11,14 @@ export class AIGenerationController {
     aiGenerationService,
     promptTemplateService,
     qualityCheckService,
+    topicRepository,
   }) {
     this.generateContentUseCase = new GenerateContentUseCase({
       contentRepository,
       aiGenerationService,
       promptTemplateService,
       qualityCheckService,
+      topicRepository,
     });
   }
 

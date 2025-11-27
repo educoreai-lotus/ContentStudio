@@ -68,11 +68,13 @@ export class CreateContentUseCase {
     }
 
     // Check if this is manual content that needs quality check BEFORE audio generation
+    // IMPORTANT: Quality check applies to ALL manual content types, including code
     const isManualContent = content.generation_method_id === 'manual' || content.generation_method_id === 'manual_edited';
     const needsQualityCheck = isManualContent && this.qualityCheckService;
     
     console.log('[CreateContentUseCase] Quality check evaluation:', {
       generation_method_id: content.generation_method_id,
+      contentTypeId: content.content_type_id,
       isManualContent,
       hasQualityCheckService: !!this.qualityCheckService,
       needsQualityCheck,

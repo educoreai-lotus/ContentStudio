@@ -58,9 +58,21 @@ export class QualityCheckService extends IQualityCheckService {
       }
 
       const contentText = this.extractTextFromContent(content);
-      if (!contentText) {
-        throw new Error('Content text not found');
+      if (!contentText || contentText.trim().length === 0) {
+        console.error('[QualityCheckService] ❌ Content text is empty or not found', {
+          contentId,
+          contentTypeId: content.content_type_id,
+          contentDataKeys: content.content_data ? Object.keys(content.content_data) : [],
+        });
+        throw new Error('Content text not found or empty');
       }
+      
+      console.log('[QualityCheckService] ✅ Extracted content text for quality check', {
+        contentId,
+        contentTypeId: content.content_type_id,
+        textLength: contentText.length,
+        textPreview: contentText.substring(0, 100),
+      });
 
       // Get topic and course information for evaluation
       const topic = await this.topicRepository?.findById(content.topic_id);
@@ -250,13 +262,15 @@ Rules:
 
 2. Detect plagiarism ONLY if entire sentences/paragraphs appear copied.
 
-3. Using standard terminology is NOT plagiarism.
+3. For CODE content: Check if the code is copied from official documentation, tutorials, or other sources. Code that closely matches official examples should receive originality_score < 75.
 
-4. Score originality high if writing feels original even if technical.
+4. Using standard terminology is NOT plagiarism.
 
-5. Assign difficulty based on skills.
+5. Score originality high if writing feels original even if technical.
 
-6. Return JSON only.`;
+6. Assign difficulty based on skills.
+
+7. Return JSON only.`;
 
     try {
       console.log('[QualityCheckService] Running quality check evaluation with GPT-4o');
@@ -327,7 +341,13 @@ Rules:
     if (typeof content.content_data === 'string') {
       try {
         const parsed = JSON.parse(content.content_data);
-        return parsed.text || parsed.code || JSON.stringify(parsed);
+        // For code content, include both code and explanation
+        if (parsed.code) {
+          const codeText = parsed.code;
+          const explanationText = parsed.explanation || '';
+          return explanationText ? `${codeText}\n\n${explanationText}` : codeText;
+        }
+        return parsed.text || JSON.stringify(parsed);
       } catch {
         return content.content_data;
       }
@@ -337,8 +357,13 @@ Rules:
       return content.content_data.text;
     }
     
+    // For code content, include both code and explanation for originality check
     if (content.content_data?.code) {
-      return content.content_data.code;
+      const codeText = content.content_data.code;
+      const explanationText = content.content_data.explanation || '';
+      // Combine code and explanation for originality check
+      // This ensures we check both the code itself and any explanatory text
+      return explanationText ? `${codeText}\n\n${explanationText}` : codeText;
     }
     
     return JSON.stringify(content.content_data);

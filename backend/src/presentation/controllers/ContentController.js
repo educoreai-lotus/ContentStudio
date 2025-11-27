@@ -24,6 +24,7 @@ export class ContentController {
     this.updateContentUseCase = new UpdateContentUseCase({
       contentRepository,
       contentHistoryService,
+      qualityCheckService,
     });
     this.regenerateContentUseCase = new RegenerateContentUseCase({
       contentRepository,
@@ -226,6 +227,7 @@ export class ContentController {
    * Update content
    * PUT /api/content/:id
    * Automatically creates a version before updating
+   * IMPORTANT: If editing AI-generated content, triggers quality check
    */
   async update(req, res, next) {
     try {
@@ -244,16 +246,57 @@ export class ContentController {
       });
 
       const updatedBy = req.body.updated_by || 'trainer123'; // TODO: Get from auth
+      const statusMessages = req.body.status_messages || null;
       const updatedContent = await this.updateContentUseCase.execute(
         contentId,
         updates,
-        updatedBy
+        updatedBy,
+        statusMessages
       );
+
+      // Determine message based on quality check status
+      let message = 'Content updated successfully. Version created automatically.';
+      let qualityCheckInfo = null;
+
+      // Check if quality check was performed and get results
+      if (updatedContent.quality_check_status) {
+        if (updatedContent.quality_check_status === 'approved') {
+          const qualityData = updatedContent.quality_check_data || {};
+          const scores = {
+            relevance: qualityData.relevance_score || 'N/A',
+            originality: qualityData.originality_score || 'N/A',
+            difficultyAlignment: qualityData.difficulty_alignment_score || 'N/A',
+            consistency: qualityData.consistency_score || 'N/A',
+            overall: qualityData.overall_score || qualityData.score || 'N/A',
+          };
+          message = `Content updated and quality check completed successfully! Scores: Relevance ${scores.relevance}/100, Originality ${scores.originality}/100, Difficulty Alignment ${scores.difficultyAlignment}/100, Consistency ${scores.consistency}/100, Overall ${scores.overall}/100`;
+          qualityCheckInfo = {
+            status: updatedContent.quality_check_status,
+            scores: scores,
+            feedback: qualityData.feedback_summary || null,
+          };
+        } else if (updatedContent.quality_check_status === 'pending') {
+          message = 'Content updated. Quality check is in progress...';
+          qualityCheckInfo = {
+            status: 'pending',
+            message: 'Quality check is being performed. Please refresh to see results.',
+          };
+        } else if (updatedContent.quality_check_status === 'rejected') {
+          const qualityData = updatedContent.quality_check_data || {};
+          message = `Content updated but quality check failed: ${qualityData.feedback_summary || 'Content did not meet quality standards'}`;
+          qualityCheckInfo = {
+            status: updatedContent.quality_check_status,
+            feedback: qualityData.feedback_summary || null,
+          };
+        }
+      }
 
       res.json({
         success: true,
         data: ContentDTO.toContentResponse(updatedContent),
-        message: 'Content updated successfully. Version created automatically.',
+        message,
+        qualityCheck: qualityCheckInfo,
+        status_messages: updatedContent.status_messages || [],
       });
     } catch (error) {
       if (error.message.includes('not found')) {

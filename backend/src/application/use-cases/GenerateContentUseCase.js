@@ -59,11 +59,13 @@ export class GenerateContentUseCase {
     contentRepository,
     promptTemplateService,
     qualityCheckService,
+    topicRepository,
   }) {
     this.aiGenerationService = aiGenerationService;
     this.contentRepository = contentRepository;
     this.promptTemplateService = promptTemplateService;
     this.qualityCheckService = qualityCheckService;
+    this.topicRepository = topicRepository;
   }
 
   buildPromptVariables({ lessonTopic, lessonDescription, language, skillsList, transcriptText, trainerRequestText }, contentTypeId) {
@@ -282,6 +284,94 @@ ${basePrompt}`;
             audience: generationRequest.audience || 'general',
             language: promptVariables.language,
           };
+
+          // IMPORTANT: Quality check for presentations created from manual input (trainerPrompt)
+          // If presentation is created from video transcription, the transcript was already checked in VideoToLessonController
+          // Only check if presentation is created from trainerPrompt (manual input)
+          if (this.qualityCheckService && this.topicRepository && presentationContent.trainerPrompt) {
+            try {
+              console.log('[GenerateContentUseCase] Starting quality check for presentation from manual input', {
+                topic_id: generationRequest.topic_id,
+                hasTrainerPrompt: !!presentationContent.trainerPrompt,
+                trainerPromptLength: presentationContent.trainerPrompt?.length || 0,
+              });
+
+              // Fetch topic and course data for quality check
+              const topic = await this.topicRepository.findById(generationRequest.topic_id);
+              if (topic) {
+                let courseName = null;
+                if (topic.course_id && this.courseRepository) {
+                  const { RepositoryFactory } = await import('../../infrastructure/database/repositories/RepositoryFactory.js');
+                  const courseRepository = await RepositoryFactory.getCourseRepository();
+                  const course = await courseRepository.findById(topic.course_id);
+                  courseName = course?.course_name || null;
+                }
+
+                // Extract skills from topic
+                const skills = Array.isArray(topic.skills) ? topic.skills : (topic.skills ? [topic.skills] : []);
+
+                // Perform quality check evaluation on trainerPrompt
+                const evaluationResult = await this.qualityCheckService.evaluateContentWithOpenAI({
+                  courseName: courseName || 'General Course',
+                  topicName: topic.topic_name || promptVariables.lessonTopic || 'Untitled Topic',
+                  skills: skills,
+                  contentText: presentationContent.trainerPrompt,
+                  statusMessages: null, // No status messages for API call
+                });
+
+                console.log('[GenerateContentUseCase] Quality check completed for presentation', {
+                  topic_id: generationRequest.topic_id,
+                  relevance_score: evaluationResult.relevance_score || evaluationResult.relevance,
+                  originality_score: evaluationResult.originality_score,
+                });
+
+                // Validate scores - reject if relevance < 60 or originality < 75
+                const relevanceScore = evaluationResult.relevance_score || evaluationResult.relevance || 100;
+                if (relevanceScore < 60) {
+                  const errorMsg = `Presentation content failed quality check: Content is not relevant to the lesson topic (Relevance: ${relevanceScore}/100). ${evaluationResult.feedback_summary || 'The content does not match the lesson topic. Please ensure your content is directly related to the topic.'}`;
+                  console.warn('[GenerateContentUseCase] Quality check failed - relevance too low', {
+                    topic_id: generationRequest.topic_id,
+                    relevance_score: relevanceScore,
+                  });
+                  throw new Error(errorMsg);
+                }
+
+                if (evaluationResult.originality_score < 75) {
+                  const errorMsg = `Presentation content failed quality check: Content appears to be copied or plagiarized (Originality: ${evaluationResult.originality_score}/100). ${evaluationResult.feedback_summary || 'Please ensure your content is original and not copied from other sources.'}`;
+                  console.warn('[GenerateContentUseCase] Quality check failed - originality too low', {
+                    topic_id: generationRequest.topic_id,
+                    originality_score: evaluationResult.originality_score,
+                  });
+                  throw new Error(errorMsg);
+                }
+
+                console.log('[GenerateContentUseCase] Quality check passed for presentation, proceeding with generation', {
+                  topic_id: generationRequest.topic_id,
+                  relevance_score: relevanceScore,
+                  originality_score: evaluationResult.originality_score,
+                });
+              } else {
+                console.warn('[GenerateContentUseCase] Topic not found for quality check, skipping', {
+                  topic_id: generationRequest.topic_id,
+                });
+              }
+            } catch (qualityCheckError) {
+              console.error('[GenerateContentUseCase] Quality check failed for presentation', {
+                topic_id: generationRequest.topic_id,
+                error: qualityCheckError.message,
+              });
+              // Re-throw to prevent presentation generation
+              throw qualityCheckError;
+            }
+          } else {
+            console.log('[GenerateContentUseCase] Quality check skipped for presentation', {
+              hasQualityCheckService: !!this.qualityCheckService,
+              hasTopicRepository: !!this.topicRepository,
+              hasTrainerPrompt: !!presentationContent.trainerPrompt,
+              hasTranscriptText: !!presentationContent.transcriptText,
+              reason: !presentationContent.trainerPrompt ? 'No trainerPrompt (using transcriptText which was already checked)' : 'Quality check service or topic repository not available',
+            });
+          }
 
           const presentation = await this.aiGenerationService.generatePresentation(presentationContent, {
             language: promptVariables.language,

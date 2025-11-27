@@ -4,6 +4,8 @@ import { AIGenerationService } from '../../infrastructure/ai/AIGenerationService
 import { ContentRepository } from '../../infrastructure/database/repositories/ContentRepository.js';
 import { PromptTemplateRepository } from '../../infrastructure/database/repositories/PromptTemplateRepository.js';
 import { PromptTemplateService } from '../../infrastructure/services/PromptTemplateService.js';
+import { RepositoryFactory } from '../../infrastructure/database/repositories/RepositoryFactory.js';
+import { QualityCheckService } from '../../infrastructure/ai/QualityCheckService.js';
 
 const router = express.Router();
 
@@ -31,45 +33,96 @@ const aiGenerationService = new AIGenerationService({
   gammaApiKey: process.env.GAMMA_API,
 });
 
-// TODO: Initialize quality check service
-const qualityCheckService = null;
+// Initialize repositories and services asynchronously
+let topicRepository = null;
+let qualityCheckService = null;
+let aiGenerationController = null;
 
-// Initialize controller
-const aiGenerationController = new AIGenerationController({
-  contentRepository,
-  aiGenerationService,
-  promptTemplateService,
-  qualityCheckService,
+const initServices = async () => {
+  if (aiGenerationController) {
+    return aiGenerationController; // Already initialized
+  }
+
+  try {
+    topicRepository = await RepositoryFactory.getTopicRepository();
+    const courseRepository = await RepositoryFactory.getCourseRepository();
+    const qualityCheckRepository = await RepositoryFactory.getQualityCheckRepository();
+
+    // Initialize QualityCheckService
+    qualityCheckService = openaiApiKey
+      ? new QualityCheckService({
+          openaiApiKey,
+          qualityCheckRepository,
+          contentRepository,
+          topicRepository,
+          courseRepository,
+        })
+      : null;
+
+    // Initialize controller
+    aiGenerationController = new AIGenerationController({
+      contentRepository,
+      aiGenerationService,
+      promptTemplateService,
+      qualityCheckService,
+      topicRepository,
+    });
+
+    return aiGenerationController;
+  } catch (error) {
+    console.error('[AI Generation Routes] Failed to initialize services:', error);
+    // Fallback: create controller without quality check service
+    aiGenerationController = new AIGenerationController({
+      contentRepository,
+      aiGenerationService,
+      promptTemplateService,
+      qualityCheckService: null,
+      topicRepository: null,
+    });
+    return aiGenerationController;
+  }
+};
+
+// Initialize services on module load
+initServices().catch(err => {
+  console.error('[AI Generation Routes] Error initializing services:', err);
 });
 
-// Routes
-router.post('/generate', (req, res, next) =>
-  aiGenerationController.generate(req, res, next)
-);
+// Routes - ensure services are initialized before handling requests
+router.post('/generate', async (req, res, next) => {
+  const controller = await initServices();
+  return controller.generate(req, res, next);
+});
 
-router.post('/generate/text', (req, res, next) =>
-  aiGenerationController.generateText(req, res, next)
-);
+router.post('/generate/text', async (req, res, next) => {
+  const controller = await initServices();
+  return controller.generateText(req, res, next);
+});
 
-router.post('/generate/code', (req, res, next) =>
-  aiGenerationController.generateCode(req, res, next)
-);
+router.post('/generate/code', async (req, res, next) => {
+  const controller = await initServices();
+  return controller.generateCode(req, res, next);
+});
 
-router.post('/generate/presentation', (req, res, next) =>
-  aiGenerationController.generatePresentation(req, res, next)
-);
+router.post('/generate/presentation', async (req, res, next) => {
+  const controller = await initServices();
+  return controller.generatePresentation(req, res, next);
+});
 
-router.post('/generate/audio', (req, res, next) =>
-  aiGenerationController.generateAudio(req, res, next)
-);
+router.post('/generate/audio', async (req, res, next) => {
+  const controller = await initServices();
+  return controller.generateAudio(req, res, next);
+});
 
-router.post('/generate/mind-map', (req, res, next) =>
-  aiGenerationController.generateMindMap(req, res, next)
-);
+router.post('/generate/mind-map', async (req, res, next) => {
+  const controller = await initServices();
+  return controller.generateMindMap(req, res, next);
+});
 
-router.post('/generate/avatar-video', (req, res, next) =>
-  aiGenerationController.generateAvatarVideo(req, res, next)
-);
+router.post('/generate/avatar-video', async (req, res, next) => {
+  const controller = await initServices();
+  return controller.generateAvatarVideo(req, res, next);
+});
 
 export default router;
 
