@@ -294,41 +294,17 @@ export function SharedSidebar({ onRestore }) {
   }, [location.pathname, context]);
 
   // Load deleted items based on context
-  useEffect(() => {
-    console.log('[SharedSidebar] useEffect triggered:', { isOpen, context });
-    
-    // Cleanup function: Clear data when context changes or component unmounts
-    let isCancelled = false;
-    
-    // 🚨 Hard reset for any NON-content page - MUST happen FIRST
-    // Clear history data, but keep deletedContent array ready for new data
-    if (context && context.type !== 'content') {
-      console.log('[SharedSidebar] Non-content context detected, clearing history data immediately');
-      setHistoryData({});
-      // Don't clear deletedContent here - let it be populated by loadDeletedContent
-    }
-    
-    // 🚫 Stop here if sidebar closed or context missing
+  // Define loadDeletedContent as a useCallback so it can be used in event listeners
+  const loadDeletedContent = React.useCallback(async () => {
     if (!isOpen || !context) {
-      console.log('[SharedSidebar] Sidebar closed or no context, clearing content');
-      return () => {
-        isCancelled = true;
-        setHistoryData({});
-        setDeletedContent([]);
-      };
+      console.log('[SharedSidebar] Sidebar closed or no context, skipping load');
+      return;
     }
-    
-    console.log('[SharedSidebar] Loading content for context:', context);
 
-    const loadDeletedContent = async () => {
-      // Don't proceed if component unmounted or context changed
-      if (isCancelled) {
-        console.log('[SharedSidebar] Load cancelled, context changed');
-        return;
-      }
-      
-      setLoading(true);
-      setError(null);
+    console.log('[SharedSidebar] Loading content for context:', context);
+    
+    setLoading(true);
+    setError(null);
 
       try {
         let result;
@@ -344,7 +320,7 @@ export function SharedSidebar({ onRestore }) {
             { page: 1, limit: 50 }
           );
           console.log('[SharedSidebar] Deleted courses loaded:', result.courses?.length || 0, result.courses);
-          if (!isCancelled && context.type === 'courses') {
+          if (context.type === 'courses') {
             setDeletedContent(result.courses || []);
             // CRITICAL: Clear history data for courses context
             setHistoryData({});
@@ -370,7 +346,7 @@ export function SharedSidebar({ onRestore }) {
           // CRITICAL: Do NOT load content history or use contentService.getHistory() for this route
           // History loading must ONLY happen on /topics/:topicId/content
           result = await topicsService.list(filters, { page: 1, limit: 50 });
-          if (!isCancelled && context.type === 'topics') {
+          if (context.type === 'topics') {
             setDeletedContent(result.topics || []);
             // CRITICAL: Ensure historyData is cleared for topics context
             setHistoryData({});
@@ -378,7 +354,7 @@ export function SharedSidebar({ onRestore }) {
         } else if (context.type === 'content') {
           // 🚨 CRITICAL: Double-check context is still 'content' before loading
           // This prevents race conditions where context changes mid-load
-          if (isCancelled || !context || context.type !== 'content') {
+          if (!context || context.type !== 'content') {
             console.log('[SharedSidebar] Context changed during load, aborting content history');
             setHistoryData({});
             setDeletedContent([]);
@@ -394,18 +370,12 @@ export function SharedSidebar({ onRestore }) {
             console.log('[SharedSidebar] Number of content items:', allContent?.length || 0);
             
             if (!allContent || allContent.length === 0) {
-              if (!isCancelled) {
-                setDeletedContent([]);
-                setHistoryData({});
-              }
+              setDeletedContent([]);
+              setHistoryData({});
               return;
             }
             
             const historyPromises = allContent.map(async (contentItem) => {
-              // Check if cancelled before processing each item
-              if (isCancelled) {
-                return [];
-              }
               try {
                 console.log(`[SharedSidebar] Loading history for content ${contentItem.content_id} (type: ${contentItem.content_type_id})`);
                 const historyResponse = await contentService.getHistory(contentItem.content_id);
@@ -499,7 +469,7 @@ export function SharedSidebar({ onRestore }) {
             const historyArrays = await Promise.all(historyPromises);
             
             // 🚨 CRITICAL: Check again after async operations
-            if (isCancelled || !context || context.type !== 'content') {
+            if (!context || context.type !== 'content') {
               console.log('[SharedSidebar] Context changed after history load, aborting');
               setHistoryData({});
               setDeletedContent([]);
@@ -537,35 +507,32 @@ export function SharedSidebar({ onRestore }) {
             });
             
             // 🚨 CRITICAL: Final check before setting state
-            if (isCancelled || !context || context.type !== 'content') {
+            if (!context || context.type !== 'content') {
               console.log('[SharedSidebar] Context changed before setting history data, aborting');
               setHistoryData({});
               setDeletedContent([]);
               return;
             }
             
-            // Only update state if not cancelled AND still in content context
-            if (!isCancelled) {
-              // Store history data organized by section
-              setHistoryData(historyBySection);
-              
-              if (allHistoryVersions.length === 0) {
-                console.warn('[SharedSidebar] No history versions found for any content items');
-                console.log('[SharedSidebar] Content items checked:', allContent.map(c => ({ id: c.content_id, type: c.content_type_id, name: c.content_type_name })));
-              }
-              
-              // CRITICAL: Do NOT set deletedContent for content context
-              // We use historyData for display, not deletedContent
-              // Setting deletedContent here causes duplicate display (flat list + sections)
-              setDeletedContent([]);
+            // Store history data organized by section
+            setHistoryData(historyBySection);
+            
+            if (allHistoryVersions.length === 0) {
+              console.warn('[SharedSidebar] No history versions found for any content items');
+              console.log('[SharedSidebar] Content items checked:', allContent.map(c => ({ id: c.content_id, type: c.content_type_id, name: c.content_type_name })));
             }
+            
+            // CRITICAL: Do NOT set deletedContent for content context
+            // We use historyData for display, not deletedContent
+            // Setting deletedContent here causes duplicate display (flat list + sections)
+            setDeletedContent([]);
           } catch (err) {
-            if (!isCancelled && context?.type === 'content') {
+            if (context?.type === 'content') {
               console.error('[SharedSidebar] Failed to load content history:', err);
               setError(err.error?.message || err.message || 'Failed to load content history');
               setDeletedContent([]);
               setHistoryData({});
-            } else if (!isCancelled && context?.type !== 'content') {
+            } else {
               // Ensure cleanup for non-content contexts
               setHistoryData({});
               setDeletedContent([]);
@@ -573,37 +540,70 @@ export function SharedSidebar({ onRestore }) {
           }
         } else {
           // CRITICAL: For any other context type, ensure historyData is cleared
-          if (!isCancelled && context.type !== 'content') {
+          if (context.type !== 'content') {
             setHistoryData({});
             // deletedContent will be set by the appropriate branch above
           }
         }
       } catch (err) {
-        if (!isCancelled) {
-          setError(err.error?.message || 'Failed to load deleted content');
-          setDeletedContent([]);
-          // CRITICAL: Always clear historyData for non-content contexts
-          if (context?.type !== 'content') {
-            setHistoryData({});
-          }
+        setError(err.error?.message || 'Failed to load deleted content');
+        setDeletedContent([]);
+        // CRITICAL: Always clear historyData for non-content contexts
+        if (context?.type !== 'content') {
+          setHistoryData({});
         }
       } finally {
-        if (!isCancelled) {
-          setLoading(false);
+        setLoading(false);
+      }
+  }, [isOpen, context]);
+
+  // Load deleted content when context or sidebar state changes
+  useEffect(() => {
+    console.log('[SharedSidebar] useEffect triggered:', { isOpen, context });
+    
+    // 🚨 Hard reset for any NON-content page - MUST happen FIRST
+    // Clear history data, but keep deletedContent array ready for new data
+    if (context && context.type !== 'content') {
+      console.log('[SharedSidebar] Non-content context detected, clearing history data immediately');
+      setHistoryData({});
+    }
+    
+    // 🚫 Stop here if sidebar closed or context missing
+    if (!isOpen || !context) {
+      console.log('[SharedSidebar] Sidebar closed or no context, clearing content');
+      setHistoryData({});
+      setDeletedContent([]);
+      return;
+    }
+    
+    loadDeletedContent();
+  }, [context, isOpen, loadDeletedContent]);
+
+  // Listen for contentRestored events to refresh deleted content
+  useEffect(() => {
+    const handleContentRestored = (event) => {
+      const { type, courseId: eventCourseId } = event.detail;
+      
+      // If a topic was deleted/restored and we're viewing topics for a course
+      if (type === 'topics' && context?.type === 'topics' && context?.courseId) {
+        // Only refresh if the event is for the same course we're viewing
+        if (eventCourseId === context.courseId || event.detail.id) {
+          console.log('[SharedSidebar] Topic deleted/restored, refreshing deleted topics list');
+          loadDeletedContent();
         }
+      } else if (type === 'topics' && context?.type === 'topics' && !context?.courseId) {
+        // Standalone topics - refresh if topic was deleted/restored
+        console.log('[SharedSidebar] Standalone topic deleted/restored, refreshing deleted topics list');
+        loadDeletedContent();
       }
     };
 
-    loadDeletedContent();
+    window.addEventListener('contentRestored', handleContentRestored);
     
-    // Cleanup function: Cancel any in-flight requests and clear data when context changes
     return () => {
-      isCancelled = true;
-      console.log('[SharedSidebar] Cleanup: Clearing data due to context change');
-      setHistoryData({});
-      setDeletedContent([]);
+      window.removeEventListener('contentRestored', handleContentRestored);
     };
-  }, [context, isOpen]);
+  }, [context, loadDeletedContent]);
 
   const handleToggleSection = (section) => {
     setOpenSections(prev => ({ ...prev, [section.id]: !prev[section.id] }));

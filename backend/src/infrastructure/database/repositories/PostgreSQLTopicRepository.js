@@ -180,13 +180,19 @@ export class PostgreSQLTopicRepository extends ITopicRepository {
     // Build HAVING conditions (after GROUP BY) - only for non-status filters
     let havingConditions = [];
 
-    if (filters.course_id !== undefined && filters.course_id !== 'null') {
-      if (filters.course_id === null) {
+    // Handle course_id filter - can be null (for standalone topics), a number (for course topics), or undefined (no filter)
+    if (filters.course_id !== undefined) {
+      if (filters.course_id === null || filters.course_id === 'null') {
+        // Standalone topics (not in a course)
         havingConditions.push(`t.course_id IS NULL`);
       } else {
-        havingConditions.push(`t.course_id = $${paramIndex}`);
-        params.push(parseInt(filters.course_id));
-        paramIndex++;
+        // Topics belonging to a specific course
+        const courseId = typeof filters.course_id === 'string' ? parseInt(filters.course_id) : filters.course_id;
+        if (!isNaN(courseId)) {
+          havingConditions.push(`t.course_id = $${paramIndex}`);
+          params.push(courseId);
+          paramIndex++;
+        }
       }
     }
 
