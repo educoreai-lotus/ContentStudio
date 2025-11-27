@@ -337,7 +337,9 @@ Rules:
   }
 
   extractTextFromContent(content) {
-    // Extract text from content_data
+    // Extract text from content_data for quality check
+    // This method handles all content types: text (1), code (2), presentation (3), mind_map (5), avatar_video (6)
+    
     if (typeof content.content_data === 'string') {
       try {
         const parsed = JSON.parse(content.content_data);
@@ -347,17 +349,27 @@ Rules:
           const explanationText = parsed.explanation || '';
           return explanationText ? `${codeText}\n\n${explanationText}` : codeText;
         }
+        // For presentation, extract metadata text if available
+        if (parsed.metadata) {
+          const metadataText = [
+            parsed.metadata.title,
+            parsed.metadata.description,
+            parsed.metadata.lessonTopic,
+          ].filter(Boolean).join('\n');
+          if (metadataText) return metadataText;
+        }
         return parsed.text || JSON.stringify(parsed);
       } catch {
         return content.content_data;
       }
     }
     
+    // Type 1: Text & Audio - extract text field
     if (content.content_data?.text) {
       return content.content_data.text;
     }
     
-    // For code content, include both code and explanation for originality check
+    // Type 2: Code - include both code and explanation for originality check
     if (content.content_data?.code) {
       const codeText = content.content_data.code;
       const explanationText = content.content_data.explanation || '';
@@ -366,6 +378,35 @@ Rules:
       return explanationText ? `${codeText}\n\n${explanationText}` : codeText;
     }
     
+    // Type 3: Presentation - extract metadata text (title, description, lessonTopic)
+    if (content.content_data?.metadata) {
+      const metadataText = [
+        content.content_data.metadata.title,
+        content.content_data.metadata.description,
+        content.content_data.metadata.lessonTopic,
+      ].filter(Boolean).join('\n');
+      if (metadataText) return metadataText;
+    }
+    
+    // Type 5: Mind Map - extract text from nodes if available
+    if (content.content_data?.nodes && Array.isArray(content.content_data.nodes)) {
+      const nodeTexts = content.content_data.nodes
+        .map(node => node.data?.label || node.label || node.text || '')
+        .filter(Boolean);
+      if (nodeTexts.length > 0) {
+        return nodeTexts.join('\n');
+      }
+    }
+    
+    // Type 6: Avatar Video - extract text/script if available
+    if (content.content_data?.text) {
+      return content.content_data.text;
+    }
+    if (content.content_data?.script) {
+      return content.content_data.script;
+    }
+    
+    // Fallback: stringify the entire content_data
     return JSON.stringify(content.content_data);
   }
 

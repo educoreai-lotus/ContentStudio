@@ -107,6 +107,11 @@ export class CreateContentUseCase {
     }
 
     if (existingContent) {
+      // Store original content data for rollback if quality check fails
+      const originalContentData = existingContent.content_data;
+      const originalGenerationMethod = existingContent.generation_method_id;
+      const originalQualityCheckStatus = existingContent.quality_check_status;
+      const originalQualityCheckData = existingContent.quality_check_data;
 
       // Save content WITHOUT audio first (if quality check is needed)
       let updatedContent = await this.contentRepository.update(existingContent.content_id, {
@@ -138,7 +143,22 @@ export class CreateContentUseCase {
           }
         } catch (error) {
           pushStatus(statusMessages, `Quality check failed: ${error.message}`);
-          console.error('[CreateContentUseCase] ❌ Quality check failed, rejecting content:', error.message);
+          console.error('[CreateContentUseCase] ❌ Quality check failed, rolling back content to original state:', error.message);
+          
+          // CRITICAL: Rollback content to original state if quality check failed
+          try {
+            await this.contentRepository.update(existingContent.content_id, {
+              content_data: originalContentData,
+              quality_check_status: originalQualityCheckStatus,
+              quality_check_data: originalQualityCheckData,
+              generation_method_id: originalGenerationMethod,
+            });
+            console.log('[CreateContentUseCase] ✅ Content rolled back to original state after quality check failure');
+          } catch (rollbackError) {
+            console.error('[CreateContentUseCase] ❌ Failed to rollback content after quality check failure:', rollbackError.message);
+            // Continue to throw the original error even if rollback fails
+          }
+          
           // Re-throw if quality check fails (content should be rejected, no audio generation)
           throw error;
         }
@@ -185,7 +205,10 @@ export class CreateContentUseCase {
     }
 
     // Save content to repository WITHOUT audio first
+    // NOTE: Content is saved before quality check because triggerQualityCheck needs content_id
+    // If quality check fails, we will delete the content from DB
     let createdContent = await this.contentRepository.create(content);
+    let contentIdToDeleteOnFailure = createdContent.content_id; // Store ID for potential rollback
 
     // Trigger quality check BEFORE audio generation for manual content
     console.log('[CreateContentUseCase] Checking if quality check should run (new content):', {
@@ -207,10 +230,24 @@ export class CreateContentUseCase {
         if (contentAfterQualityCheck) {
           createdContent = contentAfterQualityCheck;
         }
+        // Clear the rollback flag since quality check passed
+        contentIdToDeleteOnFailure = null;
       } catch (error) {
         pushStatus(statusMessages, `Quality check failed: ${error.message}`);
+        console.error('[CreateContentUseCase] ❌ Quality check failed, deleting content from DB:', error.message);
+        
+        // CRITICAL: Delete content from DB if quality check failed
+        if (contentIdToDeleteOnFailure) {
+          try {
+            await this.contentRepository.delete(contentIdToDeleteOnFailure, true);
+            console.log('[CreateContentUseCase] ✅ Content deleted from DB after quality check failure');
+          } catch (deleteError) {
+            console.error('[CreateContentUseCase] ❌ Failed to delete content after quality check failure:', deleteError.message);
+            // Continue to throw the original error even if delete fails
+          }
+        }
+        
         // Re-throw if quality check fails (content should be rejected, no audio generation)
-        console.error('[CreateContentUseCase] ❌ Quality check failed, rejecting content:', error.message);
         throw error;
       }
     } else {

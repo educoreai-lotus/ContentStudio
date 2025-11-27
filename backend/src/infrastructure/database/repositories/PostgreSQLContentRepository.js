@@ -399,7 +399,25 @@ export class PostgreSQLContentRepository extends IContentRepository {
         ? JSON.parse(content.content_data) 
         : content.content_data;
 
+      // Try to extract storage path from various fields (storagePath, presentationUrl, fileUrl)
+      let storagePathToDelete = null;
       if (contentData?.storagePath) {
+        storagePathToDelete = contentData.storagePath;
+      } else if (contentData?.presentationUrl && contentData.presentationUrl.includes('/storage/v1/object/public/')) {
+        // Extract path from Supabase public URL: https://xxx.supabase.co/storage/v1/object/public/media/path/to/file
+        const urlParts = contentData.presentationUrl.split('/storage/v1/object/public/');
+        if (urlParts.length > 1) {
+          storagePathToDelete = urlParts[1];
+        }
+      } else if (contentData?.fileUrl && contentData.fileUrl.includes('/storage/v1/object/public/')) {
+        // Extract path from Supabase public URL for avatar videos
+        const urlParts = contentData.fileUrl.split('/storage/v1/object/public/');
+        if (urlParts.length > 1) {
+          storagePathToDelete = urlParts[1];
+        }
+      }
+
+      if (storagePathToDelete) {
         try {
           if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
             const { createClient } = await import('@supabase/supabase-js');
@@ -408,24 +426,14 @@ export class PostgreSQLContentRepository extends IContentRepository {
               process.env.SUPABASE_SERVICE_ROLE_KEY
             );
 
-            // Determine bucket based on content type
-            let bucket = 'media';
-            if (content.content_type_id === 3) {
-              // Presentation
-              bucket = 'media';
-            } else if (content.content_type_id === 6) {
-              // Avatar video
-              bucket = 'media';
-            } else if (content.content_type_id === 4) {
-              // Audio
-              bucket = 'media';
-            }
+            // Determine bucket based on content type (all use 'media' bucket)
+            const bucket = 'media';
 
             await supabase.storage
               .from(bucket)
-              .remove([contentData.storagePath]);
+              .remove([storagePathToDelete]);
             
-            console.log(`[PostgreSQLContentRepository] Deleted file from storage: ${contentData.storagePath} (content_type_id=${content.content_type_id})`);
+            console.log(`[PostgreSQLContentRepository] Deleted file from storage: ${storagePathToDelete} (content_type_id=${content.content_type_id})`);
           } else {
             console.warn('[PostgreSQLContentRepository] Supabase not configured, skipping file deletion from storage');
           }
