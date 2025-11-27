@@ -29,6 +29,23 @@ export const CourseList = () => {
     loadCourses();
   }, [filters, pagination.page]);
 
+  // Listen for restore events to refresh data
+  useEffect(() => {
+    const handleContentRestored = (event) => {
+      const { type } = event.detail;
+      // Refresh if a course was restored
+      if (type === 'courses') {
+        console.log('[CourseList] Course restored, refreshing list');
+        loadCourses();
+      }
+    };
+
+    window.addEventListener('contentRestored', handleContentRestored);
+    return () => {
+      window.removeEventListener('contentRestored', handleContentRestored);
+    };
+  }, [filters, pagination.page]);
+
   const loadCourses = async () => {
     try {
       setLoading(true);

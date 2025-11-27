@@ -848,6 +848,21 @@ export function SharedSidebar({ onRestore }) {
       if (onRestore) {
         onRestore(content);
       }
+
+      // Dispatch custom event to trigger page refresh
+      // This allows CourseDetail, TopicContentManager, etc. to listen and refresh their data
+      const restoreEvent = new CustomEvent('contentRestored', {
+        detail: {
+          type: context.type,
+          id: context.type === 'courses' ? content.course_id : 
+              context.type === 'topics' ? content.topic_id : 
+              context.type === 'content' ? content.content_id : null,
+          courseId: context.courseId || (context.type === 'topics' && content.course_id) || null,
+          topicId: context.topicId || (context.type === 'content' && content.topic_id) || null,
+        }
+      });
+      window.dispatchEvent(restoreEvent);
+      console.log('[SharedSidebar] Dispatched contentRestored event:', restoreEvent.detail);
     } catch (err) {
       setLoading(false);
       const errorMessage = err.error?.message || err.response?.data?.error?.message || err.message || 'Failed to restore content';

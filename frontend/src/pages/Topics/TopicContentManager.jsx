@@ -54,6 +54,27 @@ export default function TopicContentManager() {
     }
   }, [topicId, location.state]);
 
+  // Listen for restore events to refresh data
+  useEffect(() => {
+    const handleContentRestored = (event) => {
+      const { type, topicId: restoredTopicId, id } = event.detail;
+      // Refresh if content was restored for this topic
+      if (type === 'content' && restoredTopicId === parseInt(topicId)) {
+        console.log('[TopicContentManager] Content restored, refreshing data');
+        fetchContent();
+        fetchTopicDetails();
+      } else if (type === 'topics' && (restoredTopicId === parseInt(topicId) || id === parseInt(topicId))) {
+        console.log('[TopicContentManager] Topic restored, refreshing data');
+        fetchTopicDetails();
+      }
+    };
+
+    window.addEventListener('contentRestored', handleContentRestored);
+    return () => {
+      window.removeEventListener('contentRestored', handleContentRestored);
+    };
+  }, [topicId]);
+
   // Refresh content when returning to this page
   useEffect(() => {
     const handleVisibilityChange = () => {

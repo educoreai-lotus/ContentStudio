@@ -32,6 +32,30 @@ export const TopicList = ({ courseId = null }) => {
     loadTopics();
   }, [filters, pagination.page]);
 
+  // Listen for restore events to refresh data
+  useEffect(() => {
+    const handleContentRestored = (event) => {
+      const { type, courseId: restoredCourseId } = event.detail;
+      // Refresh if a topic was restored (and it matches our filters)
+      if (type === 'topics') {
+        // If we're showing topics for a specific course, only refresh if that course matches
+        if (courseId && restoredCourseId === courseId) {
+          console.log('[TopicList] Topic restored in this course, refreshing list');
+          loadTopics();
+        } else if (!courseId && !restoredCourseId) {
+          // If we're showing standalone topics, refresh if restored topic is standalone
+          console.log('[TopicList] Standalone topic restored, refreshing list');
+          loadTopics();
+        }
+      }
+    };
+
+    window.addEventListener('contentRestored', handleContentRestored);
+    return () => {
+      window.removeEventListener('contentRestored', handleContentRestored);
+    };
+  }, [courseId, filters, pagination.page]);
+
   const loadTopics = async () => {
     try {
       setLoading(true);

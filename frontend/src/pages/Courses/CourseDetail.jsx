@@ -22,50 +22,72 @@ export const CourseDetail = () => {
   const [publishError, setPublishError] = useState(null);
   const [publishSuccess, setPublishSuccess] = useState(false);
 
+  const fetchCourse = React.useCallback(async () => {
+    try {
+      setLoadingCourse(true);
+      const courseData = await coursesService.getById(courseId);
+      setCourse(courseData);
+    } catch (err) {
+      setError(err.error?.message || 'Failed to load course details');
+    } finally {
+      setLoadingCourse(false);
+    }
+  }, [courseId]);
+
+  const fetchTopics = React.useCallback(async () => {
+    try {
+      setLoadingTopics(true);
+      const result = await topicsService.list(
+        {
+          trainer_id: DEFAULT_TRAINER_ID,
+          course_id: courseId,
+          status: 'active', // Only show active topics (exclude deleted)
+        },
+        {
+          page: 1,
+          limit: 50,
+        }
+      );
+      setTopics(result.topics || []);
+    } catch (err) {
+      setError(err.error?.message || 'Failed to load course lessons');
+    } finally {
+      setLoadingTopics(false);
+    }
+  }, [courseId]);
+
   useEffect(() => {
     if (!courseId) {
       setError('Invalid course ID');
       return;
     }
 
-    const fetchCourse = async () => {
-      try {
-        setLoadingCourse(true);
-        const courseData = await coursesService.getById(courseId);
-        setCourse(courseData);
-      } catch (err) {
-        setError(err.error?.message || 'Failed to load course details');
-      } finally {
-        setLoadingCourse(false);
-      }
-    };
-
-    const fetchTopics = async () => {
-      try {
-        setLoadingTopics(true);
-        const result = await topicsService.list(
-          {
-            trainer_id: DEFAULT_TRAINER_ID,
-            course_id: courseId,
-            status: 'active', // Only show active topics (exclude deleted)
-          },
-          {
-            page: 1,
-            limit: 50,
-          }
-        );
-        setTopics(result.topics || []);
-      } catch (err) {
-        setError(err.error?.message || 'Failed to load course lessons');
-      } finally {
-        setLoadingTopics(false);
-      }
-    };
-
     setError(null);
     fetchCourse();
     fetchTopics();
-  }, [courseId]);
+  }, [courseId, fetchCourse, fetchTopics]);
+
+  // Listen for restore events to refresh data
+  useEffect(() => {
+    const handleContentRestored = (event) => {
+      const { type, id, courseId: restoredCourseId } = event.detail;
+      // Refresh if a course was restored (and we're viewing that course)
+      if (type === 'courses' && id === courseId) {
+        console.log('[CourseDetail] Course restored, refreshing data');
+        fetchCourse();
+        fetchTopics();
+      } else if (type === 'topics' && restoredCourseId === courseId) {
+        // Refresh topics if a topic was restored in this course
+        console.log('[CourseDetail] Topic restored in this course, refreshing topics');
+        fetchTopics();
+      }
+    };
+
+    window.addEventListener('contentRestored', handleContentRestored);
+    return () => {
+      window.removeEventListener('contentRestored', handleContentRestored);
+    };
+  }, [courseId, fetchCourse, fetchTopics]);
 
   const getStatusBadgeVariant = status => {
     switch (status) {
