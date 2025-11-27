@@ -331,28 +331,39 @@ export class ContentController {
         });
       }
 
-      // MANDATORY: Save to history BEFORE deletion
+      // MANDATORY: Save to history BEFORE deletion for ALL content types
+      // This applies to: text (1), code (2), presentation (3), audio (4), mind_map (5), avatar_video (6)
       if (this.contentHistoryService?.saveVersion) {
         try {
-          console.log('[ContentController] Saving content to history before deletion:', {
+          console.log('[ContentController] MANDATORY: Saving content to history before deletion:', {
             content_id: contentId,
             topic_id: existingContent.topic_id,
             content_type_id: existingContent.content_type_id,
+            content_type_name: existingContent.content_type_id === 1 ? 'text' :
+                              existingContent.content_type_id === 2 ? 'code' :
+                              existingContent.content_type_id === 3 ? 'presentation' :
+                              existingContent.content_type_id === 4 ? 'audio' :
+                              existingContent.content_type_id === 5 ? 'mind_map' :
+                              existingContent.content_type_id === 6 ? 'avatar_video' : 'unknown',
           });
           await this.contentHistoryService.saveVersion(existingContent, { force: true });
-          console.log('[ContentController] Successfully archived content to history before deletion');
+          console.log('[ContentController] ✅ Successfully archived content to history before deletion');
         } catch (error) {
-          console.error('[ContentController] Failed to save content to history before deletion:', error.message, error.stack);
-          // Do not proceed with deletion if history save fails
+          console.error('[ContentController] ❌ Failed to save content to history before deletion:', error.message, error.stack);
+          // CRITICAL: Do not proceed with deletion if history save fails
+          // This ensures we never lose content without saving it to history first
           throw new Error(`Failed to archive content to history: ${error.message}`);
         }
       } else {
-        console.warn('[ContentController] ContentHistoryService not available, but proceeding with deletion');
+        // CRITICAL: If ContentHistoryService is not available, we should NOT proceed with deletion
+        // This is a safety measure to prevent data loss
+        console.error('[ContentController] ❌ ContentHistoryService not available - CANNOT proceed with deletion');
+        throw new Error('ContentHistoryService is required for content deletion. Cannot delete content without saving to history first.');
       }
 
-      // Repository delete() method also handles archiving to history as a backup
-      // But we've already done it above to ensure it happens
-      await this.contentRepository.delete(contentId);
+      // Repository delete() method will skip history save since we already did it above
+      // Pass skipHistoryCheck=true to prevent duplicate history entries
+      await this.contentRepository.delete(contentId, true);
 
       res.status(204).send();
     } catch (error) {

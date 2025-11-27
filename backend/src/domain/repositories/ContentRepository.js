@@ -42,11 +42,13 @@ export class ContentRepository {
   }
 
   /**
-   * Soft delete content item
+   * Delete content item
+   * IMPORTANT: This method should NOT save to history - that must be done BEFORE calling this method
    * @param {number} contentId - Content ID
-   * @returns {Promise<void>}
+   * @param {boolean} skipHistoryCheck - If true, skip the history check (for cases where history was already saved)
+   * @returns {Promise<boolean>} True if deletion was successful
    */
-  async delete(contentId) {
+  async delete(contentId, skipHistoryCheck = false) {
     throw new Error('ContentRepository.delete() must be implemented');
   }
 

@@ -350,12 +350,23 @@ export class PostgreSQLContentRepository extends IContentRepository {
     return await this.mapRowToContent(result.rows[0]);
   }
 
-  async delete(contentId) {
+  /**
+   * Delete content from database
+   * IMPORTANT: This method does NOT save to history - that must be done BEFORE calling this method
+   * The ContentController.remove() method handles history saving before calling this method
+   * @param {number} contentId - Content ID to delete
+   * @param {boolean} skipHistoryCheck - If true, skip the history check (for cases where history was already saved)
+   * @returns {Promise<boolean>} True if deletion was successful
+   */
+  async delete(contentId, skipHistoryCheck = false) {
     if (!this.db.isConnected()) {
       throw new Error('Database not connected. Using in-memory repository.');
     }
 
-    console.log(`[PostgreSQLContentRepository] Deleting content_id=${contentId}`);
+    console.log(`[PostgreSQLContentRepository] Deleting content_id=${contentId}`, {
+      skipHistoryCheck,
+      note: skipHistoryCheck ? 'History should have been saved by ContentController before this call' : 'WARNING: History may not have been saved!',
+    });
 
     const client = await this.db.getClient();
 
@@ -371,10 +382,24 @@ export class PostgreSQLContentRepository extends IContentRepository {
 
       const content = getResult.rows[0];
 
-      await this.saveRowToHistory(content, client);
-      console.log(`[PostgreSQLContentRepository] Archived content_id=${contentId} → content_history (topic_id=${content.topic_id}, type_id=${content.content_type_id})`);
+      // IMPORTANT: Only save to history if skipHistoryCheck is false
+      // This is a safety net in case ContentController didn't save to history
+      // But normally, ContentController should save to history BEFORE calling this method
+      if (!skipHistoryCheck) {
+        console.warn(`[PostgreSQLContentRepository] WARNING: History not saved before delete! Saving now as backup for content_id=${contentId}`);
+        await this.saveRowToHistory(content, client);
+        console.log(`[PostgreSQLContentRepository] Archived content_id=${contentId} → content_history (topic_id=${content.topic_id}, type_id=${content.content_type_id})`);
+      } else {
+        console.log(`[PostgreSQLContentRepository] Skipping history save (already saved by ContentController) for content_id=${contentId}`);
+      }
 
-      if (content.content_type_id === 3 && content.content_data?.storagePath) {
+      // Delete files from storage for all content types that use storage
+      // This applies to: presentations (type 3), avatar videos (type 6), audio (type 4)
+      const contentData = typeof content.content_data === 'string' 
+        ? JSON.parse(content.content_data) 
+        : content.content_data;
+
+      if (contentData?.storagePath) {
         try {
           if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
             const { createClient } = await import('@supabase/supabase-js');
@@ -383,16 +408,30 @@ export class PostgreSQLContentRepository extends IContentRepository {
               process.env.SUPABASE_SERVICE_ROLE_KEY
             );
 
+            // Determine bucket based on content type
+            let bucket = 'media';
+            if (content.content_type_id === 3) {
+              // Presentation
+              bucket = 'media';
+            } else if (content.content_type_id === 6) {
+              // Avatar video
+              bucket = 'media';
+            } else if (content.content_type_id === 4) {
+              // Audio
+              bucket = 'media';
+            }
+
             await supabase.storage
-              .from('media')
-              .remove([content.content_data.storagePath]);
+              .from(bucket)
+              .remove([contentData.storagePath]);
             
-            console.log(`Deleted file from storage: ${content.content_data.storagePath}`);
+            console.log(`[PostgreSQLContentRepository] Deleted file from storage: ${contentData.storagePath} (content_type_id=${content.content_type_id})`);
           } else {
-            console.warn('Supabase not configured, skipping file deletion from storage');
+            console.warn('[PostgreSQLContentRepository] Supabase not configured, skipping file deletion from storage');
           }
         } catch (storageError) {
-          console.error('Failed to delete file from storage:', storageError);
+          console.error('[PostgreSQLContentRepository] Failed to delete file from storage:', storageError);
+          // Don't fail the entire deletion if storage deletion fails
         }
       }
 
@@ -401,8 +440,7 @@ export class PostgreSQLContentRepository extends IContentRepository {
 
       await client.query('COMMIT');
 
-      console.log(`[PostgreSQLContentRepository] Deleted content_id=${contentId} from content`);
-      console.log(`✅ History entry created once successfully.`);
+      console.log(`[PostgreSQLContentRepository] Deleted content_id=${contentId} from content (content_type_id=${content.content_type_id})`);
 
       return true;
     } catch (error) {

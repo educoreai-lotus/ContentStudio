@@ -67,13 +67,20 @@ export class ContentRepository extends IContentRepository {
     return updatedContent;
   }
 
-  async delete(contentId) {
+  async delete(contentId, skipHistoryCheck = false) {
     const index = this.contents.findIndex(c => c.content_id === contentId);
     if (index === -1) {
       throw new Error(`Content with id ${contentId} not found`);
     }
 
+    // For in-memory repository, we don't have history support
+    // But we still respect the skipHistoryCheck parameter for consistency
+    if (!skipHistoryCheck) {
+      console.warn('[ContentRepository] WARNING: In-memory repository does not support history. Content will be deleted without history backup.');
+    }
+
     this.contents[index].softDelete();
+    return true;
   }
 
   async hasContentType(topicId, contentType) {
