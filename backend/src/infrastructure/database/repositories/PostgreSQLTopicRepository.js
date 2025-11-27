@@ -226,6 +226,11 @@ export class PostgreSQLTopicRepository extends ITopicRepository {
       throw new Error('Database not connected. Using in-memory repository.');
     }
 
+    // Validate updates parameter
+    if (!updates || typeof updates !== 'object') {
+      throw new Error('Updates must be a non-null object');
+    }
+
     const allowedFields = [
       'topic_name',
       'description',

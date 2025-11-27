@@ -21,16 +21,19 @@ export class UpdateTopicUseCase {
       return null;
     }
 
-    // Update topic with new data
-    const updatedTopic = new Topic({
-      ...existingTopic.toJSON(),
-      ...updateData,
-      topic_id: topicId,
-      updated_at: new Date().toISOString(),
-    });
+    // Convert UpdateTopicDTO to plain object if needed
+    // The repository expects (topicId, updates) where updates is a plain object
+    const updates = updateData instanceof Object && !Array.isArray(updateData)
+      ? { ...updateData } // Spread to get plain object
+      : updateData;
 
-    // Persist update
-    const savedTopic = await this.topicRepository.update(updatedTopic);
+    // Validate that updates is an object
+    if (!updates || typeof updates !== 'object' || Array.isArray(updates)) {
+      throw new Error('Update data must be a non-null object');
+    }
+
+    // Persist update - pass topicId and updates separately
+    const savedTopic = await this.topicRepository.update(topicId, updates);
 
     return savedTopic;
   }
