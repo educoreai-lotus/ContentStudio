@@ -196,19 +196,19 @@ export const VideoUploadModal = ({ open, onClose, topicId, theme = 'day-mode', o
         // Generic transcription error
         const errorMessage =
           error?.error || error?.error?.message || error?.message || 'Failed to transcribe video';
-        
-        addMessage({
-          message: 'Transcription failed',
-          timestamp: new Date().toISOString(),
-        });
+      
+      addMessage({
+        message: 'Transcription failed',
+        timestamp: new Date().toISOString(),
+      });
 
-        showPopup({
-          type: 'error',
-          title: 'Transcription Failed',
-          message: 'Failed to transcribe video',
-          reason: errorMessage,
-          guidance: 'Please try another video or check your internet connection.',
-        });
+      showPopup({
+        type: 'error',
+        title: 'Transcription Failed',
+        message: 'Failed to transcribe video',
+        reason: errorMessage,
+        guidance: 'Please try another video or check your internet connection.',
+      });
       }
     } finally {
       setLoading(false);

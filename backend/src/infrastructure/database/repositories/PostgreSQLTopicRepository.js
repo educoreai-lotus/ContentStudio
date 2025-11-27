@@ -1,6 +1,7 @@
 import { TopicRepository as ITopicRepository } from '../../../domain/repositories/TopicRepository.js';
 import { Topic } from '../../../domain/entities/Topic.js';
 import { db } from '../DatabaseConnection.js';
+import { logger } from '../../logging/Logger.js';
 
 /**
  * PostgreSQL Topic Repository Implementation
@@ -343,6 +344,44 @@ export class PostgreSQLTopicRepository extends ITopicRepository {
       created_at: row.created_at,
       updated_at: row.updated_at,
     });
+  }
+
+  /**
+   * Update devlab_exercises field in topics table
+   * @param {number} topicId - Topic ID
+   * @param {string} answer - The answer code (HTML/CSS/JS) to save
+   * @returns {Promise<void>}
+   */
+  async updateDevlabExercises(topicId, answer) {
+    if (!this.db || !this.db.isConnected()) {
+      logger.warn('[PostgreSQLTopicRepository] Database not connected, cannot update devlab_exercises');
+      return;
+    }
+
+    try {
+      // Save answer as string in devlab_exercises field (JSONB)
+      const updateSql = `
+        UPDATE topics
+        SET devlab_exercises = $1::jsonb
+        WHERE topic_id = $2
+      `;
+
+      await this.db.query(updateSql, [
+        JSON.stringify(answer), // Save as string in JSONB
+        topicId,
+      ]);
+
+      logger.info('[PostgreSQLTopicRepository] Updated devlab_exercises in topics table', {
+        topic_id: topicId,
+        answerLength: answer.length,
+      });
+    } catch (error) {
+      logger.error('[PostgreSQLTopicRepository] Failed to update devlab_exercises', {
+        topic_id: topicId,
+        error: error.message,
+      });
+      throw error;
+    }
   }
 }
 

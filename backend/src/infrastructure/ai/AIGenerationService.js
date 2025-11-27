@@ -795,7 +795,7 @@ This presentation should be educational and suitable for ${audience}.`;
 
       // Extract storage metadata if available
       const storageMetadata = videoResult.storageMetadata || null;
-      
+
       return {
         videoUrl: videoResult.videoUrl,
         videoId: videoResult.videoId,

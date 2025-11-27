@@ -101,19 +101,30 @@ export class ExerciseController {
   }
 
   /**
-   * Create a single manual exercise (validate and save)
+   * Create manual code exercises (always 4 exercises together)
    * POST /api/exercises/manual
+   * 
+   * Request body:
+   * {
+   *   topic_id: number,
+   *   topic_name: string,
+   *   skills: string[],
+   *   question_type: "code" (only code allowed),
+   *   programming_language: string (required),
+   *   language: string,
+   *   exercises: Array<{ question_text, hint?, solution? }> (exactly 4)
+   * }
    */
   async createManualExercise(req, res, next) {
     try {
       const {
         topic_id,
-        question_text,
+        topic_name,
+        skills,
         question_type,
         programming_language,
         language,
-        hint,
-        solution,
+        exercises, // Array of 4 exercises
       } = req.body;
       const trainerId = req.auth?.trainer?.trainer_id || req.body.trainer_id;
 
@@ -123,35 +134,76 @@ export class ExerciseController {
         });
       }
 
-      logger.info('[ExerciseController] Creating manual exercise', {
-        topic_id,
-        trainer_id: trainerId,
-        question_text: question_text?.substring(0, 100),
-      });
+      // Validate that only code questions can be manual
+      if (question_type !== 'code') {
+        return res.status(400).json({
+          success: false,
+          error: 'Manual exercises are only allowed for code questions. Theoretical questions must be AI-generated.',
+          validation_failed: true,
+        });
+      }
 
-      const exercise = await this.createExercisesUseCase.createManualExercise({
+      // Validate programming_language is provided
+      if (!programming_language || !programming_language.trim()) {
+        return res.status(400).json({
+          success: false,
+          error: 'Programming language is required for code questions',
+          validation_failed: true,
+        });
+      }
+
+      // Validate exercises array exists and has exactly 4 items
+      if (!Array.isArray(exercises) || exercises.length !== 4) {
+        return res.status(400).json({
+          success: false,
+          error: 'Manual code exercises must include exactly 4 questions',
+          validation_failed: true,
+        });
+      }
+
+      // Validate all exercises have question_text
+      const emptyExercises = exercises.filter(ex => !ex.question_text || !ex.question_text.trim());
+      if (emptyExercises.length > 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'All 4 exercises must have question text',
+          validation_failed: true,
+        });
+      }
+
+      logger.info('[ExerciseController] Creating manual code exercises (4 together)', {
         topic_id,
-        question_text,
+        topic_name,
+        trainer_id: trainerId,
         question_type,
         programming_language,
-        language,
-        hint,
-        solution,
+        exercisesCount: exercises.length,
+      });
+
+      const createdExercises = await this.createExercisesUseCase.createManualExercises({
+        topic_id,
+        topic_name,
+        skills: skills || [],
+        question_type: 'code',
+        programming_language,
+        language: language || 'en',
+        exercises,
         created_by: trainerId,
       });
 
       return res.status(201).json({
         success: true,
-        exercise: exercise.toJSON(),
+        exercises: createdExercises.map(ex => ex.toJSON()),
+        count: createdExercises.length,
       });
     } catch (error) {
-      logger.error('[ExerciseController] Error creating manual exercise', {
+      logger.error('[ExerciseController] Error creating manual exercises', {
         error: error.message,
         stack: error.stack,
       });
 
       // Check if it's a validation error
-      if (error.message.includes('validation failed') || error.message.includes('rejected')) {
+      if (error.message.includes('validation failed') || error.message.includes('rejected') || error.message.includes('Manual exercises are only allowed')) {
         return res.status(400).json({
           success: false,
           error: error.message,

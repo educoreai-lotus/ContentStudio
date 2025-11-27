@@ -74,12 +74,73 @@ export class CreateExercisesUseCase {
     }
 
     // Validate response structure
-    if (!dablaResponse || !Array.isArray(dablaResponse.exercises)) {
-      throw new Error('Invalid response from Dabla: exercises array not found');
+    // Coordinator returns: { answer: "string" }
+    // answer is ALWAYS a plain string (code HTML/CSS/JS or error message) - NEVER JSON
+    // NO verified field in response! Only answer.
+    if (!dablaResponse || !dablaResponse.answer) {
+      throw new Error('Invalid response from Coordinator: missing answer');
     }
 
-    // Create Exercise entities from Dabla response
-    const exercises = dablaResponse.exercises.map((exerciseData, index) => {
+    const answer = dablaResponse.answer;
+
+    // Check if answer is an error message or code
+    // Error messages typically don't contain HTML/CSS/JS code patterns
+    const isError = answer.length === 0 || 
+      answer.toLowerCase().includes('error') ||
+      answer.toLowerCase().includes('failed') ||
+      answer.toLowerCase().includes('invalid') ||
+      answer.toLowerCase().includes('not match') ||
+      answer.toLowerCase().includes('does not match') ||
+      (!answer.includes('<') && !answer.includes('function') && !answer.includes('const') && !answer.includes('let'));
+
+    if (isError) {
+      const errorMessage = answer || 'Exercise generation failed';
+      logger.warn('[CreateExercisesUseCase] Coordinator returned error message', {
+        topic_id,
+        errorMessage,
+      });
+      throw new Error(errorMessage);
+    }
+
+    // If answer contains code (not error), save it to devlab_exercises in topics table
+    // Save the answer code to devlab_exercises field in topics table
+    try {
+      await this.topicRepository.updateDevlabExercises(topic_id, answer);
+      logger.info('[CreateExercisesUseCase] Saved answer code to devlab_exercises in topics table', {
+        topic_id,
+        answerLength: answer.length,
+      });
+    } catch (updateError) {
+      logger.warn('[CreateExercisesUseCase] Failed to update devlab_exercises in topics table', {
+        topic_id,
+        error: updateError.message,
+      });
+      // Continue even if update fails - exercises will still be created
+    }
+
+    // Check if exercises array is provided, or if we need to create from answer
+    let exercisesArray = dablaResponse.exercises;
+    
+    // If no exercises array, create a single exercise from the answer code
+    if (!Array.isArray(exercisesArray) || exercisesArray.length === 0) {
+      // Create a single exercise from the answer code (HTML/CSS/JS)
+      exercisesArray = [{
+        question_text: `Exercise for ${topic.topic_name}`,
+        solution: answer, // The HTML/CSS/JS code
+        html_code: answer, // The HTML/CSS/JS code for display
+      }];
+    }
+
+    // Log Coordinator response details
+    logger.info('[CreateExercisesUseCase] Coordinator response received', {
+      topic_id,
+      exercisesCount: exercisesArray.length,
+      hasAnswer: !!answer,
+      answerLength: answer.length,
+    });
+
+    // Create Exercise entities from Coordinator response
+    const exercises = exercisesArray.map((exerciseData, index) => {
       return new Exercise({
         topic_id,
         question_text: exerciseData.question_text || exerciseData.question || '',
@@ -88,7 +149,8 @@ export class CreateExercisesUseCase {
         language: language || topic.language || 'en',
         skills: topic.skills || [],
         hint: exerciseData.hint || null,
-        solution: exerciseData.solution || null,
+        solution: exerciseData.solution || exerciseData.html_code || answer || null,
+        html_code: exerciseData.html_code || answer || null, // HTML/CSS/JS code for display
         test_cases: exerciseData.test_cases || null,
         difficulty: exerciseData.difficulty || null,
         points: exerciseData.points || 10,
@@ -96,7 +158,10 @@ export class CreateExercisesUseCase {
         generation_mode: 'ai',
         validation_status: 'approved', // AI exercises are auto-approved
         validation_message: null,
-        devlab_response: exerciseData, // Store full response
+        devlab_response: {
+          ...exerciseData,
+          answer: answer, // Store the answer code
+        }, // Store full response including answer
         created_by,
         status: 'active',
       });
@@ -114,7 +179,198 @@ export class CreateExercisesUseCase {
   }
 
   /**
-   * Validate and create a single manual exercise
+   * Create manual code exercises (always 4 exercises together)
+   * Validates all 4 with Coordinator/DevLab before saving
+   * @param {Object} requestData - Request data:
+   *   {
+   *     topic_id: number,
+   *     topic_name: string,
+   *     skills: string[],
+   *     question_type: "code" (only code allowed),
+   *     programming_language: string (required),
+   *     language: string,
+   *     exercises: Array<{ question_text, hint?, solution? }> (exactly 4),
+   *     created_by: string (trainer_id)
+   *   }
+   * @returns {Promise<Exercise[]>} Created and validated exercises (4 exercises)
+   */
+  async createManualExercises(requestData) {
+    const {
+      topic_id,
+      topic_name,
+      skills,
+      question_type,
+      programming_language,
+      language,
+      exercises, // Array of 4
+      created_by,
+    } = requestData;
+
+    // Validate required fields
+    if (!topic_id) {
+      throw new Error('topic_id is required');
+    }
+    if (!created_by) {
+      throw new Error('created_by (trainer_id) is required');
+    }
+    if (question_type !== 'code') {
+      throw new Error('Manual exercises are only allowed for code questions. Theoretical questions must be AI-generated.');
+    }
+    if (!programming_language || !programming_language.trim()) {
+      throw new Error('Programming language is required for code questions');
+    }
+    if (!Array.isArray(exercises) || exercises.length !== 4) {
+      throw new Error('Manual code exercises must include exactly 4 questions');
+    }
+
+    // Fetch topic to get additional info if needed
+    const topic = await this.topicRepository.findById(topic_id);
+    if (!topic) {
+      throw new Error(`Topic with id ${topic_id} not found`);
+    }
+
+    logger.info('[CreateExercisesUseCase] Validating 4 manual code exercises together', {
+      topic_id,
+      topic_name: topic_name || topic.topic_name,
+      programming_language,
+      exercisesCount: exercises.length,
+    });
+
+    // Build validation request for Coordinator
+    const validationRequest = {
+      topic_id: topic_id.toString(),
+      topic_name: topic_name || topic.topic_name || '',
+      skills: skills || topic.skills || [],
+      question_type: 'code',
+      programming_language: programming_language,
+      Language: language || topic.language || 'en',
+      exercises: exercises.map(ex => ({
+        question_text: ex.question_text || '',
+        hint: ex.hint || null,
+        solution: ex.solution || null,
+      })),
+    };
+
+    // Call Coordinator to validate all 4 exercises together
+    let validationResult;
+    try {
+      validationResult = await validateManualExercise(validationRequest);
+    } catch (error) {
+      logger.error('[CreateExercisesUseCase] Failed to validate manual exercises with Coordinator', {
+        topic_id,
+        error: error.message,
+      });
+      throw new Error(`Failed to validate exercises: ${error.message}`);
+    }
+
+    // Check validation result
+    // Coordinator returns: { answer: "string" }
+    // answer is ALWAYS a plain string (code HTML/CSS/JS or error message) - NEVER JSON
+    // NO verified field in response! Only answer.
+    const answer = validationResult.answer || '';
+
+    // Check if answer is an error message or code
+    // Error messages typically don't contain HTML/CSS/JS code patterns
+    const isError = answer.length === 0 || 
+      answer.toLowerCase().includes('error') ||
+      answer.toLowerCase().includes('failed') ||
+      answer.toLowerCase().includes('invalid') ||
+      answer.toLowerCase().includes('not match') ||
+      answer.toLowerCase().includes('does not match') ||
+      (!answer.includes('<') && !answer.includes('function') && !answer.includes('const') && !answer.includes('let'));
+
+    if (isError) {
+      const errorMessage = answer || 'Exercise validation failed';
+      logger.warn('[CreateExercisesUseCase] Exercises validation rejected', {
+        topic_id,
+        errorMessage,
+      });
+      throw new Error(errorMessage);
+    }
+
+    // If answer contains code (not error), save it to devlab_exercises in topics table
+    const htmlCode = answer;
+    
+    // Save the answer code to devlab_exercises field in topics table
+    try {
+      await this.topicRepository.updateDevlabExercises(topic_id, htmlCode);
+      logger.info('[CreateExercisesUseCase] Saved answer code to devlab_exercises in topics table', {
+        topic_id,
+        answerLength: htmlCode.length,
+      });
+    } catch (updateError) {
+      logger.warn('[CreateExercisesUseCase] Failed to update devlab_exercises in topics table', {
+        topic_id,
+        error: updateError.message,
+      });
+      // Continue even if update fails - exercises will still be created
+    }
+
+    // Get validated exercises from response (if provided) or use original exercises
+    let validatedExercises = validationResult.exercises;
+    if (!Array.isArray(validatedExercises) || validatedExercises.length !== 4) {
+      // If exercises array not provided, use original exercises and add html_code
+      validatedExercises = exercises.map((ex, index) => ({
+        question_text: ex.question_text || '',
+        hint: ex.hint || null,
+        solution: ex.solution || null,
+        html_code: htmlCode, // Use the same HTML code for all exercises
+      }));
+    } else {
+      // If exercises array provided, add html_code to each
+      validatedExercises = validatedExercises.map((ex, index) => ({
+        ...ex,
+        html_code: ex.html_code || htmlCode, // Use exercise-specific code or fallback to answer
+      }));
+    }
+
+    // Get the next order_index for this topic
+    const existingExercises = await this.exerciseRepository.findByTopicId(topic_id);
+    const startOrderIndex = existingExercises.length;
+
+    // Create Exercise entities from validated response
+    const exerciseEntities = validatedExercises.map((exerciseData, index) => {
+      return new Exercise({
+        topic_id,
+        question_text: exerciseData.question_text || exercises[index].question_text || '',
+        question_type: 'code',
+        programming_language: programming_language,
+        language: language || topic.language || 'en',
+        skills: skills || topic.skills || [],
+        hint: exerciseData.hint || exercises[index].hint || null,
+        solution: exerciseData.solution || exercises[index].solution || null,
+        html_code: exerciseData.html_code || htmlCode, // HTML/CSS/JS code for display
+        test_cases: exerciseData.test_cases || null,
+        difficulty: exerciseData.difficulty || null,
+        points: exerciseData.points || 10,
+        order_index: startOrderIndex + index,
+        generation_mode: 'manual',
+        validation_status: 'approved',
+        validation_message: null,
+        devlab_response: {
+          ...exerciseData,
+          verified: validationResult.verified,
+          answer: htmlCode, // Store the answer code
+        },
+        created_by,
+        status: 'active',
+      });
+    });
+
+    // Save all 4 exercises to database
+    const createdExercises = await this.exerciseRepository.createBatch(exerciseEntities);
+
+    logger.info('[CreateExercisesUseCase] Successfully created 4 manual code exercises', {
+      topic_id,
+      exercisesCount: createdExercises.length,
+      verified: validationResult.verified,
+    });
+
+    return createdExercises;
+  }
+
+  /**
+   * Validate and create a single manual exercise (DEPRECATED - use createManualExercises for code)
    * @param {Object} exerciseData - Exercise data:
    *   {
    *     topic_id: number,

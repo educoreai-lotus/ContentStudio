@@ -211,41 +211,41 @@ async function initializeDatabase() {
 // Start server immediately, initialize DB in background
 function startServer() {
   try {
-    // Start the Express server immediately (don't wait for DB)
+  // Start the Express server immediately (don't wait for DB)
     // Set longer timeout for video transcription requests (20 minutes)
     // Video transcription can take a long time (downloading, processing, quality check, content generation)
     const server = app.listen(PORT, '0.0.0.0', async () => {
       // Set server timeout to 20 minutes (1200000 ms) for long-running requests
       server.timeout = 20 * 60 * 1000; // 20 minutes
       console.log(`🚀 Content Studio Backend running on port ${PORT}`);
-      logger.info(`🚀 Content Studio Backend running on port ${PORT}`, {
-        environment: process.env.NODE_ENV || 'development',
-        logLevel: process.env.LOG_LEVEL || 'INFO',
-      });
-      
-      // Initialize database in the background (non-blocking)
-      initializeDatabase().catch(error => {
-        console.error('Background database initialization failed:', error.message);
-        logger.error('Background database initialization failed', { 
-          error: error.message 
-        });
-      });
-      
-      // Start background jobs (if enabled)
-      if (process.env.ENABLE_BACKGROUND_JOBS !== 'false') {
-        try {
-          const { getJobScheduler } = await import('./src/infrastructure/jobs/JobScheduler.js');
-          const scheduler = getJobScheduler();
-          await scheduler.start();
-          logger.info('Background jobs scheduler started');
-        } catch (error) {
-          logger.error('Failed to start background jobs scheduler', { error: error.message });
-          logger.warn('Continuing without background jobs...');
-        }
-      } else {
-        logger.info('Background jobs disabled (ENABLE_BACKGROUND_JOBS=false)');
-      }
+    logger.info(`🚀 Content Studio Backend running on port ${PORT}`, {
+      environment: process.env.NODE_ENV || 'development',
+      logLevel: process.env.LOG_LEVEL || 'INFO',
     });
+    
+    // Initialize database in the background (non-blocking)
+    initializeDatabase().catch(error => {
+        console.error('Background database initialization failed:', error.message);
+      logger.error('Background database initialization failed', { 
+        error: error.message 
+      });
+    });
+    
+    // Start background jobs (if enabled)
+    if (process.env.ENABLE_BACKGROUND_JOBS !== 'false') {
+      try {
+        const { getJobScheduler } = await import('./src/infrastructure/jobs/JobScheduler.js');
+        const scheduler = getJobScheduler();
+        await scheduler.start();
+        logger.info('Background jobs scheduler started');
+      } catch (error) {
+        logger.error('Failed to start background jobs scheduler', { error: error.message });
+        logger.warn('Continuing without background jobs...');
+      }
+    } else {
+      logger.info('Background jobs disabled (ENABLE_BACKGROUND_JOBS=false)');
+    }
+  });
 
     // Handle server errors
     server.on('error', (error) => {

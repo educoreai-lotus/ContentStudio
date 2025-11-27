@@ -23,18 +23,23 @@ export const exercisesService = {
   },
 
   /**
-   * Create a single manual exercise (validates with Dabla first)
+   * Create manual code exercises (always 4 exercises together)
+   * Validates with Coordinator/DevLab before saving
    * @param {Object} exerciseData - Exercise data:
    *   {
    *     topic_id: number,
-   *     question_text: string,
-   *     question_type: "code" | "theoretical",
-   *     programming_language: string,
+   *     topic_name: string,
+   *     skills: string[],
+   *     question_type: "code" (only code allowed for manual),
+   *     programming_language: string (required),
    *     language: string (optional),
-   *     hint: string (optional),
-   *     solution: string (optional)
+   *     exercises: Array<{
+   *       question_text: string,
+   *       hint: string (optional),
+   *       solution: string (optional)
+   *     }> (exactly 4 exercises)
    *   }
-   * @returns {Promise<Object>} Created exercise
+   * @returns {Promise<Object>} Response with validated exercises array
    */
   async createManual(exerciseData) {
     const response = await apiClient.post('/api/exercises/manual', exerciseData);

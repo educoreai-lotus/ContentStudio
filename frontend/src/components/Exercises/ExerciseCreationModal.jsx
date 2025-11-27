@@ -12,13 +12,14 @@ export default function ExerciseCreationModal({ isOpen, onClose, topicId, topicN
   const [loading, setLoading] = useState(false);
   const [generatedExercises, setGeneratedExercises] = useState([]);
   const [manualExercises, setManualExercises] = useState([]);
-  const [currentManualExercise, setCurrentManualExercise] = useState({
-    question_text: '',
-    question_type: 'code',
-    programming_language: '',
-    hint: '',
-    solution: '',
-  });
+  // For manual code exercises: always 4 exercises together
+  const [manualExercisesArray, setManualExercisesArray] = useState([
+    { question_text: '', hint: '', solution: '' },
+    { question_text: '', hint: '', solution: '' },
+    { question_text: '', hint: '', solution: '' },
+    { question_text: '', hint: '', solution: '' },
+  ]);
+  const [manualProgrammingLanguage, setManualProgrammingLanguage] = useState('');
 
   // AI Mode state
   const [aiConfig, setAiConfig] = useState({
@@ -49,15 +50,25 @@ export default function ExerciseCreationModal({ isOpen, onClose, topicId, topicN
       }
     } catch (error) {
       console.error('Error generating AI exercises:', error);
-      setError(error.response?.data?.error || error.message || 'Failed to generate exercises');
+      // Error format from backend: { success: false, error: { message: "..." } }
+      // Or from apiClient interceptor: { error: { message: "..." } }
+      const errorMessage = error?.error?.message || error?.message || 'Failed to generate exercises';
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
   const handleManualAdd = async () => {
-    if (!currentManualExercise.question_text.trim()) {
-      setError('Question text is required');
+    // Validate all 4 exercises have question text
+    const emptyExercises = manualExercisesArray.filter(ex => !ex.question_text.trim());
+    if (emptyExercises.length > 0) {
+      setError('All 4 exercises must have question text');
+      return;
+    }
+
+    if (!manualProgrammingLanguage.trim()) {
+      setError('Programming language is required for code exercises');
       return;
     }
 
@@ -65,33 +76,42 @@ export default function ExerciseCreationModal({ isOpen, onClose, topicId, topicN
       setLoading(true);
       setError(null);
 
+      // Send all 4 exercises together
       const response = await exercisesService.createManual({
         topic_id: parseInt(topicId),
-        question_text: currentManualExercise.question_text,
-        question_type: currentManualExercise.question_type,
-        programming_language: currentManualExercise.programming_language,
+        topic_name: topicName,
+        skills: topicSkills || [],
+        question_type: 'code', // Manual is only for code
+        programming_language: manualProgrammingLanguage,
         language: topicLanguage || 'en',
-        hint: currentManualExercise.hint || null,
-        solution: currentManualExercise.solution || null,
+        exercises: manualExercisesArray.map(ex => ({
+          question_text: ex.question_text.trim(),
+          hint: ex.hint?.trim() || null,
+          solution: ex.solution?.trim() || null,
+        })),
       });
 
-      if (response.success && response.exercise) {
-        setManualExercises(prev => [...prev, response.exercise]);
-        setCurrentManualExercise({
-          question_text: '',
-          question_type: 'code',
-          programming_language: '',
-          hint: '',
-          solution: '',
-        });
+      if (response.success && response.exercises && Array.isArray(response.exercises)) {
+        setManualExercises(response.exercises);
+        // Reset form
+        setManualExercisesArray([
+          { question_text: '', hint: '', solution: '' },
+          { question_text: '', hint: '', solution: '' },
+          { question_text: '', hint: '', solution: '' },
+          { question_text: '', hint: '', solution: '' },
+        ]);
+        setManualProgrammingLanguage('');
       } else if (response.validation_failed) {
-        setError(response.error || 'Exercise validation failed');
+        setError(response.error || response.message || 'Exercise validation failed');
       } else {
-        setError('Failed to create exercise');
+        setError('Failed to create exercises');
       }
     } catch (error) {
-      console.error('Error creating manual exercise:', error);
-      const errorMessage = error.response?.data?.error || error.message || 'Failed to create exercise';
+      console.error('Error creating manual exercises:', error);
+      // Error format from backend: { success: false, error: { message: "..." } }
+      // Or from apiClient interceptor: { error: { message: "..." } }
+      // Or validation_failed: { success: false, error: "...", validation_failed: true }
+      const errorMessage = error?.error?.message || error?.message || error?.error || 'Failed to create exercises';
       setError(errorMessage);
     } finally {
       setLoading(false);
@@ -109,13 +129,13 @@ export default function ExerciseCreationModal({ isOpen, onClose, topicId, topicN
     setMode('ai');
     setGeneratedExercises([]);
     setManualExercises([]);
-    setCurrentManualExercise({
-      question_text: '',
-      question_type: 'code',
-      programming_language: '',
-      hint: '',
-      solution: '',
-    });
+    setManualExercisesArray([
+      { question_text: '', hint: '', solution: '' },
+      { question_text: '', hint: '', solution: '' },
+      { question_text: '', hint: '', solution: '' },
+      { question_text: '', hint: '', solution: '' },
+    ]);
+    setManualProgrammingLanguage('');
     onClose();
   };
 
@@ -166,61 +186,93 @@ export default function ExerciseCreationModal({ isOpen, onClose, topicId, topicN
           {/* AI Mode */}
           {mode === 'ai' && (
             <div className="space-y-6">
+              {aiConfig.question_type === 'theoretical' && (
+                <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-4">
+                  <p className="text-sm text-purple-800 dark:text-purple-200 font-semibold">
+                    <i className="fas fa-exclamation-triangle mr-2"></i>
+                    <strong>Important:</strong> Theoretical questions can only be generated using AI. Manual creation is not available for theoretical questions.
+                  </p>
+                </div>
+              )}
               <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
                 <p className="text-sm text-blue-800 dark:text-blue-200">
                   <i className="fas fa-info-circle mr-2"></i>
-                  AI will generate {aiConfig.amount} exercises based on the topic: <strong>{topicName}</strong>
+                  AI will generate {aiConfig.question_type === 'code' ? '4' : aiConfig.amount} {aiConfig.question_type} exercises based on the topic: <strong>{topicName}</strong>
                 </p>
               </div>
 
               {/* AI Configuration */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium mb-2">Question Type</label>
                   <select
                     value={aiConfig.question_type}
-                    onChange={(e) => setAiConfig({ ...aiConfig, question_type: e.target.value })}
+                    onChange={(e) => {
+                      const newType = e.target.value;
+                      setAiConfig({ 
+                        ...aiConfig, 
+                        question_type: newType,
+                        // Clear programming_language if switching to theoretical
+                        programming_language: newType === 'theoretical' ? '' : aiConfig.programming_language,
+                        // For code: always 4, for theoretical: can vary
+                        amount: newType === 'code' ? 4 : aiConfig.amount,
+                      });
+                    }}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-[#334155] rounded-lg bg-white dark:bg-[#1e293b]"
                   >
                     <option value="code">Code</option>
-                    <option value="theoretical">Theoretical</option>
+                    <option value="theoretical">Theoretical (AI Only)</option>
                   </select>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium mb-2">Programming Language</label>
-                  <input
-                    type="text"
-                    value={aiConfig.programming_language}
-                    onChange={(e) => setAiConfig({ ...aiConfig, programming_language: e.target.value })}
-                    placeholder="e.g., javascript, python"
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-[#334155] rounded-lg bg-white dark:bg-[#1e293b]"
-                  />
-                </div>
+                {aiConfig.question_type === 'code' && (
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Programming Language *</label>
+                    <input
+                      type="text"
+                      value={aiConfig.programming_language}
+                      onChange={(e) => setAiConfig({ ...aiConfig, programming_language: e.target.value })}
+                      placeholder="e.g., javascript, python"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-[#334155] rounded-lg bg-white dark:bg-[#1e293b]"
+                      required
+                    />
+                  </div>
+                )}
 
-                <div>
-                  <label className="block text-sm font-medium mb-2">Amount</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="10"
-                    value={aiConfig.amount}
-                    onChange={(e) => setAiConfig({ ...aiConfig, amount: parseInt(e.target.value) || 4 })}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-[#334155] rounded-lg bg-white dark:bg-[#1e293b]"
-                  />
-                </div>
+                {aiConfig.question_type === 'theoretical' && (
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Amount</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="10"
+                      value={aiConfig.amount}
+                      onChange={(e) => setAiConfig({ ...aiConfig, amount: parseInt(e.target.value) || 4 })}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-[#334155] rounded-lg bg-white dark:bg-[#1e293b]"
+                    />
+                  </div>
+                )}
+
+                {aiConfig.question_type === 'code' && (
+                  <div className="md:col-span-2">
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      <i className="fas fa-info-circle mr-2"></i>
+                      Code questions will generate exactly 4 exercises. Programming language is required.
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Generate Button */}
               <button
                 onClick={handleAIGenerate}
-                disabled={loading}
+                disabled={loading || (aiConfig.question_type === 'code' && !aiConfig.programming_language.trim())}
                 className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? (
                   <span><i className="fas fa-spinner fa-spin mr-2"></i>Generating...</span>
                 ) : (
-                  <span><i className="fas fa-magic mr-2"></i>Generate Exercises</span>
+                  <span><i className="fas fa-magic mr-2"></i>Generate {aiConfig.question_type === 'code' ? '4' : aiConfig.amount} {aiConfig.question_type === 'code' ? 'Code' : 'Theoretical'} Exercises</span>
                 )}
               </button>
 
@@ -261,91 +313,96 @@ export default function ExerciseCreationModal({ isOpen, onClose, topicId, topicN
             </div>
           )}
 
-          {/* Manual Mode */}
+          {/* Manual Mode - Only for Code Questions */}
           {mode === 'manual' && (
             <div className="space-y-6">
               <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
                 <p className="text-sm text-yellow-800 dark:text-yellow-200">
                   <i className="fas fa-info-circle mr-2"></i>
-                  Create exercises manually. Each exercise will be validated by Dabla before saving.
+                  <strong>Manual creation is only available for Code questions.</strong> You must create exactly 4 code exercises at once. All 4 will be validated together by Coordinator before saving.
                 </p>
               </div>
 
-              {/* Manual Exercise Form */}
-              <div className="space-y-4 border border-gray-200 dark:border-[#334155] rounded-lg p-4 bg-gray-50 dark:bg-[#0f172a]">
-                <h3 className="font-semibold">New Exercise</h3>
-
-                <div>
-                  <label className="block text-sm font-medium mb-2">Question Text *</label>
-                  <textarea
-                    value={currentManualExercise.question_text}
-                    onChange={(e) => setCurrentManualExercise({ ...currentManualExercise, question_text: e.target.value })}
-                    rows="4"
-                    placeholder="Enter the exercise question..."
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-[#334155] rounded-lg bg-white dark:bg-[#1e293b]"
-                    required
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Question Type</label>
-                    <select
-                      value={currentManualExercise.question_type}
-                      onChange={(e) => setCurrentManualExercise({ ...currentManualExercise, question_type: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-[#334155] rounded-lg bg-white dark:bg-[#1e293b]"
-                    >
-                      <option value="code">Code</option>
-                      <option value="theoretical">Theoretical</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Programming Language</label>
-                    <input
-                      type="text"
-                      value={currentManualExercise.programming_language}
-                      onChange={(e) => setCurrentManualExercise({ ...currentManualExercise, programming_language: e.target.value })}
-                      placeholder="e.g., javascript, python"
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-[#334155] rounded-lg bg-white dark:bg-[#1e293b]"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-2">Hint (Optional)</label>
-                  <textarea
-                    value={currentManualExercise.hint}
-                    onChange={(e) => setCurrentManualExercise({ ...currentManualExercise, hint: e.target.value })}
-                    rows="2"
-                    placeholder="Enter a hint for the exercise..."
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-[#334155] rounded-lg bg-white dark:bg-[#1e293b]"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-2">Solution (Optional)</label>
-                  <textarea
-                    value={currentManualExercise.solution}
-                    onChange={(e) => setCurrentManualExercise({ ...currentManualExercise, solution: e.target.value })}
-                    rows="3"
-                    placeholder="Enter the solution..."
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-[#334155] rounded-lg bg-white dark:bg-[#1e293b]"
-                  />
-                </div>
-
-                <button
-                  onClick={handleManualAdd}
-                  disabled={loading || !currentManualExercise.question_text.trim()}
-                  className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {loading ? (
-                    <span><i className="fas fa-spinner fa-spin mr-2"></i>Validating...</span>
-                  ) : (
-                    <span><i className="fas fa-check mr-2"></i>Validate & Add Exercise</span>
-                  )}
-                </button>
+              {/* Programming Language (Required for Code) */}
+              <div>
+                <label className="block text-sm font-medium mb-2">Programming Language *</label>
+                <input
+                  type="text"
+                  value={manualProgrammingLanguage}
+                  onChange={(e) => setManualProgrammingLanguage(e.target.value)}
+                  placeholder="e.g., javascript, python, java"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-[#334155] rounded-lg bg-white dark:bg-[#1e293b]"
+                  required
+                />
               </div>
+
+              {/* 4 Exercises Form */}
+              <div className="space-y-6">
+                <h3 className="font-semibold text-lg">Create 4 Code Exercises</h3>
+                {manualExercisesArray.map((exercise, index) => (
+                  <div key={index} className="border border-gray-200 dark:border-[#334155] rounded-lg p-4 bg-gray-50 dark:bg-[#0f172a]">
+                    <h4 className="font-semibold mb-4">Exercise {index + 1} *</h4>
+                    
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium mb-2">Question Text *</label>
+                      <textarea
+                        value={exercise.question_text}
+                        onChange={(e) => {
+                          const newArray = [...manualExercisesArray];
+                          newArray[index].question_text = e.target.value;
+                          setManualExercisesArray(newArray);
+                        }}
+                        rows="4"
+                        placeholder="Enter the exercise question..."
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-[#334155] rounded-lg bg-white dark:bg-[#1e293b]"
+                        required
+                      />
+                    </div>
+
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium mb-2">Hint (Optional)</label>
+                      <textarea
+                        value={exercise.hint}
+                        onChange={(e) => {
+                          const newArray = [...manualExercisesArray];
+                          newArray[index].hint = e.target.value;
+                          setManualExercisesArray(newArray);
+                        }}
+                        rows="2"
+                        placeholder="Enter a hint for the exercise..."
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-[#334155] rounded-lg bg-white dark:bg-[#1e293b]"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Solution (Optional)</label>
+                      <textarea
+                        value={exercise.solution}
+                        onChange={(e) => {
+                          const newArray = [...manualExercisesArray];
+                          newArray[index].solution = e.target.value;
+                          setManualExercisesArray(newArray);
+                        }}
+                        rows="3"
+                        placeholder="Enter the solution..."
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-[#334155] rounded-lg bg-white dark:bg-[#1e293b]"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <button
+                onClick={handleManualAdd}
+                disabled={loading || !manualProgrammingLanguage.trim() || manualExercisesArray.some(ex => !ex.question_text.trim())}
+                className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? (
+                  <span><i className="fas fa-spinner fa-spin mr-2"></i>Validating 4 Exercises...</span>
+                ) : (
+                  <span><i className="fas fa-check mr-2"></i>Validate & Save All 4 Exercises</span>
+                )}
+              </button>
 
               {/* Created Exercises List */}
               {manualExercises.length > 0 && (

@@ -37,7 +37,7 @@ export class ContentDataCleaner {
     if (contentData.audioDuration !== undefined && contentData.audioDuration !== null) {
       cleaned.audioDuration = contentData.audioDuration;
     }
-    
+
     // Keep file integrity data (hash and signature) for audio file
     if (contentData.sha256Hash) {
       cleaned.sha256Hash = contentData.sha256Hash;
