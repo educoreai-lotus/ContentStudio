@@ -206,10 +206,21 @@ export function SharedSidebar({ onRestore }) {
     }
     // Inside a course (viewing course detail) - show deleted topics/lessons for this course
     // Route: /courses/:id (where id is numeric, and NOT /edit or /new)
-    else if (path.startsWith('/courses/') && params.id && !path.includes('/edit') && !path.includes('/new')) {
-      const courseId = parseInt(params.id);
-      if (!isNaN(courseId) && courseId > 0) {
-        console.log('[SharedSidebar] Course detail context detected:', { courseId, path });
+    // CRITICAL: Must check this BEFORE courses list to avoid false matches
+    else if (path.startsWith('/courses/') && !path.includes('/edit') && !path.includes('/new') && !path.includes('/content')) {
+      // Extract courseId from params or from path
+      let courseId = params.id ? parseInt(params.id) : null;
+      
+      // If courseId not in params, try to extract from path
+      if (!courseId || isNaN(courseId)) {
+        const match = path.match(/\/courses\/(\d+)/);
+        if (match && match[1]) {
+          courseId = parseInt(match[1]);
+        }
+      }
+      
+      if (courseId && !isNaN(courseId) && courseId > 0) {
+        console.log('[SharedSidebar] Course detail context detected:', { courseId, path, params });
         return {
           type: 'topics',
           courseId: courseId, // CRITICAL: Must pass courseId to load only topics for this course
@@ -219,7 +230,8 @@ export function SharedSidebar({ onRestore }) {
       }
     }
     // Courses list page
-    else if (path === '/courses' || (path.startsWith('/courses') && !params.id)) {
+    // CRITICAL: Must check this AFTER course detail check
+    else if (path === '/courses' || (path.startsWith('/courses') && !path.match(/\/courses\/\d+/))) {
       console.log('[SharedSidebar] Courses list context detected:', { path });
       return {
         type: 'courses',
@@ -655,18 +667,45 @@ export function SharedSidebar({ onRestore }) {
       
       if (context.type === 'courses') {
         // Restore course by updating status to 'active'
-        await coursesService.update(content.course_id, { status: 'active' });
+        console.log('[SharedSidebar] Restoring course:', {
+          course_id: content.course_id,
+          course_name: content.course_name,
+        });
+        const updatedCourse = await coursesService.update(content.course_id, { status: 'active' });
+        console.log('[SharedSidebar] Course restored successfully:', {
+          course_id: updatedCourse?.course_id,
+          status: updatedCourse?.status,
+        });
+        if (!updatedCourse || updatedCourse.status !== 'active') {
+          throw new Error('Failed to restore course: Status was not updated to active');
+        }
       } else if (context.type === 'content') {
         // Restore content version from history
         if (content.history_id) {
+          console.log('[SharedSidebar] Restoring content version:', {
+            history_id: content.history_id,
+            content_id: content.content_id,
+          });
           await contentService.restoreVersion(content.history_id);
+          console.log('[SharedSidebar] Content version restored successfully');
         } else {
           throw new Error('History ID is missing');
         }
       } else {
         // Restore topic/lesson by updating status to 'active'
         if (content.topic_id) {
-          await topicsService.update(content.topic_id, { status: 'active' });
+          console.log('[SharedSidebar] Restoring topic:', {
+            topic_id: content.topic_id,
+            topic_name: content.topic_name,
+          });
+          const updatedTopic = await topicsService.update(content.topic_id, { status: 'active' });
+          console.log('[SharedSidebar] Topic restored successfully:', {
+            topic_id: updatedTopic?.topic_id,
+            status: updatedTopic?.status,
+          });
+          if (!updatedTopic || updatedTopic.status !== 'active') {
+            throw new Error('Failed to restore topic: Status was not updated to active');
+          }
         } else {
           throw new Error('Topic ID is missing');
         }
@@ -790,6 +829,15 @@ export function SharedSidebar({ onRestore }) {
       }
 
       setError(null);
+      setLoading(false);
+
+      // Show success message
+      const successMessage = context.type === 'courses' 
+        ? `Course "${contentName}" restored successfully`
+        : context.type === 'topics'
+        ? `Topic "${contentName}" restored successfully`
+        : `Content "${contentName}" restored successfully`;
+      console.log('[SharedSidebar]', successMessage);
 
       // CRITICAL: Clear history state for non-content contexts
       if (context?.type !== 'content') {
@@ -801,15 +849,16 @@ export function SharedSidebar({ onRestore }) {
         onRestore(content);
       }
     } catch (err) {
-      setError(err.error?.message || err.message || 'Failed to restore content');
-      alert(err.error?.message || err.message || 'Failed to restore content');
+      setLoading(false);
+      const errorMessage = err.error?.message || err.response?.data?.error?.message || err.message || 'Failed to restore content';
+      setError(errorMessage);
+      console.error('[SharedSidebar] Restore failed:', errorMessage, err);
+      alert(errorMessage);
       
       // CRITICAL: Clear history state for non-content contexts even on error
       if (context?.type !== 'content') {
         setHistoryData({});
       }
-    } finally {
-      setLoading(false);
     }
   };
 

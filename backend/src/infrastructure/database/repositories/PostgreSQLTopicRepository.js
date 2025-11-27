@@ -58,6 +58,28 @@ export class PostgreSQLTopicRepository extends ITopicRepository {
     return this.mapRowToTopic(result.rows[0]);
   }
 
+  /**
+   * Find topic by ID including deleted topics
+   * Used for restore operations where we need to update status from 'deleted' to 'active'
+   * @param {number} topicId - Topic ID
+   * @returns {Promise<Topic|null>} Topic entity or null if not found
+   */
+  async findByIdIncludingDeleted(topicId) {
+    if (!this.db.isConnected()) {
+      throw new Error('Database not connected. Using in-memory repository.');
+    }
+
+    // Return topic regardless of status (for restore operations)
+    const query = 'SELECT * FROM topics WHERE topic_id = $1';
+    const result = await this.db.query(query, [topicId]);
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    return this.mapRowToTopic(result.rows[0]);
+  }
+
   async findAll(filters = {}, pagination = {}) {
     if (!this.db.isConnected()) {
       throw new Error('Database not connected. Using in-memory repository.');

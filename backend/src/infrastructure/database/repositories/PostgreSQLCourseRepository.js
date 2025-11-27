@@ -57,6 +57,28 @@ export class PostgreSQLCourseRepository extends ICourseRepository {
     return this.mapRowToCourse(result.rows[0]);
   }
 
+  /**
+   * Find course by ID including deleted courses
+   * Used for restore operations where we need to update status from 'deleted' to 'active'
+   * @param {number} courseId - Course ID
+   * @returns {Promise<Course|null>} Course entity or null if not found
+   */
+  async findByIdIncludingDeleted(courseId) {
+    if (!this.db.isConnected()) {
+      throw new Error('Database not connected. Using in-memory repository.');
+    }
+
+    // Return course regardless of status (for restore operations)
+    const query = 'SELECT * FROM trainer_courses WHERE course_id = $1';
+    const result = await this.db.query(query, [courseId]);
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    return this.mapRowToCourse(result.rows[0]);
+  }
+
   async findAll(filters = {}, pagination = {}) {
     if (!this.db.isConnected()) {
       throw new Error('Database not connected. Using in-memory repository.');
