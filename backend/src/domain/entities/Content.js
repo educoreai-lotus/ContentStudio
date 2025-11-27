@@ -88,7 +88,8 @@ export class Content {
   /**
    * Check if content needs quality check
    * @returns {boolean}
-   * Content needs quality check if it was created manually (manual or manual_edited)
+   * Content needs quality check ONLY if it was created manually (manual or manual_edited)
+   * AI-generated content does NOT need quality check here because AI already generates quality content
    * This does NOT depend on quality_check_status, as the status changes after the check completes
    */
   needsQualityCheck() {

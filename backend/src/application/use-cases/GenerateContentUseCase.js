@@ -260,6 +260,10 @@ ${basePrompt}`;
             include_comments: generationRequest.include_comments !== false,
           });
           
+          // NOTE: AI-generated code does NOT need quality check here
+          // AI already generates quality content, so we trust it
+          // Quality check is only performed for manual content in CreateContentUseCase
+          
           // Build raw content data
           const rawContentData = {
             ...codeResult,
