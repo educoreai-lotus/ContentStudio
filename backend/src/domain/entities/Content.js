@@ -91,9 +91,31 @@ export class Content {
    * Content needs quality check ONLY if it was created manually (manual or manual_edited)
    * AI-generated content does NOT need quality check here because AI already generates quality content
    * This does NOT depend on quality_check_status, as the status changes after the check completes
+   * 
+   * NOTE: generation_method_id should always be a string (name) after mapRowToContent conversion.
+   * If it's still a number, that indicates the conversion failed in the repository.
+   * We check both string and number to be defensive, but the repository should ensure conversion.
    */
   needsQualityCheck() {
-    return this.generation_method_id === 'manual' || this.generation_method_id === 'manual_edited';
+    const methodId = this.generation_method_id;
+    
+    // Check if it's a string (name) - this is the expected format
+    if (typeof methodId === 'string') {
+      return methodId === 'manual' || methodId === 'manual_edited';
+    }
+    
+    // If it's still a number, log a warning and check common manual method IDs
+    // This is a fallback - the repository should convert IDs to names
+    if (typeof methodId === 'number') {
+      console.warn('[Content.needsQualityCheck] generation_method_id is still a number, conversion may have failed:', methodId);
+      // Common manual method IDs (may vary by DB schema):
+      // Typically: 1=manual, 4=manual_edited (but this is DB-dependent)
+      // We'll be conservative and only check if we're confident it's manual
+      // The real fix is ensuring mapRowToContent always converts IDs to names
+      return false; // Don't assume - conversion should happen in repository
+    }
+    
+    return false;
   }
 
   /**

@@ -543,13 +543,25 @@ export class PostgreSQLContentRepository extends IContentRepository {
     );
 
     // Convert generation_method_id from number to string if needed
+    // CRITICAL: This conversion MUST succeed for needsQualityCheck() to work correctly
     let generationMethodId = row.generation_method_id;
     if (typeof generationMethodId === 'number') {
       try {
         generationMethodId = await this.getGenerationMethodName(generationMethodId);
+        if (!generationMethodId) {
+          console.error('[PostgreSQLContentRepository] getGenerationMethodName returned null/undefined for ID:', row.generation_method_id);
+          // Fallback: try to determine if it's manual based on common IDs
+          // This is a temporary workaround - the DB should have the correct mapping
+          throw new Error('Generation method name not found for ID: ' + row.generation_method_id);
+        }
       } catch (error) {
-        console.warn('[PostgreSQLContentRepository] Failed to convert generation_method_id to name:', error.message);
-        // Keep the number if conversion fails
+        console.error('[PostgreSQLContentRepository] CRITICAL: Failed to convert generation_method_id to name:', {
+          id: row.generation_method_id,
+          error: error.message,
+        });
+        // This is critical - if conversion fails, needsQualityCheck() won't work correctly
+        // We'll throw an error to prevent silent failures
+        throw new Error(`Failed to convert generation_method_id ${row.generation_method_id} to name: ${error.message}`);
       }
     }
 

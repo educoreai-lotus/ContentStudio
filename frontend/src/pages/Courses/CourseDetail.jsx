@@ -56,6 +56,36 @@ export const CourseDetail = () => {
     }
   }, [courseId]);
 
+  const handleDeleteTopic = async (topicId, topicName) => {
+    if (!window.confirm(`Are you sure you want to delete "${topicName}"?\n\nThe topic will be moved to the history and can be restored later.`)) {
+      return;
+    }
+
+    try {
+      // Update topic status to 'deleted' (soft delete)
+      await topicsService.update(topicId, { status: 'deleted' });
+      
+      // Refresh topics list to remove the deleted topic
+      await fetchTopics();
+      
+      // Dispatch event to notify other components (including SharedSidebar)
+      const deleteEvent = new CustomEvent('contentRestored', {
+        detail: {
+          type: 'topics',
+          id: topicId,
+          courseId: courseId,
+        }
+      });
+      window.dispatchEvent(deleteEvent);
+      
+      console.log(`[CourseDetail] Topic "${topicName}" deleted successfully`);
+    } catch (err) {
+      const errorMessage = err.error?.message || err.message || 'Failed to delete topic';
+      setError(errorMessage);
+      console.error('[CourseDetail] Error deleting topic:', err);
+    }
+  };
+
   useEffect(() => {
     if (!courseId) {
       setError('Invalid course ID');
@@ -533,6 +563,21 @@ export const CourseDetail = () => {
                         }`}
                       >
                         Manage Content
+                      </button>
+                      <button
+                        onClick={e => {
+                          e.stopPropagation();
+                          handleDeleteTopic(topic.topic_id, topic.topic_name);
+                        }}
+                        className={`px-3 py-1 rounded-lg text-sm font-medium transition-all ${
+                          theme === 'day-mode'
+                            ? 'bg-red-100 hover:bg-red-200 text-red-700'
+                            : 'bg-red-900/30 hover:bg-red-900/50 text-red-300'
+                        }`}
+                        title="Delete topic"
+                      >
+                        <i className="fas fa-trash mr-1"></i>
+                        Delete
                       </button>
                     </div>
                   </div>
