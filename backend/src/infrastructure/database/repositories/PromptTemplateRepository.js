@@ -17,7 +17,7 @@ export class PromptTemplateRepository {
     const defaultTemplates = [
       {
         template_name: 'Default Text Lesson Template',
-        content_type_id: 'text_audio',
+        content_type_id: 'text',
         template_text:
           'Create an educational lesson about {topic}. The lesson should cover {key_points} and be suitable for {audience}. Include examples and clear explanations.',
         variables: ['topic', 'key_points', 'audience'],
