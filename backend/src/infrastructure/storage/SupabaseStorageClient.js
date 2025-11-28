@@ -112,7 +112,7 @@ export class SupabaseStorageClient {
    * @param {string} contentType - Content type (text, code, presentation, etc.)
    * @returns {Promise<string>} Storage path/URL
    */
-  async storeLessonContent(languageCode, lessonId, contentData, contentType = 'text') {
+  async storeLessonContent(languageCode, lessonId, contentData, contentType = 'text_audio') {
     if (!this.isConfigured()) {
       // Mock storage for development
       return `mock://storage/${languageCode}/${lessonId}/${contentType}.json`;
@@ -151,7 +151,7 @@ export class SupabaseStorageClient {
    * @param {string} contentType - Content type
    * @returns {Promise<Object|null>} Content data or null if not found
    */
-  async getLessonContent(languageCode, lessonId, contentType = 'text') {
+  async getLessonContent(languageCode, lessonId, contentType = 'text_audio') {
     if (!this.isConfigured()) {
       return null; // Mock returns null
     }
@@ -182,7 +182,7 @@ export class SupabaseStorageClient {
    * @param {string} contentType - Content type
    * @returns {Promise<boolean>} True if exists
    */
-  async lessonContentExists(languageCode, lessonId, contentType = 'text') {
+  async lessonContentExists(languageCode, lessonId, contentType = 'text_audio') {
     if (!this.isConfigured()) {
       return false;
     }

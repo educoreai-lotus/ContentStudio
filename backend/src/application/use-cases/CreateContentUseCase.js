@@ -410,7 +410,8 @@ export class CreateContentUseCase {
     const isTextType =
       contentTypeId === 1 ||
       contentTypeId === '1' ||
-      contentTypeId === 'text';
+      contentTypeId === 'text_audio' ||
+      contentTypeId === 'text'; // Support both for backward compatibility
 
     if (!isTextType) {
       return false;

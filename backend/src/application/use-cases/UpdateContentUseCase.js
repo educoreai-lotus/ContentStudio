@@ -97,7 +97,7 @@ export class UpdateContentUseCase {
       console.log('[UpdateContentUseCase] ✅ Triggering quality check for edited AI-generated content:', {
         contentId: updatedContent.content_id,
         contentTypeId: updatedContent.content_type_id,
-        contentType: updatedContent.content_type_id === 1 || updatedContent.content_type_id === 'text' ? 'text' : 
+        contentType: updatedContent.content_type_id === 1 || updatedContent.content_type_id === 'text_audio' ? 'text_audio' : 
                      updatedContent.content_type_id === 2 || updatedContent.content_type_id === 'code' ? 'code' : 
                      'other',
       });

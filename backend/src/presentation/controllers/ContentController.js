@@ -339,7 +339,7 @@ export class ContentController {
             content_id: contentId,
             topic_id: existingContent.topic_id,
             content_type_id: existingContent.content_type_id,
-            content_type_name: existingContent.content_type_id === 1 ? 'text' :
+            content_type_name: existingContent.content_type_id === 1 ? 'text_audio' :
                               existingContent.content_type_id === 2 ? 'code' :
                               existingContent.content_type_id === 3 ? 'presentation' :
                               existingContent.content_type_id === 4 ? 'audio' :

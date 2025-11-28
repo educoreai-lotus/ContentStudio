@@ -107,7 +107,7 @@ export class PreloadFrequentLanguagesUseCase {
         const exists = await this.supabaseStorageClient.lessonContentExists(
           languageCode,
           topic.topic_id.toString(),
-          'text'
+          'text_audio'
         );
 
         if (exists) {
@@ -116,7 +116,7 @@ export class PreloadFrequentLanguagesUseCase {
 
         // Get content from database (prefer English as source)
         const contents = await this.contentRepository.findAllByTopicId(topic.topic_id, {
-          content_type_id: 'text',
+          content_type_id: 'text_audio',
         });
 
         if (contents.length === 0) {
@@ -141,7 +141,7 @@ export class PreloadFrequentLanguagesUseCase {
           languageCode,
           topic.topic_id.toString(),
           translatedContent,
-          'text'
+          'text_audio'
         );
 
         preloadedCount++;

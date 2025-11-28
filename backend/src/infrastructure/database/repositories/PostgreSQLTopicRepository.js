@@ -312,7 +312,7 @@ export class PostgreSQLTopicRepository extends ITopicRepository {
       FROM topics t
       LEFT JOIN content c ON c.topic_id = t.topic_id 
         AND c.status != 'deleted'
-        AND c.content_type_id IN ('text', 'code', 'presentation', 'audio', 'mind_map')
+        AND c.content_type_id IN (1, 2, 3, 4, 5)
       WHERE t.topic_id = $1
       GROUP BY t.topic_id
     `;
