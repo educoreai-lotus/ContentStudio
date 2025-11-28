@@ -32,6 +32,15 @@ export class ContentVersionRepository {
   }
 
   /**
+   * Find all versions for a topic (all content types)
+   * @param {number} topicId - Topic ID
+   * @returns {Promise<ContentVersion[]>} Array of versions
+   */
+  async findByTopic(topicId) {
+    throw new Error('ContentVersionRepository.findByTopic() must be implemented');
+  }
+
+  /**
    * Find current version for content
    * @param {number} topicId - Topic ID
    * @param {number} contentTypeId - Content type ID

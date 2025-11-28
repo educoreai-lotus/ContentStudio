@@ -361,112 +361,64 @@ export function SharedSidebar({ onRestore }) {
             return;
           }
           
-          // Load content history for all content items in the topic
-          // Similar to ContentHistorySidebar, we need to load history for each content item
+          // Load ALL content history for the topic (including deleted content)
+          // This loads directly from content_history table, not just active content
           try {
-            console.log('[SharedSidebar] Loading content history for topic:', context.topicId);
-            const allContent = await contentService.listByTopic(context.topicId);
-            console.log('[SharedSidebar] Loaded content items:', allContent);
-            console.log('[SharedSidebar] Number of content items:', allContent?.length || 0);
+            console.log('[SharedSidebar] Loading ALL content history for topic:', context.topicId);
+            const topicHistory = await contentService.getTopicHistory(context.topicId);
+            console.log('[SharedSidebar] Loaded topic history:', topicHistory);
             
-            if (!allContent || allContent.length === 0) {
+            if (!topicHistory || Object.keys(topicHistory).length === 0) {
+              console.log('[SharedSidebar] No history found for topic');
               setDeletedContent([]);
               setHistoryData({});
               return;
             }
             
-            const historyPromises = allContent.map(async (contentItem) => {
-              try {
-                console.log(`[SharedSidebar] Loading history for content ${contentItem.content_id} (type: ${contentItem.content_type_id})`);
-                const historyResponse = await contentService.getHistory(contentItem.content_id);
-                console.log(`[SharedSidebar] History response for ${contentItem.content_id}:`, JSON.stringify(historyResponse, null, 2));
-                
-                if (!historyResponse) {
-                  console.warn(`[SharedSidebar] No history response for content ${contentItem.content_id}`);
-                  return [];
-                }
-                
-                // Check if response has the expected structure
-                if (typeof historyResponse !== 'object') {
-                  console.error(`[SharedSidebar] Invalid history response type for content ${contentItem.content_id}:`, typeof historyResponse);
-                  return [];
-                }
-                
-                // Normalize response structure (same as ContentHistorySidebar)
-                // Backend returns: { current: {...}, versions: [...] }
-                const normalized = {
-                  ...historyResponse,
-                  current: historyResponse.current ? {
-                    ...historyResponse.current,
-                    preview: historyResponse.current.preview || formatPreview(contentItem.content_type_id, {
-                      content_data: historyResponse.current.content_data,
-                    }),
-                  } : null,
-                  versions: (historyResponse.versions || []).map(entry => ({
-                    ...entry,
-                    preview: entry.preview || formatPreview(contentItem.content_type_id, entry),
-                  })),
+            // Convert topicHistory (grouped by content type) to historyData format
+            const historyBySection = {};
+            const allHistoryVersions = [];
+            
+            // Process each content type in the history
+            Object.keys(topicHistory).forEach(sectionId => {
+              const versions = topicHistory[sectionId] || [];
+              if (versions.length === 0) return;
+              
+              // Map section ID to content_type_id
+              const sectionToTypeId = {
+                'text_audio': 1,
+                'code': 2,
+                'slides': 3,
+                'mind_map': 5,
+                'avatar_video': 6,
+              };
+              const contentTypeId = sectionToTypeId[sectionId] || null;
+              
+              if (!historyBySection[sectionId]) {
+                historyBySection[sectionId] = {
+                  contentItem: null, // We don't have active content item for deleted content
+                  versions: [],
                 };
-                
-                if (!normalized.versions) {
-                  console.warn(`[SharedSidebar] No 'versions' field in history response for content ${contentItem.content_id}`, historyResponse);
-                  return [];
-                }
-                
-                if (!Array.isArray(normalized.versions)) {
-                  console.error(`[SharedSidebar] 'versions' is not an array for content ${contentItem.content_id}:`, typeof normalized.versions);
-                  return [];
-                }
-                
-                if (normalized.versions.length === 0) {
-                  console.log(`[SharedSidebar] Empty versions array for content ${contentItem.content_id}`);
-                  return [];
-                }
-                
-                console.log(`[SharedSidebar] Found ${normalized.versions.length} versions for content ${contentItem.content_id}`);
-                
-                // Map content_type_id to section ID for formatPreview
-                const sectionMap = {
-                  1: 'text_audio',
-                  2: 'code',
-                  3: 'slides',
-                  5: 'mind_map',
-                  6: 'avatar_video',
-                };
-                const sectionId = sectionMap[contentItem.content_type_id] || 'default';
-                
-                // Return history versions (not current, as current is the active content)
-                // Backend returns history_id from entry.version_id (see ContentHistoryService.js line 149)
-                // Backend also returns preview built by #buildPreview (see ContentHistoryService.js line 152)
-                return normalized.versions.map(version => {
-                  const historyId = version.history_id || version.version_id;
-                  
-                  console.log(`[SharedSidebar] Processing version:`, {
-                    history_id: historyId,
-                    content_id: contentItem.content_id,
-                    has_content_data: !!version.content_data,
-                    preview_from_backend: version.preview,
-                    preview_final: version.preview
-                  });
-                  
-                  return {
-                    ...version,
-                    history_id: historyId, // Backend uses version_id, we normalize to history_id
-                    content_id: contentItem.content_id,
-                    content_type_id: contentItem.content_type_id,
-                    content_type_name: contentItem.content_type_name,
-                    topic_id: context.topicId,
-                    preview: version.preview, // Already normalized above
-                    sectionId: sectionId,
-                  };
-                });
-              } catch (err) {
-                console.error(`[SharedSidebar] Failed to load history for content ${contentItem.content_id}:`, err);
-                return [];
               }
+              
+              // Process each version
+              versions.forEach(version => {
+                const historyVersion = {
+                  ...version,
+                  content_type_id: contentTypeId,
+                  content_type_name: sectionId,
+                  topic_id: context.topicId,
+                  sectionId: sectionId,
+                };
+                historyBySection[sectionId].versions.push(historyVersion);
+                allHistoryVersions.push(historyVersion);
+              });
             });
             
-            const historyArrays = await Promise.all(historyPromises);
+            console.log('[SharedSidebar] Processed history:', {
+              sections: Object.keys(historyBySection),
+              totalVersions: allHistoryVersions.length,
+            });
             
             // 🚨 CRITICAL: Check again after async operations
             if (!context || context.type !== 'content') {
@@ -476,56 +428,8 @@ export function SharedSidebar({ onRestore }) {
               return;
             }
             
-            const allHistoryVersions = historyArrays.flat().filter(Boolean); // Remove any null/undefined content
-            console.log('[SharedSidebar] All history versions after processing:', allHistoryVersions);
-            console.log('[SharedSidebar] Total history versions count:', allHistoryVersions.length);
-            
-            // Organize history by content type (section) - similar to ContentHistorySidebar
-            const historyBySection = {};
-            allContent.forEach(contentItem => {
-              const sectionMap = {
-                1: 'text_audio',
-                2: 'code',
-                3: 'slides',
-                5: 'mind_map',
-                6: 'avatar_video',
-              };
-              const sectionId = sectionMap[contentItem.content_type_id] || 'default';
-              
-              if (!historyBySection[sectionId]) {
-                historyBySection[sectionId] = {
-                  contentItem: contentItem,
-                  versions: [],
-                };
-              }
-              
-              // Find versions for this content item
-              const versionsForThisContent = allHistoryVersions.filter(
-                v => v.content_id === contentItem.content_id
-              );
-              historyBySection[sectionId].versions = versionsForThisContent;
-            });
-            
-            // 🚨 CRITICAL: Final check before setting state
-            if (!context || context.type !== 'content') {
-              console.log('[SharedSidebar] Context changed before setting history data, aborting');
-              setHistoryData({});
-              setDeletedContent([]);
-              return;
-            }
-            
-            // Store history data organized by section
             setHistoryData(historyBySection);
-            
-            if (allHistoryVersions.length === 0) {
-              console.warn('[SharedSidebar] No history versions found for any content items');
-              console.log('[SharedSidebar] Content items checked:', allContent.map(c => ({ id: c.content_id, type: c.content_type_id, name: c.content_type_name })));
-            }
-            
-            // CRITICAL: Do NOT set deletedContent for content context
-            // We use historyData for display, not deletedContent
-            // Setting deletedContent here causes duplicate display (flat list + sections)
-            setDeletedContent([]);
+            setDeletedContent(allHistoryVersions);
           } catch (err) {
             if (context?.type === 'content') {
               console.error('[SharedSidebar] Failed to load content history:', err);

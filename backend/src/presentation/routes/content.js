@@ -79,6 +79,13 @@ router.get('/', async (req, res, next) => {
   return contentController.list(req, res, next);
 });
 
+router.get('/topic/:topicId/history', async (req, res, next) => {
+  if (!contentController) {
+    return res.status(503).json({ error: 'Service initializing, please try again' });
+  }
+  return contentController.topicHistory(req, res, next);
+});
+
 router.get('/:id/history', async (req, res, next) => {
   if (!contentController) {
     return res.status(503).json({ error: 'Service initializing, please try again' });

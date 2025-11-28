@@ -72,6 +72,16 @@ export const contentService = {
   },
 
   /**
+   * Get all content history for a topic (all content types)
+   * @param {number} topicId
+   * @returns {Promise<Object>} History grouped by content type
+   */
+  async getTopicHistory(topicId) {
+    const response = await apiClient.get(`/api/content/topic/${topicId}/history`);
+    return response.data.data;
+  },
+
+  /**
    * Restore a specific history version
    * @param {number} historyId
    * @returns {Promise<Object>}

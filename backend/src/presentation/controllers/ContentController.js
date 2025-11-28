@@ -406,6 +406,24 @@ export class ContentController {
   }
 
   /**
+   * Get all history for a topic (all content types)
+   * GET /api/content/topic/:topicId/history
+   */
+  async topicHistory(req, res, next) {
+    try {
+      const topicId = parseInt(req.params.topicId);
+      const history = await this.contentHistoryService.getHistoryByTopic(topicId);
+
+      res.json({
+        success: true,
+        data: history,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
    * Restore a specific history version
    * POST /api/content/history/:historyId/restore
    */

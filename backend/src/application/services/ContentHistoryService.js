@@ -195,6 +195,49 @@ export class ContentHistoryService {
     await this.contentHistoryRepository.softDelete(historyId);
   }
 
+  async getHistoryByTopic(topicId) {
+    const historyEntries = await this.contentHistoryRepository.findByTopic(topicId);
+
+    // Group by content_type_id
+    const grouped = {};
+    historyEntries.forEach(entry => {
+      const typeId = entry.content_type_id;
+      if (!grouped[typeId]) {
+        grouped[typeId] = [];
+      }
+      grouped[typeId].push(entry);
+    });
+
+    // Build response for each content type
+    const result = {};
+    Object.keys(grouped).forEach(typeId => {
+      const entries = grouped[typeId];
+      const typeKey = CONTENT_TYPE_MAP[typeId] || 'unknown';
+      
+      // Sort by updated_at DESC, then created_at DESC
+      const sorted = [...entries].sort((a, b) => {
+        const aTime = new Date(a.updated_at || a.created_at || 0).getTime();
+        const bTime = new Date(b.updated_at || b.created_at || 0).getTime();
+        if (bTime !== aTime) return bTime - aTime;
+        const aCreated = new Date(a.created_at || 0).getTime();
+        const bCreated = new Date(b.created_at || 0).getTime();
+        return bCreated - aCreated;
+      });
+
+      result[typeKey] = sorted.map(entry => ({
+        history_id: entry.version_id || entry.history_id, // version_id is mapped from history_id in mapRowToContentVersion
+        content_type_id: entry.content_type_id,
+        created_at: entry.created_at,
+        updated_at: entry.updated_at || entry.created_at,
+        preview: this.#buildPreview(typeKey, entry.content_data),
+        content_data: entry.content_data,
+        generation_method_id: entry.generation_method_id,
+      }));
+    });
+
+    return result;
+  }
+
   #isSameContent(a, b) {
     try {
       return JSON.stringify(a) === JSON.stringify(b);

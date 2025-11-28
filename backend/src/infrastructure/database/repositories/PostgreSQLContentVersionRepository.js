@@ -163,6 +163,31 @@ export class PostgreSQLContentVersionRepository extends IContentVersionRepositor
     return result.rows.map(row => this.mapRowToContentVersion(row));
   }
 
+  async findByTopic(topicId) {
+    if (!this.db.isConnected()) {
+      throw new Error('Database not connected. Using in-memory repository.');
+    }
+
+    const supportsDeletedAt = await this.ensureDeletedAtSupport();
+
+    const query = supportsDeletedAt
+      ? `
+        SELECT * FROM content_history 
+        WHERE topic_id = $1
+          AND deleted_at IS NULL
+        ORDER BY content_type_id, updated_at DESC, created_at DESC
+      `
+      : `
+        SELECT * FROM content_history 
+        WHERE topic_id = $1
+        ORDER BY content_type_id, updated_at DESC, created_at DESC
+      `;
+
+    const result = await this.db.query(query, [topicId]);
+
+    return result.rows.map(row => this.mapRowToContentVersion(row));
+  }
+
   async findCurrentVersion(topicId, contentTypeId) {
     if (!this.db.isConnected()) {
       throw new Error('Database not connected. Using in-memory repository.');
