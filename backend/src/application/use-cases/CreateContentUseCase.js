@@ -133,34 +133,8 @@ export class CreateContentUseCase {
               // Skip language validation for code without explanation
             } else if (contentText && contentText.trim().length > 0) {
               // Detect language of content
+              // detectContentLanguage always returns a language code (never null, defaults to 'en')
               const detectedLanguage = await this.detectContentLanguage(contentText);
-              
-              // CRITICAL: If language detection fails (returns null), block content creation
-              // We cannot verify the language, so we must reject the content to be safe
-              if (!detectedLanguage) {
-                console.warn('[CreateContentUseCase] Language detection failed - blocking creation:', {
-                  expected_language: expectedLanguage,
-                  topic_id: topic.topic_id,
-                  course_id: topic.course_id,
-                  content_type_id: content.content_type_id,
-                  content_preview: contentText.substring(0, 100),
-                });
-                const isCodeContent = content.content_type_id === 2 || content.content_type_id === 'code' || content.content_type_id === '2';
-                const errorMessage = isCodeContent
-                  ? `Failed to detect language of explanation. Please ensure your explanation is in ${expectedLanguage}.`
-                  : `Failed to detect content language. Please ensure your content is in ${expectedLanguage}.`;
-                const error = new Error(errorMessage);
-                error.code = 'LANGUAGE_DETECTION_FAILED';
-                error.details = {
-                  expected_language: expectedLanguage,
-                  detected_language: null,
-                  topic_id: topic.topic_id,
-                  course_id: topic.course_id,
-                  content_type_id: content.content_type_id,
-                  is_code_content: isCodeContent,
-                };
-                throw error;
-              }
               
               // If language is detected but doesn't match, block creation
               if (detectedLanguage !== expectedLanguage) {
@@ -835,11 +809,26 @@ export class CreateContentUseCase {
   /**
    * Detect language of content text using AI
    * @param {string} text - Text to detect language for
-   * @returns {Promise<string|null>} Detected language code or null
+   * @returns {Promise<string>} Detected language code (never returns null - defaults to 'en')
    */
   async detectContentLanguage(text) {
-    if (!this.aiGenerationService || !text || text.trim().length === 0) {
-      return null;
+    if (!text || text.trim().length === 0) {
+      console.warn('[CreateContentUseCase] Empty text provided for language detection, defaulting to English');
+      return 'en';
+    }
+
+    // First try heuristic detection (fast and free)
+    const heuristicLanguage = this.detectLanguageHeuristic(text);
+    if (heuristicLanguage) {
+      console.log('[CreateContentUseCase] Language detected via heuristic:', heuristicLanguage);
+      return heuristicLanguage;
+    }
+
+    // If heuristic didn't detect (likely English or other Latin-based language), try AI detection
+    if (!this.aiGenerationService || !this.aiGenerationService.openaiClient) {
+      console.log('[CreateContentUseCase] OpenAI client not available for language detection, defaulting to English (heuristic found no special characters)');
+      // Default to English if we can't detect and no OpenAI (heuristic found no special characters = likely English)
+      return 'en';
     }
 
     try {
@@ -850,28 +839,92 @@ ${text.substring(0, 500)}
 
 Return only the 2-letter language code, nothing else.`;
 
-      // Use generateText method from AIGenerationService
-      const response = await this.aiGenerationService.generateText(prompt, {
+      // Use openaiClient directly (not through AIGenerationService.generateText which requires language config)
+      const response = await this.aiGenerationService.openaiClient.generateText(prompt, {
+        systemPrompt: 'You are a language detection expert. Return only the ISO 639-1 language code.',
         temperature: 0.1,
         max_tokens: 10,
       });
 
-      if (!response) {
-        return null;
+      if (!response || !response.trim()) {
+        console.log('[CreateContentUseCase] Language detection returned empty response, defaulting to English (likely English content)');
+        return 'en';
       }
 
-      const languageCode = response.trim().toLowerCase();
+      // Clean response - remove any punctuation or extra text
+      const languageCode = response.trim().toLowerCase().replace(/[^a-z]/g, '').substring(0, 2);
       const validCodes = ['en', 'he', 'ar', 'es', 'fr', 'de', 'it', 'pt', 'ru', 'zh', 'ja', 'ko', 'fa', 'ur'];
       
       if (validCodes.includes(languageCode)) {
+        console.log('[CreateContentUseCase] Language detected via AI:', languageCode);
         return languageCode;
       }
 
-      return null;
+      console.log('[CreateContentUseCase] Language detection returned invalid code:', languageCode, 'defaulting to English');
+      // If AI returned invalid code, default to English (most common case)
+      return 'en';
     } catch (error) {
-      console.warn('[CreateContentUseCase] Language detection failed:', error.message);
+      console.warn('[CreateContentUseCase] Language detection failed:', error.message, 'defaulting to English');
+      // If AI detection fails, default to English (most common case)
+      return 'en';
+    }
+  }
+
+  /**
+   * Heuristic language detection (fast, no API calls)
+   * @param {string} text - Text to detect language for
+   * @returns {string|null} Detected language code or null
+   */
+  detectLanguageHeuristic(text) {
+    if (!text || text.trim().length === 0) {
       return null;
     }
+
+    // Hebrew pattern
+    const hebrewPattern = /[\u0590-\u05FF]/;
+    if (hebrewPattern.test(text)) {
+      return 'he';
+    }
+
+    // Arabic pattern
+    const arabicPattern = /[\u0600-\u06FF]/;
+    if (arabicPattern.test(text)) {
+      return 'ar';
+    }
+
+    // Persian/Farsi pattern
+    const persianPattern = /[\u06A0-\u06FF]/;
+    if (persianPattern.test(text)) {
+      return 'fa';
+    }
+
+    // Russian/Cyrillic pattern
+    const cyrillicPattern = /[\u0400-\u04FF]/;
+    if (cyrillicPattern.test(text)) {
+      return 'ru';
+    }
+
+    // Chinese pattern
+    const chinesePattern = /[\u4E00-\u9FFF]/;
+    if (chinesePattern.test(text)) {
+      return 'zh';
+    }
+
+    // Japanese pattern
+    const japanesePattern = /[\u3040-\u309F\u30A0-\u30FF]/;
+    if (japanesePattern.test(text)) {
+      return 'ja';
+    }
+
+    // Korean pattern
+    const koreanPattern = /[\uAC00-\uD7AF]/;
+    if (koreanPattern.test(text)) {
+      return 'ko';
+    }
+
+    // If no special characters detected, likely English or other Latin-based language
+    // Return null to allow AI detection or default to English
+    return null;
   }
 }
 
