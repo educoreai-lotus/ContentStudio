@@ -77,6 +77,12 @@ export class CreateContentUseCase {
     const isManualContent = content.generation_method_id === 'manual' || content.generation_method_id === 'manual_edited';
     const needsQualityCheck = isManualContent && this.qualityCheckService;
     
+    // CRITICAL: If manual content but qualityCheckService is missing, block creation
+    // We cannot allow manual content without quality check
+    if (isManualContent && !this.qualityCheckService) {
+      throw new Error('Quality check service is required for manual content creation. Cannot create content without quality validation.');
+    }
+    
     console.log('[CreateContentUseCase] Quality check evaluation:', {
       generation_method_id: content.generation_method_id,
       contentTypeId: content.content_type_id,
@@ -128,7 +134,36 @@ export class CreateContentUseCase {
             } else if (contentText && contentText.trim().length > 0) {
               // Detect language of content
               const detectedLanguage = await this.detectContentLanguage(contentText);
-              if (detectedLanguage && detectedLanguage !== expectedLanguage) {
+              
+              // CRITICAL: If language detection fails (returns null), block content creation
+              // We cannot verify the language, so we must reject the content to be safe
+              if (!detectedLanguage) {
+                console.warn('[CreateContentUseCase] Language detection failed - blocking creation:', {
+                  expected_language: expectedLanguage,
+                  topic_id: topic.topic_id,
+                  course_id: topic.course_id,
+                  content_type_id: content.content_type_id,
+                  content_preview: contentText.substring(0, 100),
+                });
+                const isCodeContent = content.content_type_id === 2 || content.content_type_id === 'code' || content.content_type_id === '2';
+                const errorMessage = isCodeContent
+                  ? `Failed to detect language of explanation. Please ensure your explanation is in ${expectedLanguage}.`
+                  : `Failed to detect content language. Please ensure your content is in ${expectedLanguage}.`;
+                const error = new Error(errorMessage);
+                error.code = 'LANGUAGE_DETECTION_FAILED';
+                error.details = {
+                  expected_language: expectedLanguage,
+                  detected_language: null,
+                  topic_id: topic.topic_id,
+                  course_id: topic.course_id,
+                  content_type_id: content.content_type_id,
+                  is_code_content: isCodeContent,
+                };
+                throw error;
+              }
+              
+              // If language is detected but doesn't match, block creation
+              if (detectedLanguage !== expectedLanguage) {
                 console.warn('[CreateContentUseCase] Language mismatch detected - blocking creation to save tokens:', {
                   expected_language: expectedLanguage,
                   detected_language: detectedLanguage,
@@ -153,23 +188,32 @@ export class CreateContentUseCase {
                   is_code_content: isCodeContent,
                 };
                 throw error;
-              } else if (detectedLanguage && detectedLanguage === expectedLanguage) {
-                console.log('[CreateContentUseCase] ✅ Language validation passed - proceeding with DB save and quality check:', {
-                  expected_language: expectedLanguage,
-                  detected_language: detectedLanguage,
-                  content_type_id: content.content_type_id,
-                });
               }
+              
+              // Language matches - proceed
+              console.log('[CreateContentUseCase] ✅ Language validation passed - proceeding with DB save and quality check:', {
+                expected_language: expectedLanguage,
+                detected_language: detectedLanguage,
+                content_type_id: content.content_type_id,
+              });
             }
           }
         }
       } catch (error) {
-        // Re-throw if it's our language mismatch error
-        if (error.code === 'LANGUAGE_MISMATCH') {
+        // Re-throw if it's our language validation error (mismatch or detection failed)
+        if (error.code === 'LANGUAGE_MISMATCH' || error.code === 'LANGUAGE_DETECTION_FAILED') {
           throw error;
         }
         console.warn('[CreateContentUseCase] Failed to validate language:', error.message);
-        // Don't block content creation if language validation fails (but log warning)
+        // For other errors (e.g., topic not found), we still block creation to be safe
+        // If we can't validate language, we shouldn't proceed
+        const validationError = new Error(`Language validation failed: ${error.message}. Content cannot be created without language validation.`);
+        validationError.code = 'LANGUAGE_VALIDATION_ERROR';
+        validationError.details = {
+          original_error: error.message,
+          topic_id: content.topic_id,
+        };
+        throw validationError;
       }
     }
 

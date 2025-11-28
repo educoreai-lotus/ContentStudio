@@ -60,12 +60,12 @@ export class ContentController {
         data: ContentDTO.toContentResponse(content),
       });
     } catch (error) {
-      // Handle language mismatch error
-      if (error.code === 'LANGUAGE_MISMATCH') {
+      // Handle language validation errors
+      if (error.code === 'LANGUAGE_MISMATCH' || error.code === 'LANGUAGE_DETECTION_FAILED' || error.code === 'LANGUAGE_VALIDATION_ERROR') {
         return res.status(400).json({
           success: false,
           error: {
-            code: 'LANGUAGE_MISMATCH',
+            code: error.code,
             message: error.message,
             details: error.details,
             timestamp: new Date().toISOString(),
@@ -175,6 +175,33 @@ export class ContentController {
       });
     } catch (error) {
       console.error('[Content Approve] Error:', error.message);
+      
+      // Handle language validation errors
+      if (error.code === 'LANGUAGE_MISMATCH' || error.code === 'LANGUAGE_DETECTION_FAILED' || error.code === 'LANGUAGE_VALIDATION_ERROR') {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: error.code,
+            message: error.message,
+            details: error.details,
+            timestamp: new Date().toISOString(),
+          },
+        });
+      }
+      
+      // Handle quality check failures
+      // If quality check failed, content should have been deleted, but if it wasn't, return error
+      if (error.message && error.message.includes('Quality check failed') || error.message && error.message.includes('quality check')) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: 'QUALITY_CHECK_FAILED',
+            message: error.message,
+            timestamp: new Date().toISOString(),
+          },
+        });
+      }
+      
       next(error);
     }
   }
