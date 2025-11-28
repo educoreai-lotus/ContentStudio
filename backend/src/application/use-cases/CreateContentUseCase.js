@@ -86,6 +86,93 @@ export class CreateContentUseCase {
       hasExistingContent: !!existingContent,
     });
 
+    // STEP 1: Language validation BEFORE quality check and DB operations (to save tokens)
+    // For manual content, validate language matches topic language BEFORE saving to DB or history
+    // This applies to both new content and updates, and to both standalone topics and topics in courses
+    // If language doesn't match, we skip quality check and DB operations to save tokens
+    // IMPORTANT: This check happens BEFORE history save to avoid unnecessary operations
+    if (isManualContent && this.topicRepository) {
+      try {
+        const topic = await this.topicRepository.findById(content.topic_id);
+        if (topic) {
+          // Get topic language - either from topic itself or from course
+          let expectedLanguage = topic.language;
+          if (!expectedLanguage && topic.course_id && this.courseRepository) {
+            try {
+              const course = await this.courseRepository.findById(topic.course_id);
+              if (course && course.language) {
+                expectedLanguage = course.language;
+                console.log('[CreateContentUseCase] Using course language for validation:', {
+                  course_id: topic.course_id,
+                  course_language: course.language,
+                });
+              }
+            } catch (error) {
+              console.warn('[CreateContentUseCase] Failed to get course language:', error.message);
+            }
+          }
+
+          if (expectedLanguage) {
+            // Extract text from content for language detection
+            // For code content (type 2), only check explanation (code itself should be in English)
+            const contentText = this.extractTextForLanguageValidation(content);
+            
+            // For code content without explanation, skip language validation (code should be in English)
+            const isCodeContent = content.content_type_id === 2 || content.content_type_id === 'code' || content.content_type_id === '2';
+            if (isCodeContent && (!contentText || contentText.trim().length === 0)) {
+              console.log('[CreateContentUseCase] Code content without explanation - skipping language validation (code should be in English):', {
+                content_type_id: content.content_type_id,
+                topic_id: topic.topic_id,
+              });
+              // Skip language validation for code without explanation
+            } else if (contentText && contentText.trim().length > 0) {
+              // Detect language of content
+              const detectedLanguage = await this.detectContentLanguage(contentText);
+              if (detectedLanguage && detectedLanguage !== expectedLanguage) {
+                console.warn('[CreateContentUseCase] Language mismatch detected - blocking creation to save tokens:', {
+                  expected_language: expectedLanguage,
+                  detected_language: detectedLanguage,
+                  topic_id: topic.topic_id,
+                  course_id: topic.course_id,
+                  content_type_id: content.content_type_id,
+                  content_preview: contentText.substring(0, 100),
+                });
+                // Block content creation if language doesn't match (saves tokens by skipping quality check)
+                const isCodeContent = content.content_type_id === 2 || content.content_type_id === 'code' || content.content_type_id === '2';
+                const errorMessage = isCodeContent
+                  ? `Explanation language (${detectedLanguage}) does not match expected language (${expectedLanguage}). Code should be in English, but explanation should be in ${expectedLanguage}.`
+                  : `Content language (${detectedLanguage}) does not match expected language (${expectedLanguage}). Please create content in the correct language.`;
+                const error = new Error(errorMessage);
+                error.code = 'LANGUAGE_MISMATCH';
+                error.details = {
+                  expected_language: expectedLanguage,
+                  detected_language: detectedLanguage,
+                  topic_id: topic.topic_id,
+                  course_id: topic.course_id,
+                  content_type_id: content.content_type_id,
+                  is_code_content: isCodeContent,
+                };
+                throw error;
+              } else if (detectedLanguage && detectedLanguage === expectedLanguage) {
+                console.log('[CreateContentUseCase] ✅ Language validation passed - proceeding with DB save and quality check:', {
+                  expected_language: expectedLanguage,
+                  detected_language: detectedLanguage,
+                  content_type_id: content.content_type_id,
+                });
+              }
+            }
+          }
+        }
+      } catch (error) {
+        // Re-throw if it's our language mismatch error
+        if (error.code === 'LANGUAGE_MISMATCH') {
+          throw error;
+        }
+        console.warn('[CreateContentUseCase] Failed to validate language:', error.message);
+        // Don't block content creation if language validation fails (but log warning)
+      }
+    }
+
     // MANDATORY: Save existing content to history BEFORE creating/updating new content
     // This applies to ALL content formats - no exceptions
     if (existingContent) {
@@ -110,6 +197,7 @@ export class CreateContentUseCase {
 
     if (existingContent) {
       // Store original content data for rollback if quality check fails
+      // NOTE: Language validation was already done above (before history save) to save tokens
       const originalContentData = existingContent.content_data;
       const originalGenerationMethod = existingContent.generation_method_id;
       const originalQualityCheckStatus = existingContent.quality_check_status;
@@ -173,7 +261,13 @@ export class CreateContentUseCase {
       }
 
       // Generate audio ONLY if quality check passed (or if not needed)
-      if (await this.shouldGenerateAudio(enrichedContentData)) {
+      // CRITICAL: Pass quality_check_status to shouldGenerateAudio to prevent audio generation for rejected content
+      const shouldGenerate = await this.shouldGenerateAudio({
+        ...enrichedContentData,
+        quality_check_status: updatedContent.quality_check_status,
+      });
+      
+      if (shouldGenerate) {
         pushStatus(statusMessages, 'Generating audio...');
         try {
           await this.attachGeneratedAudio(enrichedContentData);
@@ -194,6 +288,11 @@ export class CreateContentUseCase {
           pushStatus(statusMessages, `Audio generation failed: ${error.message}`);
           throw error;
         }
+      } else {
+        console.log('[CreateContentUseCase] ⚠️ Audio generation skipped (update):', {
+          quality_check_status: updatedContent.quality_check_status,
+          content_type_id: enrichedContentData.content_type_id,
+        });
       }
 
       // Reload content to get updated quality check results
@@ -204,60 +303,6 @@ export class CreateContentUseCase {
       }
       updatedContent.status_messages = statusMessages;
       return updatedContent;
-    }
-
-    // For manual content, validate language matches topic language
-    // This applies to both standalone topics and topics in courses
-    if (isManualContent && this.topicRepository) {
-      try {
-        const topic = await this.topicRepository.findById(content.topic_id);
-        if (topic) {
-          // Get topic language - either from topic itself or from course
-          let expectedLanguage = topic.language;
-          if (!expectedLanguage && topic.course_id && this.courseRepository) {
-            try {
-              const course = await this.courseRepository.findById(topic.course_id);
-              if (course && course.language) {
-                expectedLanguage = course.language;
-                console.log('[CreateContentUseCase] Using course language for validation:', {
-                  course_id: topic.course_id,
-                  course_language: course.language,
-                });
-              }
-            } catch (error) {
-              console.warn('[CreateContentUseCase] Failed to get course language:', error.message);
-            }
-          }
-
-          if (expectedLanguage) {
-            // Extract text from content for language detection
-            const contentText = this.extractTextFromContent(content);
-            if (contentText && contentText.trim().length > 0) {
-              // Detect language of content
-              const detectedLanguage = await this.detectContentLanguage(contentText);
-              if (detectedLanguage && detectedLanguage !== expectedLanguage) {
-                console.warn('[CreateContentUseCase] Language mismatch detected:', {
-                  expected_language: expectedLanguage,
-                  detected_language: detectedLanguage,
-                  topic_id: topic.topic_id,
-                  course_id: topic.course_id,
-                  content_preview: contentText.substring(0, 100),
-                });
-                // For now, we log a warning but don't block creation
-                // In the future, we might want to make this stricter
-              } else if (detectedLanguage && detectedLanguage === expectedLanguage) {
-                console.log('[CreateContentUseCase] Language validation passed:', {
-                  expected_language: expectedLanguage,
-                  detected_language: detectedLanguage,
-                });
-              }
-            }
-          }
-        }
-      } catch (error) {
-        console.warn('[CreateContentUseCase] Failed to validate language:', error.message);
-        // Don't block content creation if language validation fails
-      }
     }
 
     // Save content to repository WITHOUT audio first
@@ -285,6 +330,20 @@ export class CreateContentUseCase {
         const contentAfterQualityCheck = await this.contentRepository.findById(createdContent.content_id);
         if (contentAfterQualityCheck) {
           createdContent = contentAfterQualityCheck;
+          // Verify quality check status is approved before proceeding
+          if (contentAfterQualityCheck.quality_check_status !== 'approved') {
+            console.error('[CreateContentUseCase] ❌ Quality check status is not approved:', contentAfterQualityCheck.quality_check_status);
+            // Delete content if quality check status is not approved
+            if (contentIdToDeleteOnFailure) {
+              try {
+                await this.contentRepository.delete(contentIdToDeleteOnFailure, true);
+                console.log('[CreateContentUseCase] ✅ Content deleted from DB - quality check status not approved');
+              } catch (deleteError) {
+                console.error('[CreateContentUseCase] ❌ Failed to delete content:', deleteError.message);
+              }
+            }
+            throw new Error(`Content failed quality check. Status: ${contentAfterQualityCheck.quality_check_status}`);
+          }
         }
         // Clear the rollback flag since quality check passed
         contentIdToDeleteOnFailure = null;
@@ -293,13 +352,23 @@ export class CreateContentUseCase {
         console.error('[CreateContentUseCase] ❌ Quality check failed, deleting content from DB:', error.message);
         
         // CRITICAL: Delete content from DB if quality check failed
+        // MUST succeed - if deletion fails, we cannot proceed
         if (contentIdToDeleteOnFailure) {
           try {
             await this.contentRepository.delete(contentIdToDeleteOnFailure, true);
             console.log('[CreateContentUseCase] ✅ Content deleted from DB after quality check failure');
+            contentIdToDeleteOnFailure = null; // Mark as deleted
           } catch (deleteError) {
-            console.error('[CreateContentUseCase] ❌ Failed to delete content after quality check failure:', deleteError.message);
-            // Continue to throw the original error even if delete fails
+            console.error('[CreateContentUseCase] ❌ CRITICAL: Failed to delete content after quality check failure:', deleteError.message);
+            // Try one more time with force
+            try {
+              await this.contentRepository.delete(contentIdToDeleteOnFailure, true);
+              console.log('[CreateContentUseCase] ✅ Content deleted on retry');
+              contentIdToDeleteOnFailure = null;
+            } catch (retryError) {
+              console.error('[CreateContentUseCase] ❌ CRITICAL: Content deletion failed even on retry:', retryError.message);
+              // Still throw the original error - content should not be saved if quality check fails
+            }
           }
         }
         
@@ -317,8 +386,34 @@ export class CreateContentUseCase {
       });
     }
 
+    // CRITICAL: Verify content still exists and quality check passed before generating audio
+    // If content was deleted due to failed quality check, we should not proceed
+    if (contentIdToDeleteOnFailure) {
+      console.error('[CreateContentUseCase] ❌ Content was marked for deletion, cannot proceed with audio generation');
+      throw new Error('Content failed quality check and was deleted. Cannot generate audio.');
+    }
+
+    // Verify content exists and quality check status is approved (if quality check was required)
+    if (needsQualityCheck) {
+      const currentContent = await this.contentRepository.findById(createdContent.content_id);
+      if (!currentContent) {
+        console.error('[CreateContentUseCase] ❌ Content not found after quality check - may have been deleted');
+        throw new Error('Content not found after quality check');
+      }
+      if (currentContent.quality_check_status !== 'approved') {
+        console.error('[CreateContentUseCase] ❌ Quality check status is not approved:', currentContent.quality_check_status);
+        throw new Error(`Content quality check failed. Status: ${currentContent.quality_check_status}`);
+      }
+    }
+
     // Generate audio ONLY if quality check passed (or if not needed)
-    if (await this.shouldGenerateAudio(enrichedContentData)) {
+    // CRITICAL: Pass quality_check_status to shouldGenerateAudio to prevent audio generation for rejected content
+    const shouldGenerate = await this.shouldGenerateAudio({
+      ...enrichedContentData,
+      quality_check_status: createdContent.quality_check_status,
+    });
+    
+    if (shouldGenerate) {
       pushStatus(statusMessages, 'Generating audio...');
       try {
         await this.attachGeneratedAudio(enrichedContentData);
@@ -339,6 +434,11 @@ export class CreateContentUseCase {
         pushStatus(statusMessages, `Audio generation failed: ${error.message}`);
         throw error;
       }
+    } else {
+      console.log('[CreateContentUseCase] ⚠️ Audio generation skipped:', {
+        quality_check_status: createdContent.quality_check_status,
+        content_type_id: enrichedContentData.content_type_id,
+      });
     }
 
     // Reload content to get updated quality check results
@@ -473,6 +573,13 @@ export class CreateContentUseCase {
       return false;
     }
 
+    // CRITICAL: Do not generate audio if quality check failed or is not approved
+    // This prevents audio generation for content that failed quality check
+    if (contentData.quality_check_status && contentData.quality_check_status !== 'approved') {
+      console.warn('[CreateContentUseCase] ⚠️ Skipping audio generation - quality check status is not approved:', contentData.quality_check_status);
+      return false;
+    }
+
     const text = this.extractTextContent(contentData.content_data);
     if (!text) {
       return false;
@@ -544,6 +651,7 @@ export class CreateContentUseCase {
   /**
    * Extract text from content for language detection
    * Similar to QualityCheckService.extractTextFromContent
+   * NOTE: For code content (type 2), only extracts explanation (code itself should be in English)
    */
   extractTextFromContent(content) {
     if (typeof content.content_data === 'string') {
@@ -576,6 +684,83 @@ export class CreateContentUseCase {
       const codeText = content.content_data.code;
       const explanationText = content.content_data.explanation || '';
       return explanationText ? `${codeText}\n\n${explanationText}` : codeText;
+    }
+    
+    if (content.content_data?.metadata) {
+      const metadataText = [
+        content.content_data.metadata.title,
+        content.content_data.metadata.description,
+        content.content_data.metadata.lessonTopic,
+      ].filter(Boolean).join('\n');
+      if (metadataText) return metadataText;
+    }
+    
+    if (content.content_data?.nodes && Array.isArray(content.content_data.nodes)) {
+      const nodeTexts = content.content_data.nodes
+        .map(node => node.data?.label || node.label || node.text || '')
+        .filter(Boolean);
+      if (nodeTexts.length > 0) {
+        return nodeTexts.join('\n');
+      }
+    }
+    
+    if (content.content_data?.script) {
+      return content.content_data.script;
+    }
+    
+    return JSON.stringify(content.content_data);
+  }
+
+  /**
+   * Extract text from content for language validation
+   * For code content (type 2), only extracts explanation (code itself should be in English)
+   * For other content types, extracts all text as usual
+   */
+  extractTextForLanguageValidation(content) {
+    const contentTypeId = content.content_type_id;
+    const isCodeContent = contentTypeId === 2 || contentTypeId === 'code' || contentTypeId === '2';
+
+    if (typeof content.content_data === 'string') {
+      try {
+        const parsed = JSON.parse(content.content_data);
+        if (isCodeContent && parsed.explanation) {
+          // For code: only check explanation, not the code itself
+          return parsed.explanation;
+        }
+        if (parsed.code && !isCodeContent) {
+          // For non-code content that has code field, include both
+          const codeText = parsed.code;
+          const explanationText = parsed.explanation || '';
+          return explanationText ? `${codeText}\n\n${explanationText}` : codeText;
+        }
+        if (parsed.metadata) {
+          const metadataText = [
+            parsed.metadata.title,
+            parsed.metadata.description,
+            parsed.metadata.lessonTopic,
+          ].filter(Boolean).join('\n');
+          if (metadataText) return metadataText;
+        }
+        return parsed.text || JSON.stringify(parsed);
+      } catch {
+        return content.content_data;
+      }
+    }
+    
+    if (content.content_data?.text) {
+      return content.content_data.text;
+    }
+    
+    if (content.content_data?.code) {
+      if (isCodeContent) {
+        // For code: only check explanation, not the code itself
+        return content.content_data.explanation || '';
+      } else {
+        // For non-code content, include both code and explanation
+        const codeText = content.content_data.code;
+        const explanationText = content.content_data.explanation || '';
+        return explanationText ? `${codeText}\n\n${explanationText}` : codeText;
+      }
     }
     
     if (content.content_data?.metadata) {

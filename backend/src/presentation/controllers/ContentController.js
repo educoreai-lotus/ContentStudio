@@ -60,6 +60,18 @@ export class ContentController {
         data: ContentDTO.toContentResponse(content),
       });
     } catch (error) {
+      // Handle language mismatch error
+      if (error.code === 'LANGUAGE_MISMATCH') {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: 'LANGUAGE_MISMATCH',
+            message: error.message,
+            details: error.details,
+            timestamp: new Date().toISOString(),
+          },
+        });
+      }
       next(error);
     }
   }

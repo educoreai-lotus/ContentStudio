@@ -169,13 +169,29 @@ export class QualityCheckService extends IQualityCheckService {
         completed_at: savedCheck.completed_at,
       });
 
-      console.log('[QualityCheckService] Quality check completed:', {
+      // CRITICAL: Update content quality_check_status to 'approved' if check passed
+      // This ensures content is marked as approved before proceeding
+      await this.contentRepository.update(contentId, {
+        quality_check_status: 'approved',
+        quality_check_data: {
+          quality_check_id: savedCheck.quality_check_id,
+          relevance_score: relevanceScore,
+          originality_score: evaluationResult.originality_score,
+          difficulty_alignment_score: evaluationResult.difficulty_alignment_score,
+          consistency_score: evaluationResult.consistency_score,
+          overall_score: overallScore,
+          feedback_summary: evaluationResult.feedback_summary,
+        },
+      });
+
+      console.log('[QualityCheckService] Quality check completed and content status updated:', {
         contentId,
         relevance_score: relevanceScore,
         originality_score: evaluationResult.originality_score,
         difficulty_alignment_score: evaluationResult.difficulty_alignment_score,
         consistency_score: evaluationResult.consistency_score,
         overallScore,
+        quality_check_status: 'approved',
       });
 
       return savedCheck;
@@ -189,6 +205,24 @@ export class QualityCheckService extends IQualityCheckService {
         error_message: savedCheck.error_message,
         completed_at: savedCheck.completed_at,
       });
+
+      // CRITICAL: Update content quality_check_status to 'rejected' if check failed
+      // This marks the content as rejected before it gets deleted
+      try {
+        await this.contentRepository.update(contentId, {
+          quality_check_status: 'rejected',
+          quality_check_data: {
+            quality_check_id: savedCheck.quality_check_id,
+            error_message: error.message,
+            status: 'failed',
+          },
+        });
+        console.log('[QualityCheckService] Content marked as rejected:', contentId);
+      } catch (updateError) {
+        console.error('[QualityCheckService] Failed to update content status to rejected:', updateError.message);
+        // Continue to throw original error even if status update fails
+      }
+
       throw error;
     }
   }
