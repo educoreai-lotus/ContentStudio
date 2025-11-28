@@ -429,7 +429,9 @@ export function SharedSidebar({ onRestore }) {
             }
             
             setHistoryData(historyBySection);
-            setDeletedContent(allHistoryVersions);
+            // CRITICAL: Do NOT set deletedContent for content context
+            // We use historyData for display (organized by sections), not deletedContent (flat list)
+            setDeletedContent([]);
           } catch (err) {
             if (context?.type === 'content') {
               console.error('[SharedSidebar] Failed to load content history:', err);
@@ -645,85 +647,59 @@ export function SharedSidebar({ onRestore }) {
         result = await topicsService.list(filters, { page: 1, limit: 50 });
         setDeletedContent(result.topics || []);
       } else if (context.type === 'content') {
+        // Reload content history directly from content_history table (same as initial load)
         try {
-          const allContent = await contentService.listByTopic(context.topicId);
-          console.log('[SharedSidebar] Reloading content history after restore, found content items:', allContent?.length || 0);
+          console.log('[SharedSidebar] Reloading ALL content history for topic after restore:', context.topicId);
+          const topicHistory = await contentService.getTopicHistory(context.topicId);
+          console.log('[SharedSidebar] Reloaded topic history:', topicHistory);
           
-          if (!allContent || allContent.length === 0) {
+          if (!topicHistory || Object.keys(topicHistory).length === 0) {
+            setHistoryData({});
             setDeletedContent([]);
             return;
           }
           
-          const historyPromises = allContent.map(async (contentItem) => {
-            try {
-              const historyResponse = await contentService.getHistory(contentItem.content_id);
-              
-              if (!historyResponse || !historyResponse.versions) {
-                return [];
-              }
-              
-              const sectionMap = {
-                1: 'text_audio',
-                2: 'code',
-                3: 'slides',
-                5: 'mind_map',
-                6: 'avatar_video',
-              };
-              const sectionId = sectionMap[contentItem.content_type_id] || 'default';
-              
-              return (historyResponse.versions || []).map(version => {
-                // Use preview from backend (built by #buildPreview) or fallback to formatPreview
-                const preview = version.preview || formatPreview(contentItem.content_type_id, version);
-                  return {
-                    ...version,
-                    history_id: version.history_id || version.version_id, // Support both field names
-                    content_id: contentItem.content_id,
-                    content_type_id: contentItem.content_type_id,
-                    content_type_name: contentItem.content_type_name,
-                    topic_id: context.topicId,
-                    preview: preview, // Use backend preview (from #buildPreview) or fallback
-                    sectionId: sectionId,
-                  };
-              });
-            } catch (err) {
-              console.error(`[SharedSidebar] Failed to reload history for content ${contentItem.content_id}:`, err);
-              return [];
-            }
-          });
-          
-          const historyArrays = await Promise.all(historyPromises);
-          const allHistoryVersions = historyArrays.flat().filter(Boolean);
-          
-          // Reorganize history by section after restore
+          // Convert topicHistory (grouped by content type) to historyData format
           const historyBySection = {};
-          allContent.forEach(contentItem => {
-            const sectionMap = {
-              1: 'text_audio',
-              2: 'code',
-              3: 'slides',
-              5: 'mind_map',
-              6: 'avatar_video',
+          
+          // Process each content type in the history
+          Object.keys(topicHistory).forEach(sectionId => {
+            const versions = topicHistory[sectionId] || [];
+            if (versions.length === 0) return;
+            
+            // Map section ID to content_type_id
+            const sectionToTypeId = {
+              'text_audio': 1,
+              'code': 2,
+              'slides': 3,
+              'mind_map': 5,
+              'avatar_video': 6,
             };
-            const sectionId = sectionMap[contentItem.content_type_id] || 'default';
+            const contentTypeId = sectionToTypeId[sectionId] || null;
             
             if (!historyBySection[sectionId]) {
               historyBySection[sectionId] = {
-                contentItem: contentItem,
+                contentItem: null, // We don't have active content item for deleted content
                 versions: [],
               };
             }
             
-            const versionsForThisContent = allHistoryVersions.filter(
-              v => v.content_id === contentItem.content_id
-            );
-            historyBySection[sectionId].versions = versionsForThisContent;
+            // Process each version
+            versions.forEach(version => {
+              const historyVersion = {
+                ...version,
+                content_type_id: contentTypeId,
+                content_type_name: sectionId,
+                topic_id: context.topicId,
+                sectionId: sectionId,
+              };
+              historyBySection[sectionId].versions.push(historyVersion);
+            });
           });
           
           setHistoryData(historyBySection);
-          console.log('[SharedSidebar] Reloaded history versions after restore:', allHistoryVersions.length);
           // CRITICAL: Do NOT set deletedContent for content context
-          // We use historyData for display, not deletedContent
-          // Setting deletedContent here causes duplicate display (flat list + sections)
+          // We use historyData for display (organized by sections), not deletedContent (flat list)
           setDeletedContent([]);
         } catch (err) {
           console.error('[SharedSidebar] Failed to reload content history after restore:', err);
@@ -876,14 +852,26 @@ export function SharedSidebar({ onRestore }) {
               }`}>
                 Content Studio
               </span>
-              {deletedContent.length > 0 && (
+              {/* Only show count for courses/topics, not for content (content uses historyData organized by sections) */}
+              {context?.type !== 'content' && deletedContent.length > 0 && (
                 <p
                   className={`text-sm ${
                     theme === 'day-mode' ? 'text-gray-600' : 'text-slate-400'
                   }`}
                 >
-                  {deletedContent.length} deleted {displayContext.type === 'courses' ? 'course' : displayContext.type === 'content' ? 'content' : displayContext.type === 'topics' ? 'topic' : 'content'}
+                  {deletedContent.length} deleted {displayContext.type === 'courses' ? 'course' : displayContext.type === 'topics' ? 'topic' : 'content'}
                   {deletedContent.length !== 1 ? 's' : ''}
+                </p>
+              )}
+              {/* For content context, show total count from historyData */}
+              {context?.type === 'content' && Object.keys(historyData).length > 0 && (
+                <p
+                  className={`text-sm ${
+                    theme === 'day-mode' ? 'text-gray-600' : 'text-slate-400'
+                  }`}
+                >
+                  {Object.values(historyData).reduce((sum, section) => sum + (section.versions?.length || 0), 0)} deleted content
+                  {Object.values(historyData).reduce((sum, section) => sum + (section.versions?.length || 0), 0) !== 1 ? 's' : ''}
                 </p>
               )}
             </>
@@ -904,13 +892,24 @@ export function SharedSidebar({ onRestore }) {
               <i className={`fas ${displayContext.icon} text-xl ${
                 theme === 'day-mode' ? 'text-gray-700' : 'text-slate-300'
               }`}></i>
-              {deletedContent.length > 0 && (
+              {/* Only show count for courses/topics, not for content (content uses historyData organized by sections) */}
+              {context?.type !== 'content' && deletedContent.length > 0 && (
                 <span
                   className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
                     theme === 'day-mode' ? 'bg-red-500 text-white' : 'bg-red-600 text-white'
                   }`}
                 >
                   {deletedContent.length}
+                </span>
+              )}
+              {/* For content context, show total count from historyData */}
+              {context?.type === 'content' && Object.keys(historyData).length > 0 && (
+                <span
+                  className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                    theme === 'day-mode' ? 'bg-red-500 text-white' : 'bg-red-600 text-white'
+                  }`}
+                >
+                  {Object.values(historyData).reduce((sum, section) => sum + (section.versions?.length || 0), 0)}
                 </span>
               )}
             </div>
