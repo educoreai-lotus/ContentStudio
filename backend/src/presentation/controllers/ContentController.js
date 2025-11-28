@@ -14,12 +14,16 @@ export class ContentController {
     aiGenerationService,
     contentHistoryService,
     promptTemplateService,
+    topicRepository,
+    courseRepository,
   }) {
     this.createContentUseCase = new CreateContentUseCase({
       contentRepository,
       qualityCheckService,
       aiGenerationService,
       contentHistoryService,
+      topicRepository,
+      courseRepository,
     });
     this.updateContentUseCase = new UpdateContentUseCase({
       contentRepository,

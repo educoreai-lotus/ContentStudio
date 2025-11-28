@@ -9,10 +9,11 @@ import { CreateTopicDTO, UpdateTopicDTO, TopicResponseDTO } from '../../applicat
 import { logger } from '../../infrastructure/logging/Logger.js';
 
 export class TopicController {
-  constructor(topicRepository, skillsEngineClient = null, templateRepository = null, contentRepository = null) {
+  constructor(topicRepository, skillsEngineClient = null, templateRepository = null, contentRepository = null, courseRepository = null) {
     this.createTopicUseCase = new CreateTopicUseCase({
       topicRepository,
       skillsEngineClient,
+      courseRepository,
     });
     this.getTopicsUseCase = new GetTopicsUseCase(topicRepository);
     this.getTopicUseCase = new GetTopicUseCase(topicRepository);

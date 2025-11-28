@@ -7,6 +7,7 @@ export class Topic {
     course_id = null,
     template_id = null,
     skills = [],
+    language = null, // Language code (e.g., 'en', 'he', 'ar') - required for standalone topics
     status = 'active', // Changed from 'draft' - ENUM doesn't support 'draft'
     has_text = false,
     has_code = false,
@@ -18,7 +19,7 @@ export class Topic {
     created_at = null,
     updated_at = null,
   }) {
-    this.validate({ topic_name, trainer_id });
+    this.validate({ topic_name, trainer_id, course_id, language });
 
     this.topic_id = topic_id;
     this.topic_name = topic_name;
@@ -27,6 +28,7 @@ export class Topic {
     this.course_id = course_id;
     this.template_id = template_id;
     this.skills = Array.isArray(skills) ? skills : [];
+    this.language = language;
     this.status = status;
     this.has_text = has_text;
     this.has_code = has_code;
@@ -40,7 +42,7 @@ export class Topic {
     this.is_standalone = course_id === null;
   }
 
-  validate({ topic_name, trainer_id }) {
+  validate({ topic_name, trainer_id, course_id, language }) {
     if (!topic_name) {
       throw new Error('Topic name is required');
     }
@@ -51,6 +53,16 @@ export class Topic {
 
     if (!trainer_id) {
       throw new Error('Trainer ID is required');
+    }
+
+    // Language is required for standalone topics (course_id is null)
+    if (course_id === null && !language) {
+      throw new Error('Language is required for stand-alone topics');
+    }
+
+    // Validate language code format if provided
+    if (language && (typeof language !== 'string' || language.length > 10)) {
+      throw new Error('Language must be a string with maximum 10 characters');
     }
   }
 
@@ -130,6 +142,7 @@ export class Topic {
       course_id: this.course_id,
       template_id: this.template_id,
       skills: this.skills,
+      language: this.language,
       status: this.status,
       has_text: this.has_text,
       has_code: this.has_code,

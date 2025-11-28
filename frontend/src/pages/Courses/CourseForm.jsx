@@ -86,7 +86,17 @@ export const CourseForm = () => {
 
       navigate('/courses');
     } catch (err) {
-      setErrors({ submit: err.error?.message || 'Failed to save course' });
+      // Handle language update blocked error
+      if (err.error?.code === 'LANGUAGE_UPDATE_BLOCKED') {
+        const details = err.error?.details;
+        const topicsList = details?.topics_with_content?.map(t => t.topic_name).join(', ') || 'some topics';
+        setErrors({ 
+          submit: `Cannot change course language. The following topics already have content: ${topicsList}. Please create a new course if you need a different language.`,
+          language: 'Language cannot be changed when topics contain content. Create a new course instead.',
+        });
+      } else {
+        setErrors({ submit: err.error?.message || 'Failed to save course' });
+      }
     } finally {
       setLoading(false);
     }
@@ -225,22 +235,45 @@ export const CourseForm = () => {
                   theme === 'day-mode' ? 'text-gray-700' : 'text-gray-300'
                 }`}
               >
-                Language
+                Language {isEditing && <span className="text-xs opacity-70">(Cannot be changed if topics have content)</span>}
               </label>
               <select
                 name="language"
                 value={formData.language}
                 onChange={handleChange}
+                required
                 className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors ${
-                  theme === 'day-mode'
+                  errors.language
+                    ? 'border-red-600'
+                    : theme === 'day-mode'
                     ? 'border-gray-300 bg-white text-gray-900'
                     : 'border-gray-600 bg-gray-700 text-white'
                 }`}
               >
                 <option value="en">English</option>
-                <option value="he">Hebrew</option>
-                <option value="ar">Arabic</option>
+                <option value="he">Hebrew (עברית)</option>
+                <option value="ar">Arabic (العربية)</option>
+                <option value="es">Spanish (Español)</option>
+                <option value="fr">French (Français)</option>
+                <option value="de">German (Deutsch)</option>
+                <option value="it">Italian (Italiano)</option>
+                <option value="ja">Japanese (日本語)</option>
+                <option value="zh">Chinese (中文)</option>
+                <option value="ko">Korean (한국어)</option>
+                <option value="pt">Portuguese (Português)</option>
+                <option value="fa">Persian/Farsi (فارسی)</option>
+                <option value="ur">Urdu (اردو)</option>
+                <option value="ru">Russian (Русский)</option>
               </select>
+              {errors.language && (
+                <p className="mt-1 text-sm text-red-600">{errors.language}</p>
+              )}
+              {isEditing && formData.language && (
+                <p className={`mt-1 text-xs ${theme === 'day-mode' ? 'text-gray-500' : 'text-gray-400'}`}>
+                  <i className="fas fa-info-circle mr-1"></i>
+                  Language cannot be changed if topics already contain content. Create a new course if you need a different language.
+                </p>
+              )}
             </div>
 
             {errors.submit && (

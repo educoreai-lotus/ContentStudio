@@ -9,6 +9,7 @@ const router = express.Router();
 const topicRepository = await RepositoryFactory.getTopicRepository();
 const templateRepository = await RepositoryFactory.getTemplateRepository();
 const contentRepository = await RepositoryFactory.getContentRepository();
+const courseRepository = await RepositoryFactory.getCourseRepository();
 
 // Initialize integration services
 const integrationManager = new IntegrationServiceManager();
@@ -19,7 +20,8 @@ const topicController = new TopicController(
   topicRepository,
   skillsEngineClient,
   templateRepository,
-  contentRepository
+  contentRepository,
+  courseRepository
 );
 
 router.post('/', topicController.create.bind(topicController));

@@ -7,11 +7,13 @@ import { pushStatus, createStatusMessages } from '../utils/StatusMessages.js';
  * Handles manual content creation with automatic quality check trigger
  */
 export class CreateContentUseCase {
-  constructor({ contentRepository, qualityCheckService, aiGenerationService, contentHistoryService }) {
+  constructor({ contentRepository, qualityCheckService, aiGenerationService, contentHistoryService, topicRepository, courseRepository }) {
     this.contentRepository = contentRepository;
     this.qualityCheckService = qualityCheckService;
     this.aiGenerationService = aiGenerationService;
     this.contentHistoryService = contentHistoryService;
+    this.topicRepository = topicRepository;
+    this.courseRepository = courseRepository;
   }
 
   async execute(contentData) {
@@ -202,6 +204,60 @@ export class CreateContentUseCase {
       }
       updatedContent.status_messages = statusMessages;
       return updatedContent;
+    }
+
+    // For manual content, validate language matches topic language
+    // This applies to both standalone topics and topics in courses
+    if (isManualContent && this.topicRepository) {
+      try {
+        const topic = await this.topicRepository.findById(content.topic_id);
+        if (topic) {
+          // Get topic language - either from topic itself or from course
+          let expectedLanguage = topic.language;
+          if (!expectedLanguage && topic.course_id && this.courseRepository) {
+            try {
+              const course = await this.courseRepository.findById(topic.course_id);
+              if (course && course.language) {
+                expectedLanguage = course.language;
+                console.log('[CreateContentUseCase] Using course language for validation:', {
+                  course_id: topic.course_id,
+                  course_language: course.language,
+                });
+              }
+            } catch (error) {
+              console.warn('[CreateContentUseCase] Failed to get course language:', error.message);
+            }
+          }
+
+          if (expectedLanguage) {
+            // Extract text from content for language detection
+            const contentText = this.extractTextFromContent(content);
+            if (contentText && contentText.trim().length > 0) {
+              // Detect language of content
+              const detectedLanguage = await this.detectContentLanguage(contentText);
+              if (detectedLanguage && detectedLanguage !== expectedLanguage) {
+                console.warn('[CreateContentUseCase] Language mismatch detected:', {
+                  expected_language: expectedLanguage,
+                  detected_language: detectedLanguage,
+                  topic_id: topic.topic_id,
+                  course_id: topic.course_id,
+                  content_preview: contentText.substring(0, 100),
+                });
+                // For now, we log a warning but don't block creation
+                // In the future, we might want to make this stricter
+              } else if (detectedLanguage && detectedLanguage === expectedLanguage) {
+                console.log('[CreateContentUseCase] Language validation passed:', {
+                  expected_language: expectedLanguage,
+                  detected_language: detectedLanguage,
+                });
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.warn('[CreateContentUseCase] Failed to validate language:', error.message);
+        // Don't block content creation if language validation fails
+      }
     }
 
     // Save content to repository WITHOUT audio first
@@ -482,6 +538,110 @@ export class CreateContentUseCase {
       contentData.content_data = ContentDataCleaner.clean(rawContentData, contentTypeId);
     } catch (error) {
       console.warn('[CreateContentUseCase] Failed to auto-generate audio for manual text:', error.message);
+    }
+  }
+
+  /**
+   * Extract text from content for language detection
+   * Similar to QualityCheckService.extractTextFromContent
+   */
+  extractTextFromContent(content) {
+    if (typeof content.content_data === 'string') {
+      try {
+        const parsed = JSON.parse(content.content_data);
+        if (parsed.code) {
+          const codeText = parsed.code;
+          const explanationText = parsed.explanation || '';
+          return explanationText ? `${codeText}\n\n${explanationText}` : codeText;
+        }
+        if (parsed.metadata) {
+          const metadataText = [
+            parsed.metadata.title,
+            parsed.metadata.description,
+            parsed.metadata.lessonTopic,
+          ].filter(Boolean).join('\n');
+          if (metadataText) return metadataText;
+        }
+        return parsed.text || JSON.stringify(parsed);
+      } catch {
+        return content.content_data;
+      }
+    }
+    
+    if (content.content_data?.text) {
+      return content.content_data.text;
+    }
+    
+    if (content.content_data?.code) {
+      const codeText = content.content_data.code;
+      const explanationText = content.content_data.explanation || '';
+      return explanationText ? `${codeText}\n\n${explanationText}` : codeText;
+    }
+    
+    if (content.content_data?.metadata) {
+      const metadataText = [
+        content.content_data.metadata.title,
+        content.content_data.metadata.description,
+        content.content_data.metadata.lessonTopic,
+      ].filter(Boolean).join('\n');
+      if (metadataText) return metadataText;
+    }
+    
+    if (content.content_data?.nodes && Array.isArray(content.content_data.nodes)) {
+      const nodeTexts = content.content_data.nodes
+        .map(node => node.data?.label || node.label || node.text || '')
+        .filter(Boolean);
+      if (nodeTexts.length > 0) {
+        return nodeTexts.join('\n');
+      }
+    }
+    
+    if (content.content_data?.script) {
+      return content.content_data.script;
+    }
+    
+    return JSON.stringify(content.content_data);
+  }
+
+  /**
+   * Detect language of content text using AI
+   * @param {string} text - Text to detect language for
+   * @returns {Promise<string|null>} Detected language code or null
+   */
+  async detectContentLanguage(text) {
+    if (!this.aiGenerationService || !text || text.trim().length === 0) {
+      return null;
+    }
+
+    try {
+      const prompt = `Detect the language of the following text and return only the ISO 639-1 language code (e.g., 'en', 'he', 'ar', 'es', 'fr').
+
+Text:
+${text.substring(0, 500)}
+
+Return only the 2-letter language code, nothing else.`;
+
+      // Use generateText method from AIGenerationService
+      const response = await this.aiGenerationService.generateText(prompt, {
+        temperature: 0.1,
+        max_tokens: 10,
+      });
+
+      if (!response) {
+        return null;
+      }
+
+      const languageCode = response.trim().toLowerCase();
+      const validCodes = ['en', 'he', 'ar', 'es', 'fr', 'de', 'it', 'pt', 'ru', 'zh', 'ja', 'ko', 'fa', 'ur'];
+      
+      if (validCodes.includes(languageCode)) {
+        return languageCode;
+      }
+
+      return null;
+    } catch (error) {
+      console.warn('[CreateContentUseCase] Language detection failed:', error.message);
+      return null;
     }
   }
 }

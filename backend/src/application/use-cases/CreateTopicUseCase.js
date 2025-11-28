@@ -5,9 +5,10 @@ import { Topic } from '../../domain/entities/Topic.js';
  * Creates a topic/lesson with Skills Engine integration
  */
 export class CreateTopicUseCase {
-  constructor({ topicRepository, skillsEngineClient }) {
+  constructor({ topicRepository, skillsEngineClient, courseRepository }) {
     this.topicRepository = topicRepository;
     this.skillsEngineClient = skillsEngineClient;
+    this.courseRepository = courseRepository;
   }
 
   async execute(topicData) {
@@ -32,10 +33,30 @@ export class CreateTopicUseCase {
       }
     }
 
+    // If topic belongs to a course, get language from course
+    let topicLanguage = topicData.language;
+    if (topicData.course_id && this.courseRepository) {
+      try {
+        const course = await this.courseRepository.findById(topicData.course_id);
+        if (course && course.language) {
+          topicLanguage = course.language;
+          console.log('[CreateTopicUseCase] Topic language inherited from course:', {
+            course_id: topicData.course_id,
+            course_language: course.language,
+            topic_language: topicLanguage,
+          });
+        }
+      } catch (error) {
+        console.warn('[CreateTopicUseCase] Failed to get course language:', error.message);
+        // Continue with provided language or default
+      }
+    }
+
     // Create topic entity (will validate)
     const topic = new Topic({
       ...topicData,
       skills,
+      language: topicLanguage,
       status: topicData.status || 'active', // Default to 'active' - ENUM doesn't support 'draft'
     });
 

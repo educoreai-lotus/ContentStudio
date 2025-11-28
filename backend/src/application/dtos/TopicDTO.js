@@ -9,6 +9,8 @@ export class CreateTopicDTO {
     this.course_id = this.normalizeCourseId(data.course_id);
     this.template_id = data.template_id || null;
     this.skills = Array.isArray(data.skills) ? data.skills : [];
+    // Language is required for standalone topics (course_id is null)
+    this.language = data.language || (data.course_id === null ? 'en' : null);
   }
 
   normalizeCourseId(courseId) {
@@ -29,6 +31,7 @@ export class UpdateTopicDTO {
     if (data.template_id !== undefined) this.template_id = data.template_id;
     if (data.skills !== undefined) this.skills = Array.isArray(data.skills) ? data.skills : [];
     if (data.status !== undefined) this.status = data.status;
+    if (data.language !== undefined) this.language = data.language;
   }
 
   normalizeCourseId(courseId) {
@@ -51,6 +54,7 @@ export class TopicResponseDTO {
     this.template_id = topic.template_id;
     this.skills = topic.skills;
     this.status = topic.status;
+    this.language = topic.language;
     this.format_flags = {
       has_text: topic.has_text,
       has_code: topic.has_code,

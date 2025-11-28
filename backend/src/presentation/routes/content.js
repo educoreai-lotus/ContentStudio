@@ -54,6 +54,8 @@ let contentController;
     aiGenerationService,
     contentHistoryService,
     promptTemplateService,
+    topicRepository,
+    courseRepository,
   });
 })();
 

@@ -25,6 +25,12 @@ export class PostgreSQLTopicRepository extends ITopicRepository {
       RETURNING *
     `;
 
+    // Language is required for standalone topics (course_id is null)
+    // For topics in a course, language comes from the course
+    const language = topic.course_id === null 
+      ? (topic.language || 'en') // Standalone topic - use provided language or default to 'en'
+      : (topic.language || null); // Topic in course - language comes from course, but can be overridden
+
     const values = [
       topic.topic_name,
       topic.trainer_id,
@@ -32,7 +38,7 @@ export class PostgreSQLTopicRepository extends ITopicRepository {
       topic.course_id || null,
       topic.template_id || null,
       topic.skills || [],
-      topic.language || 'en',
+      language,
       topic.status || 'active', // Changed from 'draft' - ENUM doesn't support draft
     ];
 

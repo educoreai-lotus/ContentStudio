@@ -17,6 +17,7 @@ export const TopicForm = () => {
     course_id: null,
     template_id: null,
     skills: [],
+    language: 'en', // Default to English, but user must select
   });
   const [courses, setCourses] = useState([]);
   const [suggestedSkills, setSuggestedSkills] = useState([]);
@@ -53,6 +54,7 @@ export const TopicForm = () => {
         course_id: topic.course_id,
         template_id: topic.template_id || null,
         skills: topic.skills || [],
+        language: topic.language || 'en',
       });
     } catch (err) {
       setErrors({ submit: err.error?.message || 'Failed to load topic' });
@@ -133,6 +135,15 @@ export const TopicForm = () => {
 
     if (formData.topic_name && formData.topic_name.length > 255) {
       newErrors.topic_name = 'Topic name must not exceed 255 characters';
+    }
+
+    // Validate language - required for standalone topics
+    if (!formData.course_id && !formData.language) {
+      newErrors.language = 'Language is required for stand-alone lessons';
+    }
+
+    if (formData.language && formData.language.length > 10) {
+      newErrors.language = 'Language code must not exceed 10 characters';
     }
 
     setErrors(newErrors);
@@ -334,6 +345,72 @@ export const TopicForm = () => {
                 Select a course or leave as stand-alone lesson
               </p>
             </div>
+
+            {/* Language selection - required for standalone topics */}
+            {!formData.course_id && (
+              <div className="mb-6">
+                <label
+                  className={`block text-sm font-medium mb-2 ${
+                    theme === 'day-mode' ? 'text-gray-700' : 'text-gray-300'
+                  }`}
+                  style={{
+                    background:
+                      theme === 'day-mode'
+                        ? undefined
+                        : 'var(--gradient-primary)',
+                    WebkitBackgroundClip:
+                      theme === 'day-mode' ? undefined : 'text',
+                    WebkitTextFillColor:
+                      theme === 'day-mode' ? undefined : 'transparent',
+                    backgroundClip: theme === 'day-mode' ? undefined : 'text',
+                  }}
+                >
+                  Language * <span className="text-xs opacity-70">(Required for stand-alone lessons)</span>
+                </label>
+                <select
+                  name="language"
+                  value={formData.language || 'en'}
+                  onChange={handleChange}
+                  required={!formData.course_id}
+                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors ${
+                    errors.language
+                      ? 'border-red-600'
+                      : theme === 'day-mode'
+                      ? 'border-gray-300'
+                      : 'border-gray-600'
+                  } ${
+                    theme === 'day-mode'
+                      ? 'border-gray-300 bg-white text-gray-900'
+                      : 'border-gray-600 bg-gray-700 text-white'
+                  }`}
+                >
+                  <option value="en">English</option>
+                  <option value="he">Hebrew (עברית)</option>
+                  <option value="ar">Arabic (العربية)</option>
+                  <option value="es">Spanish (Español)</option>
+                  <option value="fr">French (Français)</option>
+                  <option value="de">German (Deutsch)</option>
+                  <option value="it">Italian (Italiano)</option>
+                  <option value="ja">Japanese (日本語)</option>
+                  <option value="zh">Chinese (中文)</option>
+                  <option value="ko">Korean (한국어)</option>
+                  <option value="pt">Portuguese (Português)</option>
+                  <option value="fa">Persian/Farsi (فارسی)</option>
+                  <option value="ur">Urdu (اردو)</option>
+                  <option value="ru">Russian (Русский)</option>
+                </select>
+                {errors.language && (
+                  <p className="mt-1 text-sm text-red-600">{errors.language}</p>
+                )}
+                <p
+                  className={`mt-1 text-xs ${
+                    theme === 'day-mode' ? 'text-gray-500' : 'text-gray-400'
+                  }`}
+                >
+                  Select the language for this stand-alone lesson
+                </p>
+              </div>
+            )}
 
             <div className="mb-6">
               <label

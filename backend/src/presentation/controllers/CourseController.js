@@ -11,7 +11,7 @@ export class CourseController {
     this.createCourseUseCase = new CreateCourseUseCase(courseRepository);
     this.getCoursesUseCase = new GetCoursesUseCase(courseRepository);
     this.getCourseUseCase = new GetCourseUseCase(courseRepository);
-    this.updateCourseUseCase = new UpdateCourseUseCase(courseRepository);
+    this.updateCourseUseCase = new UpdateCourseUseCase(courseRepository, topicRepository, contentRepository);
     this.deleteCourseUseCase = new DeleteCourseUseCase(courseRepository);
     this.publishCourseUseCase = new PublishCourseUseCase({
       courseRepository,
@@ -104,6 +104,17 @@ export class CourseController {
       const responseDTO = new CourseResponseDTO(course);
       res.status(200).json(responseDTO);
     } catch (error) {
+      // Handle language update blocked error
+      if (error.code === 'LANGUAGE_UPDATE_BLOCKED') {
+        return res.status(400).json({
+          error: {
+            code: 'LANGUAGE_UPDATE_BLOCKED',
+            message: error.message,
+            details: error.details,
+            timestamp: new Date().toISOString(),
+          },
+        });
+      }
       next(error);
     }
   }
