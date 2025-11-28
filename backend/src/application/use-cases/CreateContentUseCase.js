@@ -248,6 +248,30 @@ export class CreateContentUseCase {
           const contentAfterQualityCheck = await this.contentRepository.findById(updatedContent.content_id);
           if (contentAfterQualityCheck) {
             updatedContent = contentAfterQualityCheck;
+            // CRITICAL: Verify quality check status is approved before proceeding
+            // If status is 'rejected' or 'pending', we must rollback the content and throw error
+            if (contentAfterQualityCheck.quality_check_status !== 'approved') {
+              console.error('[CreateContentUseCase] ❌ Quality check status is not approved:', contentAfterQualityCheck.quality_check_status);
+              // Rollback content to original state if quality check status is not approved
+              try {
+                await this.contentRepository.update(existingContent.content_id, {
+                  content_data: originalContentData,
+                  quality_check_status: originalQualityCheckStatus,
+                  quality_check_data: originalQualityCheckData,
+                  generation_method_id: originalGenerationMethod,
+                });
+                console.log('[CreateContentUseCase] ✅ Content rolled back to original state - quality check status not approved');
+              } catch (rollbackError) {
+                console.error('[CreateContentUseCase] ❌ Failed to rollback content after quality check failure:', rollbackError.message);
+                // Continue to throw the original error even if rollback fails
+              }
+              // Get error message from quality_check_data if available
+              const qualityData = contentAfterQualityCheck.quality_check_data || {};
+              const errorMessage = qualityData.error_message || 
+                                   qualityData.feedback_summary || 
+                                   `Content failed quality check. Status: ${contentAfterQualityCheck.quality_check_status}`;
+              throw new Error(errorMessage);
+            }
           }
         } catch (error) {
           pushStatus(statusMessages, `Quality check failed: ${error.message}`);
@@ -348,7 +372,8 @@ export class CreateContentUseCase {
         const contentAfterQualityCheck = await this.contentRepository.findById(createdContent.content_id);
         if (contentAfterQualityCheck) {
           createdContent = contentAfterQualityCheck;
-          // Verify quality check status is approved before proceeding
+          // CRITICAL: Verify quality check status is approved before proceeding
+          // If status is 'rejected' or 'pending', we must delete the content and throw error
           if (contentAfterQualityCheck.quality_check_status !== 'approved') {
             console.error('[CreateContentUseCase] ❌ Quality check status is not approved:', contentAfterQualityCheck.quality_check_status);
             // Delete content if quality check status is not approved
@@ -356,11 +381,25 @@ export class CreateContentUseCase {
               try {
                 await this.contentRepository.delete(contentIdToDeleteOnFailure, true);
                 console.log('[CreateContentUseCase] ✅ Content deleted from DB - quality check status not approved');
+                contentIdToDeleteOnFailure = null; // Mark as deleted
               } catch (deleteError) {
                 console.error('[CreateContentUseCase] ❌ Failed to delete content:', deleteError.message);
+                // Try one more time with force
+                try {
+                  await this.contentRepository.delete(contentIdToDeleteOnFailure, true);
+                  console.log('[CreateContentUseCase] ✅ Content deleted on retry');
+                  contentIdToDeleteOnFailure = null;
+                } catch (retryError) {
+                  console.error('[CreateContentUseCase] ❌ CRITICAL: Content deletion failed even on retry:', retryError.message);
+                }
               }
             }
-            throw new Error(`Content failed quality check. Status: ${contentAfterQualityCheck.quality_check_status}`);
+            // Get error message from quality_check_data if available
+            const qualityData = contentAfterQualityCheck.quality_check_data || {};
+            const errorMessage = qualityData.error_message || 
+                                 qualityData.feedback_summary || 
+                                 `Content failed quality check. Status: ${contentAfterQualityCheck.quality_check_status}`;
+            throw new Error(errorMessage);
           }
         }
         // Clear the rollback flag since quality check passed
