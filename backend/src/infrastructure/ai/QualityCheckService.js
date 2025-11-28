@@ -25,6 +25,156 @@ export class QualityCheckService extends IQualityCheckService {
     this.courseRepository = courseRepository;
   }
 
+  /**
+   * Validate content quality BEFORE saving to DB
+   * This performs the quality check without saving content to DB first
+   * @param {Object} content - Content object to validate (not yet saved to DB)
+   * @param {number} topicId - Topic ID for context
+   * @param {Array} statusMessages - Optional status messages array
+   * @returns {Promise<Object>} Quality check results if validation passes
+   * @throws {Error} If quality check fails
+   */
+  async validateContentQualityBeforeSave(content, topicId, statusMessages = null) {
+    console.log('[QualityCheckService] 🔍 Validating content quality BEFORE saving to DB:', {
+      topic_id: topicId,
+      content_type_id: content.content_type_id,
+    });
+    
+    if (!this.openaiClient) {
+      console.error('[QualityCheckService] ❌ OpenAI client not configured');
+      throw new Error('OpenAI client not configured');
+    }
+
+    console.log('[QualityCheckService] ✅ OpenAI client is configured, proceeding with quality check');
+    
+    if (statusMessages) {
+      pushStatus(statusMessages, 'Examining content originality...');
+    }
+
+    try {
+      const contentText = this.extractTextFromContent(content);
+      if (!contentText || contentText.trim().length === 0) {
+        console.error('[QualityCheckService] ❌ Content text is empty or not found', {
+          topicId,
+          contentTypeId: content.content_type_id,
+          contentDataKeys: content.content_data ? Object.keys(content.content_data) : [],
+        });
+        throw new Error('Content text not found or empty');
+      }
+      
+      console.log('[QualityCheckService] ✅ Extracted content text for quality check', {
+        topicId,
+        contentTypeId: content.content_type_id,
+        textLength: contentText.length,
+        textPreview: contentText.substring(0, 100),
+      });
+
+      // Get topic and course information for evaluation
+      const topic = await this.topicRepository?.findById(topicId);
+      if (!topic) {
+        throw new Error('Topic not found');
+      }
+
+      let courseName = null;
+      if (topic.course_id && this.courseRepository) {
+        const course = await this.courseRepository.findById(topic.course_id);
+        courseName = course?.course_name || null;
+      }
+
+      // Extract skills from topic
+      const skills = Array.isArray(topic.skills) ? topic.skills : (topic.skills ? [topic.skills] : []);
+
+      // Perform OpenAI evaluation with new format
+      const evaluationResult = await this.evaluateContentWithOpenAI({
+        courseName: courseName || 'General Course',
+        topicName: topic.topic_name || 'Untitled Topic',
+        skills: skills,
+        contentText: contentText,
+        statusMessages: statusMessages,
+      });
+
+      // Validate scores - reject if relevance/difficulty/consistency < 60, originality < 75
+      // CRITICAL: Check relevance first - this is the most important check
+      // IMPORTANT: Originality threshold is 75 (not 60) to catch content that resembles official documentation
+      const relevanceScore = evaluationResult.relevance_score || evaluationResult.relevance || 100;
+      if (relevanceScore < 60) {
+        const errorMsg = `Content failed quality check: Content is not relevant to the lesson topic (Relevance: ${relevanceScore}/100). ${evaluationResult.feedback_summary || 'The content does not match the lesson topic. Please ensure your content is directly related to the topic.'}`;
+        if (statusMessages) {
+          pushStatus(statusMessages, `Quality check failed: ${errorMsg}`);
+        }
+        throw new Error(errorMsg);
+      }
+
+      if (statusMessages) {
+        pushStatus(statusMessages, 'Checking difficulty alignment...');
+      }
+
+      // Reject content if originality score is below 75 (stricter threshold to catch content that resembles official documentation)
+      if (evaluationResult.originality_score < 75) {
+        const errorMsg = `Content failed quality check: Content appears to be copied or plagiarized (Originality: ${evaluationResult.originality_score}/100). ${evaluationResult.feedback_summary || 'Please rewrite the content in your own words. Copying from official sources or other materials is not allowed. Content that closely resembles official documentation will be rejected.'}`;
+        if (statusMessages) {
+          pushStatus(statusMessages, `Quality check failed: ${errorMsg}`);
+        }
+        throw new Error(errorMsg);
+      }
+
+      if (evaluationResult.difficulty_alignment_score < 60) {
+        const errorMsg = `Content failed quality check: Difficulty level mismatch (${evaluationResult.difficulty_alignment_score}/100). ${evaluationResult.feedback_summary || 'Please adjust the difficulty level to match the target skills.'}`;
+        if (statusMessages) {
+          pushStatus(statusMessages, `Quality check failed: ${errorMsg}`);
+        }
+        throw new Error(errorMsg);
+      }
+
+      if (statusMessages) {
+        pushStatus(statusMessages, 'Checking structure and consistency...');
+      }
+
+      if (evaluationResult.consistency_score < 60) {
+        const errorMsg = `Content failed quality check: Low consistency score (${evaluationResult.consistency_score}/100). ${evaluationResult.feedback_summary || 'Please improve the structure and coherence of your content.'}`;
+        if (statusMessages) {
+          pushStatus(statusMessages, `Quality check failed: ${errorMsg}`);
+        }
+        throw new Error(errorMsg);
+      }
+
+      // Calculate overall score (average of all four scores, with relevance weighted more)
+      const overallScore = Math.round(
+        (relevanceScore * 0.4 + // Relevance is most important (40% weight)
+          evaluationResult.originality_score * 0.2 +
+          evaluationResult.difficulty_alignment_score * 0.2 +
+          evaluationResult.consistency_score * 0.2)
+      );
+
+      // Return quality check results (will be saved after content is saved to DB)
+      const results = {
+        relevance_score: relevanceScore,
+        originality_score: evaluationResult.originality_score,
+        difficulty_alignment_score: evaluationResult.difficulty_alignment_score,
+        consistency_score: evaluationResult.consistency_score,
+        overall_score: overallScore,
+        feedback_summary: evaluationResult.feedback_summary,
+      };
+
+      console.log('[QualityCheckService] ✅ Quality check validation passed:', {
+        topicId,
+        relevance_score: relevanceScore,
+        originality_score: evaluationResult.originality_score,
+        difficulty_alignment_score: evaluationResult.difficulty_alignment_score,
+        consistency_score: evaluationResult.consistency_score,
+        overallScore,
+      });
+
+      return results;
+    } catch (error) {
+      if (statusMessages) {
+        pushStatus(statusMessages, `Quality check failed: ${error.message}`);
+      }
+      console.error('[QualityCheckService] ❌ Quality check validation failed:', error.message);
+      throw error;
+    }
+  }
+
   async triggerQualityCheck(contentId, checkType = 'full', statusMessages = null) {
     console.log(`[QualityCheckService] 🔍 Triggering quality check for content: ${contentId}, type: ${checkType}`);
     

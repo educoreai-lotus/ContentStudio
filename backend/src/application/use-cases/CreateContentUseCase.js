@@ -347,119 +347,73 @@ export class CreateContentUseCase {
       return updatedContent;
     }
 
-    // Save content to repository WITHOUT audio first
-    // NOTE: Content is saved before quality check because triggerQualityCheck needs content_id
-    // If quality check fails, we will delete the content from DB
-    let createdContent = await this.contentRepository.create(content);
-    let contentIdToDeleteOnFailure = createdContent.content_id; // Store ID for potential rollback
+    // CRITICAL: For manual content, we MUST run quality check BEFORE saving to DB
+    // If quality check fails, we should NOT save the content at all
+    let qualityCheckResults = null;
 
-    // Trigger quality check BEFORE audio generation for manual content
-    console.log('[CreateContentUseCase] Checking if quality check should run (new content):', {
-      needsQualityCheck,
-      createdContentNeedsQualityCheck: createdContent.needsQualityCheck(),
-      createdContentGenerationMethod: createdContent.generation_method_id,
-      createdContentId: createdContent.content_id,
-    });
-    
-    if (needsQualityCheck && createdContent.needsQualityCheck()) {
-      console.log('[CreateContentUseCase] ✅ Triggering quality check BEFORE audio generation for manual content:', createdContent.content_id);
+    // Validate content quality BEFORE saving to DB for manual content
+    if (needsQualityCheck) {
+      console.log('[CreateContentUseCase] ✅ Validating content quality BEFORE saving to DB');
       pushStatus(statusMessages, 'Starting quality check...');
       try {
-        await this.qualityCheckService.triggerQualityCheck(createdContent.content_id, 'full', statusMessages);
+        // Validate content quality before saving - this will throw error if check fails
+        qualityCheckResults = await this.qualityCheckService.validateContentQualityBeforeSave(
+          content,
+          content.topic_id,
+          statusMessages
+        );
         pushStatus(statusMessages, 'Quality check completed successfully.');
-        console.log('[CreateContentUseCase] ✅ Quality check passed, proceeding with audio generation');
-        // Reload content to get updated quality check status and results
-        const contentAfterQualityCheck = await this.contentRepository.findById(createdContent.content_id);
-        if (contentAfterQualityCheck) {
-          createdContent = contentAfterQualityCheck;
-          // CRITICAL: Verify quality check status is approved before proceeding
-          // If status is 'rejected' or 'pending', we must delete the content and throw error
-          if (contentAfterQualityCheck.quality_check_status !== 'approved') {
-            console.error('[CreateContentUseCase] ❌ Quality check status is not approved:', contentAfterQualityCheck.quality_check_status);
-            // Delete content if quality check status is not approved
-            if (contentIdToDeleteOnFailure) {
-              try {
-                await this.contentRepository.delete(contentIdToDeleteOnFailure, true);
-                console.log('[CreateContentUseCase] ✅ Content deleted from DB - quality check status not approved');
-                contentIdToDeleteOnFailure = null; // Mark as deleted
-              } catch (deleteError) {
-                console.error('[CreateContentUseCase] ❌ Failed to delete content:', deleteError.message);
-                // Try one more time with force
-                try {
-                  await this.contentRepository.delete(contentIdToDeleteOnFailure, true);
-                  console.log('[CreateContentUseCase] ✅ Content deleted on retry');
-                  contentIdToDeleteOnFailure = null;
-                } catch (retryError) {
-                  console.error('[CreateContentUseCase] ❌ CRITICAL: Content deletion failed even on retry:', retryError.message);
-                }
-              }
-            }
-            // Get error message from quality_check_data if available
-            const qualityData = contentAfterQualityCheck.quality_check_data || {};
-            const errorMessage = qualityData.error_message || 
-                                 qualityData.feedback_summary || 
-                                 `Content failed quality check. Status: ${contentAfterQualityCheck.quality_check_status}`;
-            throw new Error(errorMessage);
-          }
-        }
-        // Clear the rollback flag since quality check passed
-        contentIdToDeleteOnFailure = null;
+        console.log('[CreateContentUseCase] ✅ Quality check passed, proceeding with DB save');
       } catch (error) {
         pushStatus(statusMessages, `Quality check failed: ${error.message}`);
-        console.error('[CreateContentUseCase] ❌ Quality check failed, deleting content from DB:', error.message);
-        
-        // CRITICAL: Delete content from DB if quality check failed
-        // MUST succeed - if deletion fails, we cannot proceed
-        if (contentIdToDeleteOnFailure) {
-          try {
-            await this.contentRepository.delete(contentIdToDeleteOnFailure, true);
-            console.log('[CreateContentUseCase] ✅ Content deleted from DB after quality check failure');
-            contentIdToDeleteOnFailure = null; // Mark as deleted
-          } catch (deleteError) {
-            console.error('[CreateContentUseCase] ❌ CRITICAL: Failed to delete content after quality check failure:', deleteError.message);
-            // Try one more time with force
-            try {
-              await this.contentRepository.delete(contentIdToDeleteOnFailure, true);
-              console.log('[CreateContentUseCase] ✅ Content deleted on retry');
-              contentIdToDeleteOnFailure = null;
-            } catch (retryError) {
-              console.error('[CreateContentUseCase] ❌ CRITICAL: Content deletion failed even on retry:', retryError.message);
-              // Still throw the original error - content should not be saved if quality check fails
-            }
-          }
-        }
-        
-        // Re-throw if quality check fails (content should be rejected, no audio generation)
+        console.error('[CreateContentUseCase] ❌ Quality check failed - content will NOT be saved:', error.message);
+        // Re-throw if quality check fails (content should NOT be saved to DB)
         throw error;
       }
-    } else {
-      console.log('[CreateContentUseCase] ⚠️ Quality check NOT triggered (new content):', {
-        reason: !needsQualityCheck ? 'needsQualityCheck is false' : 'createdContent.needsQualityCheck() returned false',
-        isManualContent,
-        needsQualityCheck,
-        createdContentNeedsQualityCheck: createdContent.needsQualityCheck(),
-        hasQualityCheckService: !!this.qualityCheckService,
-        generation_method_id: content.generation_method_id,
-      });
     }
 
-    // CRITICAL: Verify content still exists and quality check passed before generating audio
-    // If content was deleted due to failed quality check, we should not proceed
-    if (contentIdToDeleteOnFailure) {
-      console.error('[CreateContentUseCase] ❌ Content was marked for deletion, cannot proceed with audio generation');
-      throw new Error('Content failed quality check and was deleted. Cannot generate audio.');
-    }
-
-    // Verify content exists and quality check status is approved (if quality check was required)
-    if (needsQualityCheck) {
-      const currentContent = await this.contentRepository.findById(createdContent.content_id);
-      if (!currentContent) {
-        console.error('[CreateContentUseCase] ❌ Content not found after quality check - may have been deleted');
-        throw new Error('Content not found after quality check');
-      }
-      if (currentContent.quality_check_status !== 'approved') {
-        console.error('[CreateContentUseCase] ❌ Quality check status is not approved:', currentContent.quality_check_status);
-        throw new Error(`Content quality check failed. Status: ${currentContent.quality_check_status}`);
+    // Save content to DB ONLY if quality check passed (or if not required)
+    let createdContent = await this.contentRepository.create(content);
+    
+    // If quality check was performed and passed, create quality check record and update content
+    if (needsQualityCheck && qualityCheckResults) {
+      try {
+        // Create quality check record
+        const { QualityCheck } = await import('../../../domain/entities/QualityCheck.js');
+        const qualityCheck = new QualityCheck({
+          content_id: createdContent.content_id,
+          check_type: 'full',
+          status: 'completed',
+        });
+        qualityCheck.markCompleted(qualityCheckResults, qualityCheckResults.overall_score);
+        
+        const savedCheck = await this.qualityCheckService.qualityCheckRepository.create(qualityCheck);
+        
+        // Update content with quality check results
+        createdContent = await this.contentRepository.update(createdContent.content_id, {
+          quality_check_status: 'approved',
+          quality_check_data: {
+            quality_check_id: savedCheck.quality_check_id,
+            ...qualityCheckResults,
+          },
+        });
+        
+        console.log('[CreateContentUseCase] ✅ Quality check record created and content updated:', {
+          content_id: createdContent.content_id,
+          quality_check_id: savedCheck.quality_check_id,
+          quality_check_status: 'approved',
+        });
+      } catch (error) {
+        console.error('[CreateContentUseCase] ❌ Failed to create quality check record:', error.message);
+        // CRITICAL: If quality check record creation failed, delete the content
+        // We cannot have content saved without proper quality check record
+        try {
+          await this.contentRepository.delete(createdContent.content_id, true);
+          console.log('[CreateContentUseCase] ✅ Content deleted - quality check record creation failed');
+        } catch (deleteError) {
+          console.error('[CreateContentUseCase] ❌ CRITICAL: Failed to delete content after quality check record creation failure:', deleteError.message);
+        }
+        throw new Error(`Failed to create quality check record: ${error.message}. Content was not saved.`);
       }
     }
 
@@ -471,6 +425,12 @@ export class CreateContentUseCase {
     });
     
     if (shouldGenerate) {
+      // CRITICAL: Double-check quality check status before generating audio
+      if (needsQualityCheck && createdContent.quality_check_status !== 'approved') {
+        console.error('[CreateContentUseCase] ❌ Quality check status is not approved - aborting audio generation:', createdContent.quality_check_status);
+        throw new Error(`Content failed quality check. Status: ${createdContent.quality_check_status}. Cannot generate audio.`);
+      }
+      
       pushStatus(statusMessages, 'Generating audio...');
       try {
         await this.attachGeneratedAudio(enrichedContentData);

@@ -191,12 +191,22 @@ export class ContentController {
       
       // Handle quality check failures
       // If quality check failed, content should have been deleted, but if it wasn't, return error
-      if (error.message && error.message.includes('Quality check failed') || error.message && error.message.includes('quality check')) {
+      if (error.message && (
+        error.message.includes('Quality check failed') || 
+        error.message.includes('quality check') ||
+        error.message.includes('Content failed quality check') ||
+        error.message.includes('originality') ||
+        error.message.includes('relevance') ||
+        error.message.includes('Content is not relevant') ||
+        error.message.includes('appears to be copied') ||
+        error.message.includes('plagiarized')
+      )) {
         return res.status(400).json({
           success: false,
           error: {
             code: 'QUALITY_CHECK_FAILED',
             message: error.message,
+            reason: 'Content did not pass quality check. Content was not saved.',
             timestamp: new Date().toISOString(),
           },
         });
