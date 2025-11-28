@@ -142,11 +142,20 @@ export class ContentController {
             consistency: qualityData.consistency_score || 'N/A',
             overall: qualityData.overall_score || qualityData.score || 'N/A',
           };
-          message = `Content saved and quality check completed successfully! Scores: Relevance ${scores.relevance}/100, Originality ${scores.originality}/100, Difficulty Alignment ${scores.difficultyAlignment}/100, Consistency ${scores.consistency}/100, Overall ${scores.overall}/100`;
+          
+          // Build detailed message with scores and feedback
+          let detailedMessage = `Content saved and quality check completed successfully!\n\nQuality Scores:\n- Relevance: ${scores.relevance}/100\n- Originality: ${scores.originality}/100\n- Difficulty Alignment: ${scores.difficultyAlignment}/100\n- Consistency: ${scores.consistency}/100\n- Overall: ${scores.overall}/100`;
+          
+          if (qualityData.feedback_summary) {
+            detailedMessage += `\n\nAI Feedback:\n${qualityData.feedback_summary}`;
+          }
+          
+          message = detailedMessage;
           qualityCheckInfo = {
             status: content.quality_check_status,
             scores: scores,
             feedback: qualityData.feedback_summary || null,
+            feedback_summary: qualityData.feedback_summary || null,
           };
         } else if (content.quality_check_status === 'pending') {
           message = 'Content saved. Quality check is in progress...';
@@ -156,10 +165,36 @@ export class ContentController {
           };
         } else if (content.quality_check_status === 'rejected') {
           const qualityData = content.quality_check_data || {};
-          message = `Content saved but quality check failed: ${qualityData.feedback_summary || 'Content did not meet quality standards'}`;
+          const errorMessage = qualityData.error_message || qualityData.feedback_summary || 'Content did not meet quality standards';
+          
+          // Build detailed error message with feedback
+          let detailedMessage = `Content creation failed.\n\nReason:\n${errorMessage}`;
+          
+          if (qualityData.relevance_score !== undefined) {
+            detailedMessage += `\n\nQuality Scores:\n- Relevance: ${qualityData.relevance_score}/100`;
+          }
+          if (qualityData.originality_score !== undefined) {
+            detailedMessage += `\n- Originality: ${qualityData.originality_score}/100`;
+          }
+          if (qualityData.difficulty_alignment_score !== undefined) {
+            detailedMessage += `\n- Difficulty Alignment: ${qualityData.difficulty_alignment_score}/100`;
+          }
+          if (qualityData.consistency_score !== undefined) {
+            detailedMessage += `\n- Consistency: ${qualityData.consistency_score}/100`;
+          }
+          
+          message = detailedMessage;
           qualityCheckInfo = {
             status: content.quality_check_status,
-            feedback: qualityData.feedback_summary || null,
+            feedback: qualityData.feedback_summary || qualityData.error_message || null,
+            feedback_summary: qualityData.feedback_summary || qualityData.error_message || null,
+            error_message: qualityData.error_message || null,
+            scores: {
+              relevance: qualityData.relevance_score,
+              originality: qualityData.originality_score,
+              difficultyAlignment: qualityData.difficulty_alignment_score,
+              consistency: qualityData.consistency_score,
+            },
           };
         } else {
           message = 'Content saved and quality check completed';
@@ -199,14 +234,38 @@ export class ContentController {
         error.message.includes('relevance') ||
         error.message.includes('Content is not relevant') ||
         error.message.includes('appears to be copied') ||
-        error.message.includes('plagiarized')
+        error.message.includes('plagiarized') ||
+        error.message.includes('Difficulty level mismatch') ||
+        error.message.includes('Low consistency score')
       )) {
+        // Extract feedback from error message if available
+        const errorMessage = error.message;
+        const feedbackMatch = errorMessage.match(/AI Feedback:\s*(.+)/s) || 
+                             errorMessage.match(/feedback_summary[:\s]+(.+)/i) ||
+                             errorMessage.match(/(.+?)(?:\.\s*Quality Scores|$)/s);
+        
+        const feedback = feedbackMatch ? feedbackMatch[1].trim() : null;
+        
+        // Extract scores from error message if available
+        const relevanceMatch = errorMessage.match(/Relevance[:\s]+(\d+)/i);
+        const originalityMatch = errorMessage.match(/Originality[:\s]+(\d+)/i);
+        const difficultyMatch = errorMessage.match(/Difficulty Alignment[:\s]+(\d+)/i);
+        const consistencyMatch = errorMessage.match(/Consistency[:\s]+(\d+)/i);
+        
         return res.status(400).json({
           success: false,
           error: {
             code: 'QUALITY_CHECK_FAILED',
-            message: error.message,
+            message: errorMessage,
             reason: 'Content did not pass quality check. Content was not saved.',
+            feedback: feedback || errorMessage,
+            feedback_summary: feedback || errorMessage,
+            scores: {
+              relevance: relevanceMatch ? parseInt(relevanceMatch[1]) : undefined,
+              originality: originalityMatch ? parseInt(originalityMatch[1]) : undefined,
+              difficultyAlignment: difficultyMatch ? parseInt(difficultyMatch[1]) : undefined,
+              consistency: consistencyMatch ? parseInt(consistencyMatch[1]) : undefined,
+            },
             timestamp: new Date().toISOString(),
           },
         });

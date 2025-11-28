@@ -379,7 +379,7 @@ export class CreateContentUseCase {
     if (needsQualityCheck && qualityCheckResults) {
       try {
         // Create quality check record
-        const { QualityCheck } = await import('../../../domain/entities/QualityCheck.js');
+        const { QualityCheck } = await import('../../domain/entities/QualityCheck.js');
         const qualityCheck = new QualityCheck({
           content_id: createdContent.content_id,
           check_type: 'full',
