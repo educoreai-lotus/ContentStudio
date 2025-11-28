@@ -96,30 +96,64 @@ export class QualityCheckService extends IQualityCheckService {
       // Validate scores - reject if relevance/difficulty/consistency < 60, originality < 75
       // CRITICAL: Check relevance first - this is the most important check
       // IMPORTANT: Originality threshold is 75 (not 60) to catch content that resembles official documentation
-      const relevanceScore = evaluationResult.relevance_score || evaluationResult.relevance || 100;
-      if (relevanceScore < 60) {
-        const errorMsg = `Content failed quality check: Content is not relevant to the lesson topic (Relevance: ${relevanceScore}/100). ${evaluationResult.feedback_summary || 'The content does not match the lesson topic. Please ensure your content is directly related to the topic.'}`;
+      // CRITICAL: Use nullish coalescing (??) instead of || to handle 0 values correctly
+      // 0 is a valid score and should not be treated as falsy
+      // CRITICAL: If relevance_score is undefined, we cannot proceed - must reject
+      const relevanceScore = evaluationResult.relevance_score ?? evaluationResult.relevance;
+      
+      console.log('[QualityCheckService] 🔍 Relevance score validation (validateContentQualityBeforeSave):', {
+        evaluationResult_relevance_score: evaluationResult.relevance_score,
+        evaluationResult_relevance: evaluationResult.relevance,
+        relevanceScore,
+        type: typeof relevanceScore,
+        isUndefined: relevanceScore === undefined,
+        isNull: relevanceScore === null,
+        isLessThan60: typeof relevanceScore === 'number' ? relevanceScore < 60 : 'N/A',
+        willReject: relevanceScore === undefined || relevanceScore === null || (typeof relevanceScore === 'number' && relevanceScore < 60),
+      });
+      
+      // CRITICAL: Check if relevance_score is missing, null, or less than 60
+      if (relevanceScore === undefined || relevanceScore === null || (typeof relevanceScore === 'number' && relevanceScore < 60)) {
+        const actualScore = relevanceScore ?? 0;
+        const errorMsg = `Content failed quality check: Content is not relevant to the lesson topic (Relevance: ${actualScore}/100). ${evaluationResult.feedback_summary || 'The content does not match the lesson topic. Please ensure your content is directly related to the topic.'}`;
+        console.error('[QualityCheckService] ❌ REJECTING CONTENT - Relevance check failed (validateContentQualityBeforeSave):', {
+          actualScore,
+          relevanceScore,
+          errorMsg,
+        });
         if (statusMessages) {
           pushStatus(statusMessages, `Quality check failed: ${errorMsg}`);
         }
         throw new Error(errorMsg);
       }
+      
+      console.log('[QualityCheckService] ✅ Relevance check passed (validateContentQualityBeforeSave):', { relevanceScore });
 
       if (statusMessages) {
         pushStatus(statusMessages, 'Checking difficulty alignment...');
       }
 
       // Reject content if originality score is below 75 (stricter threshold to catch content that resembles official documentation)
-      if (evaluationResult.originality_score < 75) {
-        const errorMsg = `Content failed quality check: Content appears to be copied or plagiarized (Originality: ${evaluationResult.originality_score}/100). ${evaluationResult.feedback_summary || 'Please rewrite the content in your own words. Copying from official sources or other materials is not allowed. Content that closely resembles official documentation will be rejected.'}`;
+      // CRITICAL: Use nullish coalescing to handle 0 values correctly
+      // CRITICAL: If originality_score is undefined, we cannot proceed - must reject
+      const originalityScore = evaluationResult.originality_score;
+      if (originalityScore === undefined || originalityScore === null || (typeof originalityScore === 'number' && originalityScore < 75)) {
+        const actualScore = originalityScore ?? 0;
+        const errorMsg = `Content failed quality check: Content appears to be copied or plagiarized (Originality: ${actualScore}/100). ${evaluationResult.feedback_summary || 'Please rewrite the content in your own words. Copying from official sources or other materials is not allowed. Content that closely resembles official documentation will be rejected.'}`;
+        console.error('[QualityCheckService] ❌ REJECTING CONTENT - Originality check failed:', { actualScore, originalityScore });
         if (statusMessages) {
           pushStatus(statusMessages, `Quality check failed: ${errorMsg}`);
         }
         throw new Error(errorMsg);
       }
 
-      if (evaluationResult.difficulty_alignment_score < 60) {
-        const errorMsg = `Content failed quality check: Difficulty level mismatch (${evaluationResult.difficulty_alignment_score}/100). ${evaluationResult.feedback_summary || 'Please adjust the difficulty level to match the target skills.'}`;
+      // CRITICAL: Use nullish coalescing to handle 0 values correctly
+      // CRITICAL: If difficulty_alignment_score is undefined, we cannot proceed - must reject
+      const difficultyScore = evaluationResult.difficulty_alignment_score;
+      if (difficultyScore === undefined || difficultyScore === null || (typeof difficultyScore === 'number' && difficultyScore < 60)) {
+        const actualScore = difficultyScore ?? 0;
+        const errorMsg = `Content failed quality check: Difficulty level mismatch (${actualScore}/100). ${evaluationResult.feedback_summary || 'Please adjust the difficulty level to match the target skills.'}`;
+        console.error('[QualityCheckService] ❌ REJECTING CONTENT - Difficulty check failed:', { actualScore, difficultyScore });
         if (statusMessages) {
           pushStatus(statusMessages, `Quality check failed: ${errorMsg}`);
         }
@@ -130,8 +164,13 @@ export class QualityCheckService extends IQualityCheckService {
         pushStatus(statusMessages, 'Checking structure and consistency...');
       }
 
-      if (evaluationResult.consistency_score < 60) {
-        const errorMsg = `Content failed quality check: Low consistency score (${evaluationResult.consistency_score}/100). ${evaluationResult.feedback_summary || 'Please improve the structure and coherence of your content.'}`;
+      // CRITICAL: Use nullish coalescing to handle 0 values correctly
+      // CRITICAL: If consistency_score is undefined, we cannot proceed - must reject
+      const consistencyScore = evaluationResult.consistency_score;
+      if (consistencyScore === undefined || consistencyScore === null || (typeof consistencyScore === 'number' && consistencyScore < 60)) {
+        const actualScore = consistencyScore ?? 0;
+        const errorMsg = `Content failed quality check: Low consistency score (${actualScore}/100). ${evaluationResult.feedback_summary || 'Please improve the structure and coherence of your content.'}`;
+        console.error('[QualityCheckService] ❌ REJECTING CONTENT - Consistency check failed:', { actualScore, consistencyScore });
         if (statusMessages) {
           pushStatus(statusMessages, `Quality check failed: ${errorMsg}`);
         }
@@ -141,17 +180,17 @@ export class QualityCheckService extends IQualityCheckService {
       // Calculate overall score (average of all four scores, with relevance weighted more)
       const overallScore = Math.round(
         (relevanceScore * 0.4 + // Relevance is most important (40% weight)
-          evaluationResult.originality_score * 0.2 +
-          evaluationResult.difficulty_alignment_score * 0.2 +
-          evaluationResult.consistency_score * 0.2)
+          originalityScore * 0.2 +
+          difficultyScore * 0.2 +
+          consistencyScore * 0.2)
       );
 
       // Return quality check results (will be saved after content is saved to DB)
       const results = {
         relevance_score: relevanceScore,
-        originality_score: evaluationResult.originality_score,
-        difficulty_alignment_score: evaluationResult.difficulty_alignment_score,
-        consistency_score: evaluationResult.consistency_score,
+        originality_score: originalityScore,
+        difficulty_alignment_score: difficultyScore,
+        consistency_score: consistencyScore,
         overall_score: overallScore,
         feedback_summary: evaluationResult.feedback_summary,
       };
@@ -159,9 +198,9 @@ export class QualityCheckService extends IQualityCheckService {
       console.log('[QualityCheckService] ✅ Quality check validation passed:', {
         topicId,
         relevance_score: relevanceScore,
-        originality_score: evaluationResult.originality_score,
-        difficulty_alignment_score: evaluationResult.difficulty_alignment_score,
-        consistency_score: evaluationResult.consistency_score,
+        originality_score: originalityScore,
+        difficulty_alignment_score: difficultyScore,
+        consistency_score: consistencyScore,
         overallScore,
       });
 
@@ -251,9 +290,15 @@ export class QualityCheckService extends IQualityCheckService {
       // Validate scores - reject if relevance/difficulty/consistency < 60, originality < 75
       // CRITICAL: Check relevance first - this is the most important check
       // IMPORTANT: Originality threshold is 75 (not 60) to catch content that resembles official documentation
-      const relevanceScore = evaluationResult.relevance_score || evaluationResult.relevance || 100; // Default to 100 if not provided (backward compatibility)
-      if (relevanceScore < 60) {
-        const errorMsg = `Content failed quality check: Content is not relevant to the lesson topic (Relevance: ${relevanceScore}/100). ${evaluationResult.feedback_summary || 'The content does not match the lesson topic. Please ensure your content is directly related to the topic.'}`;
+      // CRITICAL: Use nullish coalescing (??) instead of || to handle 0 values correctly
+      // 0 is a valid score and should not be treated as falsy
+      // CRITICAL: If relevance_score is undefined, we cannot proceed - must reject
+      const relevanceScore = evaluationResult.relevance_score ?? evaluationResult.relevance;
+      
+      // CRITICAL: Check if relevance_score is missing, null, or less than 60
+      if (relevanceScore === undefined || relevanceScore === null || relevanceScore < 60) {
+        const actualScore = relevanceScore ?? 0;
+        const errorMsg = `Content failed quality check: Content is not relevant to the lesson topic (Relevance: ${actualScore}/100). ${evaluationResult.feedback_summary || 'The content does not match the lesson topic. Please ensure your content is directly related to the topic.'}`;
         if (statusMessages) {
           pushStatus(statusMessages, `Quality check failed: ${errorMsg}`);
         }
@@ -265,16 +310,24 @@ export class QualityCheckService extends IQualityCheckService {
       }
 
       // Reject content if originality score is below 75 (stricter threshold to catch content that resembles official documentation)
-      if (evaluationResult.originality_score < 75) {
-        const errorMsg = `Content failed quality check: Content appears to be copied or plagiarized (Originality: ${evaluationResult.originality_score}/100). ${evaluationResult.feedback_summary || 'Please rewrite the content in your own words. Copying from official sources or other materials is not allowed. Content that closely resembles official documentation will be rejected.'}`;
+      // CRITICAL: Use nullish coalescing to handle 0 values correctly
+      // CRITICAL: If originality_score is undefined, we cannot proceed - must reject
+      const originalityScore = evaluationResult.originality_score;
+      if (originalityScore === undefined || originalityScore === null || originalityScore < 75) {
+        const actualScore = originalityScore ?? 0;
+        const errorMsg = `Content failed quality check: Content appears to be copied or plagiarized (Originality: ${actualScore}/100). ${evaluationResult.feedback_summary || 'Please rewrite the content in your own words. Copying from official sources or other materials is not allowed. Content that closely resembles official documentation will be rejected.'}`;
         if (statusMessages) {
           pushStatus(statusMessages, `Quality check failed: ${errorMsg}`);
         }
         throw new Error(errorMsg);
       }
 
-      if (evaluationResult.difficulty_alignment_score < 60) {
-        const errorMsg = `Content failed quality check: Difficulty level mismatch (${evaluationResult.difficulty_alignment_score}/100). ${evaluationResult.feedback_summary || 'Please adjust the difficulty level to match the target skills.'}`;
+      // CRITICAL: Use nullish coalescing to handle 0 values correctly
+      // CRITICAL: If difficulty_alignment_score is undefined, we cannot proceed - must reject
+      const difficultyScore = evaluationResult.difficulty_alignment_score;
+      if (difficultyScore === undefined || difficultyScore === null || difficultyScore < 60) {
+        const actualScore = difficultyScore ?? 0;
+        const errorMsg = `Content failed quality check: Difficulty level mismatch (${actualScore}/100). ${evaluationResult.feedback_summary || 'Please adjust the difficulty level to match the target skills.'}`;
         if (statusMessages) {
           pushStatus(statusMessages, `Quality check failed: ${errorMsg}`);
         }
@@ -285,8 +338,12 @@ export class QualityCheckService extends IQualityCheckService {
         pushStatus(statusMessages, 'Checking structure and consistency...');
       }
 
-      if (evaluationResult.consistency_score < 60) {
-        const errorMsg = `Content failed quality check: Low consistency score (${evaluationResult.consistency_score}/100). ${evaluationResult.feedback_summary || 'Please improve the structure and coherence of your content.'}`;
+      // CRITICAL: Use nullish coalescing to handle 0 values correctly
+      // CRITICAL: If consistency_score is undefined, we cannot proceed - must reject
+      const consistencyScore = evaluationResult.consistency_score;
+      if (consistencyScore === undefined || consistencyScore === null || consistencyScore < 60) {
+        const actualScore = consistencyScore ?? 0;
+        const errorMsg = `Content failed quality check: Low consistency score (${actualScore}/100). ${evaluationResult.feedback_summary || 'Please improve the structure and coherence of your content.'}`;
         if (statusMessages) {
           pushStatus(statusMessages, `Quality check failed: ${errorMsg}`);
         }
@@ -294,20 +351,21 @@ export class QualityCheckService extends IQualityCheckService {
       }
 
       // Store results in the format expected by QualityCheck entity
+      // Use the validated scores (already checked above)
       const results = {
         relevance_score: relevanceScore,
-        originality_score: evaluationResult.originality_score,
-        difficulty_alignment_score: evaluationResult.difficulty_alignment_score,
-        consistency_score: evaluationResult.consistency_score,
+        originality_score: originalityScore,
+        difficulty_alignment_score: difficultyScore,
+        consistency_score: consistencyScore,
         feedback_summary: evaluationResult.feedback_summary,
       };
 
       // Calculate overall score (average of all four scores, with relevance weighted more)
       const overallScore = Math.round(
         (relevanceScore * 0.4 + // Relevance is most important (40% weight)
-          evaluationResult.originality_score * 0.2 +
-          evaluationResult.difficulty_alignment_score * 0.2 +
-          evaluationResult.consistency_score * 0.2)
+          originalityScore * 0.2 +
+          difficultyScore * 0.2 +
+          consistencyScore * 0.2)
       );
 
       // Update quality check
@@ -326,9 +384,9 @@ export class QualityCheckService extends IQualityCheckService {
         quality_check_data: {
           quality_check_id: savedCheck.quality_check_id,
           relevance_score: relevanceScore,
-          originality_score: evaluationResult.originality_score,
-          difficulty_alignment_score: evaluationResult.difficulty_alignment_score,
-          consistency_score: evaluationResult.consistency_score,
+          originality_score: originalityScore,
+          difficulty_alignment_score: difficultyScore,
+          consistency_score: consistencyScore,
           overall_score: overallScore,
           feedback_summary: evaluationResult.feedback_summary,
         },
@@ -337,9 +395,9 @@ export class QualityCheckService extends IQualityCheckService {
       console.log('[QualityCheckService] Quality check completed and content status updated:', {
         contentId,
         relevance_score: relevanceScore,
-        originality_score: evaluationResult.originality_score,
-        difficulty_alignment_score: evaluationResult.difficulty_alignment_score,
-        consistency_score: evaluationResult.consistency_score,
+        originality_score: originalityScore,
+        difficulty_alignment_score: difficultyScore,
+        consistency_score: consistencyScore,
         overallScore,
         quality_check_status: 'approved',
       });
@@ -492,19 +550,21 @@ Rules:
       const result = JSON.parse(jsonMatch[0]);
 
       console.log('✅ [QualityCheckService] Parsed evaluation result:', {
-        relevance_score: result.relevance_score || result.relevance,
+        relevance_score: result.relevance_score ?? result.relevance,
         originality_score: result.originality_score,
         difficulty_alignment_score: result.difficulty_alignment_score,
         consistency_score: result.consistency_score,
         hasFeedback: !!result.feedback_summary,
       });
 
+      // CRITICAL: Use nullish coalescing (??) instead of || to handle 0 values correctly
+      // 0 is a valid score and should not be treated as falsy
       const evaluationResult = {
-        relevance_score: Math.max(0, Math.min(100, result.relevance_score || result.relevance || 100)),
-        originality_score: Math.max(0, Math.min(100, result.originality_score || 75)),
-        difficulty_alignment_score: Math.max(0, Math.min(100, result.difficulty_alignment_score || 75)),
-        consistency_score: Math.max(0, Math.min(100, result.consistency_score || 75)),
-        feedback_summary: result.feedback_summary || 'Evaluation completed.',
+        relevance_score: result.relevance_score ?? result.relevance ?? undefined, // Don't default to 100 - let validation handle it
+        originality_score: result.originality_score ?? undefined, // Don't default - let validation handle it
+        difficulty_alignment_score: result.difficulty_alignment_score ?? undefined, // Don't default - let validation handle it
+        consistency_score: result.consistency_score ?? undefined, // Don't default - let validation handle it
+        feedback_summary: result.feedback_summary ?? 'Evaluation completed.',
       };
 
       console.log('✅ [QualityCheckService] Final evaluation result:', evaluationResult);
