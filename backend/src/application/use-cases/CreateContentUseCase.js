@@ -175,12 +175,14 @@ export class CreateContentUseCase {
                 throw error;
               }
               
-              // Language matches - proceed
-              console.log('[CreateContentUseCase] ✅ Language validation passed - proceeding with DB save and quality check:', {
-                expected_language: expectedLanguage,
-                detected_language: detectedLanguage,
-                content_type_id: content.content_type_id,
-              });
+              // Language matches or was skipped - proceed
+              if (detectedLanguage !== null) {
+                console.log('[CreateContentUseCase] ✅ Language validation passed - proceeding with DB save and quality check:', {
+                  expected_language: expectedLanguage,
+                  detected_language: detectedLanguage,
+                  content_type_id: content.content_type_id,
+                });
+              }
             }
           }
         }
