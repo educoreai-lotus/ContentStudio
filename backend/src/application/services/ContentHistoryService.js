@@ -169,17 +169,41 @@ export class ContentHistoryService {
       historyEntry.content_type_id
     );
     
+    let restoredContent;
+    
     if (!content) {
-      throw new Error('Content not found for history entry');
+      // Content doesn't exist - create new content from history
+      console.log('[ContentHistoryService] Content not found, creating new content from history:', {
+        topic_id: historyEntry.topic_id,
+        content_type_id: historyEntry.content_type_id,
+        history_id: historyId,
+      });
+      
+      // Create new content from history entry
+      const newContent = {
+        topic_id: historyEntry.topic_id,
+        content_type_id: historyEntry.content_type_id,
+        generation_method_id: historyEntry.generation_method_id,
+        content_data: historyEntry.content_data,
+      };
+      
+      restoredContent = await this.contentRepository.create(newContent);
+    } else {
+      // Content exists - save current version to history, then restore
+      console.log('[ContentHistoryService] Content found, saving current version to history before restoring:', {
+        content_id: content.content_id,
+        topic_id: historyEntry.topic_id,
+        content_type_id: historyEntry.content_type_id,
+      });
+      
+      // Save current content to history before restoring
+      await this.saveVersion(content, { force: true });
+
+      // Restore the historical version to active content
+      restoredContent = await this.contentRepository.update(content.content_id, {
+        content_data: historyEntry.content_data,
+      });
     }
-
-    // Save current content to history before restoring
-    await this.saveVersion(content, { force: true });
-
-    // Restore the historical version to active content
-    const updatedContent = await this.contentRepository.update(content.content_id, {
-      content_data: historyEntry.content_data,
-    });
 
     // Soft delete the restored history entry (it's now the active version)
     try {
@@ -188,7 +212,7 @@ export class ContentHistoryService {
       console.warn('[ContentHistoryService] Failed to archive restored history entry:', error.message);
     }
 
-    return ContentDTO.toContentResponse(updatedContent);
+    return ContentDTO.toContentResponse(restoredContent);
   }
 
   async deleteVersion(historyId) {
