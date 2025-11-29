@@ -92,36 +92,50 @@ export function analyzeLanguageWithTechnicalTerms(text) {
   const filteredText = filterTechnicalTerms(text);
   const hasTechnicalTerms = filteredText.length < text.length * 0.8; // If more than 20% was filtered
   
-  // Count characters by script
+  // Count characters by script (check both original and filtered text)
   const hebrewChars = (text.match(/[\u0590-\u05FF]/g) || []).length;
   const arabicChars = (text.match(/[\u0600-\u06FF]/g) || []).length;
-  const totalChars = text.replace(/\s/g, '').length;
+  const persianChars = (text.match(/[\u06A0-\u06FF]/g) || []).length;
   
-  // Calculate percentages
+  // Count non-whitespace, non-punctuation characters for better accuracy
+  const allChars = text.replace(/[\s\W]/g, '');
+  const totalChars = allChars.length;
+  
+  // Calculate percentages based on actual characters
   const hebrewPercent = totalChars > 0 ? hebrewChars / totalChars : 0;
   const arabicPercent = totalChars > 0 ? arabicChars / totalChars : 0;
+  const persianPercent = totalChars > 0 ? persianChars / totalChars : 0;
   
-  // Determine dominant language
-  if (hebrewPercent > 0.1) { // More than 10% Hebrew characters
+  // Lower threshold for detection - if we see ANY significant amount of non-Latin characters, prioritize them
+  // This is important because technical terms can dominate the character count
+  if (hebrewChars > 5 || hebrewPercent > 0.05) { // At least 5 Hebrew characters or 5% of text
     return {
       dominantLanguage: 'he',
-      confidence: hebrewPercent,
+      confidence: Math.max(hebrewPercent, 0.5), // Minimum 50% confidence if we detected Hebrew
       hasTechnicalTerms,
     };
   }
   
-  if (arabicPercent > 0.1) { // More than 10% Arabic characters
+  if (arabicChars > 5 || arabicPercent > 0.05) { // At least 5 Arabic characters or 5% of text
     return {
       dominantLanguage: 'ar',
-      confidence: arabicPercent,
+      confidence: Math.max(arabicPercent, 0.5), // Minimum 50% confidence if we detected Arabic
       hasTechnicalTerms,
     };
   }
   
-  // Default to English
+  if (persianChars > 5 || persianPercent > 0.05) { // At least 5 Persian characters or 5% of text
+    return {
+      dominantLanguage: 'fa',
+      confidence: Math.max(persianPercent, 0.5),
+      hasTechnicalTerms,
+    };
+  }
+  
+  // Default to English only if no non-Latin characters detected
   return {
     dominantLanguage: 'en',
-    confidence: 1 - Math.max(hebrewPercent, arabicPercent),
+    confidence: 1 - Math.max(hebrewPercent, arabicPercent, persianPercent),
     hasTechnicalTerms,
   };
 }
