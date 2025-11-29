@@ -826,9 +826,10 @@ export class CreateContentUseCase {
       // Analyze text with technical terms consideration
       const analysis = analyzeLanguageWithTechnicalTerms(text);
       
-      // If we have high confidence in a non-English language, use it
-      if (analysis.confidence > 0.3 && analysis.dominantLanguage !== 'en') {
-        console.log('[CreateContentUseCase] Language detected via technical terms analysis:', {
+      // Prioritize non-English languages even with low confidence
+      // This is important because technical terms can make English seem dominant
+      if (analysis.dominantLanguage !== 'en') {
+        console.log('[CreateContentUseCase] Language detected via technical terms analysis (prioritizing non-English):', {
           language: analysis.dominantLanguage,
           confidence: analysis.confidence,
           hasTechnicalTerms: analysis.hasTechnicalTerms,
