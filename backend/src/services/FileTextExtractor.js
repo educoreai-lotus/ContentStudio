@@ -6,8 +6,8 @@ import { exec } from "child_process";
 import axios from "axios";
 // Use dynamic import for pdf-parse to avoid test file loading issue
 // import pdf from "pdf-parse";
-// Use dynamic import for pptx-parser to avoid window is not defined error in Node.js
-// import PptxParser from "pptx-parser";
+// Use dynamic import for pptx2json (Node.js compatible, no window dependency)
+// import pptx2json from "pptx2json";
 import mammoth from "mammoth";
 import { logger } from "../infrastructure/logging/Logger.js";
 
@@ -195,10 +195,9 @@ export class FileTextExtractor {
    */
   static async _extractPPTX(localPath) {
     try {
-      // Dynamic import to avoid window is not defined error in Node.js
-      const PptxParser = (await import("pptx-parser")).default;
-      const buffer = readFileSync(localPath);
-      const pptx = await PptxParser.parse(buffer);
+      // Use pptx2json - Node.js compatible library (no window dependency)
+      const pptx2json = (await import("pptx2json")).default;
+      const pptxData = await pptx2json(localPath);
 
       const texts = [];
 
