@@ -660,8 +660,8 @@ Rules:
               extension: ext.substring(ext.lastIndexOf('.')),
             });
             
-            // Download and extract text from file (pass content_data for fallback URLs)
-            const fileText = await FileTextExtractor.extractTextFromUrl(fileUrl, content.content_data);
+            // Download and extract text from file (pass content_data and openaiClient for Vision fallback)
+            const fileText = await FileTextExtractor.extractTextFromUrl(fileUrl, content.content_data, this.openaiClient);
             
             if (fileText && fileText.trim().length >= 10) {
               console.log('[QualityCheckService] ✅ Successfully extracted text from presentation file:', {

@@ -905,8 +905,9 @@ export class CreateContentUseCase {
               extension: ext.substring(ext.lastIndexOf('.')),
             });
             
-            // Download and extract text from file (pass content_data for fallback URLs)
-            const fileText = await FileTextExtractor.extractTextFromUrl(fileUrl, content.content_data);
+            // Download and extract text from file (pass content_data and openaiClient for Vision fallback)
+            const openaiClient = this.qualityCheckService?.openaiClient || null;
+            const fileText = await FileTextExtractor.extractTextFromUrl(fileUrl, content.content_data, openaiClient);
             
             if (fileText && fileText.trim().length >= 10) {
               console.log('[CreateContentUseCase] ✅ Successfully extracted text from presentation file:', {

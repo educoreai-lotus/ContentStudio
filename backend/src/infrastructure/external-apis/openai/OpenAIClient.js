@@ -84,5 +84,40 @@ export class OpenAIClient {
       throw new Error(`Failed to transcribe audio: ${error.message}`);
     }
   }
+
+  /**
+   * Extract text from image using OpenAI Vision API (OCR)
+   * @param {string} imageBase64 - Base64 encoded image
+   * @returns {Promise<string>} Extracted text from image
+   */
+  async extractTextFromImage(imageBase64) {
+    try {
+      const response = await this.client.chat.completions.create({
+        model: 'gpt-4o', // GPT-4o supports vision
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: 'Extract all text from this slide image. Return only the text content, no explanations or formatting.',
+              },
+              {
+                type: 'image_url',
+                image_url: {
+                  url: `data:image/png;base64,${imageBase64}`,
+                },
+              },
+            ],
+          },
+        ],
+        max_tokens: 2000,
+      });
+
+      return response.choices?.[0]?.message?.content || '';
+    } catch (error) {
+      throw new Error(`Failed to extract text from image: ${error.message}`);
+    }
+  }
 }
 

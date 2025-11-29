@@ -68,7 +68,7 @@ export class FileTextExtractor {
       }
 
       if (normalizedExt === ".pptx") {
-        return await this._extractPPTX(localPath);
+        return await this._extractPPTX(localPath, options);
       }
 
       if (normalizedExt === ".ppt") {
@@ -100,9 +100,10 @@ export class FileTextExtractor {
    * Download file from URL and extract text
    * @param {string} fileUrl - URL to download file from
    * @param {Object} contentData - Optional content_data object to search for fallback URLs (pdfUrl, pptxUrl)
+   * @param {Object} openaiClient - Optional OpenAI client for Vision fallback
    * @returns {Promise<string|null>} Extracted text or null if extraction failed
    */
-  static async extractTextFromUrl(fileUrl, contentData = null) {
+  static async extractTextFromUrl(fileUrl, contentData = null, openaiClient = null) {
     if (!fileUrl) {
       return null;
     }
@@ -130,7 +131,7 @@ export class FileTextExtractor {
       const buffer = Buffer.from(response.data);
       writeFileSync(tempPath, buffer);
 
-      // Prepare fallback options for PPT files
+      // Prepare fallback options
       const options = {};
       if (ext.endsWith('.ppt') && contentData) {
         // Search for fallback URLs in content_data
@@ -143,6 +144,11 @@ export class FileTextExtractor {
             hasPptxUrl: !!options.pptxUrl,
           });
         }
+      }
+      
+      // Add OpenAI client for Vision fallback (for PPTX)
+      if (ext.endsWith('.pptx') && openaiClient) {
+        options.openaiClient = openaiClient;
       }
 
       // Extract text
@@ -192,70 +198,97 @@ export class FileTextExtractor {
   /**
    * Extract text from PPTX file
    * @private
+   * @param {string} localPath - Path to PPTX file
+   * @param {Object} options - Options including openaiClient for Vision fallback
+   * @returns {Promise<string|null>} Extracted text or null
    */
-  static async _extractPPTX(localPath) {
+  static async _extractPPTX(localPath, options = {}) {
     try {
-      // Use pptx2json - Node.js compatible library (no window dependency)
-      const pptx2json = (await import("pptx2json")).default;
-      const pptxData = await pptx2json(localPath);
+      // Try PptxExtractorPro first (reads all PPTX layers: slide.text, shape.text, paragraph.runs, txBody, spTree)
+      const { PptxExtractorPro } = await import("./PptxExtractorPro.js");
+      const extractedText = await PptxExtractorPro.extractText(localPath);
+      
+      if (extractedText && extractedText.trim().length >= 10) {
+        logger.info('[FileTextExtractor] PPTX text extracted successfully (PptxExtractorPro):', {
+          textLength: extractedText.length,
+          preview: extractedText.substring(0, 100),
+        });
+        return extractedText;
+      }
 
-      const texts = [];
+      // If extraction failed or returned too little text, try Vision fallback
+      if (options.openaiClient) {
+        logger.warn('[FileTextExtractor] PPTX extraction returned insufficient text, trying Vision fallback');
+        return await this._extractPPTXWithVision(localPath, options.openaiClient);
+      }
 
-      // Check if slides exist
-      if (!pptx.slides || !Array.isArray(pptx.slides)) {
-        logger.warn('[FileTextExtractor] PPTX has no slides array, trying alternative extraction methods');
-        // Fallback: try to extract from raw data if available
-        if (pptx.rawData) {
-          const rawText = JSON.stringify(pptx.rawData);
-          if (rawText && rawText.length > 50) {
-            logger.info('[FileTextExtractor] PPTX extracted from rawData fallback');
-            return rawText;
-          }
+      logger.warn('[FileTextExtractor] PPTX extraction failed and no Vision fallback available');
+      return null;
+    } catch (error) {
+      logger.error('[FileTextExtractor] PPTX extraction failed:', error.message);
+      
+      // Try Vision fallback on error if available
+      if (options.openaiClient) {
+        logger.info('[FileTextExtractor] Attempting Vision fallback after extraction error');
+        try {
+          return await this._extractPPTXWithVision(localPath, options.openaiClient);
+        } catch (visionError) {
+          logger.error('[FileTextExtractor] Vision fallback also failed:', visionError.message);
         }
+      }
+      
+      throw error;
+    }
+  }
+
+  /**
+   * Extract text from PPTX using OpenAI Vision API (OCR fallback)
+   * Converts each slide to image and sends to Vision API
+   * @private
+   */
+  static async _extractPPTXWithVision(localPath, openaiClient) {
+    try {
+      logger.info('[FileTextExtractor] Starting Vision-based PPTX extraction');
+      
+      // Convert PPTX slides to images
+      const { convertPPTXToImages } = await import("./PptxToImageConverter.js");
+      const slideImages = await convertPPTXToImages(localPath);
+      
+      if (!slideImages || slideImages.length === 0) {
+        logger.warn('[FileTextExtractor] Failed to convert PPTX slides to images');
         return null;
       }
 
-      // Extract text from slides
-      for (const slide of pptx.slides) {
-        // Check if slide has texts array
-        if (slide.texts && Array.isArray(slide.texts)) {
-          for (const t of slide.texts) {
-            if (t && t.text) {
-              texts.push(t.text);
-            }
-          }
-        } else {
-          // Fallback: try to extract from slide object directly
-          logger.warn('[FileTextExtractor] Slide has no texts array, trying alternative extraction', {
-            slideNumber: slide.number || 'unknown',
-            slideKeys: Object.keys(slide || {}),
-          });
+      const allTexts = [];
+
+      // Send each slide image to OpenAI Vision API
+      for (let i = 0; i < slideImages.length; i++) {
+        try {
+          const imageBase64 = slideImages[i];
+          const visionText = await openaiClient.extractTextFromImage(imageBase64);
           
-          // Try common alternative properties
-          if (slide.content) {
-            texts.push(slide.content);
-          } else if (slide.text) {
-            texts.push(slide.text);
-          } else if (slide.body) {
-            texts.push(slide.body);
-          } else if (slide.title) {
-            texts.push(slide.title);
+          if (visionText && visionText.trim().length > 0) {
+            allTexts.push(`Slide ${i + 1}: ${visionText}`);
           }
+        } catch (slideError) {
+          logger.warn('[FileTextExtractor] Failed to extract text from slide image:', {
+            slide: i + 1,
+            error: slideError.message,
+          });
         }
       }
 
-      const full = texts.join("\n").trim();
+      const fullText = allTexts.join("\n\n").trim();
       
-      logger.info('[FileTextExtractor] PPTX text extracted:', {
-        slideCount: pptx.slides?.length || 0,
-        slidesWithTexts: pptx.slides.filter(s => s.texts && Array.isArray(s.texts)).length,
-        textLength: full.length,
-        preview: full.substring(0, 100),
+      logger.info('[FileTextExtractor] Vision-based extraction completed:', {
+        slideCount: slideImages.length,
+        textLength: fullText.length,
+        preview: fullText.substring(0, 100),
       });
-      
-      return full.length > 0 ? full : null;
+
+      return fullText.length > 0 ? fullText : null;
     } catch (error) {
-      logger.error('[FileTextExtractor] PPTX extraction failed:', error.message);
+      logger.error('[FileTextExtractor] Vision-based extraction failed:', error.message);
       throw error;
     }
   }
