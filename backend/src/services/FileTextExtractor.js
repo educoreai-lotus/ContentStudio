@@ -22,9 +22,14 @@ export class FileTextExtractor {
    * Extract text from a file (local path or buffer)
    * @param {string|Buffer} filePathOrBuffer - Local file path or file buffer
    * @param {string} fileExtension - File extension (e.g., '.pdf', '.pptx', '.ppt')
+   * @param {Object} options - Optional options including fallback URLs for PPT files (pdfUrl, pptxUrl) and openaiClient for Vision fallback
    * @returns {Promise<string|null>} Extracted text or null if extraction failed
    */
-  static async extractTextFromFile(filePathOrBuffer, fileExtension = null) {
+  static async extractTextFromFile(filePathOrBuffer, fileExtension = null, options = {}) {
+    // Ensure options is always an object
+    if (!options || typeof options !== 'object') {
+      options = {};
+    }
     let ext = fileExtension;
     let localPath = null;
     let isBuffer = false;
