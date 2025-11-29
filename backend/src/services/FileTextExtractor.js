@@ -184,61 +184,91 @@ export class FileTextExtractor {
    * @returns {Promise<string|null>} Extracted text or null
    */
   static async _extractPDF(localPath, options = {}) {
+    // Try to load pdf-parse with error handling for test file issue
+    let pdf;
+    let pdfModuleLoaded = false;
+    
     try {
-      // Dynamic import to avoid test file loading issue in pdf-parse
-      let pdf;
-      try {
-        const pdfModule = await import("pdf-parse");
-        pdf = pdfModule.default || pdfModule;
-      } catch (importError) {
-        // If import fails, check if it's the test file error
-        if (importError.message && importError.message.includes('test/data')) {
-          logger.warn('[FileTextExtractor] PDF-parse test file error detected during import, will try Vision fallback');
-          // Return null to trigger Vision fallback if available
-          if (options.openaiClient) {
-            return await this._extractPDFWithVision(localPath, options.openaiClient);
-          }
-          throw new Error('PDF parser failed to load due to test file issue. Vision fallback not available.');
+      // Try dynamic import
+      const pdfModule = await import("pdf-parse");
+      pdf = pdfModule.default || pdfModule;
+      pdfModuleLoaded = true;
+      logger.info('[FileTextExtractor] Successfully loaded pdf-parse module');
+    } catch (importError) {
+      // If import fails due to test file error, try CommonJS require as fallback
+      if (importError.message && importError.message.includes('test/data')) {
+        logger.warn('[FileTextExtractor] PDF-parse test file error detected during import, trying CommonJS require fallback');
+        try {
+          const { createRequire } = await import('module');
+          const require = createRequire(import.meta.url);
+          pdf = require('pdf-parse');
+          pdfModuleLoaded = true;
+          logger.info('[FileTextExtractor] Successfully loaded pdf-parse via require fallback');
+        } catch (requireError) {
+          logger.warn('[FileTextExtractor] Both import and require failed for pdf-parse:', requireError.message);
+          // Continue to try Vision fallback below
         }
-        throw importError;
+      } else {
+        // For other import errors, log and continue to Vision fallback
+        logger.warn('[FileTextExtractor] Failed to import pdf-parse:', importError.message);
       }
+    }
 
-      const dataBuffer = readFileSync(localPath);
-      
-      // Call pdf with buffer
-      const result = await pdf(dataBuffer);
-      const text = result.text?.trim() || "";
-      
-      logger.info('[FileTextExtractor] PDF text extracted:', {
-        textLength: text.length,
-        preview: text.substring(0, 100),
-      });
-      
-      // If extracted text is too short, try Vision fallback
-      if (text.length < 10 && options.openaiClient) {
-        logger.warn('[FileTextExtractor] PDF extraction returned very little text, trying Vision fallback');
-        return await this._extractPDFWithVision(localPath, options.openaiClient);
-      }
-      
-      return text.length > 0 ? text : null;
-    } catch (error) {
-      // Check if error is about test file - if so, try Vision fallback
-      if (error.message && error.message.includes('test/data')) {
-        logger.warn('[FileTextExtractor] PDF-parse test file error detected, trying Vision fallback');
+    // If pdf-parse is loaded, try to use it
+    if (pdfModuleLoaded && pdf) {
+      try {
+        const dataBuffer = readFileSync(localPath);
+        
+        // Call pdf with buffer
+        const result = await pdf(dataBuffer);
+        const text = result.text?.trim() || "";
+        
+        logger.info('[FileTextExtractor] PDF text extracted using pdf-parse:', {
+          textLength: text.length,
+          preview: text.substring(0, 100),
+        });
+        
+        // If extracted text is too short, try Vision fallback
+        if (text.length < 10 && options.openaiClient) {
+          logger.warn('[FileTextExtractor] PDF extraction returned very little text, trying Vision fallback');
+          try {
+            return await this._extractPDFWithVision(localPath, options.openaiClient);
+          } catch (visionError) {
+            logger.warn('[FileTextExtractor] Vision fallback failed, returning extracted text:', visionError.message);
+            // Return what we have even if it's short
+            return text.length > 0 ? text : null;
+          }
+        }
+        
+        return text.length > 0 ? text : null;
+      } catch (parseError) {
+        // If pdf-parse fails to parse the file, try Vision fallback
+        logger.warn('[FileTextExtractor] pdf-parse failed to extract text, trying Vision fallback:', parseError.message);
         if (options.openaiClient) {
           try {
             return await this._extractPDFWithVision(localPath, options.openaiClient);
           } catch (visionError) {
             logger.error('[FileTextExtractor] Vision fallback also failed:', visionError.message);
+            throw new Error(`PDF extraction failed: ${parseError.message}. Vision fallback also failed: ${visionError.message}`);
           }
         }
-        // If no Vision fallback, throw the original error
-        throw new Error(`PDF extraction failed: ${error.message}. Vision fallback not available.`);
+        throw parseError;
       }
-      
-      logger.error('[FileTextExtractor] PDF extraction failed:', error.message);
-      throw error;
     }
+    
+    // If pdf-parse is not available, try Vision fallback
+    if (options.openaiClient) {
+      logger.warn('[FileTextExtractor] pdf-parse not available, trying Vision fallback');
+      try {
+        return await this._extractPDFWithVision(localPath, options.openaiClient);
+      } catch (visionError) {
+        logger.error('[FileTextExtractor] Vision fallback failed:', visionError.message);
+        throw new Error(`PDF extraction failed: pdf-parse not available and Vision fallback failed: ${visionError.message}`);
+      }
+    }
+    
+    // No extraction method available
+    throw new Error('PDF extraction failed: pdf-parse not available and Vision fallback not configured');
   }
 
   /**
@@ -257,8 +287,8 @@ export class FileTextExtractor {
       const pageImages = await convertPDFToImages(localPath);
       
       if (!pageImages || pageImages.length === 0) {
-        logger.warn('[FileTextExtractor] Failed to convert PDF pages to images');
-        return null;
+        logger.warn('[FileTextExtractor] Failed to convert PDF pages to images - poppler-utils not installed');
+        throw new Error('Vision fallback requires poppler-utils to be installed. Please install it: sudo apt-get install poppler-utils (Linux) or brew install poppler (Mac)');
       }
 
       const allTexts = [];
@@ -502,4 +532,5 @@ export class FileTextExtractor {
     return cleanPath.substring(lastDot);
   }
 }
+
 
