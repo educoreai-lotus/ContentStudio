@@ -870,7 +870,14 @@ export class CreateContentUseCase {
       
       const prompt = `Detect the language of the following text and return only the ISO 639-1 language code (e.g., 'en', 'he', 'ar', 'es', 'fr').
 
-IMPORTANT: This text is from a programming/development educational context. It may contain technical English terms (like "docker", "if else", "API") but the MAIN language of the content should be detected based on the dominant language of the explanatory text, not the technical terms.
+CRITICAL INSTRUCTIONS:
+1. This text is from a programming/development educational context
+2. The text may contain technical English terms (programming keywords, technologies, tools)
+3. IGNORE all technical English terms when detecting the language
+4. Focus ONLY on the dominant language of the explanatory/educational text
+5. Common technical English terms to IGNORE include: docker, kubernetes, react, vue, angular, node, express, API, REST, GraphQL, JSON, HTML, CSS, JavaScript, TypeScript, Python, Java, if, else, for, while, function, class, const, let, var, return, import, export, async, await, promise, callback, try, catch, SQL, NoSQL, MongoDB, PostgreSQL, MySQL, Redis, Git, GitHub, npm, yarn, server, client, database, backend, frontend, DevOps, HTTP, HTTPS, OAuth, JWT, algorithm, array, object, string, number, boolean, UI, UX, DOM, AJAX, CORS, CRUD, MVC, ORM, and similar programming/technical terms
+6. If the explanatory text is primarily in Hebrew, Arabic, or another language, return that language code even if there are many English technical terms
+7. Only return 'en' if the EXPLANATORY text itself is primarily in English
 
 Text:
 ${textForDetection.substring(0, 500)}
@@ -879,7 +886,7 @@ Return only the 2-letter language code, nothing else.`;
 
       // Use openaiClient directly (not through AIGenerationService.generateText which requires language config)
       const response = await this.aiGenerationService.openaiClient.generateText(prompt, {
-        systemPrompt: 'You are a language detection expert for educational programming content. Ignore technical English terms and focus on the dominant language of the explanatory text. Return only the ISO 639-1 language code.',
+        systemPrompt: 'You are a language detection expert for educational programming content. Your task is to identify the PRIMARY language of the explanatory/educational text, completely ignoring any technical English programming terms (keywords, technologies, tools, frameworks). Focus on the language used for explanations, instructions, and educational content, not on technical terminology. Return only the ISO 639-1 language code (2 letters).',
         temperature: 0.1,
         max_tokens: 10,
       });
