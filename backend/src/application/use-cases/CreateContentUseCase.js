@@ -816,7 +816,24 @@ export class CreateContentUseCase {
       return 'en';
     }
 
-    // Import technical terms filter (dynamic import to avoid circular dependencies)
+    // STEP 1: Ratio-based detection (most accurate for presentations and technical content)
+    // This detects language based on character percentage, which works even with many English technical terms
+    try {
+      const { detectLanguageByRatio } = await import('../utils/LanguageRatioDetector.js');
+      const ratioLang = detectLanguageByRatio(text);
+      if (ratioLang) {
+        console.log('[CreateContentUseCase] Language detected via ratio-based detection:', {
+          language: ratioLang,
+          textLength: text.length,
+          textPreview: text.substring(0, 100),
+        });
+        return ratioLang;
+      }
+    } catch (error) {
+      console.warn('[CreateContentUseCase] Failed to load LanguageRatioDetector, continuing with other methods:', error.message);
+    }
+
+    // STEP 2: Import technical terms filter (dynamic import to avoid circular dependencies)
     let filterTechnicalTerms, analyzeLanguageWithTechnicalTerms, filteredText, hasTechnicalTerms;
     try {
       const technicalTermsModule = await import('../utils/TechnicalTermsFilter.js');
