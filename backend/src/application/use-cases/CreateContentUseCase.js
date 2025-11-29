@@ -133,11 +133,22 @@ export class CreateContentUseCase {
               // Skip language validation for code without explanation
             } else if (contentText && contentText.trim().length > 0) {
               // Detect language of content
-              // detectContentLanguage always returns a language code (never null, defaults to 'en')
+              // detectContentLanguage may return null if text is too short (placeholder text)
               const detectedLanguage = await this.detectContentLanguage(contentText);
               
+              // Skip validation if text is too short (placeholder like "Manual Entry")
+              if (detectedLanguage === null) {
+                console.log('[CreateContentUseCase] Language detection skipped - text too short (likely placeholder):', {
+                  textLength: contentText.trim().length,
+                  textPreview: contentText.substring(0, 50),
+                  topic_id: topic.topic_id,
+                });
+                // Skip language validation for placeholder texts
+                // Continue with content creation
+              }
               // If language is detected but doesn't match, block creation
-              if (detectedLanguage !== expectedLanguage) {
+              // Only check mismatch if we have a valid detection (not null) and text is long enough
+              else if (contentText.trim().length >= 10 && detectedLanguage !== expectedLanguage) {
                 console.warn('[CreateContentUseCase] Language mismatch detected - blocking creation to save tokens:', {
                   expected_language: expectedLanguage,
                   detected_language: detectedLanguage,
@@ -806,14 +817,25 @@ export class CreateContentUseCase {
   }
 
   /**
-   * Detect language of content text using AI
+   * Detect language of content text using multiple methods
    * @param {string} text - Text to detect language for
-   * @returns {Promise<string>} Detected language code (never returns null - defaults to 'en')
+   * @returns {Promise<string|null>} Detected language code, or null if text is too short (placeholder)
    */
   async detectContentLanguage(text) {
     if (!text || text.trim().length === 0) {
       console.warn('[CreateContentUseCase] Empty text provided for language detection, defaulting to English');
       return 'en';
+    }
+
+    // If text is too short (< 10 chars), skip detection
+    // Short texts like "Manual Entry" will always be detected as English
+    // Return null to skip validation for placeholder texts
+    if (text.trim().length < 10) {
+      console.log('[CreateContentUseCase] Text too short for reliable language detection, skipping:', {
+        textLength: text.trim().length,
+        textPreview: text.substring(0, 50),
+      });
+      return null; // Return null to indicate detection should be skipped
     }
 
     // STEP 1: Ratio-based detection (most accurate for presentations and technical content)
