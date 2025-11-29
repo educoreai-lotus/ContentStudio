@@ -3,6 +3,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { topicsService } from '../../services/topics.js';
 import { coursesService } from '../../services/courses.js';
 import { useApp } from '../../context/AppContext.jsx';
+import LanguageSelectorWithSearch from '../../components/LanguageSelectorWithSearch.jsx';
 
 const DEFAULT_TRAINER_ID = 'trainer-maya-levi';
 
@@ -378,41 +379,13 @@ export const TopicForm = () => {
                 >
                   Language * <span className="text-xs opacity-70">(Required for stand-alone lessons)</span>
                 </label>
-                <select
-                  name="language"
+                <LanguageSelectorWithSearch
                   value={formData.language || 'en'}
                   onChange={handleChange}
                   required={!formData.course_id}
-                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors ${
-                    errors.language
-                      ? 'border-red-600'
-                      : theme === 'day-mode'
-                      ? 'border-gray-300'
-                      : 'border-gray-600'
-                  } ${
-                    theme === 'day-mode'
-                      ? 'border-gray-300 bg-white text-gray-900'
-                      : 'border-gray-600 bg-gray-700 text-white'
-                  }`}
-                >
-                  <option value="en">English</option>
-                  <option value="he">Hebrew (עברית)</option>
-                  <option value="ar">Arabic (العربية)</option>
-                  <option value="es">Spanish (Español)</option>
-                  <option value="fr">French (Français)</option>
-                  <option value="de">German (Deutsch)</option>
-                  <option value="it">Italian (Italiano)</option>
-                  <option value="ja">Japanese (日本語)</option>
-                  <option value="zh">Chinese (中文)</option>
-                  <option value="ko">Korean (한국어)</option>
-                  <option value="pt">Portuguese (Português)</option>
-                  <option value="fa">Persian/Farsi (فارسی)</option>
-                  <option value="ur">Urdu (اردو)</option>
-                  <option value="ru">Russian (Русский)</option>
-                </select>
-                {errors.language && (
-                  <p className="mt-1 text-sm text-red-600">{errors.language}</p>
-                )}
+                  theme={theme}
+                  error={errors.language}
+                />
                 <p
                   className={`mt-1 text-xs ${
                     theme === 'day-mode' ? 'text-gray-500' : 'text-gray-400'
