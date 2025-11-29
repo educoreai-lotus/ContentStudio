@@ -593,5 +593,68 @@ export class ContentController {
       next(error);
     }
   }
+
+  /**
+   * Verify file integrity for content
+   * @private
+   * @param {Object} content - Content object with content_data
+   */
+  async _verifyContentIntegrity(content) {
+    if (!content || !content.content_data) {
+      return; // No content data to verify
+    }
+
+    const contentData = content.content_data;
+    const publicKey = process.env.CONTENT_STUDIO_PUBLIC_KEY;
+
+    // Check for integrity data in different content types
+    let sha256Hash = null;
+    let digitalSignature = null;
+
+    // Audio files, Avatar videos, Presentations - all use same structure
+    if (contentData.sha256Hash && contentData.digitalSignature) {
+      sha256Hash = contentData.sha256Hash;
+      digitalSignature = contentData.digitalSignature;
+    }
+
+    // If we have integrity data, verify it
+    if (sha256Hash && digitalSignature) {
+      if (!publicKey) {
+        logger.warn('[ContentController] Public key not configured, skipping file integrity verification', {
+          contentId: content.id,
+        });
+        return; // Continue without verification if public key is not configured
+      }
+
+      try {
+        const isValid = FileIntegrityService.verifySignature(
+          sha256Hash,
+          digitalSignature,
+          publicKey
+        );
+
+        if (!isValid) {
+          logger.error('[ContentController] File integrity verification failed', {
+            contentId: content.id,
+            contentType: content.content_type_id,
+            hashPrefix: sha256Hash.substring(0, 16) + '...',
+          });
+          // Don't throw error - just log it. The content can still be served, but we know it's been tampered with
+          // In production, you might want to throw an error or mark the content as suspicious
+        } else {
+          logger.debug('[ContentController] File integrity verified successfully', {
+            contentId: content.id,
+            contentType: content.content_type_id,
+          });
+        }
+      } catch (verificationError) {
+        logger.error('[ContentController] File integrity verification error', {
+          contentId: content.id,
+          error: verificationError.message,
+        });
+        // Continue - don't block content serving if verification fails
+      }
+    }
+  }
 }
 
