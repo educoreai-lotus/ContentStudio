@@ -124,14 +124,27 @@ export class CreateContentUseCase {
             // For code content (type 2), only check explanation (code itself should be in English)
             const contentText = await this.extractTextForLanguageValidation(content);
             
-            // If extractTextForLanguageValidation returns null (e.g., manual presentation with no slides),
-            // skip language validation entirely
+            // If extractTextForLanguageValidation returns null (e.g., failed to extract text from file),
+            // we cannot validate language - this is an error for presentations
             if (contentText === null) {
-              console.log('[CreateContentUseCase] Language validation skipped - no extractable text (e.g., manual presentation with fileUrl only):', {
+              // For presentations (type 3), if we can't extract text, we cannot validate language
+              // This is a critical error - we need text to validate language
+              if (content.content_type_id === 3 || content.content_type_id === '3' || content.content_type_id === 'presentation') {
+                const errorMessage = 'Failed to extract text from presentation file. Cannot validate language without text content. Please ensure the presentation file is valid and contains text.';
+                const error = new Error(errorMessage);
+                error.code = 'LANGUAGE_DETECTION_FAILED';
+                error.details = {
+                  topic_id: topic.topic_id,
+                  content_type_id: content.content_type_id,
+                  reason: 'Text extraction failed - no text found in presentation file',
+                };
+                throw error;
+              }
+              // For other content types, skip language validation if no text
+              console.log('[CreateContentUseCase] Language validation skipped - no extractable text:', {
                 content_type_id: content.content_type_id,
                 topic_id: topic.topic_id,
               });
-              // Skip language validation - continue with content creation
             }
             // For code content without explanation, skip language validation (code should be in English)
             else if (content.content_type_id === 2 || content.content_type_id === 'code' || content.content_type_id === '2') {
@@ -916,15 +929,38 @@ export class CreateContentUseCase {
               });
               return fileText; // Real text extracted => proceed with language detection
             } else {
-              console.log('[CreateContentUseCase] Presentation file has no extractable text (empty or too short), skipping language validation');
-              return null; // Empty or too short => skip validation
+              // If we can't extract text from presentation file, we cannot validate language
+              // This is a critical error - throw error instead of returning null
+              const errorMessage = 'Failed to extract text from presentation file. Cannot validate language without text content. Please ensure the presentation file is valid and contains text.';
+              const error = new Error(errorMessage);
+              error.code = 'LANGUAGE_DETECTION_FAILED';
+              error.details = {
+                topic_id: content.topic_id,
+                content_type_id: content.content_type_id,
+                reason: 'Text extraction failed - no text found in presentation file or text too short',
+                fileUrl: fileUrl.substring(0, 100) + '...',
+              };
+              throw error;
             }
           } catch (error) {
-            console.warn('[CreateContentUseCase] Failed to extract text from presentation file, falling back to metadata:', {
+            // If it's already a LANGUAGE_DETECTION_FAILED error, re-throw it
+            if (error.code === 'LANGUAGE_DETECTION_FAILED') {
+              throw error;
+            }
+            // For other errors, wrap them as LANGUAGE_DETECTION_FAILED
+            console.error('[CreateContentUseCase] Failed to extract text from presentation file:', {
               error: error.message,
               fileUrl: fileUrl.substring(0, 100) + '...',
             });
-            // Fall through to metadata extraction below
+            const detectionError = new Error(`Failed to extract text from presentation file: ${error.message}. Cannot validate language without text content.`);
+            detectionError.code = 'LANGUAGE_DETECTION_FAILED';
+            detectionError.details = {
+              topic_id: content.topic_id,
+              content_type_id: content.content_type_id,
+              reason: `Text extraction error: ${error.message}`,
+              fileUrl: fileUrl.substring(0, 100) + '...',
+            };
+            throw detectionError;
           }
         } else {
           console.log('[CreateContentUseCase] Presentation file URL has unsupported extension, skipping file extraction');

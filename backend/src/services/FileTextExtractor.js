@@ -64,7 +64,7 @@ export class FileTextExtractor {
 
     try {
       if (normalizedExt === ".pdf") {
-        return await this._extractPDF(localPath);
+        return await this._extractPDF(localPath, options);
       }
 
       if (normalizedExt === ".pptx") {
@@ -146,8 +146,8 @@ export class FileTextExtractor {
         }
       }
       
-      // Add OpenAI client for Vision fallback (for PPTX)
-      if (ext.endsWith('.pptx') && openaiClient) {
+      // Add OpenAI client for Vision fallback (for PPTX and PDF)
+      if ((ext.endsWith('.pptx') || ext.endsWith('.pdf')) && openaiClient) {
         options.openaiClient = openaiClient;
       }
 
@@ -174,12 +174,33 @@ export class FileTextExtractor {
   /**
    * Extract text from PDF file
    * @private
+   * @param {string} localPath - Path to PDF file
+   * @param {Object} options - Options including openaiClient for Vision fallback
+   * @returns {Promise<string|null>} Extracted text or null
    */
-  static async _extractPDF(localPath) {
+  static async _extractPDF(localPath, options = {}) {
     try {
       // Dynamic import to avoid test file loading issue in pdf-parse
-      const pdf = (await import("pdf-parse")).default;
+      let pdf;
+      try {
+        const pdfModule = await import("pdf-parse");
+        pdf = pdfModule.default || pdfModule;
+      } catch (importError) {
+        // If import fails, check if it's the test file error
+        if (importError.message && importError.message.includes('test/data')) {
+          logger.warn('[FileTextExtractor] PDF-parse test file error detected during import, will try Vision fallback');
+          // Return null to trigger Vision fallback if available
+          if (options.openaiClient) {
+            return await this._extractPDFWithVision(localPath, options.openaiClient);
+          }
+          throw new Error('PDF parser failed to load due to test file issue. Vision fallback not available.');
+        }
+        throw importError;
+      }
+
       const dataBuffer = readFileSync(localPath);
+      
+      // Call pdf with buffer
       const result = await pdf(dataBuffer);
       const text = result.text?.trim() || "";
       
@@ -188,9 +209,83 @@ export class FileTextExtractor {
         preview: text.substring(0, 100),
       });
       
+      // If extracted text is too short, try Vision fallback
+      if (text.length < 10 && options.openaiClient) {
+        logger.warn('[FileTextExtractor] PDF extraction returned very little text, trying Vision fallback');
+        return await this._extractPDFWithVision(localPath, options.openaiClient);
+      }
+      
       return text.length > 0 ? text : null;
     } catch (error) {
+      // Check if error is about test file - if so, try Vision fallback
+      if (error.message && error.message.includes('test/data')) {
+        logger.warn('[FileTextExtractor] PDF-parse test file error detected, trying Vision fallback');
+        if (options.openaiClient) {
+          try {
+            return await this._extractPDFWithVision(localPath, options.openaiClient);
+          } catch (visionError) {
+            logger.error('[FileTextExtractor] Vision fallback also failed:', visionError.message);
+          }
+        }
+        // If no Vision fallback, throw the original error
+        throw new Error(`PDF extraction failed: ${error.message}. Vision fallback not available.`);
+      }
+      
       logger.error('[FileTextExtractor] PDF extraction failed:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Extract text from PDF using OpenAI Vision API (OCR fallback)
+   * Converts PDF pages to images and sends to Vision API
+   * @private
+   */
+  static async _extractPDFWithVision(localPath, openaiClient) {
+    try {
+      logger.info('[FileTextExtractor] Starting Vision-based PDF extraction');
+      
+      // Convert PDF pages to images
+      // Note: This requires pdf2pic or similar library
+      // For now, we'll use a simpler approach - convert first page only
+      const { convertPDFToImages } = await import("./PdfToImageConverter.js");
+      const pageImages = await convertPDFToImages(localPath);
+      
+      if (!pageImages || pageImages.length === 0) {
+        logger.warn('[FileTextExtractor] Failed to convert PDF pages to images');
+        return null;
+      }
+
+      const allTexts = [];
+
+      // Send each page image to OpenAI Vision API
+      for (let i = 0; i < pageImages.length; i++) {
+        try {
+          const imageBase64 = pageImages[i];
+          const visionText = await openaiClient.extractTextFromImage(imageBase64);
+          
+          if (visionText && visionText.trim().length > 0) {
+            allTexts.push(`Page ${i + 1}: ${visionText}`);
+          }
+        } catch (pageError) {
+          logger.warn('[FileTextExtractor] Failed to extract text from PDF page image:', {
+            page: i + 1,
+            error: pageError.message,
+          });
+        }
+      }
+
+      const fullText = allTexts.join("\n\n").trim();
+      
+      logger.info('[FileTextExtractor] Vision-based PDF extraction completed:', {
+        pageCount: pageImages.length,
+        textLength: fullText.length,
+        preview: fullText.substring(0, 100),
+      });
+
+      return fullText.length > 0 ? fullText : null;
+    } catch (error) {
+      logger.error('[FileTextExtractor] Vision-based PDF extraction failed:', error.message);
       throw error;
     }
   }
