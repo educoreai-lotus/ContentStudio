@@ -4,7 +4,8 @@ import { join } from "path";
 import { promisify } from "util";
 import { exec } from "child_process";
 import axios from "axios";
-import pdf from "pdf-parse";
+// Use dynamic import for pdf-parse to avoid test file loading issue
+// import pdf from "pdf-parse";
 import PptxParser from "pptx-parser";
 import mammoth from "mammoth";
 import { logger } from "../infrastructure/logging/Logger.js";
@@ -169,6 +170,8 @@ export class FileTextExtractor {
    */
   static async _extractPDF(localPath) {
     try {
+      // Dynamic import to avoid test file loading issue in pdf-parse
+      const pdf = (await import("pdf-parse")).default;
       const dataBuffer = readFileSync(localPath);
       const result = await pdf(dataBuffer);
       const text = result.text?.trim() || "";
