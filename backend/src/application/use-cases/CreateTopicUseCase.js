@@ -23,12 +23,16 @@ export class CreateTopicUseCase {
         );
         
         // Merge provided skills with Skills Engine response
+        // Only if Skills Engine returned valid mapping (not null)
         if (skillsMapping && skillsMapping.micro_skills) {
           skills = [...new Set([...skills, ...skillsMapping.micro_skills])];
+        } else if (skillsMapping === null) {
+          // Skills Engine is not configured/available - log but continue with provided skills
+          console.info('[CreateTopicUseCase] Skills Engine is not configured or unavailable, using provided skills only');
         }
       } catch (error) {
         // Log error but continue without Skills Engine skills
-        console.warn('Skills Engine integration failed:', error.message);
+        console.warn('[CreateTopicUseCase] Skills Engine integration failed:', error.message);
         // Continue with provided skills only
       }
     }

@@ -93,15 +93,26 @@ export const TopicForm = () => {
         const skills = result.skills || [];
         setSuggestedSkills(skills);
         setSkillsSource(result.source || 'skills-engine');
-        // Automatically set all suggested skills (read-only, from Skills Engine)
-        setFormData(prev => ({ ...prev, skills: skills }));
+        // Only set skills if Skills Engine is available (not 'unavailable')
+        if (result.source !== 'unavailable' && skills.length > 0) {
+          // Automatically set all suggested skills (read-only, from Skills Engine)
+          setFormData(prev => ({ ...prev, skills: skills }));
+        } else {
+          // Skills Engine is not available - clear skills
+          setFormData(prev => ({ ...prev, skills: [] }));
+        }
         if (false) { // Disabled manual skill selection
           setFormData(prev => ({ ...prev, skills }));
         }
       } catch (error) {
         if (!cancelled) {
           setSuggestedSkills([]);
-          setSkillsSource('');
+          // Check if error indicates Skills Engine is unavailable
+          if (error.response?.data?.source === 'unavailable' || error.message?.includes('unavailable')) {
+            setSkillsSource('unavailable');
+          } else {
+            setSkillsSource('');
+          }
         }
       } finally {
         if (!cancelled) {
@@ -443,9 +454,20 @@ export const TopicForm = () => {
                   </div>
                   <p className={`text-xs ${theme === 'day-mode' ? 'text-gray-500' : 'text-gray-400'}`}>
                     <i className="fas fa-info-circle mr-1"></i>
-                    Skills source: {skillsSource === 'mock' ? 'Mock Data (Skills Engine unavailable)' : 'Skills Engine'}
+                    Skills source: {
+                      skillsSource === 'mock' 
+                        ? 'Mock Data (Skills Engine unavailable)' 
+                        : skillsSource === 'unavailable'
+                        ? 'Skills Engine is not configured or unavailable'
+                        : 'Skills Engine'
+                    }
                   </p>
                 </>
+              ) : skillsSource === 'unavailable' ? (
+                <p className={`text-sm ${theme === 'day-mode' ? 'text-orange-600' : 'text-orange-400'}`}>
+                  <i className="fas fa-exclamation-triangle mr-2"></i>
+                  Skills Engine is not configured or unavailable. Please configure SKILLS_ENGINE_URL to enable skill suggestions.
+                </p>
               ) : (
                 <p className={`text-sm ${theme === 'day-mode' ? 'text-gray-500' : 'text-gray-400'}`}>
                   <i className="fas fa-lightbulb mr-2"></i>

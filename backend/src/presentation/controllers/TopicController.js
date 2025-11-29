@@ -232,19 +232,45 @@ export class TopicController {
             const microSkills = mapping.micro_skills || [];
             const nanoSkills = mapping.nano_skills || [];
             skills = [...new Set([...microSkills, ...nanoSkills])];
+            // If fallback is true, it's mock data (generated based on topic name)
+            // If fallback is false/undefined, it's from real Skills Engine
             source = mapping.fallback ? 'mock' : 'skills-engine';
+          } else {
+            // Skills Engine returned null - it's not configured/available
+            logger.info('Skills Engine returned null, using empty skills', {
+              topicName,
+            });
+            skills = [];
+            source = 'unavailable';
           }
         } catch (error) {
-          logger.warn('Skills Engine suggestion failed, using fallback skills', {
+          logger.warn('Skills Engine suggestion failed, using fallback mock skills', {
             error: error.message,
             topicName,
           });
+          // On error, generate mock skills as fallback
+          try {
+            const mockSkills = this.skillsEngineClient.generateMockSkills?.(topicName);
+            if (mockSkills) {
+              skills = [...new Set([...(mockSkills.micro || []), ...(mockSkills.nano || [])])];
+              source = 'mock';
+            } else {
+              skills = [];
+              source = 'unavailable';
+            }
+          } catch (mockError) {
+            logger.error('Failed to generate mock skills', { error: mockError.message });
+            skills = [];
+            source = 'unavailable';
+          }
         }
-      }
-
-      if (skills.length === 0) {
-        skills = ['creative thinking', 'problem solving', 'collaboration'];
-        source = 'mock';
+      } else {
+        // Skills Engine client not initialized
+        logger.info('Skills Engine client not initialized', {
+          topicName,
+        });
+        skills = [];
+        source = 'unavailable';
       }
 
       res.status(200).json({

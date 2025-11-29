@@ -18,11 +18,16 @@ export class SkillsEngineClient {
    */
   async getSkillsMapping(trainerId, topicName) {
     // TODO: Implement actual gRPC call
-    // For now, return mock data
+    // For now, return mock data if Skills Engine is not configured
     if (!this.grpcClient) {
-      // Mock response for development
+      // Skills Engine is not configured - return mock data with fallback flag
       // Generate realistic skills based on topic name
       const mockSkills = this.generateMockSkills(topicName);
+      logger.info('[SkillsEngineClient] Skills Engine gRPC client not configured, returning mock data', {
+        trainerId,
+        topicName,
+        skillsCount: (mockSkills.micro || []).length + (mockSkills.nano || []).length,
+      });
       return {
         topic_id: null,
         topic_name: topicName,
@@ -30,6 +35,7 @@ export class SkillsEngineClient {
         nano_skills: mockSkills.nano,
         difficulty_level: 'intermediate',
         validation_status: 'approved',
+        fallback: true, // Mark as fallback/mock data
       };
     }
 
