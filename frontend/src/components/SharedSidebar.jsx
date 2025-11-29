@@ -591,9 +591,25 @@ export function SharedSidebar({ onRestore }) {
           console.log('[SharedSidebar] Restoring content version:', {
             history_id: content.history_id,
             content_id: content.content_id,
+            sectionId: content.sectionId,
           });
           await contentService.restoreVersion(content.history_id);
           console.log('[SharedSidebar] Content version restored successfully');
+          
+          // Immediately update UI: Remove restored version from history
+          if (content.sectionId && historyData[content.sectionId]) {
+            const updatedVersions = historyData[content.sectionId].versions.filter(
+              v => v.history_id !== content.history_id
+            );
+            setHistoryData(prev => ({
+              ...prev,
+              [content.sectionId]: {
+                ...prev[content.sectionId],
+                versions: updatedVersions,
+              },
+            }));
+            console.log('[SharedSidebar] Removed restored version from UI immediately');
+          }
         } else {
           throw new Error('History ID is missing');
         }
@@ -647,65 +663,64 @@ export function SharedSidebar({ onRestore }) {
         result = await topicsService.list(filters, { page: 1, limit: 50 });
         setDeletedContent(result.topics || []);
       } else if (context.type === 'content') {
-        // Reload content history directly from content_history table (same as initial load)
-        try {
-          console.log('[SharedSidebar] Reloading ALL content history for topic after restore:', context.topicId);
-          const topicHistory = await contentService.getTopicHistory(context.topicId);
-          console.log('[SharedSidebar] Reloaded topic history:', topicHistory);
-          
-          if (!topicHistory || Object.keys(topicHistory).length === 0) {
-            setHistoryData({});
-            setDeletedContent([]);
-            return;
-          }
-          
-          // Convert topicHistory (grouped by content type) to historyData format
-          const historyBySection = {};
-          
-          // Process each content type in the history
-          Object.keys(topicHistory).forEach(sectionId => {
-            const versions = topicHistory[sectionId] || [];
-            if (versions.length === 0) return;
+        // Reload content history in the background (non-blocking)
+        // UI was already updated immediately above, this is just to sync with server
+        contentService.getTopicHistory(context.topicId)
+          .then(topicHistory => {
+            console.log('[SharedSidebar] Background reload of topic history completed:', topicHistory);
             
-            // Map section ID to content_type_id
-            const sectionToTypeId = {
-              'text_audio': 1,
-              'code': 2,
-              'slides': 3,
-              'mind_map': 5,
-              'avatar_video': 6,
-            };
-            const contentTypeId = sectionToTypeId[sectionId] || null;
-            
-            if (!historyBySection[sectionId]) {
-              historyBySection[sectionId] = {
-                contentItem: null, // We don't have active content item for deleted content
-                versions: [],
-              };
+            if (!topicHistory || Object.keys(topicHistory).length === 0) {
+              setHistoryData({});
+              return;
             }
             
-            // Process each version
-            versions.forEach(version => {
-              const historyVersion = {
-                ...version,
-                content_type_id: contentTypeId,
-                content_type_name: sectionId,
-                topic_id: context.topicId,
-                sectionId: sectionId,
+            // Convert topicHistory (grouped by content type) to historyData format
+            const historyBySection = {};
+            
+            // Process each content type in the history
+            Object.keys(topicHistory).forEach(sectionId => {
+              const versions = topicHistory[sectionId] || [];
+              if (versions.length === 0) return;
+              
+              // Map section ID to content_type_id
+              const sectionToTypeId = {
+                'text_audio': 1,
+                'code': 2,
+                'slides': 3,
+                'mind_map': 5,
+                'avatar_video': 6,
               };
-              historyBySection[sectionId].versions.push(historyVersion);
+              const contentTypeId = sectionToTypeId[sectionId] || null;
+              
+              if (!historyBySection[sectionId]) {
+                historyBySection[sectionId] = {
+                  contentItem: null,
+                  versions: [],
+                };
+              }
+              
+              // Process each version
+              versions.forEach(version => {
+                const historyVersion = {
+                  ...version,
+                  content_type_id: contentTypeId,
+                  content_type_name: sectionId,
+                  topic_id: context.topicId,
+                  sectionId: sectionId,
+                };
+                historyBySection[sectionId].versions.push(historyVersion);
+              });
             });
+            
+            setHistoryData(historyBySection);
+          })
+          .catch(err => {
+            console.warn('[SharedSidebar] Background reload of history failed (non-critical):', err);
+            // Don't update UI on error - keep the immediate update we did above
           });
-          
-          setHistoryData(historyBySection);
-          // CRITICAL: Do NOT set deletedContent for content context
-          // We use historyData for display (organized by sections), not deletedContent (flat list)
-          setDeletedContent([]);
-        } catch (err) {
-          console.error('[SharedSidebar] Failed to reload content history after restore:', err);
-          setDeletedContent([]);
-          setHistoryData({});
-        }
+        
+        // Don't set deletedContent for content context
+        setDeletedContent([]);
       }
 
       setError(null);
