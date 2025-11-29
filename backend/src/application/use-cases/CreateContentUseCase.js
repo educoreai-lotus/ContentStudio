@@ -816,10 +816,44 @@ export class CreateContentUseCase {
       return 'en';
     }
 
-    // First try heuristic detection (fast and free)
-    const heuristicLanguage = this.detectLanguageHeuristic(text);
+    // Import technical terms filter (dynamic import to avoid circular dependencies)
+    let filterTechnicalTerms, analyzeLanguageWithTechnicalTerms, filteredText, hasTechnicalTerms;
+    try {
+      const technicalTermsModule = await import('../utils/TechnicalTermsFilter.js');
+      filterTechnicalTerms = technicalTermsModule.filterTechnicalTerms;
+      analyzeLanguageWithTechnicalTerms = technicalTermsModule.analyzeLanguageWithTechnicalTerms;
+      
+      // Analyze text with technical terms consideration
+      const analysis = analyzeLanguageWithTechnicalTerms(text);
+      
+      // If we have high confidence in a non-English language, use it
+      if (analysis.confidence > 0.3 && analysis.dominantLanguage !== 'en') {
+        console.log('[CreateContentUseCase] Language detected via technical terms analysis:', {
+          language: analysis.dominantLanguage,
+          confidence: analysis.confidence,
+          hasTechnicalTerms: analysis.hasTechnicalTerms,
+        });
+        return analysis.dominantLanguage;
+      }
+
+      // Filter out technical terms before detection
+      filteredText = filterTechnicalTerms(text);
+      hasTechnicalTerms = filteredText.length < text.length * 0.8;
+    } catch (error) {
+      console.warn('[CreateContentUseCase] Failed to load TechnicalTermsFilter, using original text:', error.message);
+      filteredText = text;
+      hasTechnicalTerms = false;
+    }
+    
+    // Use filtered text for heuristic detection (more accurate for technical content)
+    const heuristicLanguage = this.detectLanguageHeuristic(filteredText.length > 0 ? filteredText : text);
     if (heuristicLanguage) {
-      console.log('[CreateContentUseCase] Language detected via heuristic:', heuristicLanguage);
+      console.log('[CreateContentUseCase] Language detected via heuristic (after filtering technical terms):', {
+        language: heuristicLanguage,
+        hasTechnicalTerms,
+        originalLength: text.length,
+        filteredLength: filteredText.length,
+      });
       return heuristicLanguage;
     }
 
@@ -831,16 +865,21 @@ export class CreateContentUseCase {
     }
 
     try {
+      // Use filtered text for AI detection (removes technical terms that might confuse detection)
+      const textForDetection = filteredText && filteredText.length > 50 ? filteredText : text;
+      
       const prompt = `Detect the language of the following text and return only the ISO 639-1 language code (e.g., 'en', 'he', 'ar', 'es', 'fr').
 
+IMPORTANT: This text is from a programming/development educational context. It may contain technical English terms (like "docker", "if else", "API") but the MAIN language of the content should be detected based on the dominant language of the explanatory text, not the technical terms.
+
 Text:
-${text.substring(0, 500)}
+${textForDetection.substring(0, 500)}
 
 Return only the 2-letter language code, nothing else.`;
 
       // Use openaiClient directly (not through AIGenerationService.generateText which requires language config)
       const response = await this.aiGenerationService.openaiClient.generateText(prompt, {
-        systemPrompt: 'You are a language detection expert. Return only the ISO 639-1 language code.',
+        systemPrompt: 'You are a language detection expert for educational programming content. Ignore technical English terms and focus on the dominant language of the explanatory text. Return only the ISO 639-1 language code.',
         temperature: 0.1,
         max_tokens: 10,
       });
