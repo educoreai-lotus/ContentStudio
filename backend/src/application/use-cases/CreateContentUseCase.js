@@ -1,6 +1,7 @@
 import { Content } from '../../domain/entities/Content.js';
 import { ContentDataCleaner } from '../utils/ContentDataCleaner.js';
 import { pushStatus, createStatusMessages } from '../utils/StatusMessages.js';
+import { FileTextExtractor } from '../../services/FileTextExtractor.js';
 
 /**
  * Create Content Use Case
@@ -121,16 +122,69 @@ export class CreateContentUseCase {
           if (expectedLanguage) {
             // Extract text from content for language detection
             // For code content (type 2), only check explanation (code itself should be in English)
-            const contentText = this.extractTextForLanguageValidation(content);
+            const contentText = await this.extractTextForLanguageValidation(content);
             
-            // For code content without explanation, skip language validation (code should be in English)
-            const isCodeContent = content.content_type_id === 2 || content.content_type_id === 'code' || content.content_type_id === '2';
-            if (isCodeContent && (!contentText || contentText.trim().length === 0)) {
-              console.log('[CreateContentUseCase] Code content without explanation - skipping language validation (code should be in English):', {
+            // If extractTextForLanguageValidation returns null (e.g., manual presentation with no slides),
+            // skip language validation entirely
+            if (contentText === null) {
+              console.log('[CreateContentUseCase] Language validation skipped - no extractable text (e.g., manual presentation with fileUrl only):', {
                 content_type_id: content.content_type_id,
                 topic_id: topic.topic_id,
               });
-              // Skip language validation for code without explanation
+              // Skip language validation - continue with content creation
+            }
+            // For code content without explanation, skip language validation (code should be in English)
+            else if (content.content_type_id === 2 || content.content_type_id === 'code' || content.content_type_id === '2') {
+              const isCodeContent = true;
+              if (!contentText || contentText.trim().length === 0) {
+                console.log('[CreateContentUseCase] Code content without explanation - skipping language validation (code should be in English):', {
+                  content_type_id: content.content_type_id,
+                  topic_id: topic.topic_id,
+                });
+                // Skip language validation for code without explanation
+              } else if (contentText && contentText.trim().length > 0) {
+                // Detect language of explanation only
+                const detectedLanguage = await this.detectContentLanguage(contentText);
+                
+                // Skip validation if text is too short (placeholder like "Manual Entry")
+                if (detectedLanguage === null) {
+                  console.log('[CreateContentUseCase] Language detection skipped - text too short (likely placeholder):', {
+                    textLength: contentText.trim().length,
+                    textPreview: contentText.substring(0, 50),
+                    topic_id: topic.topic_id,
+                  });
+                  // Skip language validation for placeholder texts
+                }
+                // If language is detected but doesn't match, block creation
+                else if (contentText.trim().length >= 10 && detectedLanguage !== expectedLanguage) {
+                  console.warn('[CreateContentUseCase] Language mismatch detected - blocking creation:', {
+                    expected_language: expectedLanguage,
+                    detected_language: detectedLanguage,
+                    topic_id: topic.topic_id,
+                    content_type_id: content.content_type_id,
+                  });
+                  const errorMessage = `Explanation language (${detectedLanguage}) does not match expected language (${expectedLanguage}). Code should be in English, but explanation should be in ${expectedLanguage}.`;
+                  const error = new Error(errorMessage);
+                  error.code = 'LANGUAGE_MISMATCH';
+                  error.details = {
+                    expected_language: expectedLanguage,
+                    detected_language: detectedLanguage,
+                    topic_id: topic.topic_id,
+                    content_type_id: content.content_type_id,
+                    is_code_content: true,
+                  };
+                  throw error;
+                }
+                
+                // Language matches or was skipped - proceed
+                if (detectedLanguage !== null) {
+                  console.log('[CreateContentUseCase] ✅ Language validation passed for code explanation:', {
+                    expected_language: expectedLanguage,
+                    detected_language: detectedLanguage,
+                    content_type_id: content.content_type_id,
+                  });
+                }
+              }
             } else if (contentText && contentText.trim().length > 0) {
               // Detect language of content
               // detectContentLanguage may return null if text is too short (placeholder text)
@@ -745,8 +799,9 @@ export class CreateContentUseCase {
    * Extract text from content for language validation
    * For code content (type 2), only extracts explanation (code itself should be in English)
    * For other content types, extracts all text as usual
+   * @async
    */
-  extractTextForLanguageValidation(content) {
+  async extractTextForLanguageValidation(content) {
     const contentTypeId = content.content_type_id;
     const isCodeContent = contentTypeId === 2 || contentTypeId === 'code' || contentTypeId === '2';
 
@@ -790,6 +845,90 @@ export class CreateContentUseCase {
         const codeText = content.content_data.code;
         const explanationText = content.content_data.explanation || '';
         return explanationText ? `${codeText}\n\n${explanationText}` : codeText;
+      }
+    }
+    
+    // For presentations (content_type_id === 3), extract text from slides
+    if (contentTypeId === 3 || contentTypeId === '3' || contentTypeId === 'presentation') {
+      // Check for slides array in different possible locations
+      if (content.content_data?.slides && Array.isArray(content.content_data.slides)) {
+        const slideTexts = content.content_data.slides
+          .map(slide => slide.text || slide.title || slide.content || slide.body || '')
+          .filter(Boolean)
+          .join('\n');
+        if (slideTexts.trim().length > 0) {
+          return slideTexts;
+        }
+      }
+      
+      // Check for nested presentation.slides
+      if (content.content_data?.presentation?.slides && Array.isArray(content.content_data.presentation.slides)) {
+        const slideTexts = content.content_data.presentation.slides
+          .map(slide => slide.text || slide.title || slide.content || slide.body || '')
+          .filter(Boolean)
+          .join('\n');
+        if (slideTexts.trim().length > 0) {
+          return slideTexts;
+        }
+      }
+      
+      // Check for presentation as object/array
+      if (content.content_data?.presentation) {
+        const presentationData = content.content_data.presentation;
+        if (Array.isArray(presentationData)) {
+          const slideTexts = presentationData
+            .map(slide => slide.text || slide.title || slide.content || slide.body || '')
+            .filter(Boolean)
+            .join('\n');
+          if (slideTexts.trim().length > 0) {
+            return slideTexts;
+          }
+        } else if (typeof presentationData === 'object') {
+          // Try to extract text from presentation object
+          const presentationText = JSON.stringify(presentationData);
+          if (presentationText && presentationText.length > 50) {
+            return presentationText;
+          }
+        }
+      }
+      
+      // For manual presentations (fileUrl only, no slides), try to extract text from the file
+      if (content.content_data?.fileUrl || content.content_data?.presentationUrl) {
+        const fileUrl = content.content_data?.fileUrl || content.content_data?.presentationUrl;
+        const ext = fileUrl.toLowerCase();
+        
+        // Check if it's a supported file type
+        if (ext.endsWith('.pptx') || ext.endsWith('.ppt') || ext.endsWith('.pdf')) {
+          try {
+            console.log('[CreateContentUseCase] Attempting to extract text from presentation file for language validation:', {
+              fileUrl: fileUrl.substring(0, 100) + '...',
+              extension: ext.substring(ext.lastIndexOf('.')),
+            });
+            
+            // Download and extract text from file (pass content_data for fallback URLs)
+            const fileText = await FileTextExtractor.extractTextFromUrl(fileUrl, content.content_data);
+            
+            if (fileText && fileText.trim().length >= 10) {
+              console.log('[CreateContentUseCase] ✅ Successfully extracted text from presentation file:', {
+                textLength: fileText.length,
+                preview: fileText.substring(0, 100),
+              });
+              return fileText; // Real text extracted => proceed with language detection
+            } else {
+              console.log('[CreateContentUseCase] Presentation file has no extractable text (empty or too short), skipping language validation');
+              return null; // Empty or too short => skip validation
+            }
+          } catch (error) {
+            console.warn('[CreateContentUseCase] Failed to extract text from presentation file, falling back to metadata:', {
+              error: error.message,
+              fileUrl: fileUrl.substring(0, 100) + '...',
+            });
+            // Fall through to metadata extraction below
+          }
+        } else {
+          console.log('[CreateContentUseCase] Presentation file URL has unsupported extension, skipping file extraction');
+          // Fall through to metadata extraction below
+        }
       }
     }
     

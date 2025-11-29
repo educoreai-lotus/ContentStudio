@@ -2,6 +2,7 @@ import { QualityCheckService as IQualityCheckService } from '../../domain/servic
 import { QualityCheck } from '../../domain/entities/QualityCheck.js';
 import { OpenAIClient } from '../external-apis/openai/OpenAIClient.js';
 import { pushStatus } from '../../application/utils/StatusMessages.js';
+import { FileTextExtractor } from '../../services/FileTextExtractor.js';
 
 /**
  * Quality Check Service Implementation
@@ -52,7 +53,7 @@ export class QualityCheckService extends IQualityCheckService {
     }
 
     try {
-      const contentText = this.extractTextFromContent(content);
+      const contentText = await this.extractTextFromContent(content);
       if (!contentText || contentText.trim().length === 0) {
         console.error('[QualityCheckService] ❌ Content text is empty or not found', {
           topicId,
@@ -246,7 +247,7 @@ export class QualityCheckService extends IQualityCheckService {
         throw new Error('Content not found');
       }
 
-      const contentText = this.extractTextFromContent(content);
+      const contentText = await this.extractTextFromContent(content);
       if (!contentText || contentText.trim().length === 0) {
         console.error('[QualityCheckService] ❌ Content text is empty or not found', {
           contentId,
@@ -580,7 +581,7 @@ Rules:
     }
   }
 
-  extractTextFromContent(content) {
+  async extractTextFromContent(content) {
     // Extract text from content_data for quality check
     // This method handles all content types: text (1), code (2), presentation (3), mind_map (5), avatar_video (6)
     
@@ -622,7 +623,71 @@ Rules:
       return explanationText ? `${codeText}\n\n${explanationText}` : codeText;
     }
     
-    // Type 3: Presentation - extract metadata text (title, description, lessonTopic)
+    // Type 3: Presentation - extract text from slides if available, otherwise from metadata
+    if (content.content_type_id === 3 || content.content_type_id === '3' || content.content_type_id === 'presentation') {
+      // First, try to extract from slides array (for presentations with structured data)
+      if (content.content_data?.slides && Array.isArray(content.content_data.slides)) {
+        const slideTexts = content.content_data.slides
+          .map(slide => slide.text || slide.title || slide.content || slide.body || '')
+          .filter(Boolean)
+          .join('\n');
+        if (slideTexts.trim().length > 0) {
+          return slideTexts;
+        }
+      }
+      
+      // Check for nested presentation.slides
+      if (content.content_data?.presentation?.slides && Array.isArray(content.content_data.presentation.slides)) {
+        const slideTexts = content.content_data.presentation.slides
+          .map(slide => slide.text || slide.title || slide.content || slide.body || '')
+          .filter(Boolean)
+          .join('\n');
+        if (slideTexts.trim().length > 0) {
+          return slideTexts;
+        }
+      }
+      
+      // For manual presentations (fileUrl only, no slides), try to extract text from the file
+      if (content.content_data?.fileUrl || content.content_data?.presentationUrl) {
+        const fileUrl = content.content_data?.fileUrl || content.content_data?.presentationUrl;
+        const ext = fileUrl.toLowerCase();
+        
+        // Check if it's a supported file type
+        if (ext.endsWith('.pptx') || ext.endsWith('.ppt') || ext.endsWith('.pdf')) {
+          try {
+            console.log('[QualityCheckService] Attempting to extract text from presentation file for quality check:', {
+              fileUrl: fileUrl.substring(0, 100) + '...',
+              extension: ext.substring(ext.lastIndexOf('.')),
+            });
+            
+            // Download and extract text from file (pass content_data for fallback URLs)
+            const fileText = await FileTextExtractor.extractTextFromUrl(fileUrl, content.content_data);
+            
+            if (fileText && fileText.trim().length >= 10) {
+              console.log('[QualityCheckService] ✅ Successfully extracted text from presentation file:', {
+                textLength: fileText.length,
+                preview: fileText.substring(0, 100),
+              });
+              return fileText; // Real text extracted => proceed with quality check
+            } else {
+              console.warn('[QualityCheckService] Presentation file has no extractable text (empty or too short), falling back to metadata');
+              // Fall through to metadata extraction below
+            }
+          } catch (error) {
+            console.warn('[QualityCheckService] Failed to extract text from presentation file, falling back to metadata:', {
+              error: error.message,
+              fileUrl: fileUrl.substring(0, 100) + '...',
+            });
+            // Fall through to metadata extraction below
+          }
+        } else {
+          console.warn('[QualityCheckService] Presentation file URL has unsupported extension, using metadata only');
+          // Fall through to metadata extraction below
+        }
+      }
+    }
+    
+    // Extract metadata text (for presentations without slides, or as fallback)
     if (content.content_data?.metadata) {
       const metadataText = [
         content.content_data.metadata.title,
