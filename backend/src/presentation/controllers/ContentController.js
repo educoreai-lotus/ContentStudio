@@ -2,6 +2,8 @@ import { CreateContentUseCase } from '../../application/use-cases/CreateContentU
 import { UpdateContentUseCase } from '../../application/use-cases/UpdateContentUseCase.js';
 import { RegenerateContentUseCase } from '../../application/use-cases/RegenerateContentUseCase.js';
 import { ContentDTO } from '../../application/dtos/ContentDTO.js';
+import { FileIntegrityService } from '../../infrastructure/security/FileIntegrityService.js';
+import { logger } from '../../infrastructure/logging/Logger.js';
 
 /**
  * Content Controller
@@ -293,6 +295,9 @@ export class ContentController {
         });
       }
 
+      // Verify file integrity if hash and signature are present
+      await this._verifyContentIntegrity(content);
+
       res.json({
         success: true,
         data: ContentDTO.toContentResponse(content),
@@ -324,6 +329,11 @@ export class ContentController {
       }
 
       const contents = await this.contentRepository.findAllByTopicId(topicId, filters);
+
+      // Verify integrity for all content items
+      for (const content of contents) {
+        await this._verifyContentIntegrity(content);
+      }
 
       const response = ContentDTO.toContentListResponse(contents);
       res.json({

@@ -1,6 +1,7 @@
 import express from 'express';
 import multer from 'multer';
-import { createClient } from '@supabase/supabase-js';
+import { SupabaseStorageClient } from '../../infrastructure/storage/SupabaseStorageClient.js';
+import { logger } from '../../infrastructure/logging/Logger.js';
 
 const router = express.Router();
 
@@ -35,8 +36,14 @@ router.post('/presentation', upload.single('file'), async (req, res, next) => {
       });
     }
 
-    // Check if Supabase is configured
-    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    // Initialize SupabaseStorageClient (uses FileIntegrityService for hash and signature)
+    const storageClient = new SupabaseStorageClient({
+      supabaseUrl: process.env.SUPABASE_URL,
+      supabaseServiceKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+      bucketName: process.env.SUPABASE_BUCKET_NAME || 'media',
+    });
+
+    if (!storageClient.isConfigured()) {
       return res.status(500).json({
         error: {
           code: 'STORAGE_NOT_CONFIGURED',
@@ -45,27 +52,50 @@ router.post('/presentation', upload.single('file'), async (req, res, next) => {
       });
     }
 
-    // Create Supabase client (using the correct env var names from Railway)
-    const supabase = createClient(
-      process.env.SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY
-    );
-
     // Generate unique filename
     const fileExt = req.file.originalname.split('.').pop();
-    const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-    const filePath = `presentations/${fileName}`;
+    const timestamp = Date.now();
+    const randomStr = Math.random().toString(36).substring(7);
+    const fileName = `presentations/${timestamp}-${randomStr}.${fileExt}`;
 
-    // Upload to Supabase Storage
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from('media')
-      .upload(filePath, req.file.buffer, {
-        contentType: req.file.mimetype,
-        upsert: false,
+    try {
+      // Upload to Supabase Storage using SupabaseStorageClient (includes hash and signature generation)
+      const uploadResult = await storageClient.uploadFile(
+        req.file.buffer,
+        fileName,
+        req.file.mimetype
+      );
+
+      if (!uploadResult.url || !uploadResult.path) {
+        throw new Error('Upload succeeded but no URL or path returned');
+      }
+
+      logger.info('[Upload] Manual presentation uploaded with integrity protection', {
+        fileName: req.file.originalname,
+        storagePath: uploadResult.path,
+        hasHash: !!uploadResult.sha256Hash,
+        hasSignature: !!uploadResult.digitalSignature,
       });
 
-    if (uploadError) {
-      console.error('Supabase upload error:', uploadError);
+      // Return file metadata including integrity data
+      res.json({
+        success: true,
+        data: {
+          fileName: req.file.originalname,
+          fileSize: req.file.size,
+          fileType: req.file.mimetype,
+          fileUrl: uploadResult.url,
+          storagePath: uploadResult.path,
+          uploadedAt: new Date().toISOString(),
+          sha256Hash: uploadResult.sha256Hash || null,
+          digitalSignature: uploadResult.digitalSignature || null,
+        },
+      });
+    } catch (uploadError) {
+      logger.error('[Upload] Failed to upload presentation', {
+        error: uploadError.message,
+        fileName: req.file.originalname,
+      });
       return res.status(500).json({
         error: {
           code: 'UPLOAD_FAILED',
@@ -73,24 +103,6 @@ router.post('/presentation', upload.single('file'), async (req, res, next) => {
         },
       });
     }
-
-    // Get public URL
-    const { data: urlData } = supabase.storage
-      .from('media')
-      .getPublicUrl(filePath);
-
-    // Return file metadata
-    res.json({
-      success: true,
-      data: {
-        fileName: req.file.originalname,
-        fileSize: req.file.size,
-        fileType: req.file.mimetype,
-        fileUrl: urlData.publicUrl,
-        storagePath: filePath,
-        uploadedAt: new Date().toISOString(),
-      },
-    });
   } catch (error) {
     console.error('Upload error:', error);
     next(error);

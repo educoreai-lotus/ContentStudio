@@ -563,6 +563,8 @@ ${inputText.trim()}`;
       return {
         url: uploadResult.url,
         path: uploadResult.path,
+        sha256Hash: uploadResult.sha256Hash || null,
+        digitalSignature: uploadResult.digitalSignature || null,
       };
     } catch (error) {
       logger.error('[GammaClient] Failed to upload presentation to storage', { error: error.message, stack: error.stack });
