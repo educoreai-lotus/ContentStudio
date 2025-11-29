@@ -871,22 +871,24 @@ export class CreateContentUseCase {
       
       const prompt = `You are a language detection expert. Analyze the following text and determine its PRIMARY language.
 
-CONTEXT: This is educational programming/development content that may contain technical English terms mixed with another language.
+CRITICAL: This is educational programming/development content that may contain technical English terms mixed with another language.
 
-YOUR TASK:
-1. Identify the DOMINANT language of the EXPLANATORY/EDUCATIONAL text (not code or technical terms)
-2. COMPLETELY IGNORE all technical English programming terms, even if they appear frequently
-3. Look for patterns of the actual language used for explanations, instructions, and educational content
-4. If you see non-Latin characters, prioritize that language:
-   - Arabic characters (ا-ي) → 'ar'
-   - Hebrew characters (א-ת) → 'he'
-   - Persian/Farsi characters → 'fa'
-   - Cyrillic characters (А-Я) → 'ru'
-   - Chinese characters (汉字) → 'zh'
-   - Japanese characters (ひらがな, カタカナ, 漢字) → 'ja'
-   - Korean characters (한글) → 'ko'
-   - Spanish, French, German, Italian, Portuguese → 'es', 'fr', 'de', 'it', 'pt'
-5. Only return 'en' if the EXPLANATORY sentences themselves are in English, not just because of technical terms
+YOUR TASK (IN ORDER OF PRIORITY):
+1. FIRST: Check for non-Latin script characters. If you see ANY Arabic (ا-ي), Hebrew (א-ת), Persian, Cyrillic, Chinese, Japanese, or Korean characters, return that language code IMMEDIATELY, even if there are many English technical terms.
+2. SECOND: If no non-Latin characters, identify the DOMINANT language of the EXPLANATORY/EDUCATIONAL text (not code or technical terms)
+3. COMPLETELY IGNORE all technical English programming terms, even if they appear frequently
+4. Look for patterns of the actual language used for explanations, instructions, and educational content
+5. Only return 'en' if the EXPLANATORY sentences themselves are in English AND there are no non-Latin characters
+
+LANGUAGE DETECTION RULES:
+- Arabic characters (ا-ي) → ALWAYS return 'ar' (even if only 1-2 characters)
+- Hebrew characters (א-ת) → ALWAYS return 'he' (even if only 1-2 characters)
+- Persian/Farsi characters → ALWAYS return 'fa'
+- Cyrillic characters (А-Я) → ALWAYS return 'ru'
+- Chinese characters (汉字) → ALWAYS return 'zh'
+- Japanese characters (ひらがな, カタカナ, 漢字) → ALWAYS return 'ja'
+- Korean characters (한글) → ALWAYS return 'ko'
+- Spanish, French, German, Italian, Portuguese → 'es', 'fr', 'de', 'it', 'pt'
 
 TECHNICAL TERMS TO IGNORE (do not count these as English):
 - Programming keywords: if, else, for, while, function, class, const, let, var, return, import, export, async, await, try, catch
@@ -896,6 +898,7 @@ TECHNICAL TERMS TO IGNORE (do not count these as English):
 
 EXAMPLES:
 - "في هذا الدرس سنتعلم عن docker containers" → 'ar' (Arabic, ignore "docker")
+- "في docker" → 'ar' (Even with just 2 Arabic words, return 'ar')
 - "בשיעור זה נלמד על React components" → 'he' (Hebrew, ignore "React")
 - "En esta lección aprenderemos sobre docker" → 'es' (Spanish, ignore "docker")
 - "Dans cette leçon, nous apprendrons sur docker" → 'fr' (French, ignore "docker")
@@ -909,7 +912,7 @@ Return ONLY the 2-letter ISO 639-1 language code (e.g., 'en', 'he', 'ar', 'es', 
 
       // Use openaiClient directly (not through AIGenerationService.generateText which requires language config)
       const response = await this.aiGenerationService.openaiClient.generateText(prompt, {
-        systemPrompt: 'You are a specialized language detection expert for educational programming content. Your ONLY job is to identify the PRIMARY language of explanatory/educational text, completely ignoring ALL technical English programming terms, keywords, technologies, and tools. Prioritize non-Latin scripts: Arabic (ا-ي) → "ar", Hebrew (א-ת) → "he", Persian → "fa", Cyrillic (А-Я) → "ru", Chinese (汉字) → "zh", Japanese (ひらがな/カタカナ/漢字) → "ja", Korean (한글) → "ko". For Latin-based languages, detect based on grammar and vocabulary patterns (Spanish → "es", French → "fr", German → "de", Italian → "it", Portuguese → "pt"). Only return "en" if the explanatory sentences themselves are in English. Return ONLY the 2-letter ISO 639-1 language code, nothing else.',
+        systemPrompt: 'You are a specialized language detection expert for educational programming content. CRITICAL RULES: 1) If you see ANY Arabic characters (ا-ي), return "ar" IMMEDIATELY. 2) If you see ANY Hebrew characters (א-ת), return "he" IMMEDIATELY. 3) If you see ANY non-Latin script characters, return that language code. 4) Completely ignore ALL technical English programming terms, keywords, technologies, and tools. 5) Only return "en" if the explanatory sentences themselves are in English AND there are NO non-Latin characters. Return ONLY the 2-letter ISO 639-1 language code, nothing else.',
         temperature: 0.0, // Lower temperature for more consistent results
         max_tokens: 5, // Only need 2 letters
       });
@@ -948,16 +951,19 @@ Return ONLY the 2-letter ISO 639-1 language code (e.g., 'en', 'he', 'ar', 'es', 
       return null;
     }
 
+    // Arabic pattern - check FIRST (most common issue)
+    // Even 1 Arabic character should be detected
+    const arabicPattern = /[\u0600-\u06FF]/;
+    if (arabicPattern.test(text)) {
+      console.log('[CreateContentUseCase] Arabic characters detected in heuristic check');
+      return 'ar';
+    }
+
     // Hebrew pattern
     const hebrewPattern = /[\u0590-\u05FF]/;
     if (hebrewPattern.test(text)) {
+      console.log('[CreateContentUseCase] Hebrew characters detected in heuristic check');
       return 'he';
-    }
-
-    // Arabic pattern
-    const arabicPattern = /[\u0600-\u06FF]/;
-    if (arabicPattern.test(text)) {
-      return 'ar';
     }
 
     // Persian/Farsi pattern

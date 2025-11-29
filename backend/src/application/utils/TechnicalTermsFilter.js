@@ -114,11 +114,37 @@ export function analyzeLanguageWithTechnicalTerms(text) {
   const japanesePercent = totalChars > 0 ? japaneseChars / totalChars : 0;
   const koreanPercent = totalChars > 0 ? koreanChars / totalChars : 0;
   
-  // Lower threshold for detection - if we see ANY significant amount of non-Latin characters, prioritize them
-  // This is important because technical terms can dominate the character count
+  // Very low threshold for detection - if we see ANY non-Latin characters, prioritize them
+  // This is critical because technical terms can dominate the character count
+  // Even 1-2 characters in a different script should be detected
   // Check in order of specificity (more specific patterns first)
   
-  if (chineseChars > 5 || chinesePercent > 0.05) {
+  // For Arabic/Hebrew/Persian: Even 1 character is enough if it's clearly Arabic script
+  if (arabicChars >= 1 || (arabicPercent > 0.01 && arabicChars > 0)) {
+    return {
+      dominantLanguage: 'ar',
+      confidence: Math.max(arabicPercent, 0.6), // Higher confidence for Arabic
+      hasTechnicalTerms,
+    };
+  }
+  
+  if (hebrewChars >= 1 || (hebrewPercent > 0.01 && hebrewChars > 0)) {
+    return {
+      dominantLanguage: 'he',
+      confidence: Math.max(hebrewPercent, 0.6), // Higher confidence for Hebrew
+      hasTechnicalTerms,
+    };
+  }
+  
+  if (persianChars >= 1 || (persianPercent > 0.01 && persianChars > 0)) {
+    return {
+      dominantLanguage: 'fa',
+      confidence: Math.max(persianPercent, 0.6),
+      hasTechnicalTerms,
+    };
+  }
+  
+  if (chineseChars >= 1 || (chinesePercent > 0.01 && chineseChars > 0)) {
     return {
       dominantLanguage: 'zh',
       confidence: Math.max(chinesePercent, 0.5),
@@ -126,7 +152,7 @@ export function analyzeLanguageWithTechnicalTerms(text) {
     };
   }
   
-  if (japaneseChars > 5 || japanesePercent > 0.05) {
+  if (japaneseChars >= 1 || (japanesePercent > 0.01 && japaneseChars > 0)) {
     return {
       dominantLanguage: 'ja',
       confidence: Math.max(japanesePercent, 0.5),
@@ -134,7 +160,7 @@ export function analyzeLanguageWithTechnicalTerms(text) {
     };
   }
   
-  if (koreanChars > 5 || koreanPercent > 0.05) {
+  if (koreanChars >= 1 || (koreanPercent > 0.01 && koreanChars > 0)) {
     return {
       dominantLanguage: 'ko',
       confidence: Math.max(koreanPercent, 0.5),
@@ -142,31 +168,7 @@ export function analyzeLanguageWithTechnicalTerms(text) {
     };
   }
   
-  if (hebrewChars > 5 || hebrewPercent > 0.05) {
-    return {
-      dominantLanguage: 'he',
-      confidence: Math.max(hebrewPercent, 0.5),
-      hasTechnicalTerms,
-    };
-  }
-  
-  if (arabicChars > 5 || arabicPercent > 0.05) {
-    return {
-      dominantLanguage: 'ar',
-      confidence: Math.max(arabicPercent, 0.5),
-      hasTechnicalTerms,
-    };
-  }
-  
-  if (persianChars > 5 || persianPercent > 0.05) {
-    return {
-      dominantLanguage: 'fa',
-      confidence: Math.max(persianPercent, 0.5),
-      hasTechnicalTerms,
-    };
-  }
-  
-  if (cyrillicChars > 5 || cyrillicPercent > 0.05) {
+  if (cyrillicChars >= 1 || (cyrillicPercent > 0.01 && cyrillicChars > 0)) {
     return {
       dominantLanguage: 'ru',
       confidence: Math.max(cyrillicPercent, 0.5),
