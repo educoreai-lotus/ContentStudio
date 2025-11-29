@@ -92,10 +92,14 @@ export function analyzeLanguageWithTechnicalTerms(text) {
   const filteredText = filterTechnicalTerms(text);
   const hasTechnicalTerms = filteredText.length < text.length * 0.8; // If more than 20% was filtered
   
-  // Count characters by script (check both original and filtered text)
+  // Count characters by script for all supported languages
   const hebrewChars = (text.match(/[\u0590-\u05FF]/g) || []).length;
   const arabicChars = (text.match(/[\u0600-\u06FF]/g) || []).length;
   const persianChars = (text.match(/[\u06A0-\u06FF]/g) || []).length;
+  const cyrillicChars = (text.match(/[\u0400-\u04FF]/g) || []).length; // Russian, Bulgarian, etc.
+  const chineseChars = (text.match(/[\u4E00-\u9FFF]/g) || []).length; // Chinese
+  const japaneseChars = (text.match(/[\u3040-\u309F\u30A0-\u30FF]/g) || []).length; // Japanese
+  const koreanChars = (text.match(/[\uAC00-\uD7AF]/g) || []).length; // Korean
   
   // Count non-whitespace, non-punctuation characters for better accuracy
   const allChars = text.replace(/[\s\W]/g, '');
@@ -105,26 +109,56 @@ export function analyzeLanguageWithTechnicalTerms(text) {
   const hebrewPercent = totalChars > 0 ? hebrewChars / totalChars : 0;
   const arabicPercent = totalChars > 0 ? arabicChars / totalChars : 0;
   const persianPercent = totalChars > 0 ? persianChars / totalChars : 0;
+  const cyrillicPercent = totalChars > 0 ? cyrillicChars / totalChars : 0;
+  const chinesePercent = totalChars > 0 ? chineseChars / totalChars : 0;
+  const japanesePercent = totalChars > 0 ? japaneseChars / totalChars : 0;
+  const koreanPercent = totalChars > 0 ? koreanChars / totalChars : 0;
   
   // Lower threshold for detection - if we see ANY significant amount of non-Latin characters, prioritize them
   // This is important because technical terms can dominate the character count
-  if (hebrewChars > 5 || hebrewPercent > 0.05) { // At least 5 Hebrew characters or 5% of text
+  // Check in order of specificity (more specific patterns first)
+  
+  if (chineseChars > 5 || chinesePercent > 0.05) {
+    return {
+      dominantLanguage: 'zh',
+      confidence: Math.max(chinesePercent, 0.5),
+      hasTechnicalTerms,
+    };
+  }
+  
+  if (japaneseChars > 5 || japanesePercent > 0.05) {
+    return {
+      dominantLanguage: 'ja',
+      confidence: Math.max(japanesePercent, 0.5),
+      hasTechnicalTerms,
+    };
+  }
+  
+  if (koreanChars > 5 || koreanPercent > 0.05) {
+    return {
+      dominantLanguage: 'ko',
+      confidence: Math.max(koreanPercent, 0.5),
+      hasTechnicalTerms,
+    };
+  }
+  
+  if (hebrewChars > 5 || hebrewPercent > 0.05) {
     return {
       dominantLanguage: 'he',
-      confidence: Math.max(hebrewPercent, 0.5), // Minimum 50% confidence if we detected Hebrew
+      confidence: Math.max(hebrewPercent, 0.5),
       hasTechnicalTerms,
     };
   }
   
-  if (arabicChars > 5 || arabicPercent > 0.05) { // At least 5 Arabic characters or 5% of text
+  if (arabicChars > 5 || arabicPercent > 0.05) {
     return {
       dominantLanguage: 'ar',
-      confidence: Math.max(arabicPercent, 0.5), // Minimum 50% confidence if we detected Arabic
+      confidence: Math.max(arabicPercent, 0.5),
       hasTechnicalTerms,
     };
   }
   
-  if (persianChars > 5 || persianPercent > 0.05) { // At least 5 Persian characters or 5% of text
+  if (persianChars > 5 || persianPercent > 0.05) {
     return {
       dominantLanguage: 'fa',
       confidence: Math.max(persianPercent, 0.5),
@@ -132,10 +166,18 @@ export function analyzeLanguageWithTechnicalTerms(text) {
     };
   }
   
+  if (cyrillicChars > 5 || cyrillicPercent > 0.05) {
+    return {
+      dominantLanguage: 'ru',
+      confidence: Math.max(cyrillicPercent, 0.5),
+      hasTechnicalTerms,
+    };
+  }
+  
   // Default to English only if no non-Latin characters detected
   return {
     dominantLanguage: 'en',
-    confidence: 1 - Math.max(hebrewPercent, arabicPercent, persianPercent),
+    confidence: 1 - Math.max(hebrewPercent, arabicPercent, persianPercent, cyrillicPercent, chinesePercent, japanesePercent, koreanPercent),
     hasTechnicalTerms,
   };
 }

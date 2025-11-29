@@ -877,7 +877,15 @@ YOUR TASK:
 1. Identify the DOMINANT language of the EXPLANATORY/EDUCATIONAL text (not code or technical terms)
 2. COMPLETELY IGNORE all technical English programming terms, even if they appear frequently
 3. Look for patterns of the actual language used for explanations, instructions, and educational content
-4. If you see Arabic characters (ا-ي) or Hebrew characters (א-ת), the language is likely Arabic (ar) or Hebrew (he), NOT English
+4. If you see non-Latin characters, prioritize that language:
+   - Arabic characters (ا-ي) → 'ar'
+   - Hebrew characters (א-ת) → 'he'
+   - Persian/Farsi characters → 'fa'
+   - Cyrillic characters (А-Я) → 'ru'
+   - Chinese characters (汉字) → 'zh'
+   - Japanese characters (ひらがな, カタカナ, 漢字) → 'ja'
+   - Korean characters (한글) → 'ko'
+   - Spanish, French, German, Italian, Portuguese → 'es', 'fr', 'de', 'it', 'pt'
 5. Only return 'en' if the EXPLANATORY sentences themselves are in English, not just because of technical terms
 
 TECHNICAL TERMS TO IGNORE (do not count these as English):
@@ -889,6 +897,9 @@ TECHNICAL TERMS TO IGNORE (do not count these as English):
 EXAMPLES:
 - "في هذا الدرس سنتعلم عن docker containers" → 'ar' (Arabic, ignore "docker")
 - "בשיעור זה נלמד על React components" → 'he' (Hebrew, ignore "React")
+- "En esta lección aprenderemos sobre docker" → 'es' (Spanish, ignore "docker")
+- "Dans cette leçon, nous apprendrons sur docker" → 'fr' (French, ignore "docker")
+- "В этом уроке мы изучим docker containers" → 'ru' (Russian, ignore "docker")
 - "In this lesson we will learn about docker" → 'en' (English explanatory text)
 
 Text to analyze:
@@ -898,7 +909,7 @@ Return ONLY the 2-letter ISO 639-1 language code (e.g., 'en', 'he', 'ar', 'es', 
 
       // Use openaiClient directly (not through AIGenerationService.generateText which requires language config)
       const response = await this.aiGenerationService.openaiClient.generateText(prompt, {
-        systemPrompt: 'You are a specialized language detection expert for educational programming content. Your ONLY job is to identify the PRIMARY language of explanatory/educational text, completely ignoring ALL technical English programming terms, keywords, technologies, and tools. If you see Arabic characters (ا-ي), return "ar". If you see Hebrew characters (א-ת), return "he". Only return "en" if the explanatory sentences themselves are in English. Return ONLY the 2-letter ISO 639-1 language code, nothing else.',
+        systemPrompt: 'You are a specialized language detection expert for educational programming content. Your ONLY job is to identify the PRIMARY language of explanatory/educational text, completely ignoring ALL technical English programming terms, keywords, technologies, and tools. Prioritize non-Latin scripts: Arabic (ا-ي) → "ar", Hebrew (א-ת) → "he", Persian → "fa", Cyrillic (А-Я) → "ru", Chinese (汉字) → "zh", Japanese (ひらがな/カタカナ/漢字) → "ja", Korean (한글) → "ko". For Latin-based languages, detect based on grammar and vocabulary patterns (Spanish → "es", French → "fr", German → "de", Italian → "it", Portuguese → "pt"). Only return "en" if the explanatory sentences themselves are in English. Return ONLY the 2-letter ISO 639-1 language code, nothing else.',
         temperature: 0.0, // Lower temperature for more consistent results
         max_tokens: 5, // Only need 2 letters
       });
