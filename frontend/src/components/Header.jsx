@@ -77,21 +77,7 @@ const Header = () => {
               }`}></i>
               <span>Lessons</span>
             </button>
-            <button
-              onClick={() => navigate('/languages/stats')}
-              className={`transition-all duration-300 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${
-                location.pathname.startsWith('/languages')
-                  ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/20'
-                  : 'text-gray-600 dark:text-[#cbd5e1] hover:text-emerald-600 dark:hover:text-[#f8fafc] hover:bg-emerald-50 dark:hover:bg-[#334155] hover:underline hover:decoration-emerald-400'
-              }`}
-            >
-              <i className={`fas fa-globe w-4 h-4 flex-shrink-0 ${
-                location.pathname.startsWith('/languages')
-                  ? 'text-emerald-600 dark:text-emerald-400'
-                  : 'text-gray-600 dark:text-[#cbd5e1]'
-              }`}></i>
-              <span>Languages</span>
-            </button>
+      
           </nav>
 
           {/* Language Selector */}
