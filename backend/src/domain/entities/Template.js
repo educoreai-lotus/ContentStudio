@@ -49,6 +49,7 @@ export class Template {
       const validContentTypes = [
         'avatar_video',
         'text',
+        'text_audio',
         'code',
         'presentation',
         'audio',
@@ -124,6 +125,7 @@ export class Template {
     const validContentTypes = [
       'avatar_video',
       'text',
+      'text_audio',
       'code',
       'presentation',
       'audio',

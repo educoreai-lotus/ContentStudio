@@ -39,6 +39,7 @@ export class PromptTemplate {
     const validContentTypes = [
       'avatar_video',
       'text',
+      'text_audio',
       'code',
       'presentation',
       'audio',
