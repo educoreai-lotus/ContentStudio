@@ -80,11 +80,9 @@ export class Template {
       }
 
       // REQUIRED: Audio must always be with text (text before or immediately after audio)
-      // Note: text_audio counts as text for this validation
+      // Note: text_audio counts as text for this validation (hasText already defined above)
       const audioIndex = this.format_order.indexOf('audio');
       const textIndex = this.format_order.indexOf('text');
-      const textAudioIndex = this.format_order.indexOf('text_audio');
-      const hasText = textIndex !== -1 || textAudioIndex !== -1;
       
       if (audioIndex !== -1) {
         if (!hasText) {
