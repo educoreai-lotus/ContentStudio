@@ -40,8 +40,10 @@ jobs:
           RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
           RAILWAY_SERVICE_ID: ${{ secrets.RAILWAY_SERVICE_ID }}
         run: |
+          # Link project and service first (non-interactive)
           npx @railway/cli@latest link --project ${{ secrets.RAILWAY_PROJECT_ID }} --service ${{ secrets.RAILWAY_SERVICE_ID }} || true
-          npx @railway/cli@latest up --detach
+          # Deploy with explicit service flag
+          npx @railway/cli@latest up --service ${{ secrets.RAILWAY_SERVICE_ID }} --detach
 
       - name: Deploy to Vercel (Frontend)
         uses: amondnet/vercel-action@v25
