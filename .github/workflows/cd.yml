@@ -46,7 +46,6 @@ jobs:
       - name: Deploy to Railway (Backend)
         working-directory: ./backend
         run: |
-          npx @railway/cli@latest login --token ${{ secrets.RAILWAY_TOKEN }}
           npx @railway/cli@latest link ${{ secrets.RAILWAY_PROJECT_ID }} --non-interactive
           npx @railway/cli@latest up --service content-studio-backend
         env:
@@ -79,8 +78,10 @@ jobs:
         with:
           status: ${{ job.status }}
           channel: '#deployments'
-          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         if: always()
+        continue-on-error: true
 
   # Deploy to Production
   deploy-production:
@@ -111,7 +112,6 @@ jobs:
       - name: Deploy to Railway (Backend)
         working-directory: ./backend
         run: |
-          npx @railway/cli@latest login --token ${{ secrets.RAILWAY_TOKEN }}
           npx @railway/cli@latest link ${{ secrets.RAILWAY_PROJECT_ID_PROD }} --non-interactive
           npx @railway/cli@latest up --service content-studio-backend-prod
         env:
@@ -142,7 +142,7 @@ jobs:
       - name: Create release
         uses: softprops/action-gh-release@v1
         with:
-          tag: v${{ github.run_number }}
+          tag_name: v${{ github.run_number }}
           name: Release v${{ github.run_number }}
           body: |
             ## Changes in this Release
@@ -159,8 +159,10 @@ jobs:
         with:
           status: ${{ job.status }}
           channel: '#deployments'
-          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         if: always()
+        continue-on-error: true
 
   # Rollback job
   rollback:
@@ -180,5 +182,7 @@ jobs:
         with:
           status: failure
           channel: '#deployments'
-          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         if: always()
+        continue-on-error: true
