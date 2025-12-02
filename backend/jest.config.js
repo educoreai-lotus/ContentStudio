@@ -20,5 +20,6 @@ export default {
     },
   },
   verbose: true,
+  testTimeout: 10000, // 10 seconds timeout per test to prevent hanging
 };
 

@@ -6,47 +6,67 @@
 import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
 import { GammaClient, isRTL, normalizeLanguage, RTL_LANGUAGES, buildLanguageRules } from '../../../../src/infrastructure/gamma/GammaClient.js';
 
-// Mock axios module
-const mockAxiosPost = jest.fn();
-const mockAxiosGet = jest.fn();
+// Mock axios module - use module-level variables that are accessible
+let mockAxiosPost;
+let mockAxiosGet;
 
-jest.mock('axios', () => ({
-  default: {
-    post: (...args) => mockAxiosPost(...args),
-    get: (...args) => mockAxiosGet(...args),
-  },
-}));
+// Mock axios before importing GammaClient
+// IMPORTANT: axios is imported as default, so we need to mock both default and named exports
+jest.mock('axios', () => {
+  // Create new mocks for each test run
+  const mockPost = jest.fn();
+  const mockGet = jest.fn();
+  
+  // Store references in module scope
+  mockAxiosPost = mockPost;
+  mockAxiosGet = mockGet;
+  
+  return {
+    __esModule: true,
+    default: {
+      post: (...args) => mockPost(...args),
+      get: (...args) => mockGet(...args),
+    },
+    post: (...args) => mockPost(...args),
+    get: (...args) => mockGet(...args),
+  };
+});
+
+// Get references to the mocked functions
+const getMockAxiosPost = () => {
+  if (!mockAxiosPost) {
+    throw new Error('mockAxiosPost not initialized - jest.mock may not have run');
+  }
+  return mockAxiosPost;
+};
+
+const getMockAxiosGet = () => {
+  if (!mockAxiosGet) {
+    throw new Error('mockAxiosGet not initialized - jest.mock may not have run');
+  }
+  return mockAxiosGet;
+};
 
 describe('GammaClient Language Support', () => {
   let gammaClient;
   let mockStorageClient;
 
   beforeEach(() => {
-    // Reset mocks
+    // Reset mocks FIRST - before creating new client
     jest.clearAllMocks();
     
-    // Mock storage client
-    mockStorageClient = {
-      isConfigured: jest.fn(() => true),
-      uploadFile: jest.fn().mockResolvedValue({
-        url: 'https://storage.supabase.co/presentations/test.pptx',
-        path: 'presentations/test.pptx',
-      }),
-    };
-
-    gammaClient = new GammaClient({
-      apiKey: 'test-api-key',
-      storageClient: mockStorageClient,
-    });
-
-    // Mock axios responses
-    mockAxiosPost.mockResolvedValue({
+    // Setup default mocks BEFORE creating client
+    // IMPORTANT: Set up mocks BEFORE any async operations
+    const mockPost = getMockAxiosPost();
+    const mockGet = getMockAxiosGet();
+    
+    mockPost.mockResolvedValue({
       data: {
         generationId: 'test-generation-id',
       },
     });
 
-    mockAxiosGet
+    mockGet
       .mockResolvedValueOnce({
         data: {
           status: 'completed',
@@ -62,6 +82,21 @@ describe('GammaClient Language Support', () => {
           'content-type': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
         },
       });
+    
+    // Mock storage client
+    mockStorageClient = {
+      isConfigured: jest.fn(() => true),
+      uploadFile: jest.fn().mockResolvedValue({
+        url: 'https://storage.supabase.co/presentations/test.pptx',
+        path: 'presentations/test.pptx',
+      }),
+    };
+
+    // Create client AFTER mocks are set up
+    gammaClient = new GammaClient({
+      apiKey: 'test-api-key',
+      storageClient: mockStorageClient,
+    });
   });
 
   afterEach(() => {
@@ -171,14 +206,18 @@ describe('GammaClient Language Support', () => {
       jest.clearAllMocks();
       
       // Setup default successful API responses for all integration tests
-      mockAxiosPost.mockResolvedValue({
+      // IMPORTANT: Set up mocks BEFORE any async operations
+      const mockPost = getMockAxiosPost();
+      const mockGet = getMockAxiosGet();
+      
+      mockPost.mockResolvedValue({
         data: { generationId: 'test-id' },
       });
-      mockAxiosGet
-        .mockResolvedValue({
+      mockGet
+        .mockResolvedValueOnce({
           data: { status: 'completed', result: { exportUrl: 'https://test.com/file.pptx' } },
         })
-        .mockResolvedValue({
+        .mockResolvedValueOnce({
           data: Buffer.from('test'),
           headers: { 'content-type': 'application/vnd.openxmlformats-officedocument.presentationml.presentation' },
         });
@@ -193,22 +232,20 @@ describe('GammaClient Language Support', () => {
         audience: 'students',
       });
 
-      // Check if post was called
-      if (mockAxiosPost.mock.calls.length > 0) {
-        const callArgs = mockAxiosPost.mock.calls[0];
-        const payload = callArgs[1];
-        const sentText = payload.inputText;
+      // Verify mock was called
+      const mockPost = getMockAxiosPost();
+      expect(mockPost).toHaveBeenCalled();
+      
+      const callArgs = mockPost.mock.calls[0];
+      const payload = callArgs[1];
+      const sentText = payload.inputText;
 
-        // Verify language rules are injected
-        expect(sentText).toContain('IMPORTANT — LANGUAGE RULES');
-        expect(sentText).toContain('Do NOT translate the text');
-        expect(sentText).toContain('RIGHT-TO-LEFT');
-        expect(sentText).toContain('he');
-        expect(sentText).toContain(inputText); // Original content preserved
-      } else {
-        // If mock wasn't called, verify the function exists and would inject rules
-        expect(typeof gammaClient.generatePresentation).toBe('function');
-      }
+      // Verify language rules are injected
+      expect(sentText).toContain('IMPORTANT — LANGUAGE RULES');
+      expect(sentText).toContain('Do NOT translate the text');
+      expect(sentText).toContain('RIGHT-TO-LEFT');
+      expect(sentText).toContain('he');
+      expect(sentText).toContain(inputText); // Original content preserved
     });
 
     it('should inject language rules for LTR languages', async () => {
@@ -220,7 +257,8 @@ describe('GammaClient Language Support', () => {
         audience: 'students',
       });
 
-      const callArgs = mockAxiosPost.mock.calls[0];
+      const mockPost = getMockAxiosPost();
+      const callArgs = mockPost.mock.calls[0];
       const payload = callArgs[1];
       const sentText = payload.inputText;
 
@@ -241,7 +279,8 @@ describe('GammaClient Language Support', () => {
         audience: 'students',
       });
 
-      const callArgs = mockAxiosPost.mock.calls[0];
+      const mockPost = getMockAxiosPost();
+      const callArgs = mockPost.mock.calls[0];
       const payload = callArgs[1];
       const sentText = payload.inputText;
 
@@ -259,7 +298,8 @@ describe('GammaClient Language Support', () => {
         audience: 'students',
       });
 
-      const callArgs = mockAxiosPost.mock.calls[0];
+      const mockPost = getMockAxiosPost();
+      const callArgs = mockPost.mock.calls[0];
       const payload = callArgs[1];
       const sentText = payload.inputText;
 
@@ -277,7 +317,8 @@ describe('GammaClient Language Support', () => {
         audience: 'students',
       });
 
-      const callArgs = mockAxiosPost.mock.calls[0];
+      const mockPost = getMockAxiosPost();
+      const callArgs = mockPost.mock.calls[0];
       const payload = callArgs[1];
       const sentText = payload.inputText;
 
@@ -295,7 +336,8 @@ describe('GammaClient Language Support', () => {
         audience: 'students',
       });
 
-      const callArgs = mockAxiosPost.mock.calls[0];
+      const mockPost = getMockAxiosPost();
+      const callArgs = mockPost.mock.calls[0];
       const payload = callArgs[1];
       const sentText = payload.inputText;
 
@@ -313,7 +355,8 @@ describe('GammaClient Language Support', () => {
         audience: 'students',
       });
 
-      const callArgs = mockAxiosPost.mock.calls[0];
+      const mockPost = getMockAxiosPost();
+      const callArgs = mockPost.mock.calls[0];
       const payload = callArgs[1];
       const sentText = payload.inputText;
 
@@ -331,7 +374,8 @@ describe('GammaClient Language Support', () => {
         audience: 'students',
       });
 
-      const callArgs = mockAxiosPost.mock.calls[0];
+      const mockPost = getMockAxiosPost();
+      const callArgs = mockPost.mock.calls[0];
       const payload = callArgs[1];
       const sentText = payload.inputText;
 
@@ -349,7 +393,8 @@ describe('GammaClient Language Support', () => {
         audience: 'students',
       });
 
-      const callArgs = mockAxiosPost.mock.calls[0];
+      const mockPost = getMockAxiosPost();
+      const callArgs = mockPost.mock.calls[0];
       const payload = callArgs[1];
       const sentText = payload.inputText;
 
@@ -367,7 +412,8 @@ describe('GammaClient Language Support', () => {
         audience: 'students',
       });
 
-      const callArgs = mockAxiosPost.mock.calls[0];
+      const mockPost = getMockAxiosPost();
+      const callArgs = mockPost.mock.calls[0];
       const payload = callArgs[1];
       const sentText = payload.inputText;
 
@@ -385,7 +431,8 @@ describe('GammaClient Language Support', () => {
         audience: 'students',
       });
 
-      const callArgs = mockAxiosPost.mock.calls[0];
+      const mockPost = getMockAxiosPost();
+      const callArgs = mockPost.mock.calls[0];
       const payload = callArgs[1];
       const sentText = payload.inputText;
 
@@ -403,7 +450,8 @@ describe('GammaClient Language Support', () => {
         audience: 'students',
       });
 
-      const callArgs = mockAxiosPost.mock.calls[0];
+      const mockPost = getMockAxiosPost();
+      const callArgs = mockPost.mock.calls[0];
       const payload = callArgs[1];
       const sentText = payload.inputText;
 
@@ -419,14 +467,18 @@ describe('GammaClient Language Support', () => {
       jest.clearAllMocks();
       
       // Setup default successful API responses
-      mockAxiosPost.mockResolvedValue({
+      // IMPORTANT: Set up mocks BEFORE any async operations
+      const mockPost = getMockAxiosPost();
+      const mockGet = getMockAxiosGet();
+      
+      mockPost.mockResolvedValue({
         data: { generationId: 'test-id' },
       });
-      mockAxiosGet
-        .mockResolvedValue({
+      mockGet
+        .mockResolvedValueOnce({
           data: { status: 'completed', result: { exportUrl: 'https://test.com/file.pptx' } },
         })
-        .mockResolvedValue({
+        .mockResolvedValueOnce({
           data: Buffer.from('test'),
           headers: { 'content-type': 'application/vnd.openxmlformats-officedocument.presentationml.presentation' },
         });
@@ -440,7 +492,8 @@ describe('GammaClient Language Support', () => {
         language: 'he',
       });
 
-      const callArgs = mockAxiosPost.mock.calls[0];
+      const mockPost = getMockAxiosPost();
+      const callArgs = mockPost.mock.calls[0];
       const payload = callArgs[1];
       const sentText = payload.inputText;
 
@@ -456,7 +509,8 @@ describe('GammaClient Language Support', () => {
         language: 'en',
       });
 
-      const callArgs = mockAxiosPost.mock.calls[0];
+      const mockPost = getMockAxiosPost();
+      const callArgs = mockPost.mock.calls[0];
       const payload = callArgs[1];
       const sentText = payload.inputText;
 
@@ -472,7 +526,8 @@ describe('GammaClient Language Support', () => {
         language: 'en',
       });
 
-      const callArgs = mockAxiosPost.mock.calls[0];
+      const mockPost = getMockAxiosPost();
+      const callArgs = mockPost.mock.calls[0];
       const payload = callArgs[1];
       const sentText = payload.inputText;
 
@@ -487,14 +542,18 @@ describe('GammaClient Language Support', () => {
       jest.clearAllMocks();
       
       // Setup default successful API responses
-      mockAxiosPost.mockResolvedValue({
+      // IMPORTANT: Set up mocks BEFORE any async operations
+      const mockPost = getMockAxiosPost();
+      const mockGet = getMockAxiosGet();
+      
+      mockPost.mockResolvedValue({
         data: { generationId: 'test-id' },
       });
-      mockAxiosGet
-        .mockResolvedValue({
+      mockGet
+        .mockResolvedValueOnce({
           data: { status: 'completed', result: { exportUrl: 'https://test.com/file.pptx' } },
         })
-        .mockResolvedValue({
+        .mockResolvedValueOnce({
           data: Buffer.from('test'),
           headers: { 'content-type': 'application/vnd.openxmlformats-officedocument.presentationml.presentation' },
         });
@@ -508,7 +567,8 @@ describe('GammaClient Language Support', () => {
         language: 'en',
       });
 
-      const callArgs = mockAxiosPost.mock.calls[0];
+      const mockPost = getMockAxiosPost();
+      const callArgs = mockPost.mock.calls[0];
       const payload = callArgs[1];
       const sentText = payload.inputText;
 
@@ -530,7 +590,8 @@ describe('GammaClient Language Support', () => {
         language: 'en',
       });
 
-      const callArgs = mockAxiosPost.mock.calls[0];
+      const mockPost = getMockAxiosPost();
+      const callArgs = mockPost.mock.calls[0];
       const payload = callArgs[1];
       const sentText = payload.inputText;
 
