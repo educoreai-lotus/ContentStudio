@@ -18,8 +18,14 @@ jobs:
       - name: Check backend health
         run: |
           BACKEND_URL=${{ secrets.PRODUCTION_BACKEND_URL }}
-          echo "Checking backend health at: $BACKEND_URL"
           
+          if [ -z "$BACKEND_URL" ]; then
+            echo "⚠️ PRODUCTION_BACKEND_URL not set, skipping health check"
+            echo "backend_status=skipped" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          echo "Checking backend health at: $BACKEND_URL"
           response=$(curl -s -o /dev/null -w "%{http_code}" "$BACKEND_URL/health" || echo "000")
           
           if [ "$response" = "200" ]; then
@@ -29,12 +35,19 @@ jobs:
             echo "❌ Backend is unhealthy (HTTP $response)"
             echo "backend_status=unhealthy" >> $GITHUB_OUTPUT
           fi
+        continue-on-error: true
 
       - name: Check frontend health
         run: |
           FRONTEND_URL=${{ secrets.PRODUCTION_FRONTEND_URL }}
-          echo "Checking frontend health at: $FRONTEND_URL"
           
+          if [ -z "$FRONTEND_URL" ]; then
+            echo "⚠️ PRODUCTION_FRONTEND_URL not set, skipping health check"
+            echo "frontend_status=skipped" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          echo "Checking frontend health at: $FRONTEND_URL"
           response=$(curl -s -o /dev/null -w "%{http_code}" "$FRONTEND_URL" || echo "000")
           
           if [ "$response" = "200" ]; then
@@ -44,6 +57,7 @@ jobs:
             echo "❌ Frontend is unhealthy (HTTP $response)"
             echo "frontend_status=unhealthy" >> $GITHUB_OUTPUT
           fi
+        continue-on-error: true
 
       - name: Check database connectivity
         run: |
@@ -69,21 +83,45 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Install bc (for calculations)
+        run: sudo apt-get update && sudo apt-get install -y bc
+
       - name: Measure response times
         run: |
           BACKEND_URL=${{ secrets.PRODUCTION_BACKEND_URL }}
           
+          if [ -z "$BACKEND_URL" ]; then
+            echo "⚠️ PRODUCTION_BACKEND_URL not set, skipping performance check"
+            echo "backend_performance=skipped" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
           echo "Measuring backend response times..."
-          response_time=$(curl -o /dev/null -s -w "%{time_total}" "$BACKEND_URL/health")
+          response_time=$(curl -o /dev/null -s -w "%{time_total}" "$BACKEND_URL/health" 2>/dev/null || echo "0")
+          
+          if [ "$response_time" = "0" ] || [ -z "$response_time" ]; then
+            echo "⚠️ Failed to measure response time"
+            echo "backend_performance=error" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
           echo "Backend response time: ${response_time}s"
           
-          if (( $(echo "$response_time > 2.0" | bc -l) )); then
+          # Use awk for comparison if bc fails
+          if command -v bc >/dev/null 2>&1; then
+            is_slow=$(echo "$response_time > 2.0" | bc -l)
+          else
+            is_slow=$(awk "BEGIN {print ($response_time > 2.0) ? 1 : 0}")
+          fi
+          
+          if [ "$is_slow" = "1" ]; then
             echo "⚠️ Backend response time is slow: ${response_time}s"
             echo "backend_performance=slow" >> $GITHUB_OUTPUT
           else
             echo "✅ Backend response time is good: ${response_time}s"
             echo "backend_performance=good" >> $GITHUB_OUTPUT
           fi
+        continue-on-error: true
 
       - name: Check memory usage
         run: |

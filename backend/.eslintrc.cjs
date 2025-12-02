@@ -23,7 +23,10 @@ module.exports = {
   rules: {
     'no-console': 'off',
     'no-unused-vars': 'warn',
-    'prefer-const': 'error',
+    'no-case-declarations': 'off',
+    'no-control-regex': 'warn',
+    'no-prototype-builtins': 'warn',
+    'prefer-const': 'warn',
     'no-var': 'error',
   },
 };

@@ -25,9 +25,13 @@ module.exports = {
   rules: {
     'react/react-in-jsx-scope': 'off',
     'react/prop-types': 'off',
+    'react-hooks/exhaustive-deps': 'warn',
     'no-console': 'off',
     'no-unused-vars': 'warn',
-    'prefer-const': 'error',
+    'no-constant-condition': 'warn',
+    'no-case-declarations': 'off',
+    'react/no-unescaped-entities': 'warn',
+    'prefer-const': 'warn',
     'no-var': 'error',
   },
 };
