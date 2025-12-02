@@ -28,14 +28,19 @@ RUN ffmpeg -version && \
 # Set working directory
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Copy package files (including package-lock.json)
+COPY package.json package-lock.json* ./
 
 # Install Node.js dependencies
-# Use npm ci for faster, reliable, reproducible builds
+# Use npm ci if package-lock.json exists, otherwise use npm install
 # Don't use --only=production to ensure all dependencies are available
-RUN npm ci && \
-    npm cache clean --force
+RUN if [ -f package-lock.json ]; then \
+        npm ci && \
+        npm cache clean --force; \
+    else \
+        npm install && \
+        npm cache clean --force; \
+    fi
 
 # Copy application code
 COPY . .

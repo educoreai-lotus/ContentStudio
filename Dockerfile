@@ -57,9 +57,16 @@ RUN set -e; \
         exit 1; \
     fi; \
     echo "Copying package files from ${APP_SRC}"; \
-    cp ${APP_SRC}/package*.json ./ && \
-    npm ci && \
-    npm cache clean --force
+    cp ${APP_SRC}/package.json ./ && \
+    if [ -f ${APP_SRC}/package-lock.json ]; then \
+        cp ${APP_SRC}/package-lock.json ./ && \
+        npm ci && \
+        npm cache clean --force; \
+    else \
+        echo "WARNING: package-lock.json not found, using npm install instead"; \
+        npm install && \
+        npm cache clean --force; \
+    fi
 
 # Copy application code from detected app dir inside the image
 RUN set -e; \
