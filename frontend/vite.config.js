@@ -10,6 +10,18 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
     },
+    pool: 'forks',
+    poolOptions: {
+      forks: {
+        singleFork: true,
+      },
+    },
+  },
+  optimizeDeps: {
+    include: ['whatwg-url', 'webidl-conversions'],
+  },
+  ssr: {
+    noExternal: ['whatwg-url', 'webidl-conversions'],
   },
   build: {
     outDir: 'dist',
@@ -38,6 +50,8 @@ export default defineConfig({
     'import.meta.env.VITE_API_BASE_URL': JSON.stringify(
       process.env.VITE_API_BASE_URL || ''
     ),
+    // Fix for webidl-conversions - make global available
+    'global': 'globalThis',
   },
 });
 

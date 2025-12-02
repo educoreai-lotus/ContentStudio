@@ -1,9 +1,11 @@
-import { describe, it, expect, jest, beforeEach } from '@jest/globals';
+import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
 import { WhisperClient } from '../../../../../src/infrastructure/external-apis/openai/WhisperClient.js';
+import fs from 'fs';
 
 describe('WhisperClient', () => {
   let whisperClient;
   let mockOpenAI;
+  let mockReadStream;
 
   beforeEach(() => {
     mockOpenAI = {
@@ -14,6 +16,15 @@ describe('WhisperClient', () => {
       },
     };
 
+    // Mock fs.createReadStream
+    mockReadStream = {
+      pipe: jest.fn(),
+      on: jest.fn(),
+      once: jest.fn(),
+      emit: jest.fn(),
+    };
+    jest.spyOn(fs, 'createReadStream').mockReturnValue(mockReadStream);
+
     // Mock OpenAI constructor
     jest.mock('openai', () => {
       return jest.fn().mockImplementation(() => mockOpenAI);
@@ -21,6 +32,10 @@ describe('WhisperClient', () => {
 
     whisperClient = new WhisperClient({ apiKey: 'test-key' });
     whisperClient.openai = mockOpenAI;
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   describe('transcribe', () => {
