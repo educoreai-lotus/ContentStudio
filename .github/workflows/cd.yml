@@ -36,12 +36,10 @@ jobs:
       - name: Deploy to Railway (Backend)
         working-directory: ./backend
         run: |
-          npx @railway/cli@latest up \
-            --project ${{ secrets.RAILWAY_PROJECT_ID }} \
-            --service ${{ secrets.RAILWAY_SERVICE_ID }} \
-            --detach
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_PROJECT_ID=${{ secrets.RAILWAY_PROJECT_ID }} \
+          RAILWAY_SERVICE_ID=${{ secrets.RAILWAY_SERVICE_ID }} \
+          RAILWAY_TOKEN=${{ secrets.RAILWAY_TOKEN }} \
+          npx @railway/cli@latest up --detach
 
       - name: Deploy to Vercel (Frontend)
         uses: amondnet/vercel-action@v25
