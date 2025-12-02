@@ -46,7 +46,7 @@ jobs:
       - name: Deploy to Railway (Backend)
         working-directory: ./backend
         run: |
-          npx @railway/cli@latest link --project ${{ secrets.RAILWAY_PROJECT_ID }} --non-interactive
+          npx @railway/cli@latest link --project ${{ secrets.RAILWAY_PROJECT_ID }}
           npx @railway/cli@latest up --service content-studio-backend
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
@@ -112,7 +112,7 @@ jobs:
       - name: Deploy to Railway (Backend)
         working-directory: ./backend
         run: |
-          npx @railway/cli@latest link --project ${{ secrets.RAILWAY_PROJECT_ID_PROD }} --non-interactive
+          npx @railway/cli@latest link --project ${{ secrets.RAILWAY_PROJECT_ID_PROD }}
           npx @railway/cli@latest up --service content-studio-backend-prod
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
