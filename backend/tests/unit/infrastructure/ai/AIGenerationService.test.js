@@ -249,12 +249,6 @@ describe('AIGenerationService', () => {
         serviceWithoutGamma.generatePresentation({ topic: 'Test' })
       ).rejects.toThrow('Gamma client not configured');
     });
-      service.openaiClient = null;
-
-      await expect(service.generatePresentation('test')).rejects.toThrow(
-        'OpenAI client not configured'
-      );
-    });
   });
 
   describe('generate', () => {

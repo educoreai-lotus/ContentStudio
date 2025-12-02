@@ -2,9 +2,28 @@
 // webidl-conversions expects 'global' to exist when it's imported
 
 // Set up global = globalThis immediately (before any imports)
-if (typeof global === 'undefined' && typeof globalThis !== 'undefined') {
-  // eslint-disable-next-line no-global-assign
-  global = globalThis;
+// This must be done synchronously before any module imports
+if (typeof global === 'undefined') {
+  if (typeof globalThis !== 'undefined') {
+    // eslint-disable-next-line no-global-assign
+    global = globalThis;
+  } else if (typeof window !== 'undefined') {
+    // eslint-disable-next-line no-global-assign
+    global = window;
+  } else {
+    // eslint-disable-next-line no-global-assign
+    global = {};
+  }
+}
+
+// Ensure global has required properties
+if (typeof global !== 'undefined') {
+  // Make sure global.get is available (needed by webidl-conversions)
+  if (!global.get) {
+    global.get = function(key) {
+      return this[key];
+    };
+  }
 }
 
 // Import polyfills
