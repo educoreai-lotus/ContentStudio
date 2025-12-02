@@ -15,15 +15,20 @@ export default defineConfig({
         inline: ['whatwg-url', 'webidl-conversions'],
       },
     },
-    pool: 'forks',
+    pool: 'threads',
     poolOptions: {
-      forks: {
-        singleFork: true,
+      threads: {
+        singleThread: true,
       },
     },
   },
   optimizeDeps: {
     include: ['whatwg-url', 'webidl-conversions'],
+    esbuildOptions: {
+      define: {
+        global: 'globalThis',
+      },
+    },
   },
   build: {
     outDir: 'dist',
