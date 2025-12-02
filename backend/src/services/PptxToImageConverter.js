@@ -114,7 +114,9 @@ export class PptxToImageConverter {
       // Clean up on error
       try {
         await execAsync(`rm -rf "${outputDir}"`);
-      } catch {}
+      } catch {
+        // Ignore cleanup errors
+      }
       return [];
     }
   }

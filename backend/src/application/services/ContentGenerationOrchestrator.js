@@ -457,6 +457,7 @@ export class ContentGenerationOrchestrator {
     normalized = normalized.replace(/[ \t]{2,}/g, ' ');
 
     // Remove special characters that might cause issues
+    // eslint-disable-next-line no-control-regex
     normalized = normalized.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
 
     return normalized.trim();

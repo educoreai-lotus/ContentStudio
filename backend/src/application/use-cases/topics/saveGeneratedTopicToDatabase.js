@@ -120,9 +120,9 @@ export async function saveGeneratedTopicToDatabase(generatedTopic, preferredLang
     
     for (const content of generatedTopic.contents) {
       let storagePathToRollback = null;
+      const contentTypeName = content.content_type;
       
       try {
-        const contentTypeName = content.content_type;
         const contentTypeId = CONTENT_TYPE_MAP[contentTypeName];
         
         if (!contentTypeId) {

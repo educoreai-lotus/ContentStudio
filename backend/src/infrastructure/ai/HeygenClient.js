@@ -270,6 +270,9 @@ export class HeygenClient {
       throw new Error('Heygen client not configured');
     }
 
+    // Define requestPayload outside try block so it's accessible in catch
+    let requestPayload = null;
+
     try {
       // Validate required fields
       if (!payload || typeof payload !== 'object') {
@@ -446,7 +449,7 @@ export class HeygenClient {
       };
       const heygenLanguage = heygenLanguageMap[language] || language;
 
-      const requestPayload = {
+      requestPayload = {
         title: title || 'EduCore Lesson',
         video_inputs: [
           {
@@ -481,6 +484,15 @@ export class HeygenClient {
 
       // Create video generation request
       // ⚠️ CRITICAL: Use /v2/video/generate endpoint (HeyGen API v2)
+      if (!requestPayload) {
+        return {
+          status: 'failed',
+          videoId: null,
+          error: 'Failed to construct request payload',
+          errorCode: 'INVALID_PAYLOAD',
+        };
+      }
+
       let response;
       try {
         response = await this.client.post('/v2/video/generate', requestPayload);

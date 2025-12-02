@@ -47,7 +47,7 @@ export function filterTechnicalTerms(text) {
   }
 
   // Split text into words (preserve punctuation and spacing)
-  const words = text.split(/(\s+|[.,;:!?()\[\]{}'"`])/);
+  const words = text.split(/(\s+|[.,;:!?()[\]{}'"`])/);
   
   const filteredWords = words.map(word => {
     // Check if word (case-insensitive) is a technical term
