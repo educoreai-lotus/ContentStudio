@@ -44,11 +44,13 @@ jobs:
         run: npm run build
 
       - name: Deploy to Railway (Backend)
-        uses: railwayapp/railway-action@v3
-        with:
-          railway_token: ${{ secrets.RAILWAY_TOKEN }}
-          service: content-studio-backend
-          command: up
+        working-directory: ./backend
+        run: |
+          npx @railway/cli@latest login --token ${{ secrets.RAILWAY_TOKEN }}
+          npx @railway/cli@latest link ${{ secrets.RAILWAY_PROJECT_ID }} --non-interactive
+          npx @railway/cli@latest up --service content-studio-backend
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
       - name: Deploy to Vercel (Frontend)
         uses: amondnet/vercel-action@v25
@@ -107,11 +109,13 @@ jobs:
         run: npm run build
 
       - name: Deploy to Railway (Backend)
-        uses: railwayapp/railway-action@v3
-        with:
-          railway_token: ${{ secrets.RAILWAY_TOKEN }}
-          service: content-studio-backend-prod
-          command: up
+        working-directory: ./backend
+        run: |
+          npx @railway/cli@latest login --token ${{ secrets.RAILWAY_TOKEN }}
+          npx @railway/cli@latest link ${{ secrets.RAILWAY_PROJECT_ID_PROD }} --non-interactive
+          npx @railway/cli@latest up --service content-studio-backend-prod
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
       - name: Deploy to Vercel (Frontend)
         uses: amondnet/vercel-action@v25
