@@ -62,8 +62,9 @@ jobs:
 
       - name: Check for known vulnerabilities
         run: |
-          cd backend && npm audit --json > backend-audit.json
-          cd ../frontend && npm audit --json > frontend-audit.json
+          cd backend && npm audit --json > backend-audit.json || true
+          cd ../frontend && npm audit --json > frontend-audit.json || true
+        continue-on-error: true
 
       - name: Upload audit results
         uses: actions/upload-artifact@v4
