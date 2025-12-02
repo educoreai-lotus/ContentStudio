@@ -31,7 +31,8 @@ describe('PostgreSQL Repository Integration Tests', () => {
       return;
     }
 
-    db = DatabaseConnection.getInstance();
+    const dbModule = await import('../../../src/infrastructure/database/DatabaseConnection.js');
+    db = dbModule.db;
     
     // Wait for connection
     if (!db.isConnected()) {

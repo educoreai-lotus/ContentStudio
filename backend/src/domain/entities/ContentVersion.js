@@ -45,6 +45,21 @@ export class ContentVersion {
       errors.push('content_data is required and must be an object or string');
     }
 
+    // Validate content_id if provided
+    if (this.content_id !== null && (typeof this.content_id !== 'number' || this.content_id <= 0)) {
+      errors.push('content_id must be a positive integer if provided');
+    }
+
+    // Validate version_number if provided (deprecated but still validated)
+    if (this.version_number !== null && (typeof this.version_number !== 'number' || this.version_number <= 0)) {
+      errors.push('version_number must be a positive integer if provided');
+    }
+
+    // Validate created_by
+    if (!this.created_by || typeof this.created_by !== 'string' || this.created_by.trim() === '') {
+      errors.push('created_by is required and must be a non-empty string');
+    }
+
     if (errors.length > 0) {
       throw new Error(`ContentVersion validation failed: ${errors.join('; ')}`);
     }

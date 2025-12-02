@@ -1,8 +1,8 @@
-// Polyfills must be set up BEFORE any imports
-// This is critical for webidl-conversions which expects 'global' to exist
+// CRITICAL: This file must set up global BEFORE any modules are loaded
+// webidl-conversions expects 'global' to exist when it's imported
 
-// Set up global = globalThis if it doesn't exist
-if (typeof global === 'undefined') {
+// Set up global = globalThis immediately (before any imports)
+if (typeof global === 'undefined' && typeof globalThis !== 'undefined') {
   // eslint-disable-next-line no-global-assign
   global = globalThis;
 }
@@ -10,7 +10,7 @@ if (typeof global === 'undefined') {
 // Import polyfills
 import { TextEncoder, TextDecoder } from 'util';
 
-// Set up TextEncoder and TextDecoder on both global and globalThis
+// Set up TextEncoder and TextDecoder
 if (typeof globalThis !== 'undefined') {
   globalThis.TextEncoder = TextEncoder;
   globalThis.TextDecoder = TextDecoder;

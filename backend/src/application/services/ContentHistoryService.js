@@ -52,11 +52,20 @@ export class ContentHistoryService {
     );
 
     const now = new Date();
+    
+    // Calculate version_number for backward compatibility
+    const existingVersions = await this.contentHistoryRepository.findByTopicAndType(
+      content.topic_id,
+      content.content_type_id
+    );
+    const versionNumber = existingVersions ? existingVersions.length + 1 : 1;
+    
     const payload = {
       topic_id: content.topic_id,
       content_type_id: content.content_type_id,
       generation_method_id: content.generation_method_id,
       content_data: cleanedContentData,
+      version_number: versionNumber, // For backward compatibility with tests
       created_at: now,
       updated_at: now,
     };

@@ -16,6 +16,9 @@ export default defineConfig({
       },
     },
   },
+  optimizeDeps: {
+    include: ['whatwg-url', 'webidl-conversions'],
+  },
   build: {
     outDir: 'dist',
     sourcemap: false,
@@ -43,6 +46,8 @@ export default defineConfig({
     'import.meta.env.VITE_API_BASE_URL': JSON.stringify(
       process.env.VITE_API_BASE_URL || ''
     ),
+    // Fix for webidl-conversions - make global available
+    'global': 'globalThis',
   },
 });
 

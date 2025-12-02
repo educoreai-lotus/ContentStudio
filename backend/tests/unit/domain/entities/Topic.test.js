@@ -29,6 +29,7 @@ describe('Topic Entity', () => {
         topic_name: 'Stand-alone Lesson',
         trainer_id: 'trainer123',
         course_id: null,
+        language: 'en',
       };
 
       const topic = new Topic(topicData);

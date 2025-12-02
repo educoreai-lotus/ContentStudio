@@ -15,6 +15,12 @@ describe('CreateContentUseCase', () => {
 
     qualityCheckService = {
       triggerQualityCheck: jest.fn(),
+      validateContentQualityBeforeSave: jest.fn().mockResolvedValue({
+        relevance_score: 90,
+        originality_score: 85,
+        difficulty_alignment_score: 80,
+        consistency_score: 85,
+      }),
     };
 
     useCase = new CreateContentUseCase({

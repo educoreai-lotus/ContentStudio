@@ -10,6 +10,11 @@ export class Template {
     format_order,
     created_by,
     created_at = new Date(),
+    updated_at = new Date(),
+    description = null,
+    notes = null,
+    is_active = true,
+    usage_count = 0,
   }) {
     this.template_id = template_id;
     this.template_name = template_name;
@@ -17,6 +22,11 @@ export class Template {
     this.format_order = format_order;
     this.created_by = created_by;
     this.created_at = created_at instanceof Date ? created_at : new Date(created_at);
+    this.updated_at = updated_at instanceof Date ? updated_at : new Date(updated_at);
+    this.description = description;
+    this.notes = notes;
+    this.is_active = is_active;
+    this.usage_count = usage_count || 0;
 
     this.validate();
   }
@@ -171,6 +181,30 @@ export class Template {
    */
   getMissingFormats(currentContent = {}) {
     return this.format_order.filter(formatType => !currentContent[formatType]);
+  }
+
+  /**
+   * Increment usage count
+   */
+  incrementUsage() {
+    this.usage_count = (this.usage_count || 0) + 1;
+    this.updated_at = new Date();
+  }
+
+  /**
+   * Deactivate template
+   */
+  deactivate() {
+    this.is_active = false;
+    this.updated_at = new Date();
+  }
+
+  /**
+   * Activate template
+   */
+  activate() {
+    this.is_active = true;
+    this.updated_at = new Date();
   }
 }
 

@@ -84,6 +84,7 @@ export class PostgreSQLContentVersionRepository extends IContentVersionRepositor
       'content_type_id',
       'content_data',
       'generation_method_id',
+      'version_number',
       'created_at',
       'updated_at',
     ];
@@ -101,6 +102,7 @@ export class PostgreSQLContentVersionRepository extends IContentVersionRepositor
         ? version.content_data
         : JSON.stringify(version.content_data),
       generationMethodId,
+      version.version_number || null, // For backward compatibility
       version.created_at || now,
       version.updated_at || now,
     ];
@@ -278,7 +280,7 @@ export class PostgreSQLContentVersionRepository extends IContentVersionRepositor
       topic_id: row.topic_id,
       content_type_id: row.content_type_id,
       generation_method_id: row.generation_method_id,
-      version_number: null, // Deprecated: use timestamps instead
+      version_number: row.version_number || null, // For backward compatibility
       content_data: typeof row.content_data === 'string' 
         ? JSON.parse(row.content_data) 
         : row.content_data,

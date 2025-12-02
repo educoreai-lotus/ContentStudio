@@ -51,7 +51,8 @@ Lesson Context:
 Generate ${language} code that demonstrates the concepts clearly.`,
 };
 
-const SUPPORTED_TYPES = [1, 2, 3, 4, 5, 6]; // text, code, presentation, audio, mind_map, avatar_video
+// Support both numeric IDs and string names for content types
+const SUPPORTED_TYPES = [1, 2, 3, 4, 5, 6, 'text', 'code', 'presentation', 'audio', 'mind_map', 'avatar_video'];
 
 export class GenerateContentUseCase {
   constructor({
@@ -154,11 +155,28 @@ ${basePrompt}`;
       throw new Error('content_type_id is required');
     }
 
-    if (!SUPPORTED_TYPES.includes(generationRequest.content_type_id)) {
+    // Normalize content_type_id to number if it's a string
+    let contentTypeId = generationRequest.content_type_id;
+    const typeMap = {
+      'text': 1,
+      'code': 2,
+      'presentation': 3,
+      'audio': 4,
+      'mind_map': 5,
+      'avatar_video': 6,
+    };
+    if (typeof contentTypeId === 'string' && typeMap[contentTypeId]) {
+      contentTypeId = typeMap[contentTypeId];
+    }
+
+    if (!SUPPORTED_TYPES.includes(contentTypeId) && !SUPPORTED_TYPES.includes(generationRequest.content_type_id)) {
       throw new Error(
         `AI generation not yet supported for type: ${generationRequest.content_type_id}`
       );
     }
+    
+    // Update the request with normalized ID
+    generationRequest.content_type_id = contentTypeId;
 
     const promptVariables = this.buildPromptVariables(generationRequest, generationRequest.content_type_id);
 

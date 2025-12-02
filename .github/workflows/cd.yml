@@ -14,6 +14,9 @@ jobs:
     name: Deploy to Production
     runs-on: ubuntu-latest
     environment: production
+    permissions:
+      contents: write
+      packages: read
 
     steps:
       - name: Checkout code
@@ -44,6 +47,29 @@ jobs:
           npx @railway/cli@latest link --project ${{ secrets.RAILWAY_PROJECT_ID }} --service ${{ secrets.RAILWAY_SERVICE_ID }} || true
           # Deploy with explicit service flag
           npx @railway/cli@latest up --service ${{ secrets.RAILWAY_SERVICE_ID }} --detach
+
+      - name: Check Vercel configuration
+        run: |
+          if [ -z "${{ secrets.VERCEL_TOKEN }}" ]; then
+            echo "⚠️ VERCEL_TOKEN is not set in GitHub secrets"
+            echo "Please add VERCEL_TOKEN in: Settings → Secrets and variables → Actions"
+            exit 0
+          fi
+          if [ -z "${{ secrets.VERCEL_ORG_ID }}" ] && [ -z "${{ secrets.VERCEL_TEAM_SLUG }}" ]; then
+            echo "⚠️ VERCEL_ORG_ID or VERCEL_TEAM_SLUG is not set"
+            echo "Please add VERCEL_ORG_ID (or VERCEL_TEAM_SLUG) in: Settings → Secrets and variables → Actions"
+            echo "You can find it in Vercel Dashboard → Team Settings → Team URL (e.g., zaheyas-projects)"
+            exit 0
+          fi
+          if [ -z "${{ secrets.VERCEL_PROJECT_ID }}" ]; then
+            echo "⚠️ VERCEL_PROJECT_ID is not set"
+            echo "Please add VERCEL_PROJECT_ID in: Settings → Secrets and variables → Actions"
+            echo "To find it:"
+            echo "  1. Go to Vercel Dashboard → Your Project → Settings → General"
+            echo "  2. Or run: cd frontend && vercel link"
+            exit 0
+          fi
+          echo "✅ Vercel configuration check passed"
 
       - name: Deploy to Vercel (Frontend)
         uses: amondnet/vercel-action@v25

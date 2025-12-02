@@ -41,6 +41,11 @@ export class Content {
     // Content type validation (accept both string and integer)
     if (!this.content_type_id) {
       errors.push('content_type_id is required');
+    } else {
+      const validContentTypes = [1, 2, 3, 4, 5, 6, 'text', 'code', 'presentation', 'audio', 'mind_map', 'avatar_video', 'text_audio'];
+      if (!validContentTypes.includes(this.content_type_id)) {
+        errors.push(`content_type_id must be one of: ${validContentTypes.join(', ')}`);
+      }
     }
 
     // Content data validation
@@ -51,6 +56,11 @@ export class Content {
     // Generation method validation (accept both string and integer)
     if (!this.generation_method_id) {
       errors.push('generation_method_id is required');
+    } else {
+      const validMethods = [1, 2, 3, 4, 'manual', 'ai_assisted', 'ai_generated', 'manual_edited'];
+      if (!validMethods.includes(this.generation_method_id)) {
+        errors.push(`generation_method_id must be one of: ${validMethods.join(', ')}`);
+      }
     }
 
     // Quality check status validation (if provided)
@@ -97,6 +107,11 @@ export class Content {
    * We check both string and number to be defensive, but the repository should ensure conversion.
    */
   needsQualityCheck() {
+    // If already checked, don't need another check
+    if (this.quality_check_status === 'approved' || this.quality_check_status === 'rejected') {
+      return false;
+    }
+    
     const methodId = this.generation_method_id;
     
     // Check if it's a string (name) - this is the expected format

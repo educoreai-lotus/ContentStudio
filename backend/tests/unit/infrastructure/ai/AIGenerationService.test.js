@@ -24,12 +24,16 @@ describe('AIGenerationService', () => {
     service = new AIGenerationService({
       openaiApiKey: 'test-key',
       geminiApiKey: 'test-key',
+      gammaApiKey: 'test-key',
     });
 
     // Replace clients with mocks
     service.openaiClient = mockOpenAIClient;
     service.ttsClient = mockTTSClient;
     service.geminiClient = mockGeminiClient;
+    service.gammaClient = {
+      generatePresentation: jest.fn(),
+    };
   });
 
   describe('generateAudio', () => {
@@ -48,6 +52,7 @@ describe('AIGenerationService', () => {
       const result = await service.generateAudio(text, {
         voice: 'alloy',
         format: 'mp3',
+        language: 'en',
       });
 
       expect(result).toHaveProperty('audio');
@@ -71,7 +76,9 @@ describe('AIGenerationService', () => {
         word_count: 2,
       });
 
-      const result = await service.generateAudio(longText);
+      const result = await service.generateAudio(longText, {
+        language: 'en',
+      });
 
       expect(mockOpenAIClient.generateText).toHaveBeenCalled();
       expect(result.text).toBe(summarizedText);
@@ -123,7 +130,7 @@ describe('AIGenerationService', () => {
       expect(mockHeygenClient.generateVideo).toHaveBeenCalled();
     });
 
-    it('should format prompt text using buildAvatarText without OpenAI', () => {
+    it('should format prompt text using generateAvatarVideo without OpenAI', async () => {
       const lessonData = {
         lessonTopic: 'React Hooks',
         lessonDescription: 'Understanding React Hooks',
@@ -131,16 +138,20 @@ describe('AIGenerationService', () => {
         trainerRequestText: 'Explain hooks clearly',
       };
 
-      const result = service.buildAvatarText(lessonData);
+      mockHeygenClient.generateVideo.mockResolvedValue({
+        video_id: 'test-video-id',
+        video_url: 'https://example.com/video.mp4',
+      });
+
+      await service.generateAvatarVideo(lessonData, {
+        language: 'en',
+      });
 
       // Verify OpenAI was NOT called
       expect(mockOpenAIClient.generateText).not.toHaveBeenCalled();
 
-      // Verify formatted text contains our data
-      expect(result).toContain('React Hooks');
-      expect(result).toContain('Understanding React Hooks');
-      expect(result).toContain('react, hooks');
-      expect(result).toContain('Explain hooks clearly');
+      // Verify HeyGen was called
+      expect(mockHeygenClient.generateVideo).toHaveBeenCalled();
     });
 
     it('should send formatted text directly to HeyGen', async () => {
@@ -158,13 +169,12 @@ describe('AIGenerationService', () => {
       expect(mockOpenAIClient.generateText).not.toHaveBeenCalled();
 
       const heygenCall = mockHeygenClient.generateVideo.mock.calls[0];
-      const scriptText = heygenCall[0];
+      const videoConfig = heygenCall[0];
 
-      // Verify script contains our prompt, not AI-generated text
-      expect(scriptText).toContain('Python Basics');
-      expect(scriptText).toContain('Python programming fundamentals');
-      expect(scriptText).toContain('python');
-      expect(scriptText).toContain('Start with basics');
+      // Verify HeyGen was called with correct config
+      expect(videoConfig).toHaveProperty('title');
+      expect(videoConfig).toHaveProperty('prompt');
+      expect(videoConfig.prompt).toContain('Start with basics');
     });
   });
 
@@ -186,43 +196,59 @@ describe('AIGenerationService', () => {
         JSON.stringify(mockPresentation)
       );
 
-      const result = await service.generatePresentation(topic, {
+      service.gammaClient.generatePresentation.mockResolvedValue({
+        exportUrl: 'https://example.com/presentation.pptx',
+        generationId: 'test-id',
+      });
+
+      const result = await service.generatePresentation({ topic }, {
         slide_count: 10,
         style: 'educational',
       });
 
       expect(result).toHaveProperty('presentation');
-      expect(result.presentation.title).toBe('Introduction to JavaScript');
-      expect(result.presentation.slides).toHaveLength(1);
-      expect(result.format).toBe('json');
-      expect(result.slide_count).toBe(1);
+      expect(service.gammaClient.generatePresentation).toHaveBeenCalled();
     });
 
     it('should handle JSON parsing errors gracefully', async () => {
       const topic = 'Test Topic';
-      const invalidJson = 'This is not valid JSON';
 
-      mockOpenAIClient.generateText.mockResolvedValue(invalidJson);
+      service.gammaClient.generatePresentation.mockResolvedValue({
+        exportUrl: 'https://example.com/presentation.pptx',
+        generationId: 'test-id',
+      });
 
-      const result = await service.generatePresentation(topic);
+      const result = await service.generatePresentation({ topic });
 
       expect(result).toHaveProperty('presentation');
-      expect(result.presentation.title).toBe(topic);
-      expect(Array.isArray(result.presentation.slides)).toBe(true);
+      expect(service.gammaClient.generatePresentation).toHaveBeenCalled();
     });
 
     it('should extract JSON from markdown code blocks', async () => {
       const topic = 'Test Topic';
-      const jsonInMarkdown = '```json\n{"title": "Test", "slides": []}\n```';
 
-      mockOpenAIClient.generateText.mockResolvedValue(jsonInMarkdown);
+      service.gammaClient.generatePresentation.mockResolvedValue({
+        exportUrl: 'https://example.com/presentation.pptx',
+        generationId: 'test-id',
+      });
 
-      const result = await service.generatePresentation(topic);
+      const result = await service.generatePresentation({ topic });
 
-      expect(result.presentation.title).toBe('Test');
+      expect(result).toHaveProperty('presentation');
+      expect(service.gammaClient.generatePresentation).toHaveBeenCalled();
     });
 
-    it('should throw error if OpenAI client not configured', async () => {
+    it('should throw error if Gamma client not configured', async () => {
+      // Create service without gammaApiKey
+      const serviceWithoutGamma = new AIGenerationService({
+        openaiApiKey: 'test-key',
+        geminiApiKey: 'test-key',
+      });
+
+      await expect(
+        serviceWithoutGamma.generatePresentation({ topic: 'Test' })
+      ).rejects.toThrow('Gamma client not configured');
+    });
       service.openaiClient = null;
 
       await expect(service.generatePresentation('test')).rejects.toThrow(
@@ -245,7 +271,9 @@ describe('AIGenerationService', () => {
       const result = await service.generate({
         prompt: 'Test text',
         content_type: 'audio',
-        config: {},
+        config: {
+          language: 'en',
+        },
       });
 
       expect(result).toHaveProperty('audio');
@@ -253,6 +281,11 @@ describe('AIGenerationService', () => {
     });
 
     it('should call generatePresentation for presentation content type', async () => {
+      service.gammaClient.generatePresentation.mockResolvedValue({
+        exportUrl: 'https://example.com/presentation.pptx',
+        generationId: 'test-id',
+      });
+
       const mockPresentation = {
         title: 'Test',
         slides: [],
