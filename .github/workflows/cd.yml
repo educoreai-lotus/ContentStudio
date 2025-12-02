@@ -36,8 +36,10 @@ jobs:
       - name: Deploy to Railway (Backend)
         working-directory: ./backend
         run: |
-          npx @railway/cli@latest link --project ${{ secrets.RAILWAY_PROJECT_ID }}
-          npx @railway/cli@latest up --service content-studio-backend
+          npx @railway/cli@latest up \
+            --project ${{ secrets.RAILWAY_PROJECT_ID }} \
+            --service ${{ secrets.RAILWAY_SERVICE_ID }} \
+            --detach
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
