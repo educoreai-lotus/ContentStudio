@@ -4,7 +4,7 @@ import { PromptSanitizer } from '../../infrastructure/security/PromptSanitizer.j
 
 const PROMPT_BUILDERS = {
   text: ({ lessonTopic, lessonDescription, language, skillsList }) => `You are an expert educational content creator in EduCore Content Studio.
-🎯 Objective: Generate a concise, audio-friendly lesson text for ${lessonTopic}.
+Objective: Generate a concise, audio-friendly lesson text for ${lessonTopic}.
 
 Lesson Context:
 - Topic: ${lessonTopic}
@@ -12,18 +12,18 @@ Lesson Context:
 - Language: ${language}
 - Skills Focus: ${skillsList}
 
-⚠️ CRITICAL CONSTRAINTS:
+ CRITICAL CONSTRAINTS:
 1. **Maximum Length: 3500 characters** (to fit audio narration limit of 4000 chars)
 2. **NO CODE EXAMPLES** - this is pure explanatory text (code has its own format)
 3. **NO special symbols or formatting** - plain text only for audio conversion
 
-📝 Structure (keep concise):
+Structure (keep concise):
 - **Introduction** (2-3 sentences): Brief overview of the topic
 - **Explanation** (main content): Clear, simple explanation of key concepts
 - **Real-world Examples** (2-3 examples): Short, practical examples WITHOUT code
 - **Summary** (2-3 sentences): Quick recap of main points
 
-✅ Writing Style:
+Writing Style:
 - Use simple, clear language suitable for audio narration
 - Short paragraphs (2-4 sentences each)
 - Avoid technical jargon unless necessary
@@ -32,7 +32,7 @@ Lesson Context:
 
 Output only pure, conversational text in ${language}.`,
   code: ({ lessonTopic, lessonDescription, language, skillsList }) => `You are a senior coding mentor in EduCore Content Studio.
-🎯 Objective: Generate clean, production-ready code example related to ${lessonTopic}.
+ Objective: Generate clean, production-ready code example related to ${lessonTopic}.
 
 Lesson Context:
 - Topic: ${lessonTopic}
@@ -40,7 +40,7 @@ Lesson Context:
 - Skills: ${skillsList}
 - Language: ${language}
 
-⚠️ CRITICAL REQUIREMENTS:
+ CRITICAL REQUIREMENTS:
 - Write clean, readable code WITHOUT excessive comments
 - Code should be self-explanatory through clear naming and structure
 - Only add comments if absolutely necessary for complex logic
