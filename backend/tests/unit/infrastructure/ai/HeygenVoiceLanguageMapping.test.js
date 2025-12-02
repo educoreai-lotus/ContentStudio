@@ -82,6 +82,7 @@ describe('HeyGen Voice Language Mapping - End-to-End Validation', () => {
       realHeygenClient = new HeygenClient({ apiKey: 'test-api-key' });
       
       // Mock the axios client
+      const mockGet = jest.fn();
       realHeygenClient.client = {
         post: jest.fn().mockResolvedValue({
           data: {
@@ -90,15 +91,46 @@ describe('HeyGen Voice Language Mapping - End-to-End Validation', () => {
             },
           },
         }),
-        get: jest.fn().mockResolvedValue({
+        get: mockGet,
+      };
+      
+      // Mock get to handle different endpoints
+      mockGet.mockImplementation((url) => {
+        // If it's an avatar list endpoint, return avatars
+        if (url.includes('avatar')) {
+          return Promise.resolve({
+            data: {
+              data: {
+                avatars: [
+                  {
+                    avatar_id: 'test-avatar-id',
+                    name: 'Test Avatar',
+                    gender: 'female',
+                    style: 'professional',
+                    is_public: true,
+                  },
+                ],
+              },
+            },
+          });
+        }
+        // Otherwise, return video status
+        return Promise.resolve({
           data: {
             data: {
               status: 'completed',
               video_url: 'https://heygen.com/video.mp4',
             },
           },
-        }),
-      };
+        });
+      });
+      
+      // Mock findFallbackAvatar to return a test avatar (prevents API calls)
+      realHeygenClient.findFallbackAvatar = jest.fn().mockResolvedValue('test-avatar-id');
+      
+      // Set a valid avatar ID to avoid fallback lookup
+      realHeygenClient.avatarId = 'test-avatar-id';
+      realHeygenClient.avatarValidated = true;
     });
 
     it('should call HeyGen API with correct voice_id for "ar"', async () => {

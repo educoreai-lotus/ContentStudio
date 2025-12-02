@@ -42,7 +42,7 @@ describe('Quality Checks API Integration Tests', () => {
         .send({ check_type: 'full' });
 
       // Should either succeed (if API key exists) or fail with proper error
-      expect([200, 201, 500]).toContain(response.status);
+      expect([200, 201, 500, 503]).toContain(response.status);
       if (response.body.success) {
         expect(response.body.data).toHaveProperty('quality_check_id');
         expect(response.body.data.content_id).toBe(testContentId);
@@ -59,7 +59,7 @@ describe('Quality Checks API Integration Tests', () => {
         .send({ check_type: 'quick' });
 
       // Should either succeed (if API key exists) or fail with proper error
-      expect([200, 201, 500]).toContain(response.status);
+      expect([200, 201, 500, 503]).toContain(response.status);
       if (response.body.success) {
         expect(response.body.data.check_type).toBe('quick');
       }

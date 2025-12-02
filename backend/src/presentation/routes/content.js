@@ -3,6 +3,7 @@ import { ContentController } from '../controllers/ContentController.js';
 import { RepositoryFactory } from '../../infrastructure/database/repositories/RepositoryFactory.js';
 import { ContentHistoryService } from '../../application/services/ContentHistoryService.js';
 import { AIGenerationService } from '../../infrastructure/ai/AIGenerationService.js';
+import { QualityCheckService } from '../../infrastructure/ai/QualityCheckService.js';
 
 const router = express.Router();
 
@@ -25,7 +26,6 @@ let contentController;
   const topicRepository = await RepositoryFactory.getTopicRepository();
   const courseRepository = await RepositoryFactory.getCourseRepository();
   
-  const { QualityCheckService } = await import('../../infrastructure/ai/QualityCheckService.js');
   const qualityCheckService = new QualityCheckService({
     openaiApiKey: process.env.OPENAI_API_KEY,
     qualityCheckRepository,

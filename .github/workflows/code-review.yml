@@ -48,7 +48,7 @@ jobs:
       - name: Run tests with coverage
         run: |
           cd backend && npm test -- --coverage
-          cd ../frontend && npm test -- --coverage --watchAll=false
+          cd ../frontend && npm test -- --coverage --run
 
       # Code complexity analysis
       - name: Analyze code complexity

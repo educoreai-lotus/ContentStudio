@@ -166,31 +166,32 @@ describe('GammaClient Language Support', () => {
   });
 
   describe('Language Rules Injection (Integration)', () => {
-    it('should inject language rules for RTL languages', async () => {
-      const inputText = 'This is the trainer content. Do not translate.';
+    beforeEach(() => {
+      // Reset mocks before each test
+      jest.clearAllMocks();
       
-      // Mock successful API responses
-      mockAxiosPost.mockResolvedValueOnce({
+      // Setup default successful API responses for all integration tests
+      mockAxiosPost.mockResolvedValue({
         data: { generationId: 'test-id' },
       });
       mockAxiosGet
-        .mockResolvedValueOnce({
+        .mockResolvedValue({
           data: { status: 'completed', result: { exportUrl: 'https://test.com/file.pptx' } },
         })
-        .mockResolvedValueOnce({
+        .mockResolvedValue({
           data: Buffer.from('test'),
           headers: { 'content-type': 'application/vnd.openxmlformats-officedocument.presentationml.presentation' },
         });
+    });
 
-      try {
-        await gammaClient.generatePresentation(inputText, {
-          topicName: 'Test Topic',
-          language: 'he',
-          audience: 'students',
-        });
-      } catch (error) {
-        // Ignore API errors, we just want to check the payload
-      }
+    it('should inject language rules for RTL languages', async () => {
+      const inputText = 'This is the trainer content. Do not translate.';
+      
+      await gammaClient.generatePresentation(inputText, {
+        topicName: 'Test Topic',
+        language: 'he',
+        audience: 'students',
+      });
 
       // Check if post was called
       if (mockAxiosPost.mock.calls.length > 0) {
@@ -413,6 +414,24 @@ describe('GammaClient Language Support', () => {
   });
 
   describe('Content Preservation (No Translation)', () => {
+    beforeEach(() => {
+      // Reset mocks before each test
+      jest.clearAllMocks();
+      
+      // Setup default successful API responses
+      mockAxiosPost.mockResolvedValue({
+        data: { generationId: 'test-id' },
+      });
+      mockAxiosGet
+        .mockResolvedValue({
+          data: { status: 'completed', result: { exportUrl: 'https://test.com/file.pptx' } },
+        })
+        .mockResolvedValue({
+          data: Buffer.from('test'),
+          headers: { 'content-type': 'application/vnd.openxmlformats-officedocument.presentationml.presentation' },
+        });
+    });
+
     it('should preserve trainer content exactly for RTL languages', async () => {
       const exactContent = 'זהו תוכן מדויק של המאמן. אל תשנה אותו.';
       
@@ -463,6 +482,24 @@ describe('GammaClient Language Support', () => {
   });
 
   describe('Language Rules Structure', () => {
+    beforeEach(() => {
+      // Reset mocks before each test
+      jest.clearAllMocks();
+      
+      // Setup default successful API responses
+      mockAxiosPost.mockResolvedValue({
+        data: { generationId: 'test-id' },
+      });
+      mockAxiosGet
+        .mockResolvedValue({
+          data: { status: 'completed', result: { exportUrl: 'https://test.com/file.pptx' } },
+        })
+        .mockResolvedValue({
+          data: Buffer.from('test'),
+          headers: { 'content-type': 'application/vnd.openxmlformats-officedocument.presentationml.presentation' },
+        });
+    });
+
     it('should include all required language rules', async () => {
       const inputText = 'Test content';
       
