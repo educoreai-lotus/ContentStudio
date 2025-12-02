@@ -45,8 +45,10 @@ jobs:
         run: |
           # Link project and service first (non-interactive)
           npx @railway/cli@latest link --project ${{ secrets.RAILWAY_PROJECT_ID }} --service ${{ secrets.RAILWAY_SERVICE_ID }} || true
-          # Deploy with explicit service flag
-          npx @railway/cli@latest up --service ${{ secrets.RAILWAY_SERVICE_ID }} --detach
+          # Deploy from backend directory
+          # Railway will use the current working directory (backend) as root
+          # Note: Root Directory in Railway Dashboard should be set to "/backend" or left empty
+          npx @railway/cli@latest up --detach
 
       - name: Check Vercel configuration
         run: |
