@@ -6,7 +6,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'jsdom',
-    setupFiles: './tests/setup.js',
+    setupFiles: ['./tests/setup.js'],
     coverage: {
       provider: 'v8',
     },
@@ -52,6 +52,8 @@ export default defineConfig({
     'import.meta.env.VITE_API_BASE_URL': JSON.stringify(
       process.env.VITE_API_BASE_URL || ''
     ),
+    // Ensure global is defined for webidl-conversions
+    'global': 'globalThis',
   },
 });
 
