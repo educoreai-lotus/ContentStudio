@@ -4,26 +4,16 @@ on:
   push:
     branches: [ main ]
   workflow_dispatch:
-    inputs:
-      environment:
-        description: 'Environment to deploy to'
-        required: true
-        default: 'staging'
-        type: choice
-        options:
-          - staging
-          - production
 
 env:
   NODE_VERSION: '18'
 
 jobs:
-  # Deploy to Staging
-  deploy-staging:
-    name: Deploy to Staging
+  # Deploy to Production
+  deploy-production:
+    name: Deploy to Production
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging')
-    environment: staging
+    environment: production
 
     steps:
       - name: Checkout code
@@ -57,72 +47,6 @@ jobs:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
           vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
           vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          working-directory: ./frontend
-
-      - name: Database Migrations
-        run: |
-          echo "⚠️ Database migrations must be run manually on Supabase"
-          echo "Go to Supabase Dashboard → SQL Editor"
-          echo "Run: database/migrations/migration.sql"
-          echo "Additional migrations may be needed based on your database state"
-
-      - name: Run health checks
-        run: |
-          sleep 30
-          curl -f ${{ secrets.STAGING_BACKEND_URL }}/health || echo "⚠️ Backend health check failed (non-blocking)"
-          curl -f ${{ secrets.STAGING_FRONTEND_URL }} || echo "⚠️ Frontend health check failed (non-blocking)"
-        continue-on-error: true
-
-      - name: Notify deployment
-        uses: 8398a7/action-slack@v3
-        with:
-          status: ${{ job.status }}
-          channel: '#deployments'
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-        if: always()
-        continue-on-error: true
-
-  # Deploy to Production
-  deploy-production:
-    name: Deploy to Production
-    runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production'
-    environment: production
-    needs: deploy-staging
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Install dependencies
-        run: |
-          cd backend && npm ci
-          cd ../frontend && npm ci
-
-      - name: Build frontend
-        working-directory: ./frontend
-        run: npm run build
-
-      - name: Deploy to Railway (Backend)
-        working-directory: ./backend
-        run: |
-          npx @railway/cli@latest link --project ${{ secrets.RAILWAY_PROJECT_ID_PROD }}
-          npx @railway/cli@latest up --service content-studio-backend-prod
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-
-      - name: Deploy to Vercel (Frontend)
-        uses: amondnet/vercel-action@v25
-        with:
-          vercel-token: ${{ secrets.VERCEL_TOKEN }}
-          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
-          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID_PROD }}
           working-directory: ./frontend
 
       - name: Database Migrations
