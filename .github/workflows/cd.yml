@@ -43,12 +43,10 @@ jobs:
           RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
           RAILWAY_SERVICE_ID: ${{ secrets.RAILWAY_SERVICE_ID }}
         run: |
-          # Link project and service first (non-interactive)
-          npx @railway/cli@latest link --project ${{ secrets.RAILWAY_PROJECT_ID }} --service ${{ secrets.RAILWAY_SERVICE_ID }} || true
-          # Deploy from backend directory
-          # Railway will use the current working directory (backend) as root
+          # Deploy to Railway using environment variables
+          # Railway CLI will use RAILWAY_TOKEN, RAILWAY_PROJECT_ID, and RAILWAY_SERVICE_ID from env
           # Note: Root Directory in Railway Dashboard should be set to "/backend" or left empty
-          npx @railway/cli@latest up --detach
+          npx @railway/cli@latest up --service ${{ secrets.RAILWAY_SERVICE_ID }} --detach
 
       - name: Check Vercel configuration
         run: |
