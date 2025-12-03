@@ -1,4 +1,5 @@
 import axios from 'axios';
+import crypto from 'crypto';
 import { logger } from '../infrastructure/logging/Logger.js';
 
 /**
@@ -29,12 +30,36 @@ function getBackoffDelay(attempt) {
 }
 
 /**
+ * Generate signature for registration request
+ * Signature is HMAC-SHA256 of: coordinator public key + service name + request payload
+ * @param {string} coordinatorPublicKey - Coordinator's public key (used as HMAC secret)
+ * @param {string} serviceName - Service name (content-studio)
+ * @param {Object} payload - Registration request payload
+ * @returns {string} Base64-encoded signature
+ */
+function generateSignature(coordinatorPublicKey, serviceName, payload) {
+  // Create a string representation of the payload (sorted keys for consistency)
+  const payloadString = JSON.stringify(payload, Object.keys(payload).sort());
+  
+  // Combine: coordinator public key + service name + payload
+  const signatureInput = `${coordinatorPublicKey}${serviceName}${payloadString}`;
+  
+  // Generate HMAC using SHA-256
+  const hmac = crypto.createHmac('sha256', coordinatorPublicKey);
+  hmac.update(signatureInput);
+  
+  // Return Base64-encoded signature (as required by Coordinator)
+  return hmac.digest('base64');
+}
+
+/**
  * Register service with Coordinator
  * @returns {Promise<{success: boolean, serviceId?: string, status?: string, error?: string}>}
  */
 async function registerWithCoordinator() {
   const coordinatorUrl = process.env.COORDINATOR_URL;
   const serviceEndpoint = process.env.SERVICE_ENDPOINT;
+  const coordinatorPublicKey = process.env.COORDINATOR_PUBLIC_KEY;
 
   // Validate required environment variables
   if (!coordinatorUrl) {
@@ -45,6 +70,12 @@ async function registerWithCoordinator() {
 
   if (!serviceEndpoint) {
     const error = 'SERVICE_ENDPOINT environment variable is required';
+    logger.error(`❌ Registration failed: ${error}`);
+    return { success: false, error };
+  }
+
+  if (!coordinatorPublicKey) {
+    const error = 'COORDINATOR_PUBLIC_KEY environment variable is required for authentication';
     logger.error(`❌ Registration failed: ${error}`);
     return { success: false, error };
   }
@@ -63,12 +94,30 @@ async function registerWithCoordinator() {
     metadata: METADATA,
   };
 
+  // Generate signature for authentication
+  let signature;
+  try {
+    signature = generateSignature(
+      coordinatorPublicKey,
+      SERVICE_NAME,
+      registrationPayload
+    );
+  } catch (signatureError) {
+    const error = `Failed to generate signature: ${signatureError.message}`;
+    logger.error(`❌ Registration failed: ${error}`, {
+      error: signatureError.message,
+      stack: signatureError.stack,
+    });
+    return { success: false, error };
+  }
+
   logger.info('🔄 Attempting to register with Coordinator...', {
     coordinatorUrl: cleanCoordinatorUrl,
     registrationUrl: registrationUrl,
     serviceEndpoint: cleanServiceEndpoint,
     serviceName: SERVICE_NAME,
     version: SERVICE_VERSION,
+    hasSignature: !!signature,
   });
 
   // Retry logic with exponential backoff (up to 5 attempts)
@@ -80,6 +129,8 @@ async function registerWithCoordinator() {
       const response = await axios.post(registrationUrl, registrationPayload, {
         headers: {
           'Content-Type': 'application/json',
+          'X-Service-Name': SERVICE_NAME,
+          'X-Signature': signature,
         },
         timeout: 10000, // 10 seconds timeout
       });
