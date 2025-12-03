@@ -38,21 +38,15 @@ function getBackoffDelay(attempt) {
  * @returns {string} Base64-encoded signature
  */
 function generateSignature(coordinatorPublicKey, serviceName, payload) {
-  // Create a string representation of the payload (sorted keys for consistency)
-  const payloadString = JSON.stringify(payload, Object.keys(payload).sort());
-  
-  // Try different signature formats - Coordinator might expect one of these:
-  // Option 1: HMAC of (publicKey + serviceName + payload)
-  // Option 2: HMAC of (serviceName + payload) using publicKey as secret
-  // Option 3: HMAC of (payload) using publicKey as secret
-  
-  // Using Option 2: HMAC of (serviceName + payload) with publicKey as secret
-  // This is the most common pattern
-  const signatureInput = `${serviceName}${payloadString}`;
+  // Coordinator expects signature of the request body (payload) only
+  // Using the raw JSON string (as sent in request body) without sorting keys
+  // This matches what the Coordinator receives and verifies
+  const payloadString = JSON.stringify(payload);
   
   // Generate HMAC using SHA-256 with publicKey as the secret
+  // Signature input: just the payload (as it appears in the request body)
   const hmac = crypto.createHmac('sha256', coordinatorPublicKey);
-  hmac.update(signatureInput);
+  hmac.update(payloadString);
   
   // Return Base64-encoded signature (as required by Coordinator)
   const signature = hmac.digest('base64');
@@ -60,9 +54,10 @@ function generateSignature(coordinatorPublicKey, serviceName, payload) {
   logger.debug('Generated signature', {
     signatureLength: signature.length,
     signaturePrefix: signature.substring(0, 20) + '...',
-    inputLength: signatureInput.length,
+    payloadStringLength: payloadString.length,
+    payloadString: payloadString.substring(0, 100) + '...',
     publicKeyLength: coordinatorPublicKey.length,
-    publicKeyPrefix: coordinatorPublicKey.substring(0, 30) + '...',
+    publicKeyPrefix: coordinatorPublicKey.substring(0, 50) + '...',
   });
   
   return signature;
