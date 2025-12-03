@@ -38,15 +38,16 @@ function getBackoffDelay(attempt) {
  * @returns {string} Base64-encoded signature
  */
 function generateSignature(coordinatorPublicKey, serviceName, payload) {
-  // Coordinator expects signature of the request body (payload) only
+  // Coordinator expects signature of: serviceName + payload
   // Using the raw JSON string (as sent in request body) without sorting keys
-  // This matches what the Coordinator receives and verifies
   const payloadString = JSON.stringify(payload);
   
+  // Combine serviceName and payload for signature
+  const signatureInput = `${serviceName}${payloadString}`;
+  
   // Generate HMAC using SHA-256 with publicKey as the secret
-  // Signature input: just the payload (as it appears in the request body)
   const hmac = crypto.createHmac('sha256', coordinatorPublicKey);
-  hmac.update(payloadString);
+  hmac.update(signatureInput);
   
   // Return Base64-encoded signature (as required by Coordinator)
   const signature = hmac.digest('base64');
@@ -54,8 +55,8 @@ function generateSignature(coordinatorPublicKey, serviceName, payload) {
   logger.debug('Generated signature', {
     signatureLength: signature.length,
     signaturePrefix: signature.substring(0, 20) + '...',
-    payloadStringLength: payloadString.length,
-    payloadString: payloadString.substring(0, 100) + '...',
+    signatureInputLength: signatureInput.length,
+    signatureInputPrefix: signatureInput.substring(0, 100) + '...',
     publicKeyLength: coordinatorPublicKey.length,
     publicKeyPrefix: coordinatorPublicKey.substring(0, 50) + '...',
   });
