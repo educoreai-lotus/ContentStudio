@@ -41,15 +41,31 @@ function generateSignature(coordinatorPublicKey, serviceName, payload) {
   // Create a string representation of the payload (sorted keys for consistency)
   const payloadString = JSON.stringify(payload, Object.keys(payload).sort());
   
-  // Combine: coordinator public key + service name + payload
-  const signatureInput = `${coordinatorPublicKey}${serviceName}${payloadString}`;
+  // Try different signature formats - Coordinator might expect one of these:
+  // Option 1: HMAC of (publicKey + serviceName + payload)
+  // Option 2: HMAC of (serviceName + payload) using publicKey as secret
+  // Option 3: HMAC of (payload) using publicKey as secret
   
-  // Generate HMAC using SHA-256
+  // Using Option 2: HMAC of (serviceName + payload) with publicKey as secret
+  // This is the most common pattern
+  const signatureInput = `${serviceName}${payloadString}`;
+  
+  // Generate HMAC using SHA-256 with publicKey as the secret
   const hmac = crypto.createHmac('sha256', coordinatorPublicKey);
   hmac.update(signatureInput);
   
   // Return Base64-encoded signature (as required by Coordinator)
-  return hmac.digest('base64');
+  const signature = hmac.digest('base64');
+  
+  logger.debug('Generated signature', {
+    signatureLength: signature.length,
+    signaturePrefix: signature.substring(0, 20) + '...',
+    inputLength: signatureInput.length,
+    publicKeyLength: coordinatorPublicKey.length,
+    publicKeyPrefix: coordinatorPublicKey.substring(0, 30) + '...',
+  });
+  
+  return signature;
 }
 
 /**
@@ -126,12 +142,24 @@ async function registerWithCoordinator() {
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
-      const response = await axios.post(registrationUrl, registrationPayload, {
+      const requestHeaders = {
+        'Content-Type': 'application/json',
+        'X-Service-Name': SERVICE_NAME,
+        'X-Signature': signature,
+      };
+
+      logger.debug('Sending registration request', {
+        url: registrationUrl,
         headers: {
-          'Content-Type': 'application/json',
-          'X-Service-Name': SERVICE_NAME,
-          'X-Signature': signature,
+          'Content-Type': requestHeaders['Content-Type'],
+          'X-Service-Name': requestHeaders['X-Service-Name'],
+          'X-Signature': signature.substring(0, 20) + '...',
         },
+        payload: registrationPayload,
+      });
+
+      const response = await axios.post(registrationUrl, registrationPayload, {
+        headers: requestHeaders,
         timeout: 10000, // 10 seconds timeout
       });
 
@@ -172,7 +200,16 @@ async function registerWithCoordinator() {
         if (status === 400) {
           errorMessage = `Bad request: ${data?.message || statusText}`;
         } else if (status === 401) {
-          errorMessage = `Unauthorized: Invalid credentials. Response: ${JSON.stringify(data || {})}`;
+          errorMessage = `Unauthorized: Authentication failed. Response: ${JSON.stringify(data || {})}. Please verify COORDINATOR_PUBLIC_KEY is correct.`;
+          logger.error('Authentication failed - signature rejected', {
+            status,
+            responseData: data,
+            serviceName: SERVICE_NAME,
+            signatureLength: signature?.length,
+            signaturePrefix: signature?.substring(0, 20),
+            publicKeyLength: coordinatorPublicKey?.length,
+            publicKeyPrefix: coordinatorPublicKey?.substring(0, 50) + '...',
+          });
         } else if (status === 403) {
           errorMessage = 'Forbidden: Access denied';
         } else if (status === 404) {
