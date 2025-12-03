@@ -1,5 +1,4 @@
 import axios from 'axios';
-import crypto from 'crypto';
 import { logger } from '../infrastructure/logging/Logger.js';
 
 /**
@@ -30,36 +29,12 @@ function getBackoffDelay(attempt) {
 }
 
 /**
- * Generate HMAC-like token for registration request
- * Token is derived from: coordinator public key + service name + request payload
- * @param {string} coordinatorPublicKey - Coordinator's public key
- * @param {string} serviceName - Service name (content-studio)
- * @param {Object} payload - Registration request payload
- * @returns {string} HMAC token (hex encoded)
- */
-function generateRegistrationToken(coordinatorPublicKey, serviceName, payload) {
-  // Create a string representation of the payload (sorted keys for consistency)
-  const payloadString = JSON.stringify(payload, Object.keys(payload).sort());
-  
-  // Combine: coordinator public key + service name + payload
-  const tokenInput = `${coordinatorPublicKey}${serviceName}${payloadString}`;
-  
-  // Generate HMAC using SHA-256
-  const hmac = crypto.createHmac('sha256', coordinatorPublicKey);
-  hmac.update(tokenInput);
-  
-  // Return hex-encoded token
-  return hmac.digest('hex');
-}
-
-/**
  * Register service with Coordinator
  * @returns {Promise<{success: boolean, serviceId?: string, status?: string, error?: string}>}
  */
 async function registerWithCoordinator() {
   const coordinatorUrl = process.env.COORDINATOR_URL;
   const serviceEndpoint = process.env.SERVICE_ENDPOINT;
-  const coordinatorPublicKey = process.env.COORDINATOR_PUBLIC_KEY;
 
   // Validate required environment variables
   if (!coordinatorUrl) {
@@ -70,12 +45,6 @@ async function registerWithCoordinator() {
 
   if (!serviceEndpoint) {
     const error = 'SERVICE_ENDPOINT environment variable is required';
-    logger.error(`❌ Registration failed: ${error}`);
-    return { success: false, error };
-  }
-
-  if (!coordinatorPublicKey) {
-    const error = 'COORDINATOR_PUBLIC_KEY environment variable is required';
     logger.error(`❌ Registration failed: ${error}`);
     return { success: false, error };
   }
@@ -94,20 +63,12 @@ async function registerWithCoordinator() {
     metadata: METADATA,
   };
 
-  // Generate HMAC token for request signing
-  const registrationToken = generateRegistrationToken(
-    coordinatorPublicKey,
-    SERVICE_NAME,
-    registrationPayload
-  );
-
   logger.info('🔄 Attempting to register with Coordinator...', {
     coordinatorUrl: cleanCoordinatorUrl,
     registrationUrl: registrationUrl,
     serviceEndpoint: cleanServiceEndpoint,
     serviceName: SERVICE_NAME,
     version: SERVICE_VERSION,
-    hasToken: !!registrationToken,
   });
 
   // Retry logic with exponential backoff (up to 5 attempts)
@@ -119,7 +80,6 @@ async function registerWithCoordinator() {
       const response = await axios.post(registrationUrl, registrationPayload, {
         headers: {
           'Content-Type': 'application/json',
-          'X-Registration-Token': registrationToken,
         },
         timeout: 10000, // 10 seconds timeout
       });
@@ -161,7 +121,7 @@ async function registerWithCoordinator() {
         if (status === 400) {
           errorMessage = `Bad request: ${data?.message || statusText}`;
         } else if (status === 401) {
-          errorMessage = 'Unauthorized: Invalid credentials';
+          errorMessage = `Unauthorized: Invalid credentials. Response: ${JSON.stringify(data || {})}`;
         } else if (status === 403) {
           errorMessage = 'Forbidden: Access denied';
         } else if (status === 404) {
