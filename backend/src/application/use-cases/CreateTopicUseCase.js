@@ -1,4 +1,5 @@
 import { Topic } from '../../domain/entities/Topic.js';
+import { logger } from '../../infrastructure/logging/Logger.js';
 
 /**
  * Create Topic Use Case
@@ -23,9 +24,9 @@ export class CreateTopicUseCase {
         );
         
         // Merge provided skills with Skills Engine response
-        // Only if Skills Engine returned valid mapping (not null)
-        if (skillsMapping && skillsMapping.micro_skills) {
-          skills = [...new Set([...skills, ...skillsMapping.micro_skills])];
+        // Skills Engine returns a simple skills array, not micro_skills/nano_skills
+        if (skillsMapping && Array.isArray(skillsMapping.skills) && skillsMapping.skills.length > 0) {
+          skills = [...new Set([...skills, ...skillsMapping.skills])];
         } else if (skillsMapping === null) {
           // Skills Engine is not configured/available - log but continue with provided skills
           console.info('[CreateTopicUseCase] Skills Engine is not configured or unavailable, using provided skills only');
@@ -66,6 +67,39 @@ export class CreateTopicUseCase {
 
     // Persist topic
     const createdTopic = await this.topicRepository.create(topic);
+
+    // If topic belongs to a course and we have skills from Skills Engine, update course skills
+    if (topicData.course_id && this.courseRepository && skills.length > 0) {
+      try {
+        const course = await this.courseRepository.findById(topicData.course_id);
+        if (course) {
+          // Get existing course skills (if any)
+          const existingCourseSkills = Array.isArray(course.skills) ? course.skills : [];
+          
+          // Merge new skills with existing course skills (no duplicates)
+          const mergedSkills = [...new Set([...existingCourseSkills, ...skills])];
+          
+          // Update course with merged skills
+          await this.courseRepository.update(topicData.course_id, {
+            skills: mergedSkills,
+          });
+          
+          logger.info('[CreateTopicUseCase] Updated course skills with topic skills', {
+            course_id: topicData.course_id,
+            topic_id: createdTopic.topic_id,
+            existingSkillsCount: existingCourseSkills.length,
+            newSkillsCount: skills.length,
+            mergedSkillsCount: mergedSkills.length,
+          });
+        }
+      } catch (error) {
+        // Log error but don't fail topic creation
+        logger.warn('[CreateTopicUseCase] Failed to update course skills', {
+          course_id: topicData.course_id,
+          error: error.message,
+        });
+      }
+    }
 
     return createdTopic;
   }

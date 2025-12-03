@@ -2,7 +2,8 @@
  * Microservice Integration Clients
  * Central export for all integration clients
  */
-export { SkillsEngineClient } from './SkillsEngineClient.js';
+// Use REST client for Skills Engine instead of gRPC
+export { SkillsEngineClient } from '../skillsEngineClient/skillsEngineClient.js';
 export { CourseBuilderClient } from './CourseBuilderClient.js';
 export { DevLabClient } from './DevLabClient.js';
 export { DirectoryClient } from './DirectoryClient.js';

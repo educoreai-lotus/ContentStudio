@@ -229,9 +229,9 @@ export class TopicController {
         try {
           const mapping = await this.skillsEngineClient.getSkillsMapping(trainerId, topicName);
           if (mapping) {
-            const microSkills = mapping.micro_skills || [];
-            const nanoSkills = mapping.nano_skills || [];
-            skills = [...new Set([...microSkills, ...nanoSkills])];
+            // Skills Engine returns a simple skills array, not micro_skills/nano_skills
+            const skillsFromEngine = Array.isArray(mapping.skills) ? mapping.skills : [];
+            skills = [...new Set(skillsFromEngine)];
             // If fallback is true, it's mock data (generated based on topic name)
             // If fallback is false/undefined, it's from real Skills Engine
             source = mapping.fallback ? 'mock' : 'skills-engine';
@@ -252,7 +252,16 @@ export class TopicController {
           try {
             const mockSkills = this.skillsEngineClient.generateMockSkills?.(topicName);
             if (mockSkills) {
-              skills = [...new Set([...(mockSkills.micro || []), ...(mockSkills.nano || [])])];
+              // Mock skills can be either array or object with micro/nano (for backward compatibility)
+              if (Array.isArray(mockSkills)) {
+                skills = [...new Set(mockSkills)];
+              } else if (mockSkills.micro || mockSkills.nano) {
+                skills = [...new Set([...(mockSkills.micro || []), ...(mockSkills.nano || [])])];
+              } else if (mockSkills.skills) {
+                skills = [...new Set(mockSkills.skills)];
+              } else {
+                skills = [];
+              }
               source = 'mock';
             } else {
               skills = [];

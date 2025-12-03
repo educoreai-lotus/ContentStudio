@@ -226,6 +226,81 @@ export class SkillsEngineClient {
 
     return validatedSkills;
   }
+
+  /**
+   * Get skills mapping for a topic (alias for getSkillsMapping)
+   * @param {string} trainerId - Trainer ID
+   * @param {string} topicName - Topic name
+   * @returns {Promise<Object>} Skills mapping with skills array:
+   *   - topic_id: string | null
+   *   - topic_name: string
+   *   - skills: string[]
+   *   - fallback: boolean (true if mock data)
+   */
+  async getSkillsMapping(trainerId, topicName) {
+    // Use fetchTrainerSkillsFromSkillsEngine and convert to expected format
+    const result = await this.fetchTrainerSkillsFromSkillsEngine(trainerId, topicName);
+    
+    return {
+      topic_id: null,
+      topic_name: result.topic,
+      skills: result.skills,
+      trainer_id: result.trainer_id,
+      trainer_name: result.trainer_name,
+      fallback: result.skills.length === 0 || !this.baseUrl, // Mark as fallback if no skills or URL not configured
+    };
+  }
+
+  /**
+   * Generate realistic mock skills based on topic name (for backward compatibility)
+   * @param {string} topicName - Topic name
+   * @returns {Object|Array} Mock skills - can be array or object with micro/nano (for backward compatibility)
+   */
+  generateMockSkills(topicName) {
+    const lowerTopic = topicName.toLowerCase();
+    
+    // Programming-related topics
+    if (lowerTopic.includes('javascript') || lowerTopic.includes('js')) {
+      return {
+        micro: ['JavaScript Fundamentals', 'ES6+ Features', 'Async Programming'],
+        nano: ['Variables & Data Types', 'Arrow Functions', 'Promises', 'Async/Await']
+      };
+    }
+    if (lowerTopic.includes('python')) {
+      return {
+        micro: ['Python Basics', 'Object-Oriented Programming', 'Data Structures'],
+        nano: ['Variables', 'Functions', 'Classes', 'Lists & Dictionaries']
+      };
+    }
+    if (lowerTopic.includes('react')) {
+      return {
+        micro: ['React Components', 'State Management', 'Hooks'],
+        nano: ['JSX', 'Props', 'useState', 'useEffect', 'Context API']
+      };
+    }
+    
+    // Data-related topics
+    if (lowerTopic.includes('data') || lowerTopic.includes('database')) {
+      return {
+        micro: ['Data Modeling', 'Query Optimization', 'Database Design'],
+        nano: ['SQL Queries', 'Indexing', 'Normalization', 'Transactions']
+      };
+    }
+    
+    // Design-related topics
+    if (lowerTopic.includes('design') || lowerTopic.includes('ui') || lowerTopic.includes('ux')) {
+      return {
+        micro: ['User Interface Design', 'User Experience', 'Visual Design'],
+        nano: ['Color Theory', 'Typography', 'Layout', 'Accessibility']
+      };
+    }
+    
+    // Default generic skills
+    return {
+      micro: ['Problem Solving', 'Critical Thinking', 'Communication'],
+      nano: ['Analysis', 'Research', 'Documentation', 'Collaboration']
+    };
+  }
 }
 
 // Export singleton instance

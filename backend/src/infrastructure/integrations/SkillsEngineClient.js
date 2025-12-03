@@ -14,7 +14,7 @@ export class SkillsEngineClient {
    * Get skills mapping for a topic
    * @param {string} trainerId - Trainer ID
    * @param {string} topicName - Topic name
-   * @returns {Promise<Object>} Skills mapping with micro_skills and nano_skills
+   * @returns {Promise<Object>} Skills mapping with skills array
    */
   async getSkillsMapping(trainerId, topicName) {
     // TODO: Implement actual gRPC call
@@ -23,16 +23,20 @@ export class SkillsEngineClient {
       // Skills Engine is not configured - return mock data with fallback flag
       // Generate realistic skills based on topic name
       const mockSkills = this.generateMockSkills(topicName);
+      // Convert micro/nano to simple skills array for backward compatibility
+      const skillsArray = Array.isArray(mockSkills) 
+        ? mockSkills 
+        : [...(mockSkills.micro || []), ...(mockSkills.nano || [])];
+      
       logger.info('[SkillsEngineClient] Skills Engine gRPC client not configured, returning mock data', {
         trainerId,
         topicName,
-        skillsCount: (mockSkills.micro || []).length + (mockSkills.nano || []).length,
+        skillsCount: skillsArray.length,
       });
       return {
         topic_id: null,
         topic_name: topicName,
-        micro_skills: mockSkills.micro,
-        nano_skills: mockSkills.nano,
+        skills: skillsArray,
         difficulty_level: 'intermediate',
         validation_status: 'approved',
         fallback: true, // Mark as fallback/mock data
@@ -45,6 +49,7 @@ export class SkillsEngineClient {
       //   trainer_id: trainerId,
       //   topic_name: topicName,
       // });
+      // Skills Engine returns: { skills: string[] }
       // return response;
 
       // Placeholder
@@ -58,8 +63,7 @@ export class SkillsEngineClient {
       return {
         topic_id: null,
         topic_name: topicName,
-        micro_skills: ['communication', 'problem_solving'],
-        nano_skills: ['brainstorming', 'rapid_iteration'],
+        skills: ['communication', 'problem_solving', 'brainstorming', 'rapid_iteration'],
         difficulty_level: 'intermediate',
         validation_status: 'pending',
         fallback: true,
@@ -84,7 +88,7 @@ export class SkillsEngineClient {
   /**
    * Generate realistic mock skills based on topic name
    * @param {string} topicName - Topic name
-   * @returns {Object} Mock skills with micro and nano skills
+   * @returns {Object|Array} Mock skills - can be array or object with micro/nano (for backward compatibility)
    */
   generateMockSkills(topicName) {
     const lowerTopic = topicName.toLowerCase();

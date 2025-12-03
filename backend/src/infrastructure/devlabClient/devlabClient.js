@@ -452,18 +452,22 @@ export class DevlabClient {
       // Build payload with required fields
       // Protocol: { requester_service: "content-studio", payload: { action, ... }, response: { answer: "" } }
       // For manual code exercises: always send 4 questions together
-      // Each exercise only contains question_text (no hint/solution in request)
+      // exercises is an array of strings (question texts)
       const payloadData = {
-        action: 'validate-manual',
+        action: 'validate-question',
         topic_id: exerciseData.topic_id || '',
         topic_name: exerciseData.topic_name || '',
         question_type: 'code', // Manual is only for code questions
         programming_language: exerciseData.programming_language || '',
         skills: Array.isArray(exerciseData.skills) ? exerciseData.skills : [],
         humanLanguage: exerciseData.Language || exerciseData.language || 'en',
-        exercises: exercises.map(ex => ({
-          question_text: ex.question_text || '', // Only question_text in request
-        })), // Array of 4 exercises
+        exercises: exercises.map(ex => {
+          // Support both string format and object format for backward compatibility
+          if (typeof ex === 'string') {
+            return ex;
+          }
+          return ex.question_text || '';
+        }), // Array of 4 question strings
       };
 
       // Build full request structure
@@ -532,38 +536,76 @@ export class DevlabClient {
       }
 
       // Extract response object
-      // answer is ALWAYS a plain string (code, explanation, or error message) - NEVER JSON
       if (!responseStructure.response || typeof responseStructure.response !== 'object') {
         throw new Error('Missing or invalid response field in payload');
       }
 
-      // answer is ALWAYS a plain string (code HTML/CSS/JS or error message) - NEVER JSON
-      // Response structure: { response: { answer: "string" } }
-      // NO verified field in response! Only answer.
+      // answer can be:
+      // 1. A JSON stringified object with { success: true, data: { status: "needs_revision", message: "..." } }
+      // 2. A plain HTML/CSS/JS code string (if validation passed)
       const answer = typeof responseStructure.response.answer === 'string' 
         ? responseStructure.response.answer 
         : '';
 
-      // Check if answer is an error message or code
-      // Error messages typically don't contain HTML/CSS/JS code patterns
-      const isError = answer.length === 0 || 
-        answer.toLowerCase().includes('error') ||
-        answer.toLowerCase().includes('failed') ||
-        answer.toLowerCase().includes('invalid') ||
-        answer.toLowerCase().includes('not match') ||
-        answer.toLowerCase().includes('does not match') ||
-        (!answer.includes('<') && !answer.includes('function') && !answer.includes('const') && !answer.includes('let'));
+      // Try to parse answer as JSON to check if it's a validation rejection
+      let parsedAnswer;
+      let isNeedsRevision = false;
+      let revisionMessage = '';
 
-      if (isError) {
-        const errorMessage = answer || 'Exercise validation failed';
-        logger.warn('[DevlabClient] Manual exercises validation failed', {
+      try {
+        parsedAnswer = JSON.parse(answer);
+        // Check if it's a validation rejection response
+        if (parsedAnswer && 
+            parsedAnswer.success === true && 
+            parsedAnswer.data && 
+            parsedAnswer.data.status === 'needs_revision' &&
+            typeof parsedAnswer.data.message === 'string') {
+          isNeedsRevision = true;
+          revisionMessage = parsedAnswer.data.message;
+        }
+      } catch (parseError) {
+        // Not JSON, treat as plain code string
+        parsedAnswer = null;
+      }
+
+      // If validation failed (needs_revision), throw error with message
+      if (isNeedsRevision) {
+        logger.warn('[DevlabClient] Manual exercises validation failed - needs revision', {
           topicId: payloadData.topic_id,
-          errorMessage,
+          revisionMessage,
+        });
+        throw new Error(revisionMessage);
+      }
+
+      // If answer is empty or doesn't look like code, treat as error
+      if (answer.length === 0) {
+        const errorMessage = 'Exercise validation failed - empty response';
+        logger.warn('[DevlabClient] Manual exercises validation failed - empty answer', {
+          topicId: payloadData.topic_id,
         });
         throw new Error(errorMessage);
       }
 
-      // If answer contains code (not error), return it
+      // Check if answer looks like code (contains HTML/CSS/JS patterns)
+      const looksLikeCode = answer.includes('<') || 
+                           answer.includes('function') || 
+                           answer.includes('const') || 
+                           answer.includes('let') ||
+                           answer.includes('{') ||
+                           answer.includes('css') ||
+                           answer.includes('html');
+
+      if (!looksLikeCode) {
+        // If it doesn't look like code, it might be an error message
+        const errorMessage = answer || 'Exercise validation failed';
+        logger.warn('[DevlabClient] Manual exercises validation failed - answer does not look like code', {
+          topicId: payloadData.topic_id,
+          errorMessage: errorMessage.substring(0, 200),
+        });
+        throw new Error(errorMessage);
+      }
+
+      // If answer contains code (validation passed), return it
       // The answer will be saved to DB in devlab_exercises field
       const finalResponse = {
         answer: answer, // The HTML code (HTML/CSS/JS) - will be saved to DB in devlab_exercises

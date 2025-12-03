@@ -237,6 +237,7 @@ export class CreateExercisesUseCase {
     });
 
     // Build validation request for Coordinator
+    // exercises should be an array of strings (question texts)
     const validationRequest = {
       topic_id: topic_id.toString(),
       topic_name: topic_name || topic.topic_name || '',
@@ -244,11 +245,13 @@ export class CreateExercisesUseCase {
       question_type: 'code',
       programming_language: programming_language,
       Language: language || topic.language || 'en',
-      exercises: exercises.map(ex => ({
-        question_text: ex.question_text || '',
-        hint: ex.hint || null,
-        solution: ex.solution || null,
-      })),
+      exercises: exercises.map(ex => {
+        // Support both string format and object format
+        if (typeof ex === 'string') {
+          return ex;
+        }
+        return ex.question_text || '';
+      }), // Array of 4 question strings
     };
 
     // Call Coordinator to validate all 4 exercises together
@@ -265,25 +268,65 @@ export class CreateExercisesUseCase {
 
     // Check validation result
     // Coordinator returns: { answer: "string" }
-    // answer is ALWAYS a plain string (code HTML/CSS/JS or error message) - NEVER JSON
-    // NO verified field in response! Only answer.
+    // answer can be:
+    // 1. A JSON stringified object with { success: true, data: { status: "needs_revision", message: "..." } } - validation failed
+    // 2. A plain HTML/CSS/JS code string - validation passed
     const answer = validationResult.answer || '';
 
-    // Check if answer is an error message or code
-    // Error messages typically don't contain HTML/CSS/JS code patterns
-    const isError = answer.length === 0 || 
-      answer.toLowerCase().includes('error') ||
-      answer.toLowerCase().includes('failed') ||
-      answer.toLowerCase().includes('invalid') ||
-      answer.toLowerCase().includes('not match') ||
-      answer.toLowerCase().includes('does not match') ||
-      (!answer.includes('<') && !answer.includes('function') && !answer.includes('const') && !answer.includes('let'));
+    // Try to parse answer as JSON to check if it's a validation rejection
+    let parsedAnswer;
+    let isNeedsRevision = false;
+    let revisionMessage = '';
 
-    if (isError) {
-      const errorMessage = answer || 'Exercise validation failed';
-      logger.warn('[CreateExercisesUseCase] Exercises validation rejected', {
+    try {
+      parsedAnswer = JSON.parse(answer);
+      // Check if it's a validation rejection response
+      if (parsedAnswer && 
+          parsedAnswer.success === true && 
+          parsedAnswer.data && 
+          parsedAnswer.data.status === 'needs_revision' &&
+          typeof parsedAnswer.data.message === 'string') {
+        isNeedsRevision = true;
+        revisionMessage = parsedAnswer.data.message;
+      }
+    } catch (parseError) {
+      // Not JSON, treat as plain code string
+      parsedAnswer = null;
+    }
+
+    // If validation failed (needs_revision), throw error with message for trainer
+    if (isNeedsRevision) {
+      logger.warn('[CreateExercisesUseCase] Exercises validation rejected - needs revision', {
         topic_id,
-        errorMessage,
+        revisionMessage,
+      });
+      throw new Error(revisionMessage);
+    }
+
+    // If answer is empty, treat as error
+    if (answer.length === 0) {
+      const errorMessage = 'Exercise validation failed - empty response';
+      logger.warn('[CreateExercisesUseCase] Exercises validation rejected - empty answer', {
+        topic_id,
+      });
+      throw new Error(errorMessage);
+    }
+
+    // Check if answer looks like code (contains HTML/CSS/JS patterns)
+    const looksLikeCode = answer.includes('<') || 
+                         answer.includes('function') || 
+                         answer.includes('const') || 
+                         answer.includes('let') ||
+                         answer.includes('{') ||
+                         answer.includes('css') ||
+                         answer.includes('html');
+
+    if (!looksLikeCode) {
+      // If it doesn't look like code, it might be an error message
+      const errorMessage = answer || 'Exercise validation failed';
+      logger.warn('[CreateExercisesUseCase] Exercises validation rejected - answer does not look like code', {
+        topic_id,
+        errorMessage: errorMessage.substring(0, 200),
       });
       throw new Error(errorMessage);
     }

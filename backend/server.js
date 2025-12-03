@@ -55,16 +55,16 @@ app.get('/health', (req, res) => {
   try {
     // Quick health check - server is up (synchronous, no async operations)
     res.status(200).json({
-      status: 'ok',
-      timestamp: new Date().toISOString(),
-      server: 'running',
+      status: 'healthy',
+      service: 'content-studio',
+      version: '1.0.0',
     });
   } catch (error) {
     // Even if there's an error, return 200 to pass health check
     res.status(200).json({ 
-      status: 'ok', 
-      timestamp: new Date().toISOString(),
-      server: 'running'
+      status: 'healthy',
+      service: 'content-studio',
+      version: '1.0.0',
     });
   }
 });
@@ -222,6 +222,20 @@ function startServer() {
       environment: process.env.NODE_ENV || 'development',
       logLevel: process.env.LOG_LEVEL || 'INFO',
     });
+    
+    // Register service with Coordinator (non-blocking)
+    try {
+      const { registerService } = await import('./src/registration/register.js');
+      registerService().catch(error => {
+        logger.error('Service registration error (non-critical)', { 
+          error: error.message 
+        });
+      });
+    } catch (error) {
+      logger.warn('Failed to load registration module (non-critical)', { 
+        error: error.message 
+      });
+    }
     
     // Initialize database in the background (non-blocking)
     initializeDatabase().catch(error => {

@@ -29,10 +29,8 @@ export class IntegrationServiceManager {
     const httpClient = null; // TODO: Initialize HTTP client (Axios) when needed
 
     // Initialize all integration clients
-    this.skillsEngine = new SkillsEngineClient({
-      grpcClient,
-      serviceUrl: skillsEngineConfig?.serviceUrl,
-    });
+    // Skills Engine uses REST API, not gRPC
+    this.skillsEngine = new SkillsEngineClient();
 
     this.courseBuilder = new CourseBuilderClient({
       grpcClient,
