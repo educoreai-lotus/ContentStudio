@@ -1,6 +1,5 @@
-import axios from 'axios';
-import qs from 'qs';
 import { logger } from '../logging/Logger.js';
+import { postToCoordinator } from '../coordinatorClient/coordinatorClient.js';
 
 /**
  * Skills Engine Client
@@ -13,19 +12,9 @@ import { logger } from '../logging/Logger.js';
  */
 export class SkillsEngineClient {
   constructor() {
-    // Get Skills Engine microservice URL from environment variable
-    const skillsEngineUrl = process.env.SKILLS_ENGINE_URL;
-    
-    if (!skillsEngineUrl) {
-      logger.warn('[SkillsEngineClient] SKILLS_ENGINE_URL not configured, Skills Engine integration will not work');
-      this.baseUrl = null;
-    } else {
-      // Remove trailing slash if present
-      this.baseUrl = skillsEngineUrl.replace(/\/$/, '');
-      logger.info('[SkillsEngineClient] Initialized with Skills Engine URL', {
-        baseUrl: this.baseUrl,
-      });
-    }
+    // Skills Engine client now uses Coordinator for all requests
+    // No direct URL needed - Coordinator handles routing
+    logger.info('[SkillsEngineClient] Initialized - using Coordinator for requests');
   }
 
   /**
@@ -43,112 +32,83 @@ export class SkillsEngineClient {
   }
 
   /**
-   * Send request to Skills Engine microservice
+   * Send request to Skills Engine microservice via Coordinator
    * @param {Object} payload - Payload object to send
    * @returns {Promise<Object>} Parsed response from Skills Engine or rollback mock data
    */
   async sendRequest(payload) {
-    // If baseUrl is not configured, return rollback immediately
-    if (!this.baseUrl) {
-      logger.warn('[SkillsEngineClient] Skills Engine URL not configured, using rollback mock data', {
-        payloadKeys: Object.keys(payload),
+    // Validate payload
+    if (typeof payload !== 'object' || payload === null) {
+      logger.warn('[SkillsEngineClient] Invalid payload, using rollback mock data', {
+        payloadType: typeof payload,
       });
-      return this.getRollbackMockData(payload);
+      return this.getRollbackMockData(payload || {});
     }
 
-    const endpoint = `${this.baseUrl}/api/fill-skills-fields`;
-
     try {
-      // Validate payload
-      if (typeof payload !== 'object' || payload === null) {
-        logger.warn('[SkillsEngineClient] Invalid payload, using rollback mock data', {
-          payloadType: typeof payload,
-        });
-        return this.getRollbackMockData(payload || {});
-      }
+      // Build envelope for Coordinator (standard structure)
+      const envelope = {
+        requester_service: 'content-studio',
+        payload: payload,
+        response: {},
+      };
 
-      // Convert payload to JSON string
-      let payloadString;
-      try {
-        payloadString = JSON.stringify(payload);
-      } catch (stringifyError) {
-        logger.warn('[SkillsEngineClient] Failed to stringify payload, using rollback mock data', {
-          error: stringifyError.message,
-          payloadKeys: Object.keys(payload),
-        });
-        return this.getRollbackMockData(payload);
-      }
-
-      // Build request body using qs.stringify
-      const body = qs.stringify({
-        serviceName: 'ContentStudio',
-        payload: payloadString,
-      });
-
-      logger.info('[SkillsEngineClient] Sending request to Skills Engine', {
-        endpoint,
+      logger.info('[SkillsEngineClient] Sending request to Skills Engine via Coordinator', {
         payloadKeys: Object.keys(payload),
       });
 
-      // Send POST request
-      const response = await axios.post(endpoint, body, {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        timeout: 30000, // 30 seconds timeout
+      // Send request via Coordinator
+      const coordinatorResponse = await postToCoordinator(envelope, {
+        endpoint: '/api/fill-content-metrics',
+        timeout: 30000,
       });
 
-      // Validate response structure - Skills Engine always returns: { serviceName: "ContentStudio", payload: "<string>" }
-      if (!response.data || typeof response.data !== 'object' || response.data === null) {
-        logger.warn('[SkillsEngineClient] Skills Engine returned invalid response structure, using rollback mock data', {
-          endpoint,
-          responseType: typeof response.data,
+      // Coordinator returns: { serviceName: "ContentStudio", payload: "<stringified JSON>" }
+      if (!coordinatorResponse || typeof coordinatorResponse !== 'object' || coordinatorResponse === null) {
+        logger.warn('[SkillsEngineClient] Coordinator returned invalid response structure, using rollback mock data', {
+          responseType: typeof coordinatorResponse,
         });
         return this.getRollbackMockData(payload);
       }
 
-      if (!response.data.payload || typeof response.data.payload !== 'string') {
-        logger.warn('[SkillsEngineClient] Skills Engine response missing or invalid payload field, using rollback mock data', {
-          endpoint,
-          payloadType: typeof response.data.payload,
-          serviceName: response.data.serviceName,
+      if (!coordinatorResponse.payload || typeof coordinatorResponse.payload !== 'string') {
+        logger.warn('[SkillsEngineClient] Coordinator response missing or invalid payload field, using rollback mock data', {
+          payloadType: typeof coordinatorResponse.payload,
+          serviceName: coordinatorResponse.serviceName,
         });
         return this.getRollbackMockData(payload);
       }
 
-      // Parse payload string - Skills Engine always returns payload as stringified JSON
+      // Parse payload string - Coordinator always returns payload as stringified JSON
       let responsePayload;
       try {
-        responsePayload = JSON.parse(response.data.payload);
+        responsePayload = JSON.parse(coordinatorResponse.payload);
       } catch (parseError) {
-        logger.warn('[SkillsEngineClient] Failed to parse payload from Skills Engine response, using rollback mock data', {
+        logger.warn('[SkillsEngineClient] Failed to parse payload from Coordinator response, using rollback mock data', {
           error: parseError.message,
-          payload: response.data.payload.substring(0, 200),
-          serviceName: response.data.serviceName,
+          payload: coordinatorResponse.payload.substring(0, 200),
+          serviceName: coordinatorResponse.serviceName,
         });
         return this.getRollbackMockData(payload);
       }
 
       // Validate that parsed payload is an object
       if (typeof responsePayload !== 'object' || responsePayload === null) {
-        logger.warn('[SkillsEngineClient] Skills Engine returned invalid payload structure, using rollback mock data', {
-          endpoint,
+        logger.warn('[SkillsEngineClient] Coordinator returned invalid payload structure, using rollback mock data', {
           payloadType: typeof responsePayload,
         });
         return this.getRollbackMockData(payload);
       }
 
-      logger.info('[SkillsEngineClient] Successfully received response from Skills Engine', {
-        endpoint,
+      logger.info('[SkillsEngineClient] Successfully received response from Skills Engine via Coordinator', {
         payloadKeys: Object.keys(responsePayload),
       });
 
       return responsePayload;
     } catch (error) {
       // All errors result in rollback - log warning and return mock data
-      logger.warn('[SkillsEngineClient] External request failed, using rollback mock data instead', {
+      logger.warn('[SkillsEngineClient] Coordinator request failed, using rollback mock data instead', {
         error: error.message,
-        endpoint,
         errorType: error.response ? 'response_error' : error.request ? 'no_response' : 'request_error',
         status: error.response?.status,
         statusText: error.response?.statusText,

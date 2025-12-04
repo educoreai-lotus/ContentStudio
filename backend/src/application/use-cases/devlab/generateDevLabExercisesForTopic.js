@@ -2,8 +2,7 @@ import { db } from '../../../infrastructure/database/DatabaseConnection.js';
 import { logger } from '../../../infrastructure/logging/Logger.js';
 import { DevlabClient } from '../../../infrastructure/devlabClient/devlabClient.js';
 import { generateDevLabFallback } from '../../utils/generateDevLabFallback.js';
-import axios from 'axios';
-import qs from 'qs';
+import { postToCoordinator } from '../../../infrastructure/coordinatorClient/coordinatorClient.js';
 
 const PROGRAMMING_LANGUAGES = [
   'javascript', 'js', 'typescript', 'ts', 'python', 'java', 'c', 'cpp', 'c++',
@@ -74,26 +73,10 @@ export async function generateDevLabExercisesForTopic(topic) {
   const questionType = determineQuestionType(topic.skills);
   const programmingLanguage = questionType === 'code' ? extractProgrammingLanguage(topic.skills) : null;
 
-  const devlabClient = new DevlabClient();
-  const devlabUrl = process.env.DEVLAB_URL;
-
-  if (!devlabUrl) {
-    logger.warn('[UseCase] DevLab URL not configured, using fallback');
-    const fallbackResult = generateDevLabFallback(topic.skills);
-    await updateTopicDevlabExercises(topic.topic_id, fallbackResult.devlab_exercises);
-    topic.devlab_exercises = fallbackResult.devlab_exercises;
-    return {
-      topic_id: topic.topic_id,
-      generated: true,
-      exercise_count: fallbackResult.devlab_exercises.length,
-    };
-  }
-
-  const endpoint = `${devlabUrl.replace(/\/$/, '')}/api/generate-exercises`;
-
   try {
-    const requestPayload = {
-      requester_service: 'content_studio',
+    // Build envelope for Coordinator (standard structure)
+    const envelope = {
+      requester_service: 'content-studio',
       payload: {
         topic_id: topic.topic_id,
         topic_name: topic.topic_name || '',
@@ -107,28 +90,21 @@ export async function generateDevLabExercisesForTopic(topic) {
       },
     };
 
-    const payloadString = JSON.stringify(requestPayload);
-    const body = qs.stringify({
-      serviceName: 'ContentStudio',
-      payload: payloadString,
-    });
-
-    logger.info('[UseCase] Sending DevLab exercise generation request', {
+    logger.info('[UseCase] Sending DevLab exercise generation request via Coordinator', {
       topic_id: topic.topic_id,
       question_type: questionType,
       programming_language: programmingLanguage,
       skills_count: topic.skills.length,
     });
 
-    const response = await axios.post(endpoint, body, {
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
+    // Send request via Coordinator
+    const coordinatorResponse = await postToCoordinator(envelope, {
+      endpoint: '/api/fill-content-metrics',
       timeout: 60000,
     });
 
-    if (!response.data || typeof response.data !== 'object' || !response.data.payload) {
-      logger.warn('[UseCase] Invalid response from DevLab, using fallback', {
+    if (!coordinatorResponse || typeof coordinatorResponse !== 'object' || !coordinatorResponse.payload) {
+      logger.warn('[UseCase] Invalid response from Coordinator, using fallback', {
         topic_id: topic.topic_id,
       });
       const fallbackResult = generateDevLabFallback(topic.skills);
@@ -143,11 +119,11 @@ export async function generateDevLabExercisesForTopic(topic) {
 
     let responsePayload;
     try {
-      responsePayload = typeof response.data.payload === 'string'
-        ? JSON.parse(response.data.payload)
-        : response.data.payload;
+      responsePayload = typeof coordinatorResponse.payload === 'string'
+        ? JSON.parse(coordinatorResponse.payload)
+        : coordinatorResponse.payload;
     } catch (parseError) {
-      logger.warn('[UseCase] Failed to parse DevLab response, using fallback', {
+      logger.warn('[UseCase] Failed to parse Coordinator response, using fallback', {
         topic_id: topic.topic_id,
         error: parseError.message,
       });

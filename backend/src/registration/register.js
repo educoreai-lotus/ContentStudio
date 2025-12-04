@@ -1,6 +1,6 @@
 import axios from 'axios';
-import crypto from 'crypto';
 import { logger } from '../infrastructure/logging/Logger.js';
+import { generateSignature } from '../utils/signature.js';
 
 /**
  * Service Registration Constants
@@ -29,40 +29,6 @@ function getBackoffDelay(attempt) {
   return Math.min(1000 * Math.pow(2, attempt), 16000);
 }
 
-/**
- * Generate signature for registration request
- * Signature is HMAC-SHA256 of: coordinator public key + service name + request payload
- * @param {string} coordinatorPublicKey - Coordinator's public key (used as HMAC secret)
- * @param {string} serviceName - Service name (content-studio)
- * @param {Object} payload - Registration request payload
- * @returns {string} Base64-encoded signature
- */
-function generateSignature(coordinatorPublicKey, serviceName, payload) {
-  // Coordinator expects signature of: serviceName + payload
-  // Using the raw JSON string (as sent in request body) without sorting keys
-  const payloadString = JSON.stringify(payload);
-  
-  // Combine serviceName and payload for signature
-  const signatureInput = `${serviceName}${payloadString}`;
-  
-  // Generate HMAC using SHA-256 with publicKey as the secret
-  const hmac = crypto.createHmac('sha256', coordinatorPublicKey);
-  hmac.update(signatureInput);
-  
-  // Return Base64-encoded signature (as required by Coordinator)
-  const signature = hmac.digest('base64');
-  
-  logger.debug('Generated signature', {
-    signatureLength: signature.length,
-    signaturePrefix: signature.substring(0, 20) + '...',
-    signatureInputLength: signatureInput.length,
-    signatureInputPrefix: signatureInput.substring(0, 100) + '...',
-    publicKeyLength: coordinatorPublicKey.length,
-    publicKeyPrefix: coordinatorPublicKey.substring(0, 50) + '...',
-  });
-  
-  return signature;
-}
 
 /**
  * Register service with Coordinator
@@ -71,7 +37,7 @@ function generateSignature(coordinatorPublicKey, serviceName, payload) {
 async function registerWithCoordinator() {
   const coordinatorUrl = process.env.COORDINATOR_URL;
   const serviceEndpoint = process.env.SERVICE_ENDPOINT;
-  const coordinatorPublicKey = process.env.COORDINATOR_PUBLIC_KEY;
+  const privateKey = process.env.CONTENT_STUDIO_PRIVATE_KEY;
 
   // Validate required environment variables
   if (!coordinatorUrl) {
@@ -86,8 +52,8 @@ async function registerWithCoordinator() {
     return { success: false, error };
   }
 
-  if (!coordinatorPublicKey) {
-    const error = 'COORDINATOR_PUBLIC_KEY environment variable is required for authentication';
+  if (!privateKey) {
+    const error = 'CONTENT_STUDIO_PRIVATE_KEY environment variable is required for ECDSA signing';
     logger.error(`❌ Registration failed: ${error}`);
     return { success: false, error };
   }
@@ -106,16 +72,16 @@ async function registerWithCoordinator() {
     metadata: METADATA,
   };
 
-  // Generate signature for authentication
+  // Generate ECDSA signature for authentication
   let signature;
   try {
     signature = generateSignature(
-      coordinatorPublicKey,
       SERVICE_NAME,
+      privateKey,
       registrationPayload
     );
   } catch (signatureError) {
-    const error = `Failed to generate signature: ${signatureError.message}`;
+    const error = `Failed to generate ECDSA signature: ${signatureError.message}`;
     logger.error(`❌ Registration failed: ${error}`, {
       error: signatureError.message,
       stack: signatureError.stack,

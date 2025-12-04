@@ -1,6 +1,5 @@
-import axios from 'axios';
-import qs from 'qs';
 import { logger } from '../logging/Logger.js';
+import { postToCoordinator } from '../coordinatorClient/coordinatorClient.js';
 
 /**
  * DevLab Client
@@ -13,19 +12,9 @@ import { logger } from '../logging/Logger.js';
  */
 export class DevlabClient {
   constructor() {
-    // Get Coordinator microservice URL from environment variable
-    const coordinatorUrl = process.env.COORDINATOR_URL;
-    
-    if (!coordinatorUrl) {
-      logger.warn('[DevlabClient] COORDINATOR_URL not configured, DevLab integration will not work');
-      this.baseUrl = null;
-    } else {
-      // Remove trailing slash if present
-      this.baseUrl = coordinatorUrl.replace(/\/$/, '');
-      logger.info('[DevlabClient] Initialized with Coordinator URL', {
-        baseUrl: this.baseUrl,
-      });
-    }
+    // DevLab client now uses Coordinator for all requests
+    // No direct URL needed - Coordinator handles routing
+    logger.info('[DevlabClient] Initialized - using Coordinator for requests');
   }
 
   /**
@@ -45,93 +34,62 @@ export class DevlabClient {
   }
 
   /**
-   * Send request to DevLab microservice
+   * Send request to DevLab microservice via Coordinator
    * @param {Object} payload - Payload object to send
    * @returns {Promise<Object>} Parsed response from DevLab or rollback mock data
    */
   async sendRequest(payload) {
-    // If baseUrl is not configured, return rollback immediately
-    if (!this.baseUrl) {
-      logger.warn('[DevlabClient] DevLab URL not configured, using rollback mock data', {
-        payloadKeys: Object.keys(payload),
+    // Validate payload
+    if (typeof payload !== 'object' || payload === null) {
+      logger.warn('[DevlabClient] Invalid payload, using rollback mock data', {
+        payloadType: typeof payload,
       });
-      return this.getRollbackMockData(payload);
+      return this.getRollbackMockData(payload || {});
     }
 
-    const endpoint = `${this.baseUrl}/api/check-trainer-question`;
-
     try {
-      // Validate payload
-      if (typeof payload !== 'object' || payload === null) {
-        logger.warn('[DevlabClient] Invalid payload, using rollback mock data', {
-          payloadType: typeof payload,
-        });
-        return this.getRollbackMockData(payload || {});
-      }
+      // Build envelope for Coordinator (standard structure)
+      const envelope = {
+        requester_service: 'content-studio',
+        payload: payload,
+        response: {},
+      };
 
-      // Convert payload to JSON string
-      let payloadString;
-      try {
-        payloadString = JSON.stringify(payload);
-      } catch (stringifyError) {
-        logger.warn('[DevlabClient] Failed to stringify payload, using rollback mock data', {
-          error: stringifyError.message,
-          payloadKeys: Object.keys(payload),
-        });
-        return this.getRollbackMockData(payload);
-      }
-
-      // Build request body using qs.stringify
-      // Protocol: { serviceName: "ContentStudio", payload: "<stringified JSON>" }
-      const body = qs.stringify({
-        serviceName: 'ContentStudio',
-        payload: payloadString,
-      });
-
-      logger.info('[DevlabClient] Sending request to Coordinator', {
-        endpoint,
+      logger.info('[DevlabClient] Sending request to DevLab via Coordinator', {
         payloadKeys: Object.keys(payload),
-        payloadStringLength: payloadString.length,
       });
 
-      // Send POST request
-      const response = await axios.post(endpoint, body, {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        timeout: 30000, // 30 seconds timeout
+      // Send request via Coordinator
+      const coordinatorResponse = await postToCoordinator(envelope, {
+        endpoint: '/api/fill-content-metrics',
+        timeout: 30000,
       });
 
-      // Validate response structure
-      // Coordinator always returns: { serviceName: "ContentStudio", payload: "<stringified JSON>" }
-      if (!response.data || typeof response.data !== 'object' || response.data === null) {
+      // Coordinator returns: { serviceName: "ContentStudio", payload: "<stringified JSON>" }
+      if (!coordinatorResponse || typeof coordinatorResponse !== 'object' || coordinatorResponse === null) {
         logger.warn('[DevlabClient] Coordinator returned invalid response structure, using rollback mock data', {
-          endpoint,
-          responseType: typeof response.data,
+          responseType: typeof coordinatorResponse,
         });
         return this.getRollbackMockData(payload);
       }
 
-      if (!response.data.payload || typeof response.data.payload !== 'string') {
+      if (!coordinatorResponse.payload || typeof coordinatorResponse.payload !== 'string') {
         logger.warn('[DevlabClient] Coordinator response missing or invalid payload field, using rollback mock data', {
-          endpoint,
-          payloadType: typeof response.data.payload,
-          serviceName: response.data.serviceName,
+          payloadType: typeof coordinatorResponse.payload,
+          serviceName: coordinatorResponse.serviceName,
         });
         return this.getRollbackMockData(payload);
       }
 
       // Parse payload string - Coordinator returns payload as stringified JSON
-      // After parsing, payload contains: { verified: boolean, answer: "string", ...other fields }
-      // NO devlab_exercises field in response!
       let responsePayload;
       try {
-        responsePayload = JSON.parse(response.data.payload);
+        responsePayload = JSON.parse(coordinatorResponse.payload);
       } catch (parseError) {
         logger.warn('[DevlabClient] Failed to parse payload from Coordinator response, using rollback mock data', {
           error: parseError.message,
-          payload: response.data.payload.substring(0, 200),
-          serviceName: response.data.serviceName,
+          payload: coordinatorResponse.payload.substring(0, 200),
+          serviceName: coordinatorResponse.serviceName,
         });
         return this.getRollbackMockData(payload);
       }
@@ -139,16 +97,12 @@ export class DevlabClient {
       // Validate that parsed payload is an object
       if (typeof responsePayload !== 'object' || responsePayload === null) {
         logger.warn('[DevlabClient] Coordinator returned invalid payload structure, using rollback mock data', {
-          endpoint,
           payloadType: typeof responsePayload,
         });
         return this.getRollbackMockData(payload);
       }
 
-      // Coordinator fills the response fields: verified, answer, etc.
-      // NO devlab_exercises field in response!
-      logger.info('[DevlabClient] Successfully received response from Coordinator', {
-        endpoint,
+      logger.info('[DevlabClient] Successfully received response from DevLab via Coordinator', {
         payloadKeys: Object.keys(responsePayload),
         verified: responsePayload.verified,
         hasAnswer: !!responsePayload.answer,
@@ -158,9 +112,8 @@ export class DevlabClient {
       return responsePayload;
     } catch (error) {
       // All errors result in rollback - log warning and return mock data
-      logger.warn('[DevlabClient] External request failed, using rollback mock data instead', {
+      logger.warn('[DevlabClient] Coordinator request failed, using rollback mock data instead', {
         error: error.message,
-        endpoint,
         errorType: error.response ? 'response_error' : error.request ? 'no_response' : 'request_error',
         status: error.response?.status,
         statusText: error.response?.statusText,
@@ -203,12 +156,7 @@ export class DevlabClient {
    *   }
    */
   async generateAIExercises(exerciseRequest) {
-    if (!this.baseUrl) {
-      logger.warn('[DevlabClient] Coordinator URL not configured, cannot generate AI exercises', {
-        topicId: exerciseRequest?.topic_id,
-      });
-      throw new Error('Coordinator URL not configured');
-    }
+    // Coordinator URL is now handled by postToCoordinator
 
     // Validate question type
     const questionType = exerciseRequest.question_type || 'code';
@@ -227,8 +175,6 @@ export class DevlabClient {
         programmingLanguage: exerciseRequest.programming_language,
       });
     }
-
-    const endpoint = `${this.baseUrl}/api/generate-exercises`;
 
     try {
       // Validate exerciseRequest
@@ -255,8 +201,8 @@ export class DevlabClient {
         payloadData.programming_language = exerciseRequest.programming_language || '';
       }
 
-      // Build full request structure
-      const requestPayload = {
+      // Build full request envelope for Coordinator
+      const envelope = {
         requester_service: 'content-studio',
         payload: payloadData,
         response: {
@@ -264,22 +210,7 @@ export class DevlabClient {
         },
       };
 
-      // Stringify the full request
-      let payloadString;
-      try {
-        payloadString = JSON.stringify(requestPayload);
-      } catch (stringifyError) {
-        throw new Error(`Failed to stringify payload: ${stringifyError.message}`);
-      }
-
-      // Build request body (form-urlencoded)
-      const body = qs.stringify({
-        serviceName: 'ContentStudio',
-        payload: payloadString,
-      });
-
       logger.info('[DevlabClient] Sending AI exercise generation request to Coordinator', {
-        endpoint,
         topicId: payloadData.topic_id,
         topicName: payloadData.topic_name,
         questionType: payloadData.question_type,
@@ -287,21 +218,18 @@ export class DevlabClient {
         programmingLanguage: payloadData.programming_language || 'N/A',
       });
 
-      // Send POST request
-      const response = await axios.post(endpoint, body, {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
+      // Send request via Coordinator
+      const coordinatorResponse = await postToCoordinator(envelope, {
+        endpoint: '/api/fill-content-metrics',
         timeout: 60000, // 60 seconds timeout for AI generation
       });
 
-      // Validate response structure
       // Coordinator returns: { serviceName: "ContentStudio", payload: "<stringified JSON>" }
-      if (!response.data || typeof response.data !== 'object' || response.data === null) {
+      if (!coordinatorResponse || typeof coordinatorResponse !== 'object' || coordinatorResponse === null) {
         throw new Error('Invalid response structure from Coordinator');
       }
 
-      if (!response.data.payload || typeof response.data.payload !== 'string') {
+      if (!coordinatorResponse.payload || typeof coordinatorResponse.payload !== 'string') {
         throw new Error('Missing or invalid payload in response');
       }
 
@@ -311,7 +239,7 @@ export class DevlabClient {
       // answer is ALWAYS a plain string (code, explanation, or error message) - NEVER JSON
       let responseStructure;
       try {
-        responseStructure = JSON.parse(response.data.payload);
+        responseStructure = JSON.parse(coordinatorResponse.payload);
       } catch (parseError) {
         throw new Error(`Failed to parse response payload: ${parseError.message}`);
       }
@@ -417,12 +345,7 @@ export class DevlabClient {
    *   }
    */
   async validateManualExercise(exerciseData) {
-    if (!this.baseUrl) {
-      logger.warn('[DevlabClient] Coordinator URL not configured, cannot validate exercise', {
-        topicId: exerciseData?.topic_id,
-      });
-      throw new Error('Coordinator URL not configured');
-    }
+    // Coordinator URL is now handled by postToCoordinator
 
     // Validate that only code questions can be manual
     const questionType = exerciseData.question_type || 'code';
@@ -440,8 +363,6 @@ export class DevlabClient {
     if (exercises.length !== 4) {
       throw new Error('Manual code exercises must include exactly 4 questions');
     }
-
-    const endpoint = `${this.baseUrl}/api/validate-exercise`;
 
     try {
       // Validate exerciseData
@@ -470,8 +391,8 @@ export class DevlabClient {
         }), // Array of 4 question strings
       };
 
-      // Build full request structure
-      const requestPayload = {
+      // Build full request envelope for Coordinator
+      const envelope = {
         requester_service: 'content-studio',
         payload: payloadData,
         response: {
@@ -479,43 +400,25 @@ export class DevlabClient {
         },
       };
 
-      // Stringify the full request
-      let payloadString;
-      try {
-        payloadString = JSON.stringify(requestPayload);
-      } catch (stringifyError) {
-        throw new Error(`Failed to stringify payload: ${stringifyError.message}`);
-      }
-
-      // Build request body (form-urlencoded)
-      const body = qs.stringify({
-        serviceName: 'ContentStudio',
-        payload: payloadString,
-      });
-
       logger.info('[DevlabClient] Sending manual code exercises validation request to Coordinator', {
-        endpoint,
         topicId: payloadData.topic_id,
         questionType: payloadData.question_type,
         exercisesCount: exercises.length,
         programmingLanguage: payloadData.programming_language,
       });
 
-      // Send POST request
-      const response = await axios.post(endpoint, body, {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
+      // Send request via Coordinator
+      const coordinatorResponse = await postToCoordinator(envelope, {
+        endpoint: '/api/fill-content-metrics',
         timeout: 30000, // 30 seconds timeout
       });
 
-      // Validate response structure
       // Coordinator returns: { serviceName: "ContentStudio", payload: "<stringified JSON>" }
-      if (!response.data || typeof response.data !== 'object' || response.data === null) {
+      if (!coordinatorResponse || typeof coordinatorResponse !== 'object' || coordinatorResponse === null) {
         throw new Error('Invalid response structure from Coordinator');
       }
 
-      if (!response.data.payload || typeof response.data.payload !== 'string') {
+      if (!coordinatorResponse.payload || typeof coordinatorResponse.payload !== 'string') {
         throw new Error('Missing or invalid payload in response');
       }
 
@@ -525,7 +428,7 @@ export class DevlabClient {
       // The answer field contains the actual response data
       let responseStructure;
       try {
-        responseStructure = JSON.parse(response.data.payload);
+        responseStructure = JSON.parse(coordinatorResponse.payload);
       } catch (parseError) {
         throw new Error(`Failed to parse response payload: ${parseError.message}`);
       }
