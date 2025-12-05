@@ -13,8 +13,9 @@ export function buildMessage(serviceName, payload) {
   // Coordinator expects simple format: "educoreai-{microservice-name}" without hash
   const message = `educoreai-${serviceName}`;
 
-  logger.debug('[Signature] Built message for signing', {
+  logger.info('[Signature] Built message for signing', {
     serviceName,
+    message,
     messageLength: message.length,
     hasPayload: !!payload,
   });
@@ -74,10 +75,12 @@ export function generateSignature(serviceName, privateKeyPem, payload) {
     // Return Base64-encoded signature
     const base64Signature = signature.toString('base64');
     
-    logger.debug('[Signature] Generated ECDSA signature', {
+    logger.info('[Signature] Generated ECDSA signature', {
       serviceName,
+      message,
       signatureLength: base64Signature.length,
       signaturePrefix: base64Signature.substring(0, 20) + '...',
+      signatureFull: base64Signature, // Full signature for debugging
     });
     
     return base64Signature;

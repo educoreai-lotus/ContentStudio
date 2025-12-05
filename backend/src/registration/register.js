@@ -75,11 +75,23 @@ async function registerWithCoordinator() {
   // Generate ECDSA signature for authentication
   let signature;
   try {
+    logger.info('[Registration] Generating signature', {
+      serviceName: SERVICE_NAME,
+      privateKeyLength: privateKey?.length,
+      privateKeyPrefix: privateKey?.substring(0, 50) + '...',
+      registrationPayload,
+    });
+    
     signature = generateSignature(
       SERVICE_NAME,
       privateKey,
       registrationPayload
     );
+    
+    logger.info('[Registration] Signature generated successfully', {
+      signatureLength: signature?.length,
+      signaturePrefix: signature?.substring(0, 20) + '...',
+    });
   } catch (signatureError) {
     const error = `Failed to generate ECDSA signature: ${signatureError.message}`;
     logger.error(`❌ Registration failed: ${error}`, {
