@@ -5,7 +5,7 @@ import { generateSignature } from '../utils/signature.js';
 /**
  * Service Registration Constants
  */
-const SERVICE_NAME = 'content-studio';
+const SERVICE_NAME = process.env.SERVICE_NAME || 'content-studio';
 const SERVICE_VERSION = '1.0.0';
 const SERVICE_DESCRIPTION = 'Content generation and course-building microservice';
 
@@ -37,7 +37,7 @@ function getBackoffDelay(attempt) {
 async function registerWithCoordinator() {
   const coordinatorUrl = process.env.COORDINATOR_URL;
   const serviceEndpoint = process.env.SERVICE_ENDPOINT;
-  const privateKey = process.env.CONTENT_STUDIO_PRIVATE_KEY;
+  const privateKey = process.env.CS_COORDINATOR_PRIVATE_KEY;
 
   // Validate required environment variables
   if (!coordinatorUrl) {
@@ -53,7 +53,7 @@ async function registerWithCoordinator() {
   }
 
   if (!privateKey) {
-    const error = 'CONTENT_STUDIO_PRIVATE_KEY environment variable is required for ECDSA signing';
+    const error = 'CS_COORDINATOR_PRIVATE_KEY environment variable is required for ECDSA signing';
     logger.error(`❌ Registration failed: ${error}`);
     return { success: false, error };
   }
@@ -162,15 +162,13 @@ async function registerWithCoordinator() {
         if (status === 400) {
           errorMessage = `Bad request: ${data?.message || statusText}`;
         } else if (status === 401) {
-          errorMessage = `Unauthorized: Authentication failed. Response: ${JSON.stringify(data || {})}. Please verify COORDINATOR_PUBLIC_KEY is correct.`;
+          errorMessage = `Unauthorized: Authentication failed. Response: ${JSON.stringify(data || {})}. Please verify CS_COORDINATOR_PRIVATE_KEY is correct.`;
           logger.error('Authentication failed - signature rejected', {
             status,
             responseData: data,
             serviceName: SERVICE_NAME,
             signatureLength: signature?.length,
             signaturePrefix: signature?.substring(0, 20),
-            publicKeyLength: coordinatorPublicKey?.length,
-            publicKeyPrefix: coordinatorPublicKey?.substring(0, 50) + '...',
           });
         } else if (status === 403) {
           errorMessage = 'Forbidden: Access denied';

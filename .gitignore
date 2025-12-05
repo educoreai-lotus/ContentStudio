@@ -21,3 +21,7 @@ yarn-error.log*
 .env.local
 .env.*.local
 
+# ECDSA key files (never commit private keys!)
+*.pem
+content-studio-ecdsa-*.pem
+

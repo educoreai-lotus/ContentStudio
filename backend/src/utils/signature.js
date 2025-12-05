@@ -2,6 +2,31 @@ import crypto from 'crypto';
 import { logger } from '../infrastructure/logging/Logger.js';
 
 /**
+ * Stable stringify function that guarantees consistent output
+ * by sorting keys at all nesting levels
+ * @param {*} obj - Object to stringify
+ * @returns {string} Stable JSON string
+ */
+function stableStringify(obj) {
+  if (obj === null || typeof obj !== 'object') {
+    return JSON.stringify(obj);
+  }
+
+  if (Array.isArray(obj)) {
+    return '[' + obj.map(item => stableStringify(item)).join(',') + ']';
+  }
+
+  // Sort keys and recursively stringify nested objects
+  const sortedKeys = Object.keys(obj).sort();
+  const keyValuePairs = sortedKeys.map(key => {
+    const value = obj[key];
+    return JSON.stringify(key) + ':' + stableStringify(value);
+  });
+
+  return '{' + keyValuePairs.join(',') + '}';
+}
+
+/**
  * Build message for ECDSA signing
  * Format: "educoreai-{serviceName}-{payloadSha256}"
  * @param {string} serviceName - Service name (e.g., "content-studio")
@@ -9,8 +34,8 @@ import { logger } from '../infrastructure/logging/Logger.js';
  * @returns {string} Message string for signing
  */
 export function buildMessage(serviceName, payload) {
-  // Convert payload to JSON string (sorted keys for consistency)
-  const payloadString = JSON.stringify(payload, Object.keys(payload).sort());
+  // Convert payload to JSON string using stable stringify (sorted keys at all levels)
+  const payloadString = stableStringify(payload);
   
   // Calculate SHA-256 hash of payload
   const payloadHash = crypto.createHash('sha256').update(payloadString).digest('hex');

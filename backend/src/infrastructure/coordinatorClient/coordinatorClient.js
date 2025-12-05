@@ -1,8 +1,8 @@
 import axios from 'axios';
 import { logger } from '../logging/Logger.js';
-import { generateSignature } from '../../utils/signature.js';
+import { generateSignature, verifySignature } from '../../utils/signature.js';
 
-const SERVICE_NAME = 'content-studio';
+const SERVICE_NAME = process.env.SERVICE_NAME || 'content-studio';
 
 /**
  * Post request to Coordinator with ECDSA signature
@@ -16,7 +16,8 @@ const SERVICE_NAME = 'content-studio';
  */
 export async function postToCoordinator(envelope, options = {}) {
   const coordinatorUrl = process.env.COORDINATOR_URL;
-  const privateKey = process.env.CONTENT_STUDIO_PRIVATE_KEY;
+  const privateKey = process.env.CS_COORDINATOR_PRIVATE_KEY;
+  const coordinatorPublicKey = process.env.CONTENT_STUDIO_COORDINATOR_PUBLIC_KEY || null;
 
   // Validate required environment variables
   if (!coordinatorUrl) {
@@ -24,14 +25,18 @@ export async function postToCoordinator(envelope, options = {}) {
   }
 
   if (!privateKey) {
-    throw new Error('CONTENT_STUDIO_PRIVATE_KEY environment variable is required for signing requests');
+    throw new Error('CS_COORDINATOR_PRIVATE_KEY environment variable is required for signing requests');
   }
 
   // Clean URL (remove trailing slash)
   const cleanCoordinatorUrl = coordinatorUrl.replace(/\/$/, '');
   
-  // Default endpoint is /api/fill-content-metrics (Coordinator proxy endpoint)
-  const endpoint = options.endpoint || '/api/fill-content-metrics';
+  // Default endpoint is /api/fill-content-metrics/ (Coordinator proxy endpoint)
+  let endpoint = options.endpoint || '/api/fill-content-metrics/';
+  
+  // Normalize endpoint to always end with exactly one slash
+  endpoint = endpoint.replace(/\/+$/, '') + '/';
+  
   const registrationUrl = `${cleanCoordinatorUrl}${endpoint}`;
   
   const timeout = options.timeout || 30000;
@@ -54,6 +59,34 @@ export async function postToCoordinator(envelope, options = {}) {
       endpoint,
       status: response.status,
     });
+
+    // Optional: Verify response signature if Coordinator provides one
+    if (coordinatorPublicKey && response.headers['x-service-signature']) {
+      const responseSignature = response.headers['x-service-signature'];
+      try {
+        const isValid = verifySignature(
+          'coordinator',
+          coordinatorPublicKey,
+          response.data,
+          responseSignature
+        );
+        if (!isValid) {
+          logger.warn('[CoordinatorClient] Response signature verification failed', {
+            endpoint,
+            status: response.status,
+          });
+        } else {
+          logger.debug('[CoordinatorClient] Response signature verified successfully', {
+            endpoint,
+          });
+        }
+      } catch (verifyError) {
+        logger.warn('[CoordinatorClient] Response signature verification error (non-blocking)', {
+          endpoint,
+          error: verifyError.message,
+        });
+      }
+    }
 
     return response.data;
   } catch (error) {

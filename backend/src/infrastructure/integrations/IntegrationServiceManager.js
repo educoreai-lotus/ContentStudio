@@ -7,8 +7,6 @@ import {
   CourseBuilderClient,
   DevLabClient,
   DirectoryClient,
-  LearningAnalyticsClient,
-  RAGClient,
   AuthenticationClient,
 } from './index.js';
 
@@ -18,8 +16,6 @@ export class IntegrationServiceManager {
     courseBuilderConfig,
     devLabConfig,
     directoryConfig,
-    learningAnalyticsConfig,
-    ragConfig,
     authenticationConfig,
   } = {}) {
     // Initialize gRPC clients (for future implementation)
@@ -45,16 +41,6 @@ export class IntegrationServiceManager {
     this.directory = new DirectoryClient({
       grpcClient,
       serviceUrl: directoryConfig?.serviceUrl,
-    });
-
-    this.learningAnalytics = new LearningAnalyticsClient({
-      httpClient,
-      serviceUrl: learningAnalyticsConfig?.serviceUrl,
-    });
-
-    this.rag = new RAGClient({
-      httpClient,
-      serviceUrl: ragConfig?.serviceUrl,
     });
 
     this.authentication = new AuthenticationClient({
@@ -92,22 +78,6 @@ export class IntegrationServiceManager {
    */
   getDirectory() {
     return this.directory;
-  }
-
-  /**
-   * Get Learning Analytics client
-   * @returns {LearningAnalyticsClient}
-   */
-  getLearningAnalytics() {
-    return this.learningAnalytics;
-  }
-
-  /**
-   * Get RAG client
-   * @returns {RAGClient}
-   */
-  getRAG() {
-    return this.rag;
   }
 
   /**

@@ -150,16 +150,6 @@ export class CourseBuilderClient {
    * @returns {Promise<void>} No return value expected - fire and forget
    */
   async sendCourseToCourseBuilder(courseData) {
-    // If baseUrl is not configured, silently skip
-    if (!this.baseUrl) {
-      logger.warn('[CourseBuilderClient] Course Builder URL not configured, skipping course publish', {
-        courseId: courseData?.course_id,
-      });
-      return;
-    }
-
-    const endpoint = `${this.baseUrl}/api/receive-course`;
-
     try {
       // Validate courseData
       if (!courseData || typeof courseData !== 'object') {
@@ -196,38 +186,23 @@ export class CourseBuilderClient {
         },
       };
 
-      // Stringify the entire course object
-      let courseObjectString;
-      try {
-        courseObjectString = JSON.stringify(courseObject);
-      } catch (stringifyError) {
-        logger.error('[CourseBuilderClient] Failed to stringify course object', {
-          error: stringifyError.message,
-          courseId: courseData.course_id,
-        });
-        return;
-      }
+      // Build envelope for Coordinator (standard structure)
+      const envelope = {
+        requester_service: 'content-studio',
+        payload: courseObject,
+        response: {},
+      };
 
-      // Build request body using qs.stringify with application/x-www-form-urlencoded format
-      const body = qs.stringify({
-        serviceName: 'ContentStudio',
-        payload: courseObjectString,
-      });
-
-      logger.info('[CourseBuilderClient] Sending course to Course Builder', {
-        endpoint,
+      logger.info('[CourseBuilderClient] Sending course to Course Builder via Coordinator', {
         courseId: courseData.course_id,
         courseName: courseData.course_name,
         topicsCount: courseData.topics?.length || 0,
       });
 
-      // Send POST request - fire and forget (no response expected)
-      await axios.post(endpoint, body, {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        timeout: 30000, // 30 seconds timeout
-        validateStatus: () => true, // Accept any status code - we don't care about response
+      // Send request via Coordinator - fire and forget (no response expected)
+      await postToCoordinator(envelope, {
+        endpoint: '/api/fill-content-metrics/',
+        timeout: 30000,
       });
 
       logger.info('[CourseBuilderClient] Course sent to Course Builder successfully', {
@@ -237,7 +212,6 @@ export class CourseBuilderClient {
       // Log error and throw to allow PublishCourseUseCase to handle it
       logger.error('[CourseBuilderClient] Failed to send course to Course Builder', {
         error: error.message,
-        endpoint,
         courseId: courseData?.course_id,
         errorType: error.response ? 'response_error' : error.request ? 'no_response' : 'request_error',
         status: error.response?.status,
