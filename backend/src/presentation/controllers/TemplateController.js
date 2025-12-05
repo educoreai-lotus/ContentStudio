@@ -141,15 +141,19 @@ export class TemplateController {
       const trainerId = req.body.trainer_id || req.auth?.trainer?.trainer_id || 'system';
       const templateName = req.body.template_name;
 
-      const template = await this.generateTemplateWithAIUseCase.execute({
+      const result = await this.generateTemplateWithAIUseCase.execute({
         topicId,
         trainerId,
         templateName,
       });
 
+      // Extract AI feedback if present
+      const { aiFeedback, ...template } = result;
+
       res.status(201).json({
         success: true,
         data: TemplateDTO.toTemplateResponse(template),
+        aiFeedback: aiFeedback || null,
       });
     } catch (error) {
       next(error);

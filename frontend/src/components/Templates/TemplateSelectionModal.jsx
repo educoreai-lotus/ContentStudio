@@ -29,6 +29,7 @@ export function TemplateSelectionModal({
   const [error, setError] = useState(null);
   const [applying, setApplying] = useState(false);
   const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiFeedback, setAiFeedback] = useState(null);
 
   useEffect(() => {
     if (open) {
@@ -77,15 +78,25 @@ export function TemplateSelectionModal({
     try {
       setAiGenerating(true);
       setError(null);
-      const generated = await templatesService.generateWithAI({
+      setAiFeedback(null);
+      const response = await templatesService.generateWithAI({
         topic_id: topicId,
         trainer_id: trainerId,
       });
 
+      // Show AI feedback if available
+      if (response.aiFeedback) {
+        setAiFeedback(response.aiFeedback);
+        // Auto-hide after 10 seconds
+        setTimeout(() => {
+          setAiFeedback(null);
+        }, 10000);
+      }
+
       // Apply template immediately after generation
-      await topicsService.applyTemplate(topicId, generated.template_id);
+      await topicsService.applyTemplate(topicId, response.template_id);
       if (onApplied) {
-        onApplied(generated.template_id, generated);
+        onApplied(response.template_id, response, response.aiFeedback);
       }
       onClose();
     } catch (err) {
@@ -156,6 +167,39 @@ export function TemplateSelectionModal({
             Need a specific structure? Save a custom template and reuse it across lessons.
           </p>
         </div>
+
+        {/* AI Feedback Message */}
+        {aiFeedback && (
+          <div className="px-6 py-4">
+            <div
+              className={`relative p-4 rounded-lg border ${
+                theme === 'day-mode'
+                  ? 'bg-blue-50 border-blue-200 text-blue-800'
+                  : 'bg-blue-900/20 border-blue-500/30 text-blue-300'
+              }`}
+            >
+              <button
+                onClick={() => setAiFeedback(null)}
+                className={`absolute top-2 right-2 p-1 rounded-full hover:bg-black/10 transition ${
+                  theme === 'day-mode' ? 'text-blue-600' : 'text-blue-400'
+                }`}
+              >
+                <i className="fas fa-times text-xs"></i>
+              </button>
+              <div className="flex items-start gap-3 pr-6">
+                <div className={`flex-shrink-0 mt-1 ${
+                  theme === 'day-mode' ? 'text-blue-600' : 'text-blue-400'
+                }`}>
+                  <i className="fas fa-lightbulb text-lg"></i>
+                </div>
+                <div className="flex-1">
+                  <p className="font-semibold mb-1">AI Template Selection Reasoning</p>
+                  <p className="text-sm leading-relaxed">{aiFeedback}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="px-6 py-4 max-h-[60vh] overflow-y-auto">
           {error && (

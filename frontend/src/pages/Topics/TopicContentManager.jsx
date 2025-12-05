@@ -32,6 +32,7 @@ export default function TopicContentManager() {
   const [error, setError] = useState(null);
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
   const [templateAppliedMessage, setTemplateAppliedMessage] = useState(null);
+  const [aiFeedback, setAiFeedback] = useState(null);
   const [regenerateTarget, setRegenerateTarget] = useState(null);
   const [qualityCheckInfo, setQualityCheckInfo] = useState(null);
   const [videoUploadModalOpen, setVideoUploadModalOpen] = useState(false);
@@ -333,12 +334,21 @@ export default function TopicContentManager() {
     }
   };
 
-  const handleTemplateApplied = async (templateId, templateData) => {
+  const handleTemplateApplied = async (templateId, templateData, aiFeedbackData) => {
     await fetchTopicDetails();
     await fetchContent();
     setTemplateAppliedMessage(
       `Template "${templateData?.template_name || templateId}" applied successfully.`
     );
+    
+    // Show AI feedback if available
+    if (aiFeedbackData) {
+      setAiFeedback(aiFeedbackData);
+      // Auto-hide after 10 seconds
+      setTimeout(() => {
+        setAiFeedback(null);
+      }, 10000);
+    }
   };
 
   return (
@@ -549,6 +559,35 @@ export default function TopicContentManager() {
                   {templateAppliedMessage}
                 </div>
               )}
+              {aiFeedback && (
+                <div
+                  className={`mt-4 px-4 py-3 rounded-lg border ${
+                    theme === 'day-mode'
+                      ? 'bg-blue-50 border-blue-200 text-blue-800'
+                      : 'bg-blue-900/20 border-blue-500/30 text-blue-300'
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className={`flex-shrink-0 mt-1 ${
+                      theme === 'day-mode' ? 'text-blue-600' : 'text-blue-400'
+                    }`}>
+                      <i className="fas fa-lightbulb text-lg"></i>
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-semibold mb-1">AI Template Selection Reasoning</p>
+                      <p className="text-sm leading-relaxed">{aiFeedback}</p>
+                    </div>
+                    <button
+                      onClick={() => setAiFeedback(null)}
+                      className={`flex-shrink-0 p-1 rounded-full hover:bg-black/10 transition ${
+                        theme === 'day-mode' ? 'text-blue-600' : 'text-blue-400'
+                      }`}
+                    >
+                      <i className="fas fa-times text-xs"></i>
+                    </button>
+                  </div>
+                </div>
+              )}
               {qualityCheckInfo && (
                 <div
                   className={`mt-4 px-4 py-3 rounded-lg border ${
@@ -726,20 +765,42 @@ export default function TopicContentManager() {
                         {topicDetails.template_name || 'Selected Template'}
                       </p>
                     </div>
-                    <button
-                      onClick={() => setTemplateModalOpen(true)}
-                      disabled={!hasAllFormats}
-                      className={`px-3 py-1 text-sm text-white rounded-md transition-all ${
-                        !hasAllFormats
-                          ? 'opacity-50 cursor-not-allowed'
-                          : theme === 'day-mode'
-                          ? 'bg-emerald-600 hover:bg-emerald-700'
-                          : 'bg-gradient-to-r from-[#0d9488] to-[#059669] hover:from-[#14b8a6] hover:to-[#10b981] shadow-lg shadow-[#0d9488]/30'
-                      }`}
-                      title={!hasAllFormats ? 'Please wait until all content formats are ready' : 'Change template'}
-                    >
-                      Change Template
-                    </button>
+                    <div className="relative group">
+                      <button
+                        onClick={() => {
+                          if (hasAllFormats) {
+                            setTemplateModalOpen(true);
+                          }
+                        }}
+                        disabled={!hasAllFormats}
+                        className={`px-3 py-1 text-sm text-white rounded-md transition-all ${
+                          !hasAllFormats
+                            ? 'opacity-60 cursor-not-allowed bg-gray-400 dark:bg-gray-600'
+                            : theme === 'day-mode'
+                            ? 'bg-emerald-600 hover:bg-emerald-700'
+                            : 'bg-gradient-to-r from-[#0d9488] to-[#059669] hover:from-[#14b8a6] hover:to-[#10b981] shadow-lg shadow-[#0d9488]/30'
+                        }`}
+                        title={!hasAllFormats ? `This button will be active once all content formats are generated. ${getMissingFormats.length > 0 ? `Waiting for: ${getMissingFormats.map(f => f.replace('_', ' ')).join(', ')}` : ''}` : 'Change template'}
+                      >
+                        Change Template
+                      </button>
+                      {!hasAllFormats && (
+                        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-64 px-3 py-2 text-xs rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none"
+                          style={{
+                            background: theme === 'day-mode' ? '#1f2937' : '#0f172a',
+                            color: '#e5e7eb',
+                            border: '1px solid rgba(156, 163, 175, 0.3)',
+                          }}
+                        >
+                          This button will be active once all content formats are generated.
+                          {getMissingFormats.length > 0 && (
+                            <div className="mt-1 text-yellow-300">
+                              Waiting for: {getMissingFormats.map(f => f.replace('_', ' ')).join(', ')}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {(topicDetails.template_format_order || []).map((format, index) => (
@@ -939,73 +1000,49 @@ export default function TopicContentManager() {
               })}
             </div>
 
-            {/* Template Selection Button - Only show when all formats are ready */}
-            {hasAllFormats && !topicDetails?.template_id ? (
+            {/* Template Selection Button - Always visible, disabled until all formats are ready */}
+            {!topicDetails?.template_id && (
               <div className="mt-8 text-center">
-                <button
-                  onClick={() => {
-                    setTemplateAppliedMessage(null);
-                    setTemplateModalOpen(true);
-                  }}
-                  className={`px-8 py-4 text-white rounded-lg text-lg font-semibold transition-all ${
-                    theme === 'day-mode'
-                      ? 'bg-emerald-600 hover:bg-emerald-700 shadow-lg'
-                      : 'bg-gradient-to-r from-[#0d9488] to-[#059669] hover:from-[#14b8a6] hover:to-[#10b981] shadow-lg shadow-[#0d9488]/40'
-                  }`}
-                >
-                  <i className="fas fa-layer-group mr-2"></i>
-                  Choose Template
-                </button>
-              </div>
-            ) : !hasAllFormats && topicDetails?.template_format_order && topicDetails.template_format_order.length > 0 ? (
-              <div className="mt-8 text-center">
-                <div
-                  className={`inline-block p-6 rounded-lg border ${
-                    theme === 'day-mode'
-                      ? 'bg-yellow-50 border-yellow-200'
-                      : 'bg-yellow-900/20 border-yellow-700/50'
-                  }`}
-                >
-                  <div className="flex items-center justify-center mb-3">
-                    <i className={`fas fa-spinner fa-spin text-2xl ${
-                      theme === 'day-mode' ? 'text-yellow-600' : 'text-yellow-400'
-                    }`}></i>
-                  </div>
-                  <p className={`text-lg font-semibold mb-2 ${
-                    theme === 'day-mode' ? 'text-yellow-800' : 'text-yellow-300'
-                  }`}>
-                    Content Generation in Progress
-                  </p>
-                  <p className={`text-sm mb-3 ${
-                    theme === 'day-mode' ? 'text-yellow-700' : 'text-yellow-400'
-                  }`}>
-                    Please wait while all content formats are being generated...
-                  </p>
-                  {getMissingFormats.length > 0 && (
-                    <div className="mt-3">
-                      <p className={`text-xs font-medium mb-2 ${
-                        theme === 'day-mode' ? 'text-yellow-700' : 'text-yellow-400'
-                      }`}>
-                        Waiting for: {getMissingFormats.map(f => f.replace('_', ' ')).join(', ')}
-                      </p>
+                <div className="relative inline-block group">
+                  <button
+                    onClick={() => {
+                      if (hasAllFormats) {
+                        setTemplateAppliedMessage(null);
+                        setTemplateModalOpen(true);
+                      }
+                    }}
+                    disabled={!hasAllFormats}
+                    className={`px-8 py-4 text-white rounded-lg text-lg font-semibold transition-all ${
+                      hasAllFormats
+                        ? theme === 'day-mode'
+                          ? 'bg-emerald-600 hover:bg-emerald-700 shadow-lg cursor-pointer'
+                          : 'bg-gradient-to-r from-[#0d9488] to-[#059669] hover:from-[#14b8a6] hover:to-[#10b981] shadow-lg shadow-[#0d9488]/40 cursor-pointer'
+                        : 'bg-gray-400 dark:bg-gray-600 opacity-60 cursor-not-allowed'
+                    }`}
+                    title={!hasAllFormats ? `This button will be active once all content formats are generated. ${getMissingFormats.length > 0 ? `Waiting for: ${getMissingFormats.map(f => f.replace('_', ' ')).join(', ')}` : ''}` : 'Choose a template for this lesson'}
+                  >
+                    <i className="fas fa-layer-group mr-2"></i>
+                    Choose Template
+                  </button>
+                  {!hasAllFormats && (
+                    <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 mt-2 w-64 px-3 py-2 text-xs rounded-lg shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-10"
+                      style={{
+                        background: theme === 'day-mode' ? '#1f2937' : '#0f172a',
+                        color: '#e5e7eb',
+                        border: '1px solid rgba(156, 163, 175, 0.3)',
+                      }}
+                    >
+                      This button will be active once all content formats are generated.
+                      {getMissingFormats.length > 0 && (
+                        <div className="mt-1 text-yellow-300">
+                          Waiting for: {getMissingFormats.map(f => f.replace('_', ' ')).join(', ')}
+                        </div>
+                      )}
                     </div>
                   )}
-                  <div className="mt-4">
-                    <button
-                      disabled
-                      className={`px-6 py-2 rounded-lg text-sm font-medium cursor-not-allowed opacity-50 ${
-                        theme === 'day-mode'
-                          ? 'bg-gray-300 text-gray-600'
-                          : 'bg-gray-700 text-gray-400'
-                      }`}
-                    >
-                      <i className="fas fa-layer-group mr-2"></i>
-                      Choose Template (Available when all formats are ready)
-                    </button>
-                  </div>
                 </div>
               </div>
-            ) : null}
+            )}
 
             {/* Create Exercises Button */}
             {hasAllFormats && (
@@ -1024,61 +1061,48 @@ export default function TopicContentManager() {
               </div>
             )}
 
-            {/* View Lesson Button - Only show when all formats are ready */}
-            {hasAllFormats && existingContent.length > 0 ? (
+            {/* View Lesson Button - Always visible, disabled until all formats are ready */}
+            {existingContent.length > 0 && (
               <div className="mt-8 text-center">
-                <button
-                  onClick={() => navigate(`/lessons/${topicId}/view`)}
-                  className={`px-8 py-4 text-white rounded-lg text-lg font-semibold transition-all ${
-                    theme === 'day-mode'
-                      ? 'bg-emerald-600 hover:bg-emerald-700 shadow-lg'
-                      : 'bg-gradient-to-r from-[#0d9488] to-[#059669] hover:from-[#14b8a6] hover:to-[#10b981] shadow-lg shadow-[#0d9488]/40'
-                  }`}
-                >
-                  <i className="fas fa-eye mr-2"></i>
-                  View Complete Lesson
-                </button>
-              </div>
-            ) : !hasAllFormats && topicDetails?.template_format_order && topicDetails.template_format_order.length > 0 ? (
-              <div className="mt-8 text-center">
-                <div
-                  className={`inline-block p-6 rounded-lg border ${
-                    theme === 'day-mode'
-                      ? 'bg-blue-50 border-blue-200'
-                      : 'bg-blue-900/20 border-blue-700/50'
-                  }`}
-                >
-                  <div className="flex items-center justify-center mb-3">
-                    <i className={`fas fa-hourglass-half text-2xl ${
-                      theme === 'day-mode' ? 'text-blue-600' : 'text-blue-400'
-                    }`}></i>
-                  </div>
-                  <p className={`text-lg font-semibold mb-2 ${
-                    theme === 'day-mode' ? 'text-blue-800' : 'text-blue-300'
-                  }`}>
-                    Lesson Preview Unavailable
-                  </p>
-                  <p className={`text-sm mb-3 ${
-                    theme === 'day-mode' ? 'text-blue-700' : 'text-blue-400'
-                  }`}>
-                    Please wait until all content formats are generated to view the complete lesson.
-                  </p>
-                  <div className="mt-4">
-                    <button
-                      disabled
-                      className={`px-6 py-2 rounded-lg text-sm font-medium cursor-not-allowed opacity-50 ${
-                        theme === 'day-mode'
-                          ? 'bg-gray-300 text-gray-600'
-                          : 'bg-gray-700 text-gray-400'
-                      }`}
+                <div className="relative inline-block group">
+                  <button
+                    onClick={() => {
+                      if (hasAllFormats) {
+                        navigate(`/lessons/${topicId}/view`);
+                      }
+                    }}
+                    disabled={!hasAllFormats}
+                    className={`px-8 py-4 text-white rounded-lg text-lg font-semibold transition-all ${
+                      hasAllFormats
+                        ? theme === 'day-mode'
+                          ? 'bg-emerald-600 hover:bg-emerald-700 shadow-lg cursor-pointer'
+                          : 'bg-gradient-to-r from-[#0d9488] to-[#059669] hover:from-[#14b8a6] hover:to-[#10b981] shadow-lg shadow-[#0d9488]/40 cursor-pointer'
+                        : 'bg-gray-400 dark:bg-gray-600 opacity-60 cursor-not-allowed'
+                    }`}
+                    title={!hasAllFormats ? `This button will be active once all content formats are generated. ${getMissingFormats.length > 0 ? `Waiting for: ${getMissingFormats.map(f => f.replace('_', ' ')).join(', ')}` : ''}` : 'View the complete lesson with all content formats'}
+                  >
+                    <i className="fas fa-eye mr-2"></i>
+                    View Complete Lesson
+                  </button>
+                  {!hasAllFormats && (
+                    <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 mt-2 w-64 px-3 py-2 text-xs rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none"
+                      style={{
+                        background: theme === 'day-mode' ? '#1f2937' : '#0f172a',
+                        color: '#e5e7eb',
+                        border: '1px solid rgba(156, 163, 175, 0.3)',
+                      }}
                     >
-                      <i className="fas fa-eye mr-2"></i>
-                      View Complete Lesson (Available when all formats are ready)
-                    </button>
-                  </div>
+                      This button will be active once all content formats are generated.
+                      {getMissingFormats.length > 0 && (
+                        <div className="mt-1 text-yellow-300">
+                          Waiting for: {getMissingFormats.map(f => f.replace('_', ' ')).join(', ')}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
-            ) : null}
+            )}
           </div>
         </div>
 

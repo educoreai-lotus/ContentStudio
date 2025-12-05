@@ -37,7 +37,10 @@ export const templatesService = {
    */
   async generateWithAI(payload) {
     const response = await apiClient.post('/api/templates/generate/ai', payload);
-    return response.data.data;
+    return {
+      ...response.data.data,
+      aiFeedback: response.data.aiFeedback || null,
+    };
   },
 
   /**

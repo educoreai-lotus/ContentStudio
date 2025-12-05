@@ -30,12 +30,13 @@ export class GenerateTemplateWithAIUseCase {
       throw new Error('Topic not found');
     }
 
-    const baseOrder = ['text', 'audio', 'presentation', 'code', 'mind_map'];
+    const baseOrder = ['text', 'audio', 'presentation', 'code', 'mind_map', 'avatar_video'];
     let aiSuggestedOrder = [...baseOrder];
     let aiTemplateName =
       templateName ||
       `${topic.topic_name} AI Flow`.substring(0, 200);
     let aiNotes = null;
+    let aiFeedback = null;
 
     if (this.aiGenerationService) {
       try {
@@ -44,10 +45,12 @@ You are an educational content template designer for EduCore Content Studio.
 You must output a JSON object only.
 
 Rules:
-- Formats must be one of: text, audio, code, presentation, mind_map.
-- Include each format exactly once (5 items total).
+- Formats must be one of: text, audio, code, presentation, mind_map, avatar_video.
+- Include each format exactly once (6 items total).
 - Place "audio" immediately after "text" (either text then audio, or audio then text).
-- Return JSON: {"template_name": "...", "format_order": ["text","audio","presentation","code","mind_map"], "notes": "..."}.
+- Include "avatar_video" as one of the formats (it's a video avatar explaining the content).
+- Return JSON: {"template_name": "...", "format_order": ["text","audio","presentation","code","mind_map","avatar_video"], "notes": "...", "feedback": "..."}.
+- The "feedback" field should explain WHY you chose this specific order for the formats. Be concise (2-3 sentences) and educational.
 
 Context:
 - Topic: ${topic.topic_name}
@@ -59,7 +62,7 @@ Return only JSON (no extra text).
 
         const aiResponse = await this.aiGenerationService.generateText(prompt, {
           temperature: 0.4,
-          max_tokens: 400,
+          max_tokens: 500,
         });
 
         const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
@@ -73,6 +76,9 @@ Return only JSON (no extra text).
           }
           if (parsed.notes) {
             aiNotes = parsed.notes.substring(0, 500);
+          }
+          if (parsed.feedback) {
+            aiFeedback = parsed.feedback.substring(0, 300);
           }
         }
       } catch (error) {
@@ -93,7 +99,12 @@ Return only JSON (no extra text).
     };
 
     const template = await this.createTemplateUseCase.execute(templateData);
-    return template;
+    
+    // Return template with AI feedback if available
+    return {
+      ...template,
+      aiFeedback: aiFeedback || null,
+    };
   }
 
   /**
@@ -102,7 +113,7 @@ Return only JSON (no extra text).
    * @returns {string[]}
    */
   normalizeFormatOrder(order = []) {
-    const allowed = ['text', 'audio', 'code', 'presentation', 'mind_map'];
+    const allowed = ['text', 'audio', 'code', 'presentation', 'mind_map', 'avatar_video'];
     let sanitized = order
       .map(item => item && item.toLowerCase())
       .filter(item => allowed.includes(item));
@@ -111,7 +122,7 @@ Return only JSON (no extra text).
     sanitized = sanitized.filter((item, index) => sanitized.indexOf(item) === index);
 
     // Ensure all mandatory formats exist
-    const mandatory = ['text', 'code', 'presentation', 'audio', 'mind_map'];
+    const mandatory = ['text', 'code', 'presentation', 'audio', 'mind_map', 'avatar_video'];
     mandatory.forEach(format => {
       if (!sanitized.includes(format)) {
         sanitized.push(format);
@@ -123,7 +134,7 @@ Return only JSON (no extra text).
     const audioIndex = sanitized.indexOf('audio');
 
     if (textIndex === -1 || audioIndex === -1) {
-      return ['text', 'audio', 'presentation', 'code', 'mind_map'];
+      return ['text', 'audio', 'presentation', 'code', 'mind_map', 'avatar_video'];
     }
 
     if (audioIndex !== textIndex + 1) {
@@ -132,8 +143,8 @@ Return only JSON (no extra text).
       sanitized.splice(textIndex + 1, 0, 'audio');
     }
 
-    // Trim to exactly 5 formats in case extras were added
-    return sanitized.slice(0, 5);
+    // Trim to exactly 6 formats in case extras were added
+    return sanitized.slice(0, 6);
   }
 }
 
