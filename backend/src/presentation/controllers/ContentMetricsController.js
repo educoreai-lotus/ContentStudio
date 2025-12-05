@@ -11,6 +11,7 @@ import { getPreferredLanguage } from '../../application/use-cases/course-builder
 import { searchSuitableCourse } from '../../application/use-cases/course-builder/searchSuitableCourse.js';
 import { fetchArchivedCourseContent } from '../../application/use-cases/course-builder/fetchArchivedCourseContent.js';
 import { mapSkillCoverage } from '../../application/use-cases/course-builder/mapSkillCoverage.js';
+import { searchTrainerTopics } from '../../application/use-cases/course-builder/searchTrainerTopics.js';
 import { findStandaloneTopic } from '../../application/use-cases/topics/findStandaloneTopic.js';
 import { generateAiTopic } from '../../application/use-cases/course-builder/generateAiTopic.js';
 import { saveGeneratedTopicToDatabase } from '../../application/use-cases/topics/saveGeneratedTopicToDatabase.js';
@@ -281,6 +282,25 @@ export class ContentMetricsController {
         preferred_language: preferredLanguage.preferred_language,
       });
 
+      // Step 2.5: If trainer_id is provided, search for existing topics by trainer
+      let trainerTopics = [];
+      if (parsedRequest.trainer_id) {
+        logger.info('[ContentMetricsController] Step 2.5: Searching for existing topics by trainer', {
+          trainer_id: parsedRequest.trainer_id,
+          skills: parsedRequest.skills,
+          language: preferredLanguage.preferred_language,
+        });
+        trainerTopics = await searchTrainerTopics(
+          parsedRequest.trainer_id,
+          parsedRequest.skills,
+          preferredLanguage.preferred_language
+        );
+        logger.info('[ContentMetricsController] Found trainer topics', {
+          trainer_id: parsedRequest.trainer_id,
+          topicsCount: trainerTopics.length,
+        });
+      }
+
       // Step 3: Try to find an ORGANIZATION-SPECIFIC course
       logger.info('[ContentMetricsController] Step 3: Searching for suitable course');
       const courseRow = await searchSuitableCourse(parsedRequest, preferredLanguage);
@@ -303,79 +323,100 @@ export class ContentMetricsController {
         logger.info('[ContentMetricsController] No suitable archived course found');
       }
 
-      // Step 5: Run mapSkillCoverage with initially empty standalone topics
+      // Step 5: Run mapSkillCoverage with trainer topics and course topics
       logger.info('[ContentMetricsController] Step 5: Mapping skill coverage');
-      let skillCoverage = mapSkillCoverage(parsedRequest.skills, courseTopics, []);
+      // Combine trainer topics and course topics for skill coverage mapping
+      const allExistingTopics = [...trainerTopics, ...courseTopics];
+      let skillCoverage = mapSkillCoverage(parsedRequest.skills, courseTopics, trainerTopics);
       logger.info('[ContentMetricsController] Initial skill coverage mapped', {
         total_skills: skillCoverage.length,
         found: skillCoverage.filter(s => s.status === 'found').length,
         missing: skillCoverage.filter(s => s.status === 'missing').length,
       });
 
-      // Step 6: For each missing skill, try to find standalone topic
+      // Step 6: For each missing skill, try to find standalone topic (only if trainer topics not found)
       logger.info('[ContentMetricsController] Step 6: Searching for standalone topics');
       const standaloneTopics = [];
-      for (const coverageItem of skillCoverage) {
-        if (coverageItem.status === 'missing' && coverageItem.source === 'ai') {
-          logger.info('[ContentMetricsController] Searching standalone topic for skill', {
-            skill: coverageItem.skill,
-          });
-          const standaloneTopic = await findStandaloneTopic(
-            coverageItem.skill,
-            preferredLanguage.preferred_language
-          );
-          if (standaloneTopic) {
-            standaloneTopics.push(standaloneTopic);
-            logger.info('[ContentMetricsController] Found standalone topic', {
+      
+      // Only search for standalone topics if we don't have trainer topics
+      // If trainer topics exist, they should cover most skills
+      if (trainerTopics.length === 0) {
+        for (const coverageItem of skillCoverage) {
+          if (coverageItem.status === 'missing' && coverageItem.source === 'ai') {
+            logger.info('[ContentMetricsController] Searching standalone topic for skill', {
               skill: coverageItem.skill,
-              topic_id: standaloneTopic.topic_id,
             });
+            const standaloneTopic = await findStandaloneTopic(
+              coverageItem.skill,
+              preferredLanguage.preferred_language
+            );
+            if (standaloneTopic) {
+              standaloneTopics.push(standaloneTopic);
+              logger.info('[ContentMetricsController] Found standalone topic', {
+                skill: coverageItem.skill,
+                topic_id: standaloneTopic.topic_id,
+              });
+            }
           }
         }
-      }
 
-      // Re-run mapSkillCoverage with standalone topics
-      if (standaloneTopics.length > 0) {
-        logger.info('[ContentMetricsController] Re-mapping skill coverage with standalone topics');
-        skillCoverage = mapSkillCoverage(parsedRequest.skills, courseTopics, standaloneTopics);
+        // Re-run mapSkillCoverage with standalone topics
+        if (standaloneTopics.length > 0) {
+          logger.info('[ContentMetricsController] Re-mapping skill coverage with standalone topics');
+          skillCoverage = mapSkillCoverage(parsedRequest.skills, courseTopics, standaloneTopics);
+        }
+      } else {
+        logger.info('[ContentMetricsController] Skipping standalone topic search - trainer topics found', {
+          trainerTopicsCount: trainerTopics.length,
+        });
       }
 
       // Step 7: For skills STILL missing, generate AI topic and save to DB
+      // Only generate if trainer topics don't cover all skills
       logger.info('[ContentMetricsController] Step 7: Generating AI topics for missing skills');
       const aiGeneratedTopics = [];
-      for (const coverageItem of skillCoverage) {
-        if (coverageItem.status === 'missing' && coverageItem.source === 'ai') {
+      
+      // Check if we have any missing skills
+      const missingSkills = skillCoverage.filter(item => item.status === 'missing' && item.source === 'ai');
+      
+      if (missingSkills.length > 0) {
+        logger.info('[ContentMetricsController] Generating AI topics for missing skills', {
+          missingSkillsCount: missingSkills.length,
+          hasTrainerTopics: trainerTopics.length > 0,
+        });
+        
+        for (const coverageItem of missingSkills) {
           logger.info('[ContentMetricsController] Generating AI topic for skill', {
             skill: coverageItem.skill,
           });
           try {
-          const generatedTopic = await generateAiTopic(coverageItem, preferredLanguage.preferred_language);
-          if (generatedTopic) {
-            // Ensure skills array is included for saving
-            if (!generatedTopic.skills || !Array.isArray(generatedTopic.skills)) {
-              generatedTopic.skills = [coverageItem.skill];
-            }
-            logger.info('[ContentMetricsController] Saving generated AI topic to database', {
-              skill: coverageItem.skill,
-            });
-              try {
-                // Extract trainer_id from request authentication context
-                const trainerId = req?.auth?.trainer?.trainer_id || null;
-                
-            const saveResult = await saveGeneratedTopicToDatabase(
-              generatedTopic,
-                  preferredLanguage.preferred_language,
-                  trainerId
-            );
-            if (saveResult && saveResult.saved) {
-              logger.info('[ContentMetricsController] AI topic saved successfully', {
-                topic_id: saveResult.topic_id,
+            const generatedTopic = await generateAiTopic(coverageItem, preferredLanguage.preferred_language);
+            if (generatedTopic) {
+              // Ensure skills array is included for saving
+              if (!generatedTopic.skills || !Array.isArray(generatedTopic.skills)) {
+                generatedTopic.skills = [coverageItem.skill];
+              }
+              logger.info('[ContentMetricsController] Saving generated AI topic to database', {
                 skill: coverageItem.skill,
               });
-              // Fetch the saved topic to include in response
-              generatedTopic.topic_id = saveResult.topic_id;
-              aiGeneratedTopics.push(generatedTopic);
-            }
+              try {
+                // Use trainer_id from parsedRequest if available
+                const trainerId = parsedRequest.trainer_id || req?.auth?.trainer?.trainer_id || null;
+                
+                const saveResult = await saveGeneratedTopicToDatabase(
+                  generatedTopic,
+                  preferredLanguage.preferred_language,
+                  trainerId
+                );
+                if (saveResult && saveResult.saved) {
+                  logger.info('[ContentMetricsController] AI topic saved successfully', {
+                    topic_id: saveResult.topic_id,
+                    skill: coverageItem.skill,
+                  });
+                  // Fetch the saved topic to include in response
+                  generatedTopic.topic_id = saveResult.topic_id;
+                  aiGeneratedTopics.push(generatedTopic);
+                }
               } catch (saveError) {
                 logger.error('[ContentMetricsController] Failed to save generated AI topic', {
                   skill: coverageItem.skill,
@@ -394,31 +435,54 @@ export class ContentMetricsController {
             // Continue to next skill even if generation failed - don't crash the entire request
           }
         }
+      } else {
+        logger.info('[ContentMetricsController] No missing skills - all covered by existing topics', {
+          trainerTopicsCount: trainerTopics.length,
+          courseTopicsCount: courseTopics.length,
+          standaloneTopicsCount: standaloneTopics.length,
+        });
       }
 
-      // Build resolved topics array (course + standalone + AI)
+      // Build resolved topics array (trainer + course + standalone + AI)
       logger.info('[ContentMetricsController] Building resolved topics array');
       const resolvedTopics = [];
+      const addedTopicIds = new Set(); // Track added topic IDs to avoid duplicates
       
-      // Add course topics
-      for (const topic of courseTopics) {
-        resolvedTopics.push(topic);
-      }
-      
-      // Add standalone topics (avoid duplicates)
-      for (const topic of standaloneTopics) {
-        if (!resolvedTopics.find(t => t.topic_id === topic.topic_id)) {
+      // Priority 1: Add trainer topics first (most relevant)
+      for (const topic of trainerTopics) {
+        if (topic.topic_id && !addedTopicIds.has(topic.topic_id)) {
           resolvedTopics.push(topic);
+          addedTopicIds.add(topic.topic_id);
         }
       }
       
-      // Add AI generated topics
+      // Priority 2: Add course topics (avoid duplicates)
+      for (const topic of courseTopics) {
+        if (topic.topic_id && !addedTopicIds.has(topic.topic_id)) {
+          resolvedTopics.push(topic);
+          addedTopicIds.add(topic.topic_id);
+        }
+      }
+      
+      // Priority 3: Add standalone topics (avoid duplicates)
+      for (const topic of standaloneTopics) {
+        if (topic.topic_id && !addedTopicIds.has(topic.topic_id)) {
+          resolvedTopics.push(topic);
+          addedTopicIds.add(topic.topic_id);
+        }
+      }
+      
+      // Priority 4: Add AI generated topics (avoid duplicates)
       for (const topic of aiGeneratedTopics) {
-        resolvedTopics.push(topic);
+        if (topic.topic_id && !addedTopicIds.has(topic.topic_id)) {
+          resolvedTopics.push(topic);
+          addedTopicIds.add(topic.topic_id);
+        }
       }
 
       logger.info('[ContentMetricsController] Resolved topics built', {
         total_topics: resolvedTopics.length,
+        trainer_topics: trainerTopics.length,
         course_topics: courseTopics.length,
         standalone_topics: standaloneTopics.length,
         ai_topics: aiGeneratedTopics.length,

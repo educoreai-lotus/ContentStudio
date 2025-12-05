@@ -1,4 +1,5 @@
 import { sendCourseToCourseBuilder } from '../../infrastructure/courseBuilderClient/courseBuilderClient.js';
+import { updateCourseStatusInDirectory } from '../../infrastructure/directoryClient/directoryClient.js';
 import { logger } from '../../infrastructure/logging/Logger.js';
 
 /**
@@ -335,6 +336,53 @@ export class PublishCourseUseCase {
     // We ONLY transfer it to Course Builder, which handles final publishing and visibility.
     try {
       await sendCourseToCourseBuilder(courseData);
+      
+      // After successfully sending to Course Builder:
+      // 1. Update course status to "archived" in database
+      try {
+        await this.courseRepository.update(courseId, { status: 'archived' });
+        logger.info('[PublishCourseUseCase] Course status updated to archived in database', {
+          courseId,
+        });
+      } catch (updateError) {
+        // Non-blocking: log error but don't fail the entire operation
+        logger.warn('[PublishCourseUseCase] Failed to update course status in database (non-blocking)', {
+          courseId,
+          error: updateError.message,
+        });
+      }
+      
+      // 2. Update Directory with course status
+      if (courseData.trainer_id && courseData.course_id) {
+        logger.info('[PublishCourseUseCase] Updating Directory with course status', {
+          trainerId: courseData.trainer_id,
+          courseId: courseData.course_id,
+        });
+        
+        try {
+          await updateCourseStatusInDirectory(
+            courseData.trainer_id,
+            courseData.course_id,
+            'archived'
+          );
+          logger.info('[PublishCourseUseCase] Directory updated successfully', {
+            trainerId: courseData.trainer_id,
+            courseId: courseData.course_id,
+          });
+        } catch (directoryError) {
+          // Non-blocking: log error but don't fail the entire operation
+          logger.warn('[PublishCourseUseCase] Failed to update Directory (non-blocking)', {
+            trainerId: courseData.trainer_id,
+            courseId: courseData.course_id,
+            error: directoryError.message,
+          });
+        }
+      } else {
+        logger.warn('[PublishCourseUseCase] Missing trainer_id or course_id, skipping Directory update', {
+          hasTrainerId: !!courseData.trainer_id,
+          hasCourseId: !!courseData.course_id,
+        });
+      }
     } catch (error) {
       // If Course Builder transfer fails, throw error with appropriate message
       logger.error('[PublishCourseUseCase] Failed to transfer course to Course Builder', {

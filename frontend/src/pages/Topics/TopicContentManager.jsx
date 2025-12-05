@@ -213,10 +213,61 @@ export default function TopicContentManager() {
     return undefined;
   }, [topicDetails]);
 
-  const hasAllFormats = existingContent.length >= 5;
+  // Check if all required formats from template are ready
+  const checkAllFormatsReady = useMemo(() => {
+    if (!topicDetails?.template_format_order || topicDetails.template_format_order.length === 0) {
+      // If no template is applied, check if we have at least 5 formats (legacy check)
+      return existingContent.length >= 5;
+    }
+
+    // Map format names to content type IDs
+    const formatToTypeId = {
+      'text': 1,
+      'text_audio': 1,
+      'audio': 1,
+      'code': 2,
+      'presentation': 3,
+      'mind_map': 5,
+      'avatar_video': 6,
+    };
+
+    // Check if all formats in template_format_order have corresponding content
+    const requiredFormats = topicDetails.template_format_order || [];
+    const readyFormats = requiredFormats.filter(format => {
+      const typeId = formatToTypeId[format] || formatToTypeId[format.replace('_', '')];
+      return existingContent.some(content => content.content_type_id === typeId);
+    });
+
+    return readyFormats.length === requiredFormats.length;
+  }, [topicDetails?.template_format_order, existingContent]);
+
+  const hasAllFormats = checkAllFormatsReady;
   const hasAvatarVideo = existingContent.some(
     content => content.content_type_id === CONTENT_TYPES.find(t => t.id === 'avatar_video')?.dbId
   );
+
+  // Get missing formats for display
+  const getMissingFormats = useMemo(() => {
+    if (!topicDetails?.template_format_order || topicDetails.template_format_order.length === 0) {
+      return [];
+    }
+
+    const formatToTypeId = {
+      'text': 1,
+      'text_audio': 1,
+      'audio': 1,
+      'code': 2,
+      'presentation': 3,
+      'mind_map': 5,
+      'avatar_video': 6,
+    };
+
+    const requiredFormats = topicDetails.template_format_order || [];
+    return requiredFormats.filter(format => {
+      const typeId = formatToTypeId[format] || formatToTypeId[format.replace('_', '')];
+      return !existingContent.some(content => content.content_type_id === typeId);
+    });
+  }, [topicDetails?.template_format_order, existingContent]);
 
   const [contentGenerationLoading, setContentGenerationLoading] = useState(false);
   const [currentGenerationStep, setCurrentGenerationStep] = useState(null);
@@ -677,11 +728,15 @@ export default function TopicContentManager() {
                     </div>
                     <button
                       onClick={() => setTemplateModalOpen(true)}
+                      disabled={!hasAllFormats}
                       className={`px-3 py-1 text-sm text-white rounded-md transition-all ${
-                        theme === 'day-mode'
+                        !hasAllFormats
+                          ? 'opacity-50 cursor-not-allowed'
+                          : theme === 'day-mode'
                           ? 'bg-emerald-600 hover:bg-emerald-700'
                           : 'bg-gradient-to-r from-[#0d9488] to-[#059669] hover:from-[#14b8a6] hover:to-[#10b981] shadow-lg shadow-[#0d9488]/30'
                       }`}
+                      title={!hasAllFormats ? 'Please wait until all content formats are ready' : 'Change template'}
                     >
                       Change Template
                     </button>
@@ -884,7 +939,8 @@ export default function TopicContentManager() {
               })}
             </div>
 
-            {hasAllFormats && !topicDetails?.template_id && (
+            {/* Template Selection Button - Only show when all formats are ready */}
+            {hasAllFormats && !topicDetails?.template_id ? (
               <div className="mt-8 text-center">
                 <button
                   onClick={() => {
@@ -901,7 +957,55 @@ export default function TopicContentManager() {
                   Choose Template
                 </button>
               </div>
-            )}
+            ) : !hasAllFormats && topicDetails?.template_format_order && topicDetails.template_format_order.length > 0 ? (
+              <div className="mt-8 text-center">
+                <div
+                  className={`inline-block p-6 rounded-lg border ${
+                    theme === 'day-mode'
+                      ? 'bg-yellow-50 border-yellow-200'
+                      : 'bg-yellow-900/20 border-yellow-700/50'
+                  }`}
+                >
+                  <div className="flex items-center justify-center mb-3">
+                    <i className={`fas fa-spinner fa-spin text-2xl ${
+                      theme === 'day-mode' ? 'text-yellow-600' : 'text-yellow-400'
+                    }`}></i>
+                  </div>
+                  <p className={`text-lg font-semibold mb-2 ${
+                    theme === 'day-mode' ? 'text-yellow-800' : 'text-yellow-300'
+                  }`}>
+                    Content Generation in Progress
+                  </p>
+                  <p className={`text-sm mb-3 ${
+                    theme === 'day-mode' ? 'text-yellow-700' : 'text-yellow-400'
+                  }`}>
+                    Please wait while all content formats are being generated...
+                  </p>
+                  {getMissingFormats.length > 0 && (
+                    <div className="mt-3">
+                      <p className={`text-xs font-medium mb-2 ${
+                        theme === 'day-mode' ? 'text-yellow-700' : 'text-yellow-400'
+                      }`}>
+                        Waiting for: {getMissingFormats.map(f => f.replace('_', ' ')).join(', ')}
+                      </p>
+                    </div>
+                  )}
+                  <div className="mt-4">
+                    <button
+                      disabled
+                      className={`px-6 py-2 rounded-lg text-sm font-medium cursor-not-allowed opacity-50 ${
+                        theme === 'day-mode'
+                          ? 'bg-gray-300 text-gray-600'
+                          : 'bg-gray-700 text-gray-400'
+                      }`}
+                    >
+                      <i className="fas fa-layer-group mr-2"></i>
+                      Choose Template (Available when all formats are ready)
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
 
             {/* Create Exercises Button */}
             {hasAllFormats && (
@@ -920,8 +1024,8 @@ export default function TopicContentManager() {
               </div>
             )}
 
-            {/* View Lesson Button */}
-            {existingContent.length > 0 && (
+            {/* View Lesson Button - Only show when all formats are ready */}
+            {hasAllFormats && existingContent.length > 0 ? (
               <div className="mt-8 text-center">
                 <button
                   onClick={() => navigate(`/lessons/${topicId}/view`)}
@@ -935,7 +1039,46 @@ export default function TopicContentManager() {
                   View Complete Lesson
                 </button>
               </div>
-            )}
+            ) : !hasAllFormats && topicDetails?.template_format_order && topicDetails.template_format_order.length > 0 ? (
+              <div className="mt-8 text-center">
+                <div
+                  className={`inline-block p-6 rounded-lg border ${
+                    theme === 'day-mode'
+                      ? 'bg-blue-50 border-blue-200'
+                      : 'bg-blue-900/20 border-blue-700/50'
+                  }`}
+                >
+                  <div className="flex items-center justify-center mb-3">
+                    <i className={`fas fa-hourglass-half text-2xl ${
+                      theme === 'day-mode' ? 'text-blue-600' : 'text-blue-400'
+                    }`}></i>
+                  </div>
+                  <p className={`text-lg font-semibold mb-2 ${
+                    theme === 'day-mode' ? 'text-blue-800' : 'text-blue-300'
+                  }`}>
+                    Lesson Preview Unavailable
+                  </p>
+                  <p className={`text-sm mb-3 ${
+                    theme === 'day-mode' ? 'text-blue-700' : 'text-blue-400'
+                  }`}>
+                    Please wait until all content formats are generated to view the complete lesson.
+                  </p>
+                  <div className="mt-4">
+                    <button
+                      disabled
+                      className={`px-6 py-2 rounded-lg text-sm font-medium cursor-not-allowed opacity-50 ${
+                        theme === 'day-mode'
+                          ? 'bg-gray-300 text-gray-600'
+                          : 'bg-gray-700 text-gray-400'
+                      }`}
+                    >
+                      <i className="fas fa-eye mr-2"></i>
+                      View Complete Lesson (Available when all formats are ready)
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
 

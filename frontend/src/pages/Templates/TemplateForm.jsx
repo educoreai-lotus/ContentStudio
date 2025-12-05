@@ -387,7 +387,15 @@ export const TemplateForm = () => {
             <div className="flex justify-end gap-3">
               <button
                 type="button"
-                onClick={() => navigate('/templates')}
+                onClick={() => {
+                  // If there's a redirect parameter, go back to it
+                  if (redirectTo) {
+                    navigate(redirectTo);
+                  } else {
+                    // Otherwise, go back in history (previous page)
+                    navigate(-1);
+                  }
+                }}
                 className={`px-4 py-2 rounded-lg transition-colors font-medium ${
                   theme === 'day-mode'
                     ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'

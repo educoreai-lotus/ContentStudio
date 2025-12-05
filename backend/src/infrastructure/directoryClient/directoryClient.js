@@ -141,58 +141,6 @@ export class DirectoryClient {
   }
 
   /**
-   * Fetch trainer basic profile from Directory
-   * @param {string} trainerId - Trainer ID
-   * @returns {Promise<Object>} Trainer profile with filled fields:
-   *   - trainer_id: string
-   *   - trainer_name: string
-   *   - company_id: string
-   *   - ai_enabled: boolean | null
-   *   - can_publish_publicly: boolean | null
-   * @throws {Error} If request fails or response is invalid
-   */
-  async fetchTrainerProfileFromDirectory(trainerId) {
-    if (!trainerId || typeof trainerId !== 'string') {
-      throw new Error('trainerId must be a non-empty string');
-    }
-
-    logger.info('[DirectoryClient] Fetching trainer profile from Directory', {
-      trainerId,
-    });
-
-    // Build payload object with empty fields
-    const payload = {
-      trainer_id: trainerId,
-      trainer_name: '',
-      company_id: '',
-      ai_enabled: null,
-      can_publish_publicly: null,
-    };
-
-    // Send request to Directory (will return rollback mock data if it fails)
-    const filledProfile = await this.sendRequest(payload);
-
-    // Build validated response with all required fields
-    const validatedProfile = {
-      trainer_id: typeof filledProfile.trainer_id === 'string' ? filledProfile.trainer_id : trainerId,
-      trainer_name: typeof filledProfile.trainer_name === 'string' ? filledProfile.trainer_name : 'Unknown Trainer',
-      company_id: typeof filledProfile.company_id === 'string' ? filledProfile.company_id : 'N/A',
-      ai_enabled: typeof filledProfile.ai_enabled === 'boolean' ? filledProfile.ai_enabled : (filledProfile.ai_enabled === null ? null : false),
-      can_publish_publicly: typeof filledProfile.can_publish_publicly === 'boolean' ? filledProfile.can_publish_publicly : (filledProfile.can_publish_publicly === null ? null : false),
-    };
-
-    logger.info('[DirectoryClient] Trainer profile fetched successfully', {
-      trainerId: validatedProfile.trainer_id,
-      trainerName: validatedProfile.trainer_name || 'not provided',
-      companyId: validatedProfile.company_id || 'not provided',
-      aiEnabled: validatedProfile.ai_enabled,
-      canPublishPublicly: validatedProfile.can_publish_publicly,
-    });
-
-    return validatedProfile;
-  }
-
-  /**
    * Fetch exercise limits from Directory
    * @param {string} trainerId - Trainer ID (optional, may be used by Directory for context)
    * @returns {Promise<Object>} Exercise limits with filled fields:
@@ -254,6 +202,78 @@ export class DirectoryClient {
 
     return validatedLimits;
   }
+
+  /**
+   * Update Directory with course completion information
+   * Called when trainer publishes/completes a course and sends it to Course Builder
+   * @param {string} trainerId - Trainer ID
+   * @param {string} courseId - Course ID
+   * @param {string} status - Course status (should be "archived" when published)
+   * @returns {Promise<Object>} Response from Directory or rollback mock data
+   */
+  async updateCourseStatusInDirectory(trainerId, courseId, status = 'archived') {
+    if (!trainerId || typeof trainerId !== 'string') {
+      logger.warn('[DirectoryClient] Invalid trainer_id for Directory update', {
+        trainerId,
+        trainerIdType: typeof trainerId,
+      });
+      return { success: false, error: 'Invalid trainer_id' };
+    }
+
+    if (!courseId || typeof courseId !== 'string') {
+      logger.warn('[DirectoryClient] Invalid course_id for Directory update', {
+        courseId,
+        courseIdType: typeof courseId,
+      });
+      return { success: false, error: 'Invalid course_id' };
+    }
+
+    logger.info('[DirectoryClient] Updating Directory with course status', {
+      trainerId,
+      courseId,
+      status,
+    });
+
+    // Build payload object with course information
+    const payload = {
+      trainer_id: trainerId,
+      course_id: courseId,
+      status: status,
+    };
+
+    // Send request to Directory (will return rollback mock data if it fails)
+    const response = await this.sendRequest(payload);
+
+    // Validate response
+    if (response && typeof response === 'object') {
+      logger.info('[DirectoryClient] Directory updated successfully', {
+        trainerId,
+        courseId,
+        status,
+      });
+      return {
+        success: true,
+        trainer_id: response.trainer_id || trainerId,
+        course_id: response.course_id || courseId,
+        status: response.status || status,
+      };
+    } else {
+      logger.warn('[DirectoryClient] Directory update returned invalid response, treating as success (non-blocking)', {
+        trainerId,
+        courseId,
+        status,
+        responseType: typeof response,
+      });
+      // Non-blocking: return success even if Directory doesn't respond correctly
+      return {
+        success: true,
+        trainer_id: trainerId,
+        course_id: courseId,
+        status: status,
+        note: 'Directory update may have failed, but continuing',
+      };
+    }
+  }
 }
 
 // Export singleton instance
@@ -271,12 +291,12 @@ export function getDirectoryClient() {
 }
 
 // Export convenience functions
-export async function fetchTrainerProfileFromDirectory(trainerId) {
-  const client = getDirectoryClient();
-  return client.fetchTrainerProfileFromDirectory(trainerId);
-}
-
 export async function fetchExerciseLimitsFromDirectory(trainerId = null) {
   const client = getDirectoryClient();
   return client.fetchExerciseLimitsFromDirectory(trainerId);
+}
+
+export async function updateCourseStatusInDirectory(trainerId, courseId, status = 'archived') {
+  const client = getDirectoryClient();
+  return client.updateCourseStatusInDirectory(trainerId, courseId, status);
 }
