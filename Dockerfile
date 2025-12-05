@@ -1,5 +1,5 @@
-# Use Node.js 18 as base image
-FROM node:18-slim
+# Use Node.js 20 as base image (LTS, more stable registry availability)
+FROM node:20-slim
 
 # Install system dependencies
 # ffmpeg includes ffprobe
