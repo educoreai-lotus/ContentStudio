@@ -14,6 +14,7 @@ export function buildMessage(serviceName, payload) {
   let message = `educoreai-${serviceName}`;
   
   // If payload exists, add SHA256 hash of the payload
+  // IMPORTANT: Use JSON.stringify (not stableStringify) to match Coordinator's implementation
   if (payload) {
     const payloadString = JSON.stringify(payload);
     const payloadHash = crypto.createHash('sha256')

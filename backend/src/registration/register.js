@@ -91,6 +91,7 @@ async function registerWithCoordinator() {
     logger.info('[Registration] Signature generated successfully', {
       signatureLength: signature?.length,
       signaturePrefix: signature?.substring(0, 20) + '...',
+      signatureFull: signature, // Full signature for debugging
     });
   } catch (signatureError) {
     const error = `Failed to generate ECDSA signature: ${signatureError.message}`;
