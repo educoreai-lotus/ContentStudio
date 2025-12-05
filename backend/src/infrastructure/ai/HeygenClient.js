@@ -623,12 +623,18 @@ export class HeygenClient {
         };
       }
 
-      const heygenVideoUrl = pollResult.videoUrl;
+      // Get download URL and share URL from poll result
+      const downloadUrl = pollResult.downloadUrl || null;
+      const shareUrl = pollResult.shareUrl || pollResult.videoUrl || `https://app.heygen.com/share/${videoId}`;
+      const heygenVideoUrl = downloadUrl || shareUrl;
+      const isShareUrl = !downloadUrl || heygenVideoUrl.includes('/share/');
       
       console.log('[HeyGen] Video generation completed, starting download and storage upload', {
         videoId,
-        heygenVideoUrl,
-        isShareUrl: heygenVideoUrl?.includes('/share/'),
+        hasDownloadUrl: !!downloadUrl,
+        downloadUrl: downloadUrl ? downloadUrl.substring(0, 100) + '...' : null,
+        shareUrl: shareUrl,
+        isShareUrl,
       });
 
       // Validate that we have a video URL
@@ -646,10 +652,32 @@ export class HeygenClient {
         };
       }
 
+      // If we only have a share URL, we cannot download directly - need to skip download
+      if (isShareUrl && !downloadUrl) {
+        console.warn('[HeyGen] Only share URL available, cannot download video directly. Video will be stored with share URL only.', {
+          videoId,
+          shareUrl,
+        });
+        return {
+          videoUrl: shareUrl,
+          videoId,
+          duration_seconds: duration || 15,
+          status: 'completed',
+          fallback: true,
+          error: 'Only share URL available - cannot download video for Supabase storage',
+          metadata: {
+            heygen_video_url: shareUrl,
+          },
+        };
+      }
+
       // Download and upload to Supabase Storage
-      console.log(`[HeyGen] Downloading video from Heygen...`);
+      console.log(`[HeyGen] Downloading video from Heygen...`, {
+        videoId,
+        downloadUrl: downloadUrl?.substring(0, 100) + '...',
+      });
       try {
-        const videoBuffer = await this.downloadVideo(heygenVideoUrl);
+        const videoBuffer = await this.downloadVideo(downloadUrl);
         console.log(`[HeyGen] Video downloaded (${videoBuffer.length} bytes)`);
         console.log(`[HeyGen] Uploading to Supabase Storage...`);
         
@@ -673,30 +701,43 @@ export class HeygenClient {
               storagePath: storageMetadata.storagePath,
             });
           } else {
-            console.warn('[HeyGen] Storage service returned incomplete metadata, using Heygen URL as fallback');
-            storageUrl = heygenVideoUrl;
+            console.warn('[HeyGen] Storage service returned incomplete metadata, using share URL as fallback');
+            storageUrl = shareUrl;
           }
         } catch (uploadErr) {
-          console.warn('[HeyGen] Upload to Supabase failed, using Heygen URL as fallback:', uploadErr.message);
-          storageUrl = heygenVideoUrl; // Fallback to Heygen URL only if upload fails
+          console.warn('[HeyGen] Upload to Supabase failed, using share URL as fallback:', uploadErr.message);
+          storageUrl = shareUrl; // Fallback to share URL only if upload fails
         }
 
         // Ensure we always return a valid URL
         if (!storageUrl) {
-          console.warn('[HeyGen] No storage URL available, using Heygen URL as final fallback');
-          storageUrl = heygenVideoUrl;
+          console.warn('[HeyGen] No storage URL available, using share URL as final fallback');
+          storageUrl = shareUrl;
         }
 
         console.log(`[HeyGen] Returning video result with metadata`);
         return {
-          videoUrl: storageUrl, // Supabase public URL if upload succeeded, otherwise Heygen URL
-          heygenVideoUrl: heygenVideoUrl, // Always keep original Heygen URL for reference
+          videoUrl: storageUrl, // Supabase public URL if upload succeeded, otherwise share URL
           videoId,
-          duration: duration || 15,
+          duration_seconds: duration || 15,
           status: 'completed',
-          fallback: storageUrl === heygenVideoUrl, // Mark as fallback if we're using Heygen URL
+          fallback: storageUrl === shareUrl, // Mark as fallback if we're using share URL
           // Include full storage metadata if available
-          storageMetadata: storageMetadata || null,
+          ...(storageMetadata && {
+            fileUrl: storageMetadata.fileUrl,
+            fileName: storageMetadata.fileName,
+            fileSize: storageMetadata.fileSize,
+            fileType: storageMetadata.fileType,
+            storagePath: storageMetadata.storagePath,
+            uploadedAt: storageMetadata.uploadedAt,
+            sha256Hash: storageMetadata.sha256Hash,
+            digitalSignature: storageMetadata.digitalSignature,
+          }),
+          // Include Heygen URLs in metadata
+          metadata: {
+            heygen_video_url: shareUrl, // Always keep share URL in metadata
+            ...(downloadUrl && { heygen_download_url: downloadUrl }),
+          },
         };
       } catch (downloadErr) {
         console.error('[HeyGen] Failed to download or upload video', {
@@ -768,12 +809,19 @@ export class HeygenClient {
           });
 
           // Try multiple possible field names for the video URL
-          const videoUrl = responseData.video_url 
+          // Prefer download URLs over share URLs
+          const downloadUrl = responseData.video_download_url 
             || responseData.download_url 
-            || responseData.video_download_url
-            || responseData.share_url
-            || (responseData.video && responseData.video.url)
+            || responseData.video_url
             || null;
+          
+          const shareUrl = responseData.share_url 
+            || (responseData.video && responseData.video.url)
+            || `https://app.heygen.com/share/${videoId}`;
+
+          // Use download URL if available, otherwise use share URL
+          const videoUrl = downloadUrl || shareUrl;
+          const isFallback = !downloadUrl || videoUrl.includes('/share/');
 
           if (!videoUrl) {
             console.error('[HeyGen] No video URL found in completed response', {
@@ -783,16 +831,24 @@ export class HeygenClient {
             // Fallback to share URL if no direct URL found
             const fallbackShareUrl = `https://app.heygen.com/share/${videoId}`;
             console.warn('[HeyGen] Using fallback share URL', { fallbackShareUrl });
-            return { status, videoUrl: fallbackShareUrl, isFallback: true };
+            return { status, videoUrl: fallbackShareUrl, isFallback: true, downloadUrl: null, shareUrl: fallbackShareUrl };
           }
 
           console.log('[HeyGen] Found video URL from poll response', {
             videoId,
-            videoUrl,
-            isShareUrl: videoUrl.includes('/share/'),
+            videoUrl: downloadUrl ? downloadUrl.substring(0, 100) + '...' : videoUrl,
+            downloadUrl: !!downloadUrl,
+            shareUrl: shareUrl,
+            isFallback,
           });
 
-          return { status, videoUrl, isFallback: videoUrl.includes('/share/') };
+          return { 
+            status, 
+            videoUrl: downloadUrl || shareUrl, 
+            downloadUrl: downloadUrl || null,
+            shareUrl: shareUrl,
+            isFallback 
+          };
         } else if (status === 'failed') {
           const errorData = responseData || {};
           const errorMessage = errorData.error_message || errorData.error || 'Video generation failed';
