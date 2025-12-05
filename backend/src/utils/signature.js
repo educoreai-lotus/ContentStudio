@@ -3,34 +3,21 @@ import { logger } from '../infrastructure/logging/Logger.js';
 
 /**
  * Build message for ECDSA signing
- * Format: "educoreai-{serviceName}-{payloadSha256}"
- * Matches Coordinator specification exactly
+ * Format: "educoreai-{serviceName}"
+ * Matches Coordinator specification exactly - simple format without payload hash
  * @param {string} serviceName - Service name (e.g., "content-studio")
- * @param {Object} payload - Payload object to sign
+ * @param {Object} payload - Payload object (not used in message, kept for API compatibility)
  * @returns {string} Message string for signing
  */
 export function buildMessage(serviceName, payload) {
-  let message = `educoreai-${serviceName}`;
+  // Coordinator expects simple format: "educoreai-{microservice-name}" without hash
+  const message = `educoreai-${serviceName}`;
 
-  if (payload) {
-    const payloadHash = crypto
-      .createHash('sha256')
-      .update(JSON.stringify(payload))
-      .digest('hex');
-
-    message = `${message}-${payloadHash}`;
-
-    logger.debug('[Signature] Built message for signing', {
-      serviceName,
-      payloadHash: payloadHash.substring(0, 16) + '...',
-      messageLength: message.length,
-    });
-  } else {
-    logger.debug('[Signature] Built message for signing (no payload)', {
-      serviceName,
-      messageLength: message.length,
-    });
-  }
+  logger.debug('[Signature] Built message for signing', {
+    serviceName,
+    messageLength: message.length,
+    hasPayload: !!payload,
+  });
 
   return message;
 }
