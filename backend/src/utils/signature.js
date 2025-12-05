@@ -2,53 +2,36 @@ import crypto from 'crypto';
 import { logger } from '../infrastructure/logging/Logger.js';
 
 /**
- * Stable stringify function that guarantees consistent output
- * by sorting keys at all nesting levels
- * @param {*} obj - Object to stringify
- * @returns {string} Stable JSON string
- */
-function stableStringify(obj) {
-  if (obj === null || typeof obj !== 'object') {
-    return JSON.stringify(obj);
-  }
-
-  if (Array.isArray(obj)) {
-    return '[' + obj.map(item => stableStringify(item)).join(',') + ']';
-  }
-
-  // Sort keys and recursively stringify nested objects
-  const sortedKeys = Object.keys(obj).sort();
-  const keyValuePairs = sortedKeys.map(key => {
-    const value = obj[key];
-    return JSON.stringify(key) + ':' + stableStringify(value);
-  });
-
-  return '{' + keyValuePairs.join(',') + '}';
-}
-
-/**
  * Build message for ECDSA signing
  * Format: "educoreai-{serviceName}-{payloadSha256}"
+ * Matches Coordinator specification exactly
  * @param {string} serviceName - Service name (e.g., "content-studio")
  * @param {Object} payload - Payload object to sign
  * @returns {string} Message string for signing
  */
 export function buildMessage(serviceName, payload) {
-  // Convert payload to JSON string using stable stringify (sorted keys at all levels)
-  const payloadString = stableStringify(payload);
-  
-  // Calculate SHA-256 hash of payload
-  const payloadHash = crypto.createHash('sha256').update(payloadString).digest('hex');
-  
-  // Build message: "educoreai-{serviceName}-{payloadSha256}"
-  const message = `educoreai-${serviceName}-${payloadHash}`;
-  
-  logger.debug('[Signature] Built message for signing', {
-    serviceName,
-    payloadHash: payloadHash.substring(0, 16) + '...',
-    messageLength: message.length,
-  });
-  
+  let message = `educoreai-${serviceName}`;
+
+  if (payload) {
+    const payloadHash = crypto
+      .createHash('sha256')
+      .update(JSON.stringify(payload))
+      .digest('hex');
+
+    message = `${message}-${payloadHash}`;
+
+    logger.debug('[Signature] Built message for signing', {
+      serviceName,
+      payloadHash: payloadHash.substring(0, 16) + '...',
+      messageLength: message.length,
+    });
+  } else {
+    logger.debug('[Signature] Built message for signing (no payload)', {
+      serviceName,
+      messageLength: message.length,
+    });
+  }
+
   return message;
 }
 
