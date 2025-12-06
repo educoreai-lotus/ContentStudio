@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { coursesService } from '../../services/courses.js';
 import { topicsService } from '../../services/topics.js';
+import { contentService } from '../../services/content.js';
 import { useApp } from '../../context/AppContext.jsx';
 import { Badge } from '../../components/common/Badge.jsx';
 
@@ -15,8 +16,10 @@ export const CourseDetail = () => {
 
   const [course, setCourse] = useState(null);
   const [topics, setTopics] = useState([]);
+  const [topicsContent, setTopicsContent] = useState({}); // { topicId: [content] }
   const [loadingCourse, setLoadingCourse] = useState(true);
   const [loadingTopics, setLoadingTopics] = useState(true);
+  const [loadingContent, setLoadingContent] = useState(false);
   const [error, setError] = useState(null);
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState(null);
@@ -48,7 +51,35 @@ export const CourseDetail = () => {
           limit: 50,
         }
       );
-      setTopics(result.topics || []);
+      const topicsList = result.topics || [];
+      setTopics(topicsList);
+      
+      // Fetch content for all topics to check if all formats are ready
+      if (topicsList.length > 0) {
+        setLoadingContent(true);
+        try {
+          const contentPromises = topicsList.map(async (topic) => {
+            try {
+              const content = await contentService.listByTopic(topic.topic_id);
+              return { topicId: topic.topic_id, content };
+            } catch (err) {
+              console.error(`Failed to fetch content for topic ${topic.topic_id}:`, err);
+              return { topicId: topic.topic_id, content: [] };
+            }
+          });
+          
+          const contentResults = await Promise.all(contentPromises);
+          const contentMap = {};
+          contentResults.forEach(({ topicId, content }) => {
+            contentMap[topicId] = content;
+          });
+          setTopicsContent(contentMap);
+        } catch (err) {
+          console.error('Failed to fetch topics content:', err);
+        } finally {
+          setLoadingContent(false);
+        }
+      }
     } catch (err) {
       setError(err.error?.message || 'Failed to load course lessons');
     } finally {
@@ -131,6 +162,39 @@ export const CourseDetail = () => {
   };
 
   /**
+   * Check if all required formats are created for a topic
+   * @param {Object} topic - Topic object
+   * @param {Array} content - Content array for the topic
+   * @returns {boolean} True if all formats are ready
+   */
+  const hasAllFormatsForTopic = (topic, content) => {
+    if (!topic.template_format_order || topic.template_format_order.length === 0) {
+      // If no template is applied, check if we have at least 5 formats (legacy check)
+      return content && content.length >= 5;
+    }
+
+    // Map format names to content type IDs
+    const formatToTypeId = {
+      'text': 1,
+      'text_audio': 1,
+      'audio': 1,
+      'code': 2,
+      'presentation': 3,
+      'mind_map': 5,
+      'avatar_video': 6,
+    };
+
+    // Check if all formats in template_format_order have corresponding content
+    const requiredFormats = topic.template_format_order || [];
+    const readyFormats = requiredFormats.filter(format => {
+      const typeId = formatToTypeId[format] || formatToTypeId[format.replace('_', '')];
+      return content && content.some(c => c.content_type_id === typeId);
+    });
+
+    return readyFormats.length === requiredFormats.length;
+  };
+
+  /**
    * Check if course is ready to publish (all validations pass)
    * This is a client-side check - backend will do full validation
    * @returns {boolean} True if course appears ready
@@ -139,7 +203,101 @@ export const CourseDetail = () => {
     if (!topics || topics.length === 0) return false;
     
     // Check if all topics have templates
-    return topics.every(topic => topic.template_id);
+    const allHaveTemplates = topics.every(topic => topic.template_id);
+    if (!allHaveTemplates) return false;
+    
+    // Check if all topics have all required formats
+    const allHaveFormats = topics.every(topic => {
+      const content = topicsContent[topic.topic_id] || [];
+      return hasAllFormatsForTopic(topic, content);
+    });
+    if (!allHaveFormats) return false;
+    
+    // Check if all topics have DevLab exercises
+    const allHaveExercises = topics.every(topic => {
+      // Check if devlab_exercises exists and is not empty
+      if (!topic.devlab_exercises) return false;
+      
+      // If it's a string, try to parse it
+      if (typeof topic.devlab_exercises === 'string') {
+        try {
+          const parsed = JSON.parse(topic.devlab_exercises);
+          // Check if it's an array with at least one exercise, or an object with content
+          return Array.isArray(parsed) ? parsed.length > 0 : Object.keys(parsed).length > 0;
+        } catch {
+          // If parsing fails, check if string is not empty
+          return topic.devlab_exercises.trim().length > 0;
+        }
+      }
+      
+      // If it's already an object/array
+      if (Array.isArray(topic.devlab_exercises)) {
+        return topic.devlab_exercises.length > 0;
+      }
+      if (typeof topic.devlab_exercises === 'object') {
+        return Object.keys(topic.devlab_exercises).length > 0;
+      }
+      
+      return false;
+    });
+    
+    return allHaveExercises;
+  };
+
+  /**
+   * Get missing requirements for publishing
+   * @returns {Object} Missing requirements details
+   */
+  const getMissingPublishRequirements = () => {
+    const missing = {
+      templates: [],
+      formats: [],
+      exercises: [],
+    };
+    
+    if (!topics || topics.length === 0) {
+      return { templates: [], formats: [], exercises: [], message: 'No lessons found in this course.' };
+    }
+    
+    topics.forEach(topic => {
+      if (!topic.template_id) {
+        missing.templates.push(topic.topic_name || `Lesson ${topic.topic_id}`);
+      }
+      
+      // Check if all formats are ready
+      const content = topicsContent[topic.topic_id] || [];
+      if (!hasAllFormatsForTopic(topic, content)) {
+        missing.formats.push(topic.topic_name || `Lesson ${topic.topic_id}`);
+      }
+      
+      const hasExercises = (() => {
+        if (!topic.devlab_exercises) return false;
+        
+        if (typeof topic.devlab_exercises === 'string') {
+          try {
+            const parsed = JSON.parse(topic.devlab_exercises);
+            return Array.isArray(parsed) ? parsed.length > 0 : Object.keys(parsed).length > 0;
+          } catch {
+            return topic.devlab_exercises.trim().length > 0;
+          }
+        }
+        
+        if (Array.isArray(topic.devlab_exercises)) {
+          return topic.devlab_exercises.length > 0;
+        }
+        if (typeof topic.devlab_exercises === 'object') {
+          return Object.keys(topic.devlab_exercises).length > 0;
+        }
+        
+        return false;
+      })();
+      
+      if (!hasExercises) {
+        missing.exercises.push(topic.topic_name || `Lesson ${topic.topic_id}`);
+      }
+    });
+    
+    return missing;
   };
 
   /**
@@ -195,7 +353,7 @@ export const CourseDetail = () => {
     }
   };
 
-  const isLoading = loadingCourse || loadingTopics;
+  const isLoading = loadingCourse || loadingTopics || loadingContent;
 
   return (
     <div
@@ -379,13 +537,28 @@ export const CourseDetail = () => {
                 <button
                   onClick={handlePublishCourse}
                   disabled={publishing || !isCourseReadyToPublish()}
-                  title={
-                    !isCourseReadyToPublish()
-                      ? 'Complete all required content and exercises before transferring the course to Course Builder.'
-                      : publishing
-                      ? 'Transferring the course to Course Builder, please wait...'
-                      : 'Transfer course to Course Builder for publishing'
-                  }
+                  title={(() => {
+                    if (publishing) {
+                      return 'Transferring the course to Course Builder, please wait...';
+                    }
+                    if (!isCourseReadyToPublish()) {
+                      const missing = getMissingPublishRequirements();
+                      const messages = [];
+                      if (missing.templates.length > 0) {
+                        messages.push(`Missing templates: ${missing.templates.join(', ')}`);
+                      }
+                      if (missing.formats.length > 0) {
+                        messages.push(`Missing content formats: ${missing.formats.join(', ')}`);
+                      }
+                      if (missing.exercises.length > 0) {
+                        messages.push(`Missing DevLab exercises: ${missing.exercises.join(', ')}`);
+                      }
+                      return messages.length > 0 
+                        ? messages.join('\n')
+                        : 'Complete all required content and exercises before transferring the course to Course Builder.';
+                    }
+                    return 'Transfer course to Course Builder for publishing';
+                  })()}
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-all relative ${
                     publishing || !isCourseReadyToPublish()
                       ? 'opacity-50 cursor-not-allowed'

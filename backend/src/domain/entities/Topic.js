@@ -16,6 +16,7 @@ export class Topic {
     has_mind_map = false,
     total_content_formats = 0,
     usage_count = 0,
+    devlab_exercises = null, // DevLab exercises (JSONB field)
     created_at = null,
     updated_at = null,
   }) {
@@ -37,6 +38,7 @@ export class Topic {
     this.has_mind_map = has_mind_map;
     this.total_content_formats = total_content_formats;
     this.usage_count = usage_count;
+    this.devlab_exercises = devlab_exercises;
     this.created_at = created_at;
     this.updated_at = updated_at;
     this.is_standalone = course_id === null;
@@ -151,6 +153,7 @@ export class Topic {
       has_mind_map: this.has_mind_map,
       total_content_formats: this.total_content_formats,
       usage_count: this.usage_count,
+      devlab_exercises: this.devlab_exercises,
       is_standalone: this.is_standalone,
       created_at: this.created_at,
       updated_at: this.updated_at,

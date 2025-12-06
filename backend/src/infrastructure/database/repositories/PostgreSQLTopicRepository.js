@@ -381,6 +381,7 @@ export class PostgreSQLTopicRepository extends ITopicRepository {
       status: row.status,
       format_flags: row.format_flags || {},
       usage_count: row.usage_count || 0,
+      devlab_exercises: row.devlab_exercises || null,
       created_at: row.created_at,
       updated_at: row.updated_at,
     });
