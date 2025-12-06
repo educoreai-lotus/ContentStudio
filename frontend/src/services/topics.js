@@ -105,6 +105,16 @@ export const topicsService = {
     });
     return response.data;
   },
+
+  /**
+   * Publish standalone topic (save and finish lesson)
+   * @param {number} topicId - Topic ID
+   * @returns {Promise<Object>} Publish result
+   */
+  async publishStandalone(topicId) {
+    const response = await apiClient.post(`/api/topics/${topicId}/publish-standalone`);
+    return response.data;
+  },
 };
 
 

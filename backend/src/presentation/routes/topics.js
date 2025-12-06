@@ -10,6 +10,7 @@ const topicRepository = await RepositoryFactory.getTopicRepository();
 const templateRepository = await RepositoryFactory.getTemplateRepository();
 const contentRepository = await RepositoryFactory.getContentRepository();
 const courseRepository = await RepositoryFactory.getCourseRepository();
+const exerciseRepository = await RepositoryFactory.getExerciseRepository();
 
 // Initialize integration services
 const integrationManager = new IntegrationServiceManager();
@@ -21,7 +22,8 @@ const topicController = new TopicController(
   skillsEngineClient,
   templateRepository,
   contentRepository,
-  courseRepository
+  courseRepository,
+  exerciseRepository
 );
 
 router.post('/', topicController.create.bind(topicController));
@@ -33,6 +35,7 @@ router.put('/:id', topicController.update.bind(topicController));
 router.delete('/:id', topicController.delete.bind(topicController));
 router.post('/:id/validate-formats', topicController.validateFormatRequirements.bind(topicController));
 router.post('/:id/apply-template', topicController.applyTemplate.bind(topicController));
+router.post('/:id/publish-standalone', topicController.publishStandalone.bind(topicController));
 
 export default router;
 

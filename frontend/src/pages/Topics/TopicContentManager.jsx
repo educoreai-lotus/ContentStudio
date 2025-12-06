@@ -37,6 +37,9 @@ export default function TopicContentManager() {
   const [qualityCheckInfo, setQualityCheckInfo] = useState(null);
   const [videoUploadModalOpen, setVideoUploadModalOpen] = useState(false);
   const [exerciseModalOpen, setExerciseModalOpen] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [publishError, setPublishError] = useState(null);
+  const [publishSuccess, setPublishSuccess] = useState(false);
 
   useEffect(() => {
     fetchContent();
@@ -348,6 +351,33 @@ export default function TopicContentManager() {
       setTimeout(() => {
         setAiFeedback(null);
       }, 10000);
+    }
+  };
+
+  const handlePublishStandalone = async () => {
+    if (!window.confirm('Are you sure you want to save and finish this lesson?\n\nThe lesson will be sent to Course Builder and can be used in personalized courses.')) {
+      return;
+    }
+
+    setPublishing(true);
+    setPublishError(null);
+    setPublishSuccess(false);
+
+    try {
+      const result = await topicsService.publishStandalone(parseInt(topicId));
+      setPublishSuccess(true);
+      
+      // Refresh topic details to get updated status
+      await fetchTopicDetails();
+      
+      // Show success message
+      setTimeout(() => {
+        setPublishSuccess(false);
+      }, 5000);
+    } catch (err) {
+      setPublishError(err.error?.message || err.message || 'Failed to save and finish lesson');
+    } finally {
+      setPublishing(false);
     }
   };
 
@@ -1064,7 +1094,7 @@ export default function TopicContentManager() {
 
             {/* View Lesson Button - Always visible, disabled until all formats are ready AND template is selected */}
             {existingContent.length > 0 && (
-              <div className="mt-8 text-center">
+              <div className="mt-8 text-center space-y-4">
                 <div className="relative inline-block group">
                   <button
                     onClick={() => {
@@ -1114,6 +1144,64 @@ export default function TopicContentManager() {
                     </div>
                   )}
                 </div>
+
+                {/* Save and Finish Lesson Button - Only for standalone lessons */}
+                {!topicDetails?.course_id && hasAllFormats && topicDetails?.template_id && (
+                  <div className="relative inline-block group">
+                    <button
+                      onClick={handlePublishStandalone}
+                      disabled={publishing}
+                      className={`px-8 py-4 text-white rounded-lg text-lg font-semibold transition-all ${
+                        publishing
+                          ? 'bg-gray-400 dark:bg-gray-600 opacity-60 cursor-not-allowed'
+                          : theme === 'day-mode'
+                          ? 'bg-blue-600 hover:bg-blue-700 shadow-lg cursor-pointer'
+                          : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-lg shadow-blue-600/40 cursor-pointer'
+                      }`}
+                      title="Save and finish this lesson. It will be sent to Course Builder and can be used in personalized courses."
+                    >
+                      {publishing ? (
+                        <>
+                          <i className="fas fa-spinner fa-spin mr-2"></i>
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <i className="fas fa-check-circle mr-2"></i>
+                          Save and Finish Lesson
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
+
+                {/* Publish Success Message */}
+                {publishSuccess && (
+                  <div
+                    className={`p-4 rounded-lg border ${
+                      theme === 'day-mode'
+                        ? 'bg-green-50 border-green-200 text-green-800'
+                        : 'bg-green-900/20 border-green-500/30 text-green-300'
+                    }`}
+                  >
+                    <i className="fas fa-check-circle mr-2"></i>
+                    Lesson saved and sent to Course Builder successfully!
+                  </div>
+                )}
+
+                {/* Publish Error Message */}
+                {publishError && (
+                  <div
+                    className={`p-4 rounded-lg border ${
+                      theme === 'day-mode'
+                        ? 'bg-red-50 border-red-200 text-red-800'
+                        : 'bg-red-900/20 border-red-500/30 text-red-300'
+                    }`}
+                  >
+                    <i className="fas fa-exclamation-circle mr-2"></i>
+                    {publishError}
+                  </div>
+                )}
               </div>
             )}
           </div>

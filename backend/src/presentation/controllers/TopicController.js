@@ -5,11 +5,12 @@ import { UpdateTopicUseCase } from '../../application/use-cases/UpdateTopicUseCa
 import { DeleteTopicUseCase } from '../../application/use-cases/DeleteTopicUseCase.js';
 import { ValidateFormatRequirementsUseCase } from '../../application/use-cases/ValidateFormatRequirementsUseCase.js';
 import { ApplyTemplateToLessonUseCase } from '../../application/use-cases/ApplyTemplateToLessonUseCase.js';
+import { PublishStandaloneTopicUseCase } from '../../application/use-cases/PublishStandaloneTopicUseCase.js';
 import { CreateTopicDTO, UpdateTopicDTO, TopicResponseDTO } from '../../application/dtos/TopicDTO.js';
 import { logger } from '../../infrastructure/logging/Logger.js';
 
 export class TopicController {
-  constructor(topicRepository, skillsEngineClient = null, templateRepository = null, contentRepository = null, courseRepository = null) {
+  constructor(topicRepository, skillsEngineClient = null, templateRepository = null, contentRepository = null, courseRepository = null, exerciseRepository = null) {
     this.createTopicUseCase = new CreateTopicUseCase({
       topicRepository,
       skillsEngineClient,
@@ -27,6 +28,15 @@ export class TopicController {
             templateRepository,
             topicRepository,
             contentRepository,
+          })
+        : null;
+    this.publishStandaloneTopicUseCase =
+      topicRepository && contentRepository && templateRepository && exerciseRepository
+        ? new PublishStandaloneTopicUseCase({
+            topicRepository,
+            contentRepository,
+            templateRepository,
+            exerciseRepository,
           })
         : null;
     this.skillsEngineClient = skillsEngineClient;
@@ -288,6 +298,37 @@ export class TopicController {
         topic_name: topicName,
         trainer_id: trainerId,
       });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async publishStandalone(req, res, next) {
+    try {
+      if (!this.publishStandaloneTopicUseCase) {
+        return res.status(503).json({
+          error: {
+            code: 'SERVICE_UNAVAILABLE',
+            message: 'Publish service is not available',
+            timestamp: new Date().toISOString(),
+          },
+        });
+      }
+
+      const topicId = parseInt(req.params.id);
+      if (!topicId || isNaN(topicId)) {
+        return res.status(400).json({
+          error: {
+            code: 'INVALID_TOPIC_ID',
+            message: 'Invalid topic ID',
+            timestamp: new Date().toISOString(),
+          },
+        });
+      }
+
+      const result = await this.publishStandaloneTopicUseCase.execute(topicId);
+
+      res.status(200).json(result);
     } catch (error) {
       next(error);
     }
