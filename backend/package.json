@@ -15,7 +15,8 @@
     "format": "prettier --write \"src/**/*.js\" \"tests/**/*.js\"",
     "format:check": "prettier --check \"src/**/*.js\" \"tests/**/*.js\"",
     "migrate": "node scripts/run-migrations.js",
-    "migrate:custom": "node scripts/run-migrations.js"
+    "migrate:custom": "node scripts/run-migrations.js",
+    "upload-migration": "node scripts/upload-migration.js"
   },
   "keywords": [
     "content-studio",
