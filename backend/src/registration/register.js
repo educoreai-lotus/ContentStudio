@@ -1,12 +1,6 @@
 import axios from 'axios';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import { logger } from '../infrastructure/logging/Logger.js';
 import { generateSignature } from '../utils/signature.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 /**
  * Service Registration Constants
@@ -334,31 +328,624 @@ export async function uploadMigration() {
       return { success: false, error: 'CS_COORDINATOR_PRIVATE_KEY not set', skipped: true };
     }
 
-    // Read migration file
-    const migrationFilePath = path.join(__dirname, '..', '..', 'migration-content-studio.json');
-    let migrationData;
-    
-    try {
-      const migrationFileContent = fs.readFileSync(migrationFilePath, 'utf8');
-      migrationData = JSON.parse(migrationFileContent);
-    } catch (error) {
-      logger.warn('⚠️ Migration upload skipped: Could not read migration file', {
-        error: error.message,
-        path: migrationFilePath,
-        serviceName: SERVICE_NAME,
-      });
-      return { success: false, error: `Could not read migration file: ${error.message}`, skipped: true };
-    }
+    // Migration file definition (embedded in code)
+    const migrationFile = {
+      version: '1.0.0',
+      description: 'Content Studio microservice for managing educational content, courses, lessons, and learning materials. Provides AI-powered content generation, video-to-lesson transformation, template management, and multi-format content creation (text, code, presentations, audio, mind maps, avatar videos).',
+      capabilities: [
+        'content management',
+        'course creation',
+        'course management',
+        'lesson creation',
+        'lesson management',
+        'content editing',
+        'content generation',
+        'ai content generation',
+        'video to lesson',
+        'template management',
+        'template application',
+        'exercise generation',
+        'exercise validation',
+        'content quality checks',
+        'multilingual content',
+        'content history',
+        'content versioning',
+        'educational content',
+        'learning materials',
+        'content authoring',
+        'content studio'
+      ],
+      api: {
+        endpoints: [
+          {
+            path: '/api/fill-content-metrics/',
+            method: 'POST',
+            description: 'Main endpoint for receiving requests from Coordinator and other microservices. Handles Course Builder requests for personalized content, Directory requests, DevLab requests, Skills Engine requests, and other service integrations.',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/courses',
+            method: 'POST',
+            description: 'Create a new course',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/courses',
+            method: 'GET',
+            description: 'List all courses with filters (trainer_id, status, search)',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/courses/:id',
+            method: 'GET',
+            description: 'Get course by ID with all topics and content',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/courses/:id',
+            method: 'PUT',
+            description: 'Update course details',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/courses/:id',
+            method: 'DELETE',
+            description: 'Soft delete course',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/courses/:id/publish',
+            method: 'POST',
+            description: 'Publish course to Course Builder and mark as archived',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/topics',
+            method: 'POST',
+            description: 'Create a new topic/lesson',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/topics',
+            method: 'GET',
+            description: 'List all topics with filters (course_id, trainer_id, status, search)',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/topics/:id',
+            method: 'GET',
+            description: 'Get topic by ID with all content',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/topics/:id',
+            method: 'PUT',
+            description: 'Update topic details',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/topics/:id',
+            method: 'DELETE',
+            description: 'Soft delete topic',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/topics/suggest-skills',
+            method: 'GET',
+            description: 'Suggest skills for a topic based on topic name and description',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/topics/suggest-skills',
+            method: 'POST',
+            description: 'Suggest skills for a topic based on topic name and description',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/topics/:id/validate-formats',
+            method: 'POST',
+            description: 'Validate if topic has all required content formats',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/topics/:id/apply-template',
+            method: 'POST',
+            description: 'Apply a template to a topic/lesson',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/topics/:id/publish-standalone',
+            method: 'POST',
+            description: 'Mark standalone topic as archived (ready for Course Builder)',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/content',
+            method: 'POST',
+            description: 'Create new content item for a topic',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/content',
+            method: 'GET',
+            description: 'List content items with filters',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/content/:id',
+            method: 'GET',
+            description: 'Get content by ID',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/content/:id',
+            method: 'PUT',
+            description: 'Update existing content',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/content/:id',
+            method: 'DELETE',
+            description: 'Soft delete content',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/content/:id/regenerate',
+            method: 'POST',
+            description: 'Regenerate content with AI',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/content/:id/history',
+            method: 'GET',
+            description: 'Get version history for a content item',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/content/topic/:topicId/history',
+            method: 'GET',
+            description: 'Get version history for all content in a topic',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/content/history/:historyId/restore',
+            method: 'POST',
+            description: 'Restore a previous version of content',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/content/history/:historyId',
+            method: 'DELETE',
+            description: 'Delete a history record',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/content/approve',
+            method: 'POST',
+            description: 'Approve content after quality check',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/templates',
+            method: 'POST',
+            description: 'Create a new template',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/templates',
+            method: 'GET',
+            description: 'List all templates',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/templates/:id',
+            method: 'GET',
+            description: 'Get template by ID',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/templates/:id',
+            method: 'PUT',
+            description: 'Update template',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/templates/:id',
+            method: 'DELETE',
+            description: 'Delete template',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/templates/generate/ai',
+            method: 'POST',
+            description: 'Generate template with AI based on topic and skills',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/templates/:templateId/apply/:topicId',
+            method: 'POST',
+            description: 'Apply template to a lesson',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/topics/:topicId/view',
+            method: 'GET',
+            description: 'Get lesson view with applied template and all content formats',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/exercises/topic/:topicId',
+            method: 'GET',
+            description: 'Get all exercises for a topic',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/exercises/generate-ai',
+            method: 'POST',
+            description: 'Generate AI exercises for a topic (code or theoretical)',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/exercises/manual',
+            method: 'POST',
+            description: 'Create a single manual exercise (validated with DevLab)',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/exercises/manual/batch',
+            method: 'POST',
+            description: 'Create multiple manual exercises in batch',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/video-to-lesson/upload',
+            method: 'POST',
+            description: 'Upload video and transform to lesson with all content formats',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/video-to-lesson/upload-youtube',
+            method: 'POST',
+            description: 'Upload YouTube video URL and transform to lesson',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/upload/presentation',
+            method: 'POST',
+            description: 'Upload presentation file to Supabase Storage',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/ai-generation/generate',
+            method: 'POST',
+            description: 'Generate content with AI (general)',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/ai-generation/generate/text',
+            method: 'POST',
+            description: 'Generate text content with AI',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/ai-generation/generate/code',
+            method: 'POST',
+            description: 'Generate code example with AI',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/ai-generation/generate/presentation',
+            method: 'POST',
+            description: 'Generate presentation with AI',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/ai-generation/generate/audio',
+            method: 'POST',
+            description: 'Generate audio narration with AI',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/ai-generation/generate/mind-map',
+            method: 'POST',
+            description: 'Generate mind map with AI',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/ai-generation/generate/avatar-video',
+            method: 'POST',
+            description: 'Generate avatar video with AI (Heygen)',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/search',
+            method: 'GET',
+            description: 'Search content, courses, and topics',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/quality-checks/:contentId',
+            method: 'POST',
+            description: 'Trigger quality check for content',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/quality-checks/:contentId',
+            method: 'GET',
+            description: 'Get quality check results for content',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/multilingual/stats',
+            method: 'GET',
+            description: 'Get language statistics',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/api/multilingual/frequent',
+            method: 'GET',
+            description: 'Get frequent languages',
+            requestSchema: {},
+            responseSchema: {}
+          },
+          {
+            path: '/health',
+            method: 'GET',
+            description: 'Health check endpoint',
+            requestSchema: {},
+            responseSchema: {}
+          }
+        ]
+      },
+      tables: [
+        'trainer_courses',
+        'topics',
+        'content',
+        'content_history',
+        'templates',
+        'content_types',
+        'generation_methods',
+        'language_stats',
+        'migration_log'
+      ],
+      database: {
+        tables: [
+          {
+            name: 'trainer_courses',
+            schema: {
+              description: 'Stores course-level data created by trainers',
+              columns: [
+                'course_id',
+                'course_name',
+                'trainer_id',
+                'description',
+                'skills',
+                'language',
+                'status',
+                'company_logo',
+                'permissions',
+                'usage_count',
+                'created_at',
+                'updated_at'
+              ]
+            }
+          },
+          {
+            name: 'topics',
+            schema: {
+              description: 'Represents lessons (topics) - can belong to course or be stand-alone',
+              columns: [
+                'topic_id',
+                'course_id',
+                'topic_name',
+                'description',
+                'trainer_id',
+                'language',
+                'status',
+                'skills',
+                'template_id',
+                'generation_methods_id',
+                'usage_count',
+                'devlab_exercises',
+                'created_at',
+                'updated_at'
+              ]
+            }
+          },
+          {
+            name: 'content',
+            schema: {
+              description: 'Stores each content item (format-specific data) belonging to a topic',
+              columns: [
+                'content_id',
+                'topic_id',
+                'content_type_id',
+                'content_data',
+                'generation_method_id',
+                'quality_check_data',
+                'quality_check_status',
+                'quality_checked_at',
+                'created_at',
+                'updated_at'
+              ]
+            }
+          },
+          {
+            name: 'content_history',
+            schema: {
+              description: 'Stores all version history of content for audit, rollback, and analytics',
+              columns: [
+                'history_id',
+                'topic_id',
+                'content_type_id',
+                'content_data',
+                'generation_method_id',
+                'deleted_at',
+                'created_at',
+                'updated_at'
+              ]
+            }
+          },
+          {
+            name: 'templates',
+            schema: {
+              description: 'Stores both structural templates (format order) and AI prompt templates',
+              columns: [
+                'template_id',
+                'template_name',
+                'template_type',
+                'created_by',
+                'created_at',
+                'format_order'
+              ]
+            }
+          },
+          {
+            name: 'content_types',
+            schema: {
+              description: 'Lookup table for content type metadata',
+              columns: [
+                'type_id',
+                'type_name',
+                'display_name'
+              ]
+            }
+          },
+          {
+            name: 'generation_methods',
+            schema: {
+              description: 'Lookup table for generation method metadata',
+              columns: [
+                'method_id',
+                'method_name',
+                'display_name',
+                'usage_count'
+              ]
+            }
+          },
+          {
+            name: 'language_stats',
+            schema: {
+              description: 'Tracks language usage statistics and frequency for multilingual content management',
+              columns: [
+                'language_code',
+                'language_name',
+                'total_requests',
+                'total_lessons',
+                'last_used',
+                'is_frequent',
+                'is_predefined',
+                'created_at',
+                'updated_at'
+              ]
+            }
+          },
+          {
+            name: 'migration_log',
+            schema: {
+              description: 'Tracks database migration execution',
+              columns: [
+                'id',
+                'file_name',
+                'executed_at',
+                'execution_duration_ms',
+                'success',
+                'error_message'
+              ]
+            }
+          }
+        ],
+        migrations: []
+      },
+      events: {
+        publishes: [
+          'content.created',
+          'content.updated',
+          'content.deleted',
+          'course.created',
+          'course.updated',
+          'course.published',
+          'course.archived',
+          'topic.created',
+          'topic.updated',
+          'topic.archived',
+          'template.applied',
+          'exercise.generated',
+          'exercise.validated',
+          'video.transcribed',
+          'video.processed'
+        ],
+        subscribes: [
+          'course.requested',
+          'content.requested',
+          'learner.requested'
+        ]
+      },
+      dependencies: [
+        'coordinator',
+        'course-builder',
+        'directory',
+        'devlab',
+        'skills-engine'
+      ]
+    };
 
     // Validate migration file structure
-    if (!migrationData.migrationFile) {
-      logger.warn('⚠️ Migration upload skipped: Invalid migration file structure', {
-        serviceName: SERVICE_NAME,
-      });
-      return { success: false, error: 'Invalid migration file structure', skipped: true };
-    }
-
-    if (!migrationData.migrationFile.version) {
+    if (!migrationFile.version) {
       logger.warn('⚠️ Migration upload skipped: migrationFile.version is required', {
         serviceName: SERVICE_NAME,
       });
@@ -371,7 +958,7 @@ export async function uploadMigration() {
 
     // Prepare payload
     const payload = {
-      migrationFile: migrationData.migrationFile,
+      migrationFile: migrationFile,
     };
 
     // Generate signature
@@ -401,9 +988,9 @@ export async function uploadMigration() {
       url: migrationUrl,
       serviceName: SERVICE_NAME,
       serviceId,
-      version: migrationData.migrationFile.version,
-      capabilities: migrationData.migrationFile.capabilities?.length || 0,
-      endpoints: migrationData.migrationFile.api?.endpoints?.length || 0,
+      version: migrationFile.version,
+      capabilities: migrationFile.capabilities?.length || 0,
+      endpoints: migrationFile.api?.endpoints?.length || 0,
     });
 
     // Send request
