@@ -225,10 +225,27 @@ function startServer() {
     
     // Register service with Coordinator (non-blocking)
     try {
-      const { registerService } = await import('./src/registration/register.js');
-      registerService().catch(error => {
+      const { registerService, uploadMigration } = await import('./src/registration/register.js');
+      // Register service first
+      registerService().then(async (registrationResult) => {
+        // After registration (or if already registered), upload migration
+        // Wait a bit to ensure registration is complete
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        uploadMigration().catch(error => {
+          logger.error('Migration upload error (non-critical)', { 
+            error: error.message 
+          });
+        });
+      }).catch(async (error) => {
         logger.error('Service registration error (non-critical)', { 
           error: error.message 
+        });
+        // Even if registration fails, try to upload migration if SERVICE_ID exists
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        uploadMigration().catch(err => {
+          logger.error('Migration upload error (non-critical)', { 
+            error: err.message 
+          });
         });
       });
     } catch (error) {

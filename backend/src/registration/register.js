@@ -1,6 +1,12 @@
 import axios from 'axios';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { logger } from '../infrastructure/logging/Logger.js';
 import { generateSignature } from '../utils/signature.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 /**
  * Service Registration Constants
@@ -283,6 +289,203 @@ export async function registerService() {
     });
     console.error('❌ Unexpected error during service registration:', error.message);
     // Don't throw - allow service to continue
+  }
+}
+
+/**
+ * Upload migration file to Coordinator
+ * This function uploads the migration file to make the service active
+ * It runs automatically after registration, but only once (if MIGRATION_UPLOADED is not set)
+ */
+export async function uploadMigration() {
+  try {
+    // Check if migration was already uploaded
+    if (process.env.MIGRATION_UPLOADED === 'true') {
+      logger.info('✓ Migration already uploaded, skipping', {
+        serviceName: SERVICE_NAME,
+      });
+      return { success: true, skipped: true };
+    }
+
+    // Check if service is registered (SERVICE_ID exists)
+    const serviceId = process.env.SERVICE_ID;
+    if (!serviceId) {
+      logger.info('⏭️ Migration upload skipped: SERVICE_ID not found (service not registered yet)', {
+        serviceName: SERVICE_NAME,
+      });
+      return { success: false, error: 'SERVICE_ID not found', skipped: true };
+    }
+
+    const coordinatorUrl = process.env.COORDINATOR_URL;
+    const privateKey = process.env.CS_COORDINATOR_PRIVATE_KEY;
+
+    // Validate required environment variables
+    if (!coordinatorUrl) {
+      logger.warn('⚠️ Migration upload skipped: COORDINATOR_URL not set', {
+        serviceName: SERVICE_NAME,
+      });
+      return { success: false, error: 'COORDINATOR_URL not set', skipped: true };
+    }
+
+    if (!privateKey) {
+      logger.warn('⚠️ Migration upload skipped: CS_COORDINATOR_PRIVATE_KEY not set', {
+        serviceName: SERVICE_NAME,
+      });
+      return { success: false, error: 'CS_COORDINATOR_PRIVATE_KEY not set', skipped: true };
+    }
+
+    // Read migration file
+    const migrationFilePath = path.join(__dirname, '..', '..', 'migration-content-studio.json');
+    let migrationData;
+    
+    try {
+      const migrationFileContent = fs.readFileSync(migrationFilePath, 'utf8');
+      migrationData = JSON.parse(migrationFileContent);
+    } catch (error) {
+      logger.warn('⚠️ Migration upload skipped: Could not read migration file', {
+        error: error.message,
+        path: migrationFilePath,
+        serviceName: SERVICE_NAME,
+      });
+      return { success: false, error: `Could not read migration file: ${error.message}`, skipped: true };
+    }
+
+    // Validate migration file structure
+    if (!migrationData.migrationFile) {
+      logger.warn('⚠️ Migration upload skipped: Invalid migration file structure', {
+        serviceName: SERVICE_NAME,
+      });
+      return { success: false, error: 'Invalid migration file structure', skipped: true };
+    }
+
+    if (!migrationData.migrationFile.version) {
+      logger.warn('⚠️ Migration upload skipped: migrationFile.version is required', {
+        serviceName: SERVICE_NAME,
+      });
+      return { success: false, error: 'migrationFile.version is required', skipped: true };
+    }
+
+    // Clean coordinator URL (remove trailing slash)
+    const cleanCoordinatorUrl = coordinatorUrl.replace(/\/$/, '');
+    const migrationUrl = `${cleanCoordinatorUrl}/register/${serviceId}/migration`;
+
+    // Prepare payload
+    const payload = {
+      migrationFile: migrationData.migrationFile,
+    };
+
+    // Generate signature
+    let signature;
+    try {
+      logger.info('🔐 Generating signature for migration upload...', {
+        serviceName: SERVICE_NAME,
+        serviceId,
+      });
+      signature = generateSignature(SERVICE_NAME, privateKey, payload);
+    } catch (error) {
+      logger.error('❌ Migration upload failed: Could not generate signature', {
+        error: error.message,
+        serviceName: SERVICE_NAME,
+      });
+      return { success: false, error: `Signature generation failed: ${error.message}` };
+    }
+
+    // Prepare headers
+    const headers = {
+      'Content-Type': 'application/json',
+      'X-Service-Name': SERVICE_NAME,
+      'X-Signature': signature,
+    };
+
+    logger.info('📤 Uploading migration file to Coordinator...', {
+      url: migrationUrl,
+      serviceName: SERVICE_NAME,
+      serviceId,
+      version: migrationData.migrationFile.version,
+      capabilities: migrationData.migrationFile.capabilities?.length || 0,
+      endpoints: migrationData.migrationFile.api?.endpoints?.length || 0,
+    });
+
+    // Send request
+    try {
+      const response = await axios.post(migrationUrl, payload, {
+        headers,
+        timeout: 30000, // 30 seconds timeout
+      });
+
+      // Check response
+      if (response.status >= 200 && response.status < 300) {
+        const status = response.data?.status || 'unknown';
+        
+        logger.info('✅ Migration uploaded successfully!', {
+          serviceId,
+          status,
+          serviceName: SERVICE_NAME,
+        });
+        
+        console.log('✅ Migration uploaded successfully!');
+        console.log(`Service ID: ${serviceId}`);
+        console.log(`Status: ${status}`);
+        
+        if (status === 'active') {
+          console.log('🎉 Service is now ACTIVE and available for AI routing!');
+          logger.info('🎉 Service is now ACTIVE and available for AI routing!', {
+            serviceId,
+            serviceName: SERVICE_NAME,
+          });
+        }
+        
+        return {
+          success: true,
+          serviceId,
+          status,
+        };
+      } else {
+        throw new Error(`Unexpected status code: ${response.status}`);
+      }
+    } catch (error) {
+      // Determine error type
+      let errorMessage = 'Unknown error';
+      if (error.response) {
+        const status = error.response.status;
+        const data = error.response.data;
+        errorMessage = data?.message || `HTTP ${status}`;
+        
+        // If service is already active, that's fine
+        if (status === 400 && data?.message?.includes('already active')) {
+          logger.info('✓ Migration already uploaded (service is active)', {
+            serviceId,
+            serviceName: SERVICE_NAME,
+          });
+          console.log('✓ Migration already uploaded (service is active)');
+          return { success: true, serviceId, status: 'active', skipped: true };
+        }
+      } else if (error.request) {
+        errorMessage = 'No response from Coordinator service';
+      } else {
+        errorMessage = error.message || 'Unknown error occurred';
+      }
+
+      logger.warn('⚠️ Migration upload failed, but continuing startup...', {
+        error: errorMessage,
+        serviceId,
+        serviceName: SERVICE_NAME,
+      });
+      console.warn('⚠️ Migration upload failed, but continuing startup...');
+      console.warn(`Error: ${errorMessage}`);
+      
+      return { success: false, error: errorMessage };
+    }
+  } catch (error) {
+    // Catch any unexpected errors to prevent service crash
+    logger.error('❌ Unexpected error during migration upload', {
+      error: error.message,
+      stack: error.stack,
+      serviceName: SERVICE_NAME,
+    });
+    console.error('❌ Unexpected error during migration upload:', error.message);
+    // Don't throw - allow service to continue
+    return { success: false, error: error.message };
   }
 }
 
