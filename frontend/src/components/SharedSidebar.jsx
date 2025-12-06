@@ -343,9 +343,18 @@ export function SharedSidebar({ onRestore }) {
             filters.course_id = null;
           }
           
+          console.log('[SharedSidebar] Calling topicsService.list with filters:', filters);
+          
           // CRITICAL: Do NOT load content history or use contentService.getHistory() for this route
           // History loading must ONLY happen on /topics/:topicId/content
           result = await topicsService.list(filters, { page: 1, limit: 50 });
+          
+          console.log('[SharedSidebar] topicsService.list result:', {
+            hasResult: !!result,
+            topicsCount: result?.topics?.length || 0,
+            topics: result?.topics || [],
+          });
+          
           if (context.type === 'topics') {
             setDeletedContent(result.topics || []);
             // CRITICAL: Ensure historyData is cleared for topics context
@@ -452,7 +461,16 @@ export function SharedSidebar({ onRestore }) {
           }
         }
       } catch (err) {
-        setError(err.error?.message || 'Failed to load deleted content');
+        console.error('[SharedSidebar] Error loading deleted content:', {
+          error: err,
+          errorMessage: err?.error?.message || err?.message,
+          context: context,
+          errorType: err?.response ? 'response_error' : err?.request ? 'no_response' : 'request_error',
+          status: err?.response?.status,
+          statusText: err?.response?.statusText,
+          url: err?.config?.url,
+        });
+        setError(err.error?.message || err.message || 'Failed to load deleted content');
         setDeletedContent([]);
         // CRITICAL: Always clear historyData for non-content contexts
         if (context?.type !== 'content') {

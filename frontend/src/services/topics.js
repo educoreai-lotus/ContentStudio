@@ -32,11 +32,18 @@ export const topicsService = {
     const params = {
       trainer_id: filters.trainer_id,
       status: filters.status,
-      course_id: filters.course_id === null ? 'null' : filters.course_id,
+      course_id: filters.course_id === null || filters.course_id === undefined ? 'null' : filters.course_id,
       search: filters.search,
       page: pagination.page || 1,
       limit: pagination.limit || 10,
     };
+
+    // Remove undefined values to avoid sending them in query params
+    Object.keys(params).forEach(key => {
+      if (params[key] === undefined) {
+        delete params[key];
+      }
+    });
 
     const response = await apiClient.get('/api/topics', { params });
     return response.data;

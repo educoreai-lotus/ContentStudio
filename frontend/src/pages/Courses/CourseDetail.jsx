@@ -31,7 +31,14 @@ export const CourseDetail = () => {
       const courseData = await coursesService.getById(courseId);
       setCourse(courseData);
     } catch (err) {
-      setError(err.error?.message || 'Failed to load course details');
+      // If course not found (404), it might have been deleted
+      // Don't show error if we're just refreshing after topic deletion
+      if (err?.response?.status === 404) {
+        console.warn('[CourseDetail] Course not found (might be deleted):', courseId);
+        // Don't set error - let the user navigate away naturally
+      } else {
+        setError(err.error?.message || 'Failed to load course details');
+      }
     } finally {
       setLoadingCourse(false);
     }
