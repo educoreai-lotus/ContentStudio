@@ -7,6 +7,8 @@ import { TemplateSelectionModal } from '../../components/Templates/TemplateSelec
 import { RegenerateOptionsModal } from '../../components/Content/RegenerateOptionsModal.jsx';
 import { VideoUploadModal } from '../../components/VideoUploadModal.jsx';
 import ExerciseCreationModal from '../../components/Exercises/ExerciseCreationModal.jsx';
+import { templateApplicationService } from '../../services/template-application';
+import { MindMapViewer } from '../../components/MindMapViewer.jsx';
 
 const CONTENT_TYPES = [
   { id: 'text', name: 'Text & Audio', icon: 'fa-file-alt', color: 'blue', dbId: 1, allowManual: true },
@@ -40,6 +42,8 @@ export default function TopicContentManager() {
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState(null);
   const [publishSuccess, setPublishSuccess] = useState(false);
+  const [lessonView, setLessonView] = useState(null);
+  const [loadingLessonView, setLoadingLessonView] = useState(false);
 
   useEffect(() => {
     fetchContent();
@@ -115,11 +119,29 @@ export default function TopicContentManager() {
       // Ensure we have the correct structure
       if (topicData && topicData.topic_name) {
         setTopicDetails(topicData);
+        
+        // If topic is archived, load lesson view for read-only display
+        if (topicData.status === 'archived') {
+          await loadLessonView();
+        }
       } else {
         console.warn('[TopicContentManager] Invalid topic data structure:', topicData);
       }
     } catch (err) {
       console.warn('Failed to fetch topic details', err);
+    }
+  };
+
+  const loadLessonView = async () => {
+    try {
+      setLoadingLessonView(true);
+      const viewData = await templateApplicationService.getLessonView(topicId);
+      setLessonView(viewData);
+    } catch (err) {
+      console.error('Failed to load lesson view:', err);
+      // Don't set error - just log it, as this is optional for archived topics
+    } finally {
+      setLoadingLessonView(false);
     }
   };
 
@@ -379,7 +401,7 @@ export default function TopicContentManager() {
   };
 
   const handlePublishStandalone = async () => {
-    if (!window.confirm('Are you sure you want to mark this lesson as ready?\n\nThe lesson will be available for use in personalized courses when Course Builder requests content.')) {
+    if (!window.confirm('Are you sure you want to mark this lesson as archived?\n\nThe lesson will be available for use in personalized courses when Course Builder requests content.')) {
       return;
     }
 
@@ -388,9 +410,9 @@ export default function TopicContentManager() {
     setPublishSuccess(false);
 
     try {
-      // Only update status to 'ready' - do NOT send to Course Builder
+      // Only update status to 'archived' - do NOT send to Course Builder
       // Course Builder will request this lesson when needed through the hierarchical search
-      await topicsService.update(parseInt(topicId), { status: 'ready' });
+      await topicsService.update(parseInt(topicId), { status: 'archived' });
       setPublishSuccess(true);
       
       // Refresh topic details to get updated status
@@ -401,11 +423,428 @@ export default function TopicContentManager() {
         setPublishSuccess(false);
       }, 5000);
     } catch (err) {
-      setPublishError(err.error?.message || err.message || 'Failed to mark lesson as ready');
+      setPublishError(err.error?.message || err.message || 'Failed to mark lesson as archived');
     } finally {
       setPublishing(false);
     }
   };
+
+  // Render functions for archived lessons (read-only view)
+  const renderTextContent = (contentData, audioFirst = false) => {
+    let parsedData = contentData;
+    if (typeof contentData === 'string') {
+      try {
+        parsedData = JSON.parse(contentData);
+      } catch (e) {
+        parsedData = { text: contentData };
+      }
+    }
+    if (!parsedData || typeof parsedData !== 'object') {
+      parsedData = { text: String(contentData || '') };
+    }
+    const textValue = parsedData?.text || parsedData?.content || '';
+    const hasAudio = !!parsedData?.audioUrl;
+    if (!textValue || textValue.trim() === '') {
+      return (
+        <div className={`p-4 rounded-lg ${theme === 'day-mode' ? 'bg-gray-50 border border-gray-200' : 'bg-[#334155] border border-white/10'}`}>
+          <p className={theme === 'day-mode' ? 'text-gray-500' : 'text-gray-400'}>No text content available</p>
+        </div>
+      );
+    }
+    const renderAudioSection = () => {
+      if (!hasAudio) return null;
+      return (
+        <div className={`p-4 rounded-lg ${theme === 'day-mode' ? 'bg-blue-50' : 'bg-blue-900/20'}`}>
+          <div className="flex items-center gap-3 mb-3">
+            <i className="fas fa-volume-up text-blue-600 text-xl"></i>
+            <h4 className={`font-semibold ${theme === 'day-mode' ? 'text-gray-900' : 'text-white'}`}>Audio Narration</h4>
+            {parsedData?.audioDuration && <span className={`text-sm ${theme === 'day-mode' ? 'text-gray-600' : 'text-gray-400'}`}>({Math.round(parsedData.audioDuration)}s)</span>}
+          </div>
+          <audio controls className="w-full" style={{ maxWidth: '100%' }}>
+            <source src={parsedData.audioUrl} type={`audio/${parsedData.audioFormat || 'mp3'}`} />
+            Your browser does not support the audio element.
+          </audio>
+          {parsedData?.audioVoice && <p className={`text-xs mt-2 ${theme === 'day-mode' ? 'text-gray-500' : 'text-gray-400'}`}>Voice: {parsedData.audioVoice}</p>}
+        </div>
+      );
+    };
+    return (
+      <div className={`p-4 rounded-lg ${theme === 'day-mode' ? 'bg-gray-50 border border-gray-200' : 'bg-gray-900 border border-gray-700'}`}>
+        {audioFirst && renderAudioSection()}
+        <div className={`whitespace-pre-wrap font-sans ${theme === 'day-mode' ? 'text-gray-900' : 'text-gray-100'}`}>{textValue}</div>
+        {!audioFirst && hasAudio && <div className="mt-4">{renderAudioSection()}</div>}
+      </div>
+    );
+  };
+
+  const renderCodeContent = contentData => {
+    let parsedData = contentData;
+    if (typeof contentData === 'string') {
+      try {
+        parsedData = JSON.parse(contentData);
+      } catch (e) {
+        parsedData = { code: contentData };
+      }
+    }
+    const codeValue = parsedData?.code || '';
+    return (
+      <div className="space-y-4">
+        {codeValue ? (
+          <div className={`p-4 rounded-lg ${theme === 'day-mode' ? 'bg-gray-900' : 'bg-[#0f172a]'}`}>
+            <pre className="text-green-400 font-mono text-sm overflow-x-auto">{codeValue}</pre>
+          </div>
+        ) : (
+          <div className={`p-4 rounded-lg ${theme === 'day-mode' ? 'bg-gray-50' : 'bg-[#334155]'}`}>
+            <p className={theme === 'day-mode' ? 'text-gray-500' : 'text-gray-400'}>No code content available</p>
+          </div>
+        )}
+        {parsedData?.explanation && (
+          <div className={`p-4 rounded-lg ${theme === 'day-mode' ? 'bg-gray-50' : 'bg-[#334155]'}`}>
+            <p className={theme === 'day-mode' ? 'text-gray-900' : 'text-gray-100'}>{parsedData.explanation}</p>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderPresentationContent = contentData => {
+    let parsedData = contentData;
+    if (typeof contentData === 'string') {
+      try {
+        parsedData = JSON.parse(contentData);
+      } catch (e) {
+        parsedData = {};
+      }
+    }
+    const presentationUrl = parsedData?.presentationUrl || parsedData?.googleSlidesUrl || parsedData?.fileUrl;
+    const presentation = parsedData?.presentation;
+    const gammaUrl = parsedData?.metadata?.gamma_raw_response?.result?.gammaUrl || parsedData?.metadata?.gamma_raw_response?.gammaUrl || parsedData?.gamma_raw_response?.result?.gammaUrl || parsedData?.gamma_raw_response?.gammaUrl || parsedData?.gammaUrl;
+    return (
+      <div className={`p-6 rounded-lg border-2 border-dashed ${theme === 'day-mode' ? 'bg-purple-50 border-purple-300' : 'bg-purple-900/20 border-purple-500/30'}`}>
+        <div className="flex items-center justify-center mb-4">
+          <i className="fas fa-file-powerpoint text-6xl text-purple-600"></i>
+        </div>
+        <div className="text-center space-y-2">
+          <h3 className={`text-lg font-semibold ${theme === 'day-mode' ? 'text-gray-900' : 'text-white'}`}>{presentation?.title || parsedData?.fileName || 'Presentation File'}</h3>
+          {parsedData?.slide_count && <p className={`text-sm ${theme === 'day-mode' ? 'text-gray-600' : 'text-gray-400'}`}>{parsedData.slide_count} slides</p>}
+          {(gammaUrl || presentationUrl) && (
+            <div className="mt-4 space-y-3">
+              <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                {gammaUrl && (
+                  <a href={gammaUrl} target="_blank" rel="noopener noreferrer" className="inline-block px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
+                    <i className="fas fa-external-link-alt mr-2"></i>View Presentation
+                  </a>
+                )}
+                {presentationUrl && (
+                  <a href={presentationUrl} target="_blank" rel="noopener noreferrer" download className="inline-block px-6 py-3 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors">
+                    <i className="fas fa-download mr-2"></i>Download PPTX
+                  </a>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const renderMindMapContent = contentData => {
+    let parsedData = contentData;
+    if (typeof contentData === 'string') {
+      try {
+        parsedData = JSON.parse(contentData);
+      } catch (e) {
+        parsedData = {};
+      }
+    }
+    return (
+      <div className="space-y-6">
+        {parsedData?.nodes && parsedData?.edges ? (
+          <div>
+            <h4 className={`font-semibold mb-4 text-lg ${theme === 'day-mode' ? 'text-gray-900' : 'text-white'}`}>
+              <i className="fas fa-project-diagram mr-2 text-purple-600"></i>Mind Map Visualization
+            </h4>
+            <MindMapViewer data={parsedData} />
+          </div>
+        ) : (
+          <div className={`p-4 rounded-lg ${theme === 'day-mode' ? 'bg-gray-50' : 'bg-[#334155]'}`}>
+            <p className={theme === 'day-mode' ? 'text-gray-500' : 'text-gray-400'}>No mind map data available</p>
+          </div>
+        )}
+        {parsedData?.imageUrl && (
+          <div className="text-center">
+            <img src={parsedData.imageUrl} alt="Mind Map" className="max-w-full h-auto rounded-lg shadow-lg mx-auto" />
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderAvatarVideoContent = contentData => {
+    let parsedData = contentData;
+    if (typeof contentData === 'string') {
+      try {
+        parsedData = JSON.parse(contentData);
+      } catch (e) {
+        parsedData = {};
+      }
+    }
+    const videoUrl = parsedData?.videoUrl || parsedData?.storageUrl || parsedData?.metadata?.heygen_video_url || parsedData?.heygen_video_url || parsedData?.metadata?.heygenVideoUrl || parsedData?.heygenVideoUrl;
+    return (
+      <div className="space-y-4">
+        {parsedData?.script && (
+          <div className={`p-4 rounded-lg ${theme === 'day-mode' ? 'bg-gray-50' : 'bg-[#334155]'}`}>
+            <h4 className={`font-semibold mb-2 ${theme === 'day-mode' ? 'text-gray-900' : 'text-white'}`}>Video Script</h4>
+            <div className={`whitespace-pre-wrap font-sans ${theme === 'day-mode' ? 'text-gray-900' : 'text-gray-100'}`}>{parsedData.script}</div>
+          </div>
+        )}
+        {videoUrl ? (
+          <div className="space-y-3">
+            <div className={`flex items-center gap-2 px-4 py-2 rounded-lg ${theme === 'day-mode' ? 'bg-blue-50' : 'bg-blue-900/20'}`}>
+              <i className="fas fa-video text-blue-600"></i>
+              <span className={`text-sm font-medium ${theme === 'day-mode' ? 'text-blue-900' : 'text-blue-300'}`}>Avatar Video</span>
+            </div>
+            <div className="relative rounded-lg overflow-hidden shadow-2xl bg-black">
+              <video src={videoUrl} controls className="w-full h-auto" style={{ maxHeight: '500px' }}>Your browser does not support the video tag.</video>
+            </div>
+            {parsedData?.videoId && <div className={`text-xs text-center ${theme === 'day-mode' ? 'text-gray-500' : 'text-gray-400'}`}>Video ID: {parsedData.videoId}</div>}
+            {parsedData?.duration_seconds && <div className={`text-xs text-center ${theme === 'day-mode' ? 'text-gray-500' : 'text-gray-400'}`}>Duration: {Math.round(parsedData.duration_seconds)}s</div>}
+          </div>
+        ) : parsedData?.videoId ? (
+          <div className="space-y-3">
+            <div className={`flex items-center gap-2 px-4 py-2 rounded-lg ${theme === 'day-mode' ? 'bg-blue-50' : 'bg-blue-900/20'}`}>
+              <i className="fas fa-video text-blue-600"></i>
+              <span className={`text-sm font-medium ${theme === 'day-mode' ? 'text-blue-900' : 'text-blue-300'}`}>Avatar Video</span>
+            </div>
+            <div className="text-center p-4">
+              <a href={`https://app.heygen.com/share/${parsedData.videoId}`} target="_blank" rel="noopener noreferrer" className={`inline-block px-6 py-3 rounded-lg ${theme === 'day-mode' ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-blue-500 hover:bg-blue-600 text-white'}`}>
+                <i className="fas fa-external-link-alt mr-2"></i>View Video on Heygen
+              </a>
+            </div>
+          </div>
+        ) : (
+          <div className={`p-4 rounded-lg ${theme === 'day-mode' ? 'bg-gray-50' : 'bg-[#334155]'}`}>
+            <p className={theme === 'day-mode' ? 'text-gray-500' : 'text-gray-400'}>No video content available</p>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderContentItem = (formatType, contentItem, index, formatItem = null) => {
+    let contentData = contentItem.content_data || contentItem;
+    if (typeof contentData === 'string') {
+      try {
+        contentData = JSON.parse(contentData);
+      } catch (e) {
+        console.warn('Failed to parse content_data:', e);
+      }
+    }
+    if (!contentData || typeof contentData !== 'object') {
+      contentData = {};
+    }
+    switch (formatType) {
+      case 'text':
+      case 'text_audio':
+      case 'text_audio_combined':
+        const audioFirst = formatItem?.audioFirst || false;
+        return <div key={contentItem.content_id || `text-${index}`} className="space-y-4">{renderTextContent(contentData, audioFirst)}</div>;
+      case 'audio_text':
+        return <div key={contentItem.content_id || `audio-text-${index}`} className="space-y-4">{renderTextContent(contentData, true)}</div>;
+      case 'code':
+        return <div key={contentItem.content_id || `code-${index}`}>{renderCodeContent(contentData)}</div>;
+      case 'presentation':
+        return <div key={contentItem.content_id || `presentation-${index}`}>{renderPresentationContent(contentData)}</div>;
+      case 'mind_map':
+        return <div key={contentItem.content_id || `mindmap-${index}`}>{renderMindMapContent(contentData)}</div>;
+      case 'avatar_video':
+        return <div key={contentItem.content_id || `avatar-${index}`}>{renderAvatarVideoContent(contentData)}</div>;
+      default:
+        if (contentData && typeof contentData === 'object' && contentData.text) {
+          return <div key={contentItem.content_id || `unknown-${index}`} className="space-y-4">{renderTextContent(contentData)}</div>;
+        }
+        return (
+          <pre key={contentItem.content_id || `unknown-${index}`} className={`text-sm overflow-x-auto p-4 rounded-lg ${theme === 'day-mode' ? 'bg-gray-100 text-gray-700' : 'bg-gray-800 text-gray-200'}`}>
+            {JSON.stringify(contentData, null, 2)}
+          </pre>
+        );
+    }
+  };
+
+  // If topic is archived, show read-only view
+  if (topicDetails?.status === 'archived') {
+    const formatIcons = { text: 'fa-file-alt', code: 'fa-code', presentation: 'fa-presentation', audio: 'fa-volume-up', mind_map: 'fa-project-diagram', avatar_video: 'fa-video' };
+    const formatLabels = { text: 'Text & Audio', code: 'Code Example', presentation: 'Presentation', audio: 'Audio Narration', mind_map: 'Mind Map', avatar_video: 'Avatar Video' };
+    
+    if (loadingLessonView) {
+      return (
+        <div className={`min-h-screen ${theme === 'day-mode' ? 'bg-gray-50' : 'bg-[#1e293b]'}`}>
+          <div className="max-w-7xl mx-auto p-6 lg:p-8">
+            <div className="flex items-center justify-center min-h-[400px]">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500 mx-auto mb-4"></div>
+                <p className={theme === 'day-mode' ? 'text-gray-600' : 'text-gray-300'}>Loading archived lesson...</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (!lessonView || !lessonView.formats) {
+      return (
+        <div className={`min-h-screen ${theme === 'day-mode' ? 'bg-gray-50' : 'bg-[#1e293b]'}`}>
+          <div className="max-w-7xl mx-auto p-6 lg:p-8">
+            <div className={`mb-6 p-4 rounded-xl border ${theme === 'day-mode' ? 'bg-yellow-50 border-yellow-200' : 'bg-yellow-900/20 border-yellow-500/30'}`}>
+              <div className="flex items-center gap-3">
+                <i className={`fas fa-archive text-xl ${theme === 'day-mode' ? 'text-yellow-600' : 'text-yellow-400'}`}></i>
+                <div>
+                  <h3 className={`font-semibold ${theme === 'day-mode' ? 'text-gray-900' : 'text-white'}`}>This lesson is archived</h3>
+                  <p className={`text-sm ${theme === 'day-mode' ? 'text-gray-700' : 'text-gray-300'}`}>Content cannot be edited. This lesson is available for use in personalized courses.</p>
+                </div>
+              </div>
+            </div>
+            <div className={`text-center p-8 rounded-lg max-w-md mx-auto ${theme === 'day-mode' ? 'bg-white' : 'bg-gray-800'}`}>
+              <i className={`fas fa-info-circle text-4xl mb-4 ${theme === 'day-mode' ? 'text-blue-500' : 'text-blue-400'}`}></i>
+              <h2 className={`text-xl font-semibold mb-2 ${theme === 'day-mode' ? 'text-gray-900' : 'text-white'}`}>No Template Applied</h2>
+              <p className={`mb-4 ${theme === 'day-mode' ? 'text-gray-600' : 'text-gray-400'}`}>This archived lesson does not have a template applied.</p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    const sortedFormats = [...lessonView.formats].sort((a, b) => {
+      const orderA = a.display_order !== undefined ? a.display_order : 999;
+      const orderB = b.display_order !== undefined ? b.display_order : 999;
+      return orderA - orderB;
+    });
+
+    const seenContentIds = new Map();
+    const deduplicatedFormats = [];
+    sortedFormats.forEach((formatItem, formatIndex) => {
+      if (formatItem.type === 'audio' && sortedFormats.some(f => f.type === 'text_audio_combined' || f.type === 'audio_text')) {
+        return;
+      }
+      if (!formatItem.content || formatItem.content.length === 0) {
+        deduplicatedFormats.push({ ...formatItem, content: [] });
+        return;
+      }
+      const deduplicatedContent = [];
+      formatItem.content.forEach(contentItem => {
+        const contentId = contentItem.content_id || contentItem.id;
+        if (!contentId) {
+          deduplicatedContent.push(contentItem);
+          return;
+        }
+        if (seenContentIds.has(contentId)) {
+          return;
+        }
+        seenContentIds.set(contentId, { formatType: formatItem.type, formatIndex, displayOrder: formatItem.display_order ?? formatIndex });
+        deduplicatedContent.push(contentItem);
+      });
+      deduplicatedFormats.push({ ...formatItem, content: deduplicatedContent });
+    });
+
+    return (
+      <div className={`min-h-screen ${theme === 'day-mode' ? 'bg-gray-50' : 'bg-[#1e293b]'}`}>
+        <div className="max-w-6xl mx-auto px-4 py-8">
+          <div className="mb-8">
+            <button
+              onClick={() => {
+                if (topicDetails?.course_id) {
+                  navigate(`/courses/${topicDetails.course_id}`);
+                } else {
+                  navigate('/topics?course_id=null');
+                }
+              }}
+              className={`mb-4 flex items-center gap-2 ${theme === 'day-mode' ? 'text-gray-600 hover:text-gray-900' : 'text-gray-300 hover:text-white'}`}
+            >
+              <i className="fas fa-arrow-left"></i>
+              {topicDetails?.course_id ? 'Back to Course' : 'Back to Standalone Lessons'}
+            </button>
+
+            <div className={`mb-6 p-4 rounded-xl border ${theme === 'day-mode' ? 'bg-yellow-50 border-yellow-200' : 'bg-yellow-900/20 border-yellow-500/30'}`}>
+              <div className="flex items-center gap-3">
+                <i className={`fas fa-archive text-xl ${theme === 'day-mode' ? 'text-yellow-600' : 'text-yellow-400'}`}></i>
+                <div>
+                  <h3 className={`font-semibold ${theme === 'day-mode' ? 'text-gray-900' : 'text-white'}`}>This lesson is archived</h3>
+                  <p className={`text-sm ${theme === 'day-mode' ? 'text-gray-700' : 'text-gray-300'}`}>Content cannot be edited. This lesson is available for use in personalized courses when Course Builder requests content.</p>
+                </div>
+              </div>
+            </div>
+
+            {lessonView?.topic && (
+              <div className={`mb-6 p-4 rounded-xl border ${theme === 'day-mode' ? 'bg-emerald-50 border-emerald-200' : 'bg-emerald-900/20 border-emerald-500/30'}`}>
+                <div className="flex flex-col items-center text-center gap-2">
+                  <div className="flex-shrink-0">
+                    <i className={`fas fa-book text-xl ${theme === 'day-mode' ? 'text-emerald-600' : 'text-emerald-400'}`}></i>
+                  </div>
+                  <div className="flex-1 w-full">
+                    <h2 className={`font-bold text-xl mb-1 ${theme === 'day-mode' ? 'text-gray-900' : 'text-white'}`}>
+                      {lessonView.topic.topic_name || lessonView.topic.name || 'Untitled Topic'}
+                    </h2>
+                    {(lessonView.topic.description || lessonView.topic.topic_description) && (
+                      <p className={`text-sm ${theme === 'day-mode' ? 'text-gray-700' : 'text-gray-300'}`}>
+                        {lessonView.topic.description || lessonView.topic.topic_description}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <h1 className="text-4xl font-bold mb-2" style={{ background: 'var(--gradient-primary)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
+              Archived Lesson View
+            </h1>
+            <p className={theme === 'day-mode' ? 'text-gray-600' : 'text-gray-400'}>Content organized according to template format order (read-only)</p>
+            {lessonView.template && (
+              <div className={`mt-4 inline-flex flex-wrap items-center gap-2 px-4 py-2 rounded-lg ${theme === 'day-mode' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-emerald-900/20 text-emerald-200 border border-emerald-500/30'}`}>
+                <span className="font-semibold">Template: {lessonView.template.template_name}</span>
+                <span className="text-xs uppercase tracking-wide opacity-70">{lessonView.template.template_type?.replace(/_/g, ' ')}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-8">
+            {deduplicatedFormats.map((formatItem, index) => {
+              if (!formatItem.content || formatItem.content.length === 0) {
+                if (formatItem.type === 'audio' && sortedFormats.some(f => f.type === 'text_audio_combined' || f.type === 'audio_text')) {
+                  return null;
+                }
+              }
+              const displayType = formatItem.type === 'text_audio_combined' || formatItem.type === 'audio_text' ? 'text' : formatItem.type;
+              const displayLabel = formatLabels[displayType] || formatItem.type;
+              const displayIcon = formatIcons[displayType] || 'fa-file';
+              return (
+                <div key={`${formatItem.type}-${index}`} className={`p-6 rounded-lg ${theme === 'day-mode' ? 'bg-white border border-gray-200 shadow-sm' : 'bg-gray-800 border border-gray-700 shadow-lg'}`}>
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${theme === 'day-mode' ? 'bg-emerald-100 text-emerald-600' : 'bg-emerald-900/30 text-emerald-400'}`}>
+                      <i className={`fas ${displayIcon}`}></i>
+                    </div>
+                    <div>
+                      <h3 className={`text-lg font-semibold ${theme === 'day-mode' ? 'text-gray-900' : 'text-white'}`}>{displayLabel}</h3>
+                      <p className={`text-sm ${theme === 'day-mode' ? 'text-gray-500' : 'text-gray-400'}`}>
+                        Step {formatItem.display_order + 1} of {deduplicatedFormats.filter(f => f.content && f.content.length > 0).length}
+                      </p>
+                    </div>
+                  </div>
+                  {formatItem.content && formatItem.content.length > 0 ? (
+                    <div>{formatItem.content.map((contentItem, itemIndex) => renderContentItem(formatItem.type, contentItem, itemIndex, formatItem))}</div>
+                  ) : (
+                    <div className={`text-center py-8 ${theme === 'day-mode' ? 'text-gray-400' : 'text-gray-500'}`}>
+                      <i className={`fas ${displayIcon} text-3xl mb-2`}></i>
+                      <p>No {displayLabel} content available</p>
+                    </div>
+                  )}
+                </div>
+              );
+            }).filter(item => item !== null)}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`min-h-screen ${theme === 'day-mode' ? 'bg-gray-50' : 'bg-[#1e293b]'}`}>
@@ -1187,7 +1626,7 @@ export default function TopicContentManager() {
                       title={
                         !isStandaloneReady
                           ? `This button will be active once all content formats are generated, a template is selected, and DevLab exercises are created.`
-                          : 'Mark this lesson as ready. It will be available for use in personalized courses when Course Builder requests content.'
+                          : 'Mark this lesson as archived. It will be available for use in personalized courses when Course Builder requests content.'
                       }
                     >
                       {publishing ? (
@@ -1198,7 +1637,7 @@ export default function TopicContentManager() {
                       ) : (
                         <>
                           <i className="fas fa-check-circle mr-2"></i>
-                          Mark Lesson as Ready
+                          Mark Lesson as Archived
                         </>
                       )}
                     </button>

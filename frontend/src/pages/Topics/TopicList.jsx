@@ -251,9 +251,9 @@ export const TopicList = ({ courseId = null }) => {
                 Active
               </button>
               <button
-                onClick={() => handleStatusFilter('draft')}
+                onClick={() => handleStatusFilter('archived')}
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  filters.status === 'draft'
+                  filters.status === 'archived'
                     ? theme === 'day-mode'
                       ? 'bg-emerald-600 text-white shadow-lg'
                       : 'bg-emerald-500 text-white shadow-lg'
@@ -262,21 +262,7 @@ export const TopicList = ({ courseId = null }) => {
                     : 'bg-[#334155] text-[#f8fafc] hover:bg-[#475569]'
                 }`}
               >
-                Draft
-              </button>
-              <button
-                onClick={() => handleStatusFilter('published')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  filters.status === 'published'
-                    ? theme === 'day-mode'
-                      ? 'bg-emerald-600 text-white shadow-lg'
-                      : 'bg-emerald-500 text-white shadow-lg'
-                    : theme === 'day-mode'
-                    ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    : 'bg-[#334155] text-[#f8fafc] hover:bg-[#475569]'
-                }`}
-              >
-                Published
+                Archived
               </button>
               {!courseId && (
                 <button

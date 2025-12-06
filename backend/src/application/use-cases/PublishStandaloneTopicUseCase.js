@@ -278,10 +278,10 @@ export class PublishStandaloneTopicUseCase {
     }
 
     try {
-      // Only update topic status to "ready" - do NOT send to Course Builder
+      // Only update topic status to "archived" - do NOT send to Course Builder
       // Course Builder will request this lesson when needed, and usage_count will be incremented then
-      await this.topicRepository.update(topicId, { status: 'ready' });
-      logger.info('[PublishStandaloneTopicUseCase] Topic status updated to ready', {
+      await this.topicRepository.update(topicId, { status: 'archived' });
+      logger.info('[PublishStandaloneTopicUseCase] Topic status updated to archived', {
         topicId,
       });
     } catch (updateError) {
@@ -289,12 +289,12 @@ export class PublishStandaloneTopicUseCase {
         topicId,
         error: updateError.message,
       });
-      throw new Error('Failed to mark lesson as ready. Please try again later.');
+      throw new Error('Failed to mark lesson as archived. Please try again later.');
     }
 
     return {
       success: true,
-      message: 'The lesson has been successfully marked as ready and will be available for use in personalized courses.',
+      message: 'The lesson has been successfully marked as archived and will be available for use in personalized courses.',
     };
   }
 }
