@@ -111,6 +111,20 @@ export const TopicList = ({ courseId = null }) => {
     try {
       await topicsService.delete(topicId);
       loadTopics();
+      
+      // Dispatch event to notify SharedSidebar to refresh deleted topics list
+      // Check if this is a standalone topic (course_id is null) or belongs to a course
+      const topic = topics.find(t => t.topic_id === topicId);
+      const deleteEvent = new CustomEvent('contentRestored', {
+        detail: {
+          type: 'topics',
+          id: topicId,
+          courseId: topic?.course_id || null, // null for standalone topics
+        }
+      });
+      window.dispatchEvent(deleteEvent);
+      
+      console.log(`[TopicList] Topic "${topicId}" deleted successfully`);
     } catch (err) {
       setError(err.error?.message || 'Failed to delete topic');
     }
