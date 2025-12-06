@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { topicsService } from '../../services/topics.js';
 import { useApp } from '../../context/AppContext.jsx';
 import { Badge } from '../../components/common/Badge.jsx';
@@ -7,14 +7,20 @@ import { Input } from '../../components/common/Input.jsx';
 
 export const TopicList = ({ courseId = null }) => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { theme } = useApp();
   const [topics, setTopics] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  
+  // Read course_id from query params if provided, otherwise use prop
+  const courseIdFromQuery = searchParams.get('course_id');
+  const initialCourseId = courseIdFromQuery === 'null' ? null : (courseIdFromQuery ? parseInt(courseIdFromQuery) : courseId);
+  
   const [filters, setFilters] = useState({
     trainer_id: 'trainer-maya-levi',
     status: 'active', // Only show active topics by default (exclude deleted)
-    course_id: courseId,
+    course_id: initialCourseId,
     search: '',
   });
   const [pagination, setPagination] = useState({
@@ -25,8 +31,11 @@ export const TopicList = ({ courseId = null }) => {
   });
 
   useEffect(() => {
-    setFilters(prev => ({ ...prev, course_id: courseId }));
-  }, [courseId]);
+    // Update course_id from query params or prop
+    const courseIdFromQuery = searchParams.get('course_id');
+    const newCourseId = courseIdFromQuery === 'null' ? null : (courseIdFromQuery ? parseInt(courseIdFromQuery) : courseId);
+    setFilters(prev => ({ ...prev, course_id: newCourseId }));
+  }, [courseId, searchParams]);
 
   useEffect(() => {
     loadTopics();

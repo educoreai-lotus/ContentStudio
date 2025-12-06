@@ -358,10 +358,11 @@ export default function TopicContentManager() {
           <button
             onClick={() => {
               if (topicDetails?.course_id) {
+                // Topic belongs to a course - navigate back to course
                 navigate(`/courses/${topicDetails.course_id}`);
               } else {
-                // Standalone topic - navigate to courses list
-                navigate('/courses');
+                // Standalone topic - navigate back to standalone lessons list
+                navigate('/topics?course_id=null');
               }
             }}
             className={`mb-4 px-4 py-2 rounded-lg ${
@@ -371,7 +372,7 @@ export default function TopicContentManager() {
             }`}
           >
             <i className="fas fa-arrow-left mr-2"></i>
-            {topicDetails?.course_id ? 'Back to Course' : 'Back to Courses'}
+            {topicDetails?.course_id ? 'Back to Course' : 'Back to Standalone Lessons'}
           </button>
 
           {/* Topic Information Banner */}
