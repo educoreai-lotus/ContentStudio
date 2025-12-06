@@ -350,17 +350,14 @@ export const CourseList = () => {
                       <span>Language: {course.language}</span>
                     </div>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2" onClick={e => e.stopPropagation()}>
                     <button
                       className={`px-3 py-1 rounded-lg text-sm font-medium transition-all ${
                         theme === 'day-mode'
                           ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
                           : 'bg-emerald-500 hover:bg-emerald-600 text-white'
                       }`}
-                      onClick={e => {
-                        e.stopPropagation();
-                        navigate(`/courses/${course.course_id}`);
-                      }}
+                      onClick={() => navigate(`/courses/${course.course_id}`)}
                     >
                       View
                     </button>
