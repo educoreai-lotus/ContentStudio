@@ -252,6 +252,7 @@ export class PostgreSQLTopicRepository extends ITopicRepository {
       'language',
       'status',
       'format_flags',
+      'generation_methods_id',
     ];
     const setClauses = [];
     const values = [];

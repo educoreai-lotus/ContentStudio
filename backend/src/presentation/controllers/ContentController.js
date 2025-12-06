@@ -31,6 +31,7 @@ export class ContentController {
       contentRepository,
       contentHistoryService,
       qualityCheckService,
+      topicRepository,
     });
     this.regenerateContentUseCase = new RegenerateContentUseCase({
       contentRepository,

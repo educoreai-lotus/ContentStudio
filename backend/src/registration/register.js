@@ -236,9 +236,27 @@ async function registerWithCoordinator() {
 /**
  * Register service on startup
  * This function is non-blocking and will not crash the service if registration fails
+ * If SERVICE_ID is already set, registration will be skipped
  */
 export async function registerService() {
   try {
+    // Check if service is already registered (SERVICE_ID exists)
+    const existingServiceId = process.env.SERVICE_ID;
+    if (existingServiceId) {
+      logger.info('✓ Service already registered, skipping registration', {
+        serviceId: existingServiceId,
+        serviceName: SERVICE_NAME,
+      });
+      console.log('✓ Service already registered');
+      console.log(`Service ID: ${existingServiceId}`);
+      return { success: true, serviceId: existingServiceId, skipped: true };
+    }
+
+    // Service not registered yet - proceed with registration
+    logger.info('🔄 Service not registered yet, proceeding with registration...', {
+      serviceName: SERVICE_NAME,
+    });
+
     const result = await registerWithCoordinator();
 
     if (!result.success) {
@@ -247,6 +265,15 @@ export async function registerService() {
       });
       console.warn('⚠️ Service registration failed, but continuing startup...');
       console.warn(`Error: ${result.error}`);
+    } else {
+      // Registration successful - log the service ID for user to save
+      logger.info('💡 Save this SERVICE_ID in Railway environment variables:', {
+        serviceId: result.serviceId,
+        instruction: 'Set SERVICE_ID environment variable in Railway to skip future registrations',
+      });
+      console.log('\n💡 IMPORTANT: Save this SERVICE_ID in Railway:');
+      console.log(`   SERVICE_ID=${result.serviceId}`);
+      console.log('   This will prevent re-registration on future deployments.\n');
     }
   } catch (error) {
     // Catch any unexpected errors to prevent service crash

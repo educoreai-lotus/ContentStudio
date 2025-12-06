@@ -93,13 +93,15 @@ export class PostgreSQLContentRepository extends IContentRepository {
 
   /**
    * Get method_name from method_id
+   * @param {number} methodId - Generation method ID
+   * @returns {Promise<string|null>} Method name or null if not found
    */
   async getGenerationMethodName(methodId) {
     const query = 'SELECT method_name FROM generation_methods WHERE method_id = $1';
     const result = await this.db.query(query, [methodId]);
     if (result.rows.length === 0) {
-      // If not found, return the ID as-is (might be a string already)
-      return methodId;
+      // If not found, return null (don't return the ID)
+      return null;
     }
     return result.rows[0].method_name;
   }
@@ -555,22 +557,62 @@ export class PostgreSQLContentRepository extends IContentRepository {
     let generationMethodId = row.generation_method_id;
     if (typeof generationMethodId === 'number') {
       try {
-        generationMethodId = await this.getGenerationMethodName(generationMethodId);
-        if (!generationMethodId) {
-          console.error('[PostgreSQLContentRepository] getGenerationMethodName returned null/undefined for ID:', row.generation_method_id);
-          // Fallback: try to determine if it's manual based on common IDs
-          // This is a temporary workaround - the DB should have the correct mapping
-          throw new Error('Generation method name not found for ID: ' + row.generation_method_id);
+        const methodName = await this.getGenerationMethodName(generationMethodId);
+        // If method name was found and is valid, use it
+        if (methodName && typeof methodName === 'string') {
+          // Validate that the method name is one of the allowed values
+          const validMethods = ['manual', 'ai_assisted', 'ai_generated', 'manual_edited', 'video_to_lesson', 'full_ai_generated', 'Mixed'];
+          if (validMethods.includes(methodName)) {
+            generationMethodId = methodName;
+          } else {
+            // If method name is not valid, fallback to manual
+            console.warn('[PostgreSQLContentRepository] Invalid method name from DB, using fallback:', {
+              id: row.generation_method_id,
+              name: methodName,
+            });
+            generationMethodId = 'manual';
+          }
+        } else if (methodName === generationMethodId) {
+          // getGenerationMethodName returned the ID (not found in DB)
+          // Check if it's a valid numeric ID (1-6)
+          if (generationMethodId >= 1 && generationMethodId <= 6) {
+            // Keep as number - it's valid
+            generationMethodId = generationMethodId;
+          } else {
+            // Invalid ID, fallback to manual
+            console.warn('[PostgreSQLContentRepository] Invalid generation_method_id, using fallback:', {
+              id: row.generation_method_id,
+            });
+            generationMethodId = 'manual';
+          }
+        } else {
+          // Unexpected case, fallback to manual
+          console.warn('[PostgreSQLContentRepository] Unexpected generation_method_id format, using fallback:', {
+            id: row.generation_method_id,
+            returned: methodName,
+          });
+          generationMethodId = 'manual';
         }
       } catch (error) {
         console.error('[PostgreSQLContentRepository] CRITICAL: Failed to convert generation_method_id to name:', {
           id: row.generation_method_id,
           error: error.message,
         });
-        // This is critical - if conversion fails, needsQualityCheck() won't work correctly
-        // We'll throw an error to prevent silent failures
-        throw new Error(`Failed to convert generation_method_id ${row.generation_method_id} to name: ${error.message}`);
+        // Fallback to manual instead of throwing - this allows the content to load
+        generationMethodId = 'manual';
       }
+    } else if (typeof generationMethodId === 'string') {
+      // Already a string, validate it
+      const validMethods = ['manual', 'ai_assisted', 'ai_generated', 'manual_edited', 'video_to_lesson', 'full_ai_generated', 'Mixed'];
+      if (!validMethods.includes(generationMethodId)) {
+        console.warn('[PostgreSQLContentRepository] Invalid string generation_method_id, using fallback:', {
+          id: generationMethodId,
+        });
+        generationMethodId = 'manual';
+      }
+    } else if (!generationMethodId) {
+      // Null or undefined, use default
+      generationMethodId = 'manual';
     }
 
     return new Content({

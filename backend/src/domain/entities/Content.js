@@ -57,7 +57,7 @@ export class Content {
     if (!this.generation_method_id) {
       errors.push('generation_method_id is required');
     } else {
-      const validMethods = [1, 2, 3, 4, 'manual', 'ai_assisted', 'ai_generated', 'manual_edited'];
+      const validMethods = [1, 2, 3, 4, 5, 6, 'manual', 'ai_assisted', 'ai_generated', 'manual_edited', 'video_to_lesson', 'full_ai_generated', 'Mixed'];
       if (!validMethods.includes(this.generation_method_id)) {
         errors.push(`generation_method_id must be one of: ${validMethods.join(', ')}`);
       }

@@ -1061,30 +1061,36 @@ export default function TopicContentManager() {
               </div>
             )}
 
-            {/* View Lesson Button - Always visible, disabled until all formats are ready */}
+            {/* View Lesson Button - Always visible, disabled until all formats are ready AND template is selected */}
             {existingContent.length > 0 && (
               <div className="mt-8 text-center">
                 <div className="relative inline-block group">
                   <button
                     onClick={() => {
-                      if (hasAllFormats) {
+                      if (hasAllFormats && topicDetails?.template_id) {
                         navigate(`/lessons/${topicId}/view`);
                       }
                     }}
-                    disabled={!hasAllFormats}
+                    disabled={!hasAllFormats || !topicDetails?.template_id}
                     className={`px-8 py-4 text-white rounded-lg text-lg font-semibold transition-all ${
-                      hasAllFormats
+                      hasAllFormats && topicDetails?.template_id
                         ? theme === 'day-mode'
                           ? 'bg-emerald-600 hover:bg-emerald-700 shadow-lg cursor-pointer'
                           : 'bg-gradient-to-r from-[#0d9488] to-[#059669] hover:from-[#14b8a6] hover:to-[#10b981] shadow-lg shadow-[#0d9488]/40 cursor-pointer'
                         : 'bg-gray-400 dark:bg-gray-600 opacity-60 cursor-not-allowed'
                     }`}
-                    title={!hasAllFormats ? `This button will be active once all content formats are generated. ${getMissingFormats.length > 0 ? `Waiting for: ${getMissingFormats.map(f => f.replace('_', ' ')).join(', ')}` : ''}` : 'View the complete lesson with all content formats'}
+                    title={
+                      !hasAllFormats
+                        ? `This button will be active once all content formats are generated. ${getMissingFormats.length > 0 ? `Waiting for: ${getMissingFormats.map(f => f.replace('_', ' ')).join(', ')}` : ''}`
+                        : !topicDetails?.template_id
+                        ? 'This button will be active once a template is selected for this lesson.'
+                        : 'View the complete lesson with all content formats'
+                    }
                   >
                     <i className="fas fa-eye mr-2"></i>
                     View Complete Lesson
                   </button>
-                  {!hasAllFormats && (
+                  {(!hasAllFormats || !topicDetails?.template_id) && (
                     <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 mt-2 w-64 px-3 py-2 text-xs rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none"
                       style={{
                         background: theme === 'day-mode' ? '#1f2937' : '#0f172a',
@@ -1092,12 +1098,18 @@ export default function TopicContentManager() {
                         border: '1px solid rgba(156, 163, 175, 0.3)',
                       }}
                     >
-                      This button will be active once all content formats are generated.
-                      {getMissingFormats.length > 0 && (
-                        <div className="mt-1 text-yellow-300">
-                          Waiting for: {getMissingFormats.map(f => f.replace('_', ' ')).join(', ')}
-                        </div>
-                      )}
+                      {!hasAllFormats ? (
+                        <>
+                          This button will be active once all content formats are generated.
+                          {getMissingFormats.length > 0 && (
+                            <div className="mt-1 text-yellow-300">
+                              Waiting for: {getMissingFormats.map(f => f.replace('_', ' ')).join(', ')}
+                            </div>
+                          )}
+                        </>
+                      ) : !topicDetails?.template_id ? (
+                        'This button will be active once a template is selected for this lesson.'
+                      ) : null}
                     </div>
                   )}
                 </div>

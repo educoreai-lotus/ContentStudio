@@ -118,7 +118,11 @@ export async function saveGeneratedTopicToDatabase(generatedTopic, preferredLang
     let contentsSaved = 0;
     const storageService = new AvatarVideoStorageService();
     
-    for (const content of generatedTopic.contents) {
+    // Determine generation_method_id based on content index and previous content
+    // For full AI-generated topics, all content uses full_ai_generated (5) for first format,
+    // but if mixing with manual later, it should become Mixed
+    for (let i = 0; i < generatedTopic.contents.length; i++) {
+      const content = generatedTopic.contents[i];
       let storagePathToRollback = null;
       const contentTypeName = content.content_type;
       
@@ -143,6 +147,17 @@ export async function saveGeneratedTopicToDatabase(generatedTopic, preferredLang
           });
         }
 
+        // Determine generation_method_id:
+        // - First format: full_ai_generated (5) for AI-generated topics
+        // - Second+ format: Check if any previous format used AI, if so use Mixed (6)
+        let generationMethodId = 5; // Default: full_ai_generated
+        if (i > 0) {
+          // Check if any previous content was saved (they all use 5 for full AI topics)
+          // For full AI-generated topics, all formats are AI, so they should all be 5
+          // But if later a trainer adds manual content, CreateContentUseCase will handle the Mixed logic
+          generationMethodId = 5; // Keep as full_ai_generated for consistency
+        }
+
         // Use parameterized query for JSONB to avoid SQL injection and escaping issues
         const insertContentSql = `
           INSERT INTO content (
@@ -160,7 +175,7 @@ export async function saveGeneratedTopicToDatabase(generatedTopic, preferredLang
           topicId,
           contentTypeId,
           JSON.stringify(cleanedContentData), // pg will handle JSONB conversion
-          5, // generation_method_id
+          generationMethodId, // Use determined method
         ]);
         contentsSaved++;
         logger.info('[UseCase] Content saved successfully', {

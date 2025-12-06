@@ -40,10 +40,18 @@ export class CreateContentUseCase {
       content_data: { ...contentData.content_data },
     };
 
-    // Set generation method to manual for manual creation
+    // Determine generation_method_id based on business logic
+    const determinedGenerationMethod = await this.determineGenerationMethod(
+      contentData.topic_id,
+      enrichedContentData.generation_method_id,
+      enrichedContentData.content_type_id,
+      enrichedContentData.content_data
+    );
+
+    // Set generation method based on business logic
     const content = new Content({
       ...enrichedContentData,
-      generation_method_id: enrichedContentData.generation_method_id || 'manual',
+      generation_method_id: determinedGenerationMethod,
     });
 
     const { candidateIdsOrNames, resolverDebugLabel } = await this.getContentTypeIdentifiers(content);
@@ -301,13 +309,24 @@ export class CreateContentUseCase {
       const originalQualityCheckStatus = existingContent.quality_check_status;
       const originalQualityCheckData = existingContent.quality_check_data;
 
+      // Re-determine generation_method_id for update (may need to change to Mixed)
+      const updatedGenerationMethod = await this.determineGenerationMethod(
+        content.topic_id,
+        content.generation_method_id,
+        content.content_type_id,
+        content.content_data
+      );
+
       // Save content WITHOUT audio first (if quality check is needed)
       let updatedContent = await this.contentRepository.update(existingContent.content_id, {
         content_data: content.content_data,
         quality_check_status: 'pending',
         quality_check_data: null,
-        generation_method_id: content.generation_method_id,
+        generation_method_id: updatedGenerationMethod,
       });
+
+      // Update topic's generation_methods_id based on updated content's generation_method_id
+      await this.updateTopicGenerationMethod(content.topic_id, updatedGenerationMethod);
 
       // Trigger quality check BEFORE audio generation for manual content
       console.log('[CreateContentUseCase] Checking if quality check should run:', {
@@ -454,6 +473,9 @@ export class CreateContentUseCase {
 
     // Save content to DB ONLY if quality check passed (or if not required)
     let createdContent = await this.contentRepository.create(content);
+    
+    // Update topic's generation_methods_id based on content's generation_method_id
+    await this.updateTopicGenerationMethod(content.topic_id, createdContent.generation_method_id);
     
     // If quality check was performed and passed, create quality check record and update content
     if (needsQualityCheck && qualityCheckResults) {
@@ -1216,6 +1238,201 @@ Return ONLY the 2-letter ISO 639-1 language code (e.g., 'en', 'he', 'ar', 'es', 
     // If no special characters detected, likely English or other Latin-based language
     // Return null to allow AI detection or default to English
     return null;
+  }
+
+  /**
+   * Determine generation_method_id based on business logic:
+   * - First format: manual or ai_assisted/ai_generated (based on input)
+   * - Second+ format: Mixed if any previous format used AI, otherwise keep original
+   * - Video to lesson: video_to_lesson
+   * @param {number} topicId - Topic ID
+   * @param {string|number} providedMethod - Method provided in contentData
+   * @param {number|string} contentTypeId - Content type ID
+   * @param {Object} contentData - Content data object
+   * @returns {Promise<string>} Determined generation method
+   */
+  async determineGenerationMethod(topicId, providedMethod, contentTypeId, contentData) {
+    try {
+      // Check if this is video_to_lesson (content from video transcription)
+      if (contentData?.source === 'video' || contentData?.videoType || contentData?.transcript) {
+        return 'video_to_lesson';
+      }
+
+      // Get all existing content for this topic
+      const existingContent = await this.contentRepository.findAllByTopicId(topicId);
+      const existingCount = existingContent?.length || 0;
+
+      // If this is the first format
+      if (existingCount === 0) {
+        // Use provided method or default to manual
+        const method = providedMethod || 'manual';
+        // Normalize to valid method names
+        if (method === 'ai_generated' || method === 'full_ai_generated') {
+          return 'ai_assisted'; // Use ai_assisted for consistency
+        }
+        if (method === 'ai_assisted' || method === 'manual' || method === 'manual_edited') {
+          return method;
+        }
+        // If it's a number, try to convert
+        if (typeof method === 'number') {
+          try {
+            const methodName = await this.contentRepository.getGenerationMethodName(method);
+            if (methodName && ['manual', 'ai_assisted', 'ai_generated', 'manual_edited'].includes(methodName)) {
+              return methodName;
+            }
+          } catch (error) {
+            console.warn('[CreateContentUseCase] Failed to convert generation_method_id to name:', error.message);
+          }
+        }
+        return 'manual'; // Default fallback
+      }
+
+      // If this is second+ format, check if any previous format used AI
+      const hasAIContent = existingContent.some(content => {
+        const method = content.generation_method_id;
+        return method === 'ai_assisted' || 
+               method === 'ai_generated' || 
+               method === 'full_ai_generated' ||
+               method === 'Mixed' ||
+               method === 2 || // ai_assisted ID
+               method === 5;    // full_ai_generated ID
+      });
+
+      // If any previous format used AI, and current is manual, change to Mixed
+      if (hasAIContent) {
+        const currentMethod = providedMethod || 'manual';
+        // If current is manual or manual_edited, change to Mixed
+        if (currentMethod === 'manual' || currentMethod === 'manual_edited' || currentMethod === 1) {
+          return 'Mixed';
+        }
+        // If current is already AI, it's still Mixed (combination of AI and manual)
+        if (currentMethod === 'ai_assisted' || currentMethod === 'ai_generated' || currentMethod === 2 || currentMethod === 5) {
+          return 'Mixed';
+        }
+      }
+
+      // If no AI in previous formats, use provided method or default to manual
+      const method = providedMethod || 'manual';
+      // Normalize to valid method names
+      if (method === 'ai_generated' || method === 'full_ai_generated') {
+        return 'ai_assisted';
+      }
+      if (method === 'ai_assisted' || method === 'manual' || method === 'manual_edited') {
+        return method;
+      }
+      // If it's a number, try to convert
+      if (typeof method === 'number') {
+        try {
+          const methodName = await this.contentRepository.getGenerationMethodName(method);
+          if (methodName && ['manual', 'ai_assisted', 'ai_generated', 'manual_edited'].includes(methodName)) {
+            return methodName;
+          }
+        } catch (error) {
+          console.warn('[CreateContentUseCase] Failed to convert generation_method_id to name:', error.message);
+        }
+      }
+      return 'manual'; // Default fallback
+    } catch (error) {
+      console.error('[CreateContentUseCase] Failed to determine generation method:', error.message);
+      // Fallback to provided method or manual
+      return providedMethod || 'manual';
+    }
+  }
+
+  /**
+   * Convert generation_method_id (string or number) to numeric ID only
+   * @param {string|number} method - Generation method (name or ID)
+   * @returns {Promise<number|null>} Numeric ID or null if not found
+   */
+  async convertMethodToId(method) {
+    if (typeof method === 'number') {
+      return method; // Already a number
+    }
+    
+    if (typeof method === 'string') {
+      try {
+        // Convert string name to numeric ID
+        return await this.contentRepository.getGenerationMethodId(method);
+      } catch (error) {
+        console.warn('[CreateContentUseCase] Failed to convert method name to ID:', method, error.message);
+        return null;
+      }
+    }
+    
+    return null;
+  }
+
+  /**
+   * Update topic's generation_methods_id based on content's generation_method_id
+   * @param {number} topicId - Topic ID
+   * @param {string|number} contentGenerationMethod - Content's generation_method_id
+   * @returns {Promise<void>}
+   */
+  async updateTopicGenerationMethod(topicId, contentGenerationMethod) {
+    if (!this.topicRepository) {
+      console.warn('[CreateContentUseCase] TopicRepository not available, skipping topic generation_methods_id update');
+      return;
+    }
+
+    try {
+      // Get all content for this topic to determine the overall method
+      const allContent = await this.contentRepository.findAllByTopicId(topicId);
+      if (!allContent || allContent.length === 0) {
+        return;
+      }
+
+      // Convert all generation_method_id to numeric IDs only
+      const methodIds = [];
+      for (const content of allContent) {
+        const methodId = await this.convertMethodToId(content.generation_method_id);
+        if (methodId !== null) {
+          methodIds.push(methodId);
+        }
+      }
+
+      if (methodIds.length === 0) {
+        return; // No valid methods found
+      }
+
+      // Determine the overall generation method for the topic (working only with numeric IDs)
+      let topicMethodId = null;
+
+      // Check if any content uses AI (IDs: 2 = ai_assisted, 5 = full_ai_generated)
+      const hasAIContent = methodIds.some(id => id === 2 || id === 5);
+
+      // Check if any content is manual (ID: 1 = manual)
+      const hasManualContent = methodIds.some(id => id === 1);
+
+      // Check if any content is video_to_lesson (ID: 3 = video_to_lesson)
+      const hasVideoToLesson = methodIds.some(id => id === 3);
+
+      // Determine topic method based on content methods (only numeric IDs)
+      if (hasVideoToLesson) {
+        topicMethodId = 3; // video_to_lesson
+      } else if (hasAIContent && hasManualContent) {
+        topicMethodId = 6; // Mixed
+      } else if (hasAIContent) {
+        // Check if it's full_ai_generated (all formats are AI - ID 5)
+        const allAreAI = methodIds.every(id => id === 2 || id === 5);
+        topicMethodId = allAreAI ? 5 : 2; // full_ai_generated (5) or ai_assisted (2)
+      } else if (hasManualContent) {
+        topicMethodId = 1; // manual
+      }
+
+      // Update topic if method was determined
+      if (topicMethodId !== null) {
+        await this.topicRepository.update(topicId, {
+          generation_methods_id: topicMethodId,
+        });
+        console.log('[CreateContentUseCase] Updated topic generation_methods_id', {
+          topic_id: topicId,
+          generation_methods_id: topicMethodId,
+        });
+      }
+    } catch (error) {
+      console.error('[CreateContentUseCase] Failed to update topic generation_methods_id:', error.message);
+      // Don't throw - this is a non-critical update
+    }
   }
 }
 
