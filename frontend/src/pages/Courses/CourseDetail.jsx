@@ -32,17 +32,19 @@ export const CourseDetail = () => {
       setCourse(courseData);
     } catch (err) {
       // If course not found (404), it might have been deleted
-      // Don't show error if we're just refreshing after topic deletion
-      if (err?.response?.status === 404) {
-        console.warn('[CourseDetail] Course not found (might be deleted):', courseId);
-        // Don't set error - let the user navigate away naturally
+      // Navigate back to courses list
+      if (err?.response?.status === 404 || err?.error?.code === 'COURSE_NOT_FOUND') {
+        console.warn('[CourseDetail] Course not found (might be deleted), navigating to courses list:', courseId);
+        // Navigate back to courses list if course was deleted
+        navigate('/courses');
+        return;
       } else {
         setError(err.error?.message || 'Failed to load course details');
       }
     } finally {
       setLoadingCourse(false);
     }
-  }, [courseId]);
+  }, [courseId, navigate]);
 
   const fetchTopics = React.useCallback(async () => {
     try {

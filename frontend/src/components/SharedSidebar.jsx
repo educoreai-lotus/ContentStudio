@@ -508,8 +508,13 @@ export function SharedSidebar({ onRestore }) {
     const handleContentRestored = (event) => {
       const { type, courseId: eventCourseId } = event.detail;
       
+      // If a course was deleted/restored and we're viewing courses list
+      if (type === 'courses' && context?.type === 'courses') {
+        console.log('[SharedSidebar] Course deleted/restored, refreshing deleted courses list');
+        loadDeletedContent();
+      }
       // If a topic was deleted/restored and we're viewing topics for a course
-      if (type === 'topics' && context?.type === 'topics' && context?.courseId) {
+      else if (type === 'topics' && context?.type === 'topics' && context?.courseId) {
         // Only refresh if the event is for the same course we're viewing
         if (eventCourseId === context.courseId || event.detail.id) {
           console.log('[SharedSidebar] Topic deleted/restored, refreshing deleted topics list');

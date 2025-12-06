@@ -92,6 +92,17 @@ export const CourseList = () => {
     try {
       await coursesService.delete(courseId);
       loadCourses();
+      
+      // Dispatch event to notify SharedSidebar to refresh deleted courses list
+      const deleteEvent = new CustomEvent('contentRestored', {
+        detail: {
+          type: 'courses',
+          id: courseId,
+        }
+      });
+      window.dispatchEvent(deleteEvent);
+      
+      console.log(`[CourseList] Course "${courseId}" deleted successfully`);
     } catch (err) {
       setError(err.error?.message || 'Failed to delete course');
     }
