@@ -154,6 +154,15 @@ export class AvatarVideoStorageService {
    * @returns {Promise<void>}
    */
   async deleteVideoFromStorage(storagePath) {
+    return this.deleteFileFromStorage(storagePath);
+  }
+
+  /**
+   * Delete file from Supabase Storage (generic method for any file type)
+   * @param {string} storagePath - Storage path to delete
+   * @returns {Promise<void>}
+   */
+  async deleteFileFromStorage(storagePath) {
     if (!this.isConfigured()) {
       logger.warn('[AvatarVideoStorageService] Supabase not configured, cannot delete file');
       return;
@@ -165,7 +174,7 @@ export class AvatarVideoStorageService {
     }
 
     try {
-      logger.info('[AvatarVideoStorageService] Deleting video from storage (rollback)', {
+      logger.info('[AvatarVideoStorageService] Deleting file from storage', {
         storagePath,
       });
 
@@ -174,22 +183,22 @@ export class AvatarVideoStorageService {
         .remove([storagePath]);
 
       if (error) {
-        logger.error('[AvatarVideoStorageService] Failed to delete video from storage', {
+        logger.error('[AvatarVideoStorageService] Failed to delete file from storage', {
           error: error.message,
           storagePath,
         });
-        // Don't throw - rollback failure is logged but doesn't break the flow
+        // Don't throw - deletion failure is logged but doesn't break the flow
       } else {
-        logger.info('[AvatarVideoStorageService] Video deleted successfully (rollback)', {
+        logger.info('[AvatarVideoStorageService] File deleted successfully', {
           storagePath,
         });
       }
     } catch (error) {
-      logger.error('[AvatarVideoStorageService] Error during video deletion (rollback)', {
+      logger.error('[AvatarVideoStorageService] Error during file deletion', {
         error: error.message,
         storagePath,
       });
-      // Don't throw - rollback failure is logged but doesn't break the flow
+      // Don't throw - deletion failure is logged but doesn't break the flow
     }
   }
 

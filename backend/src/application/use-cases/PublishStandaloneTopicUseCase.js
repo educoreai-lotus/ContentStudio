@@ -284,6 +284,25 @@ export class PublishStandaloneTopicUseCase {
       logger.info('[PublishStandaloneTopicUseCase] Topic status updated to archived', {
         topicId,
       });
+
+      // Cleanup content_history records for this topic
+      try {
+        const { CleanupContentHistoryOnArchive } = await import('./cleanupContentHistoryOnArchive.js');
+        const cleanupService = new CleanupContentHistoryOnArchive();
+        const cleanupResult = await cleanupService.cleanupTopicHistory(topicId);
+        logger.info('[PublishStandaloneTopicUseCase] Content history cleanup completed', {
+          topicId,
+          deletedFromStorage: cleanupResult.deletedFromStorage,
+          deletedFromDatabase: cleanupResult.deletedFromDatabase,
+          errorsCount: cleanupResult.errors?.length || 0,
+        });
+      } catch (cleanupError) {
+        // Non-blocking: log error but don't fail the entire operation
+        logger.warn('[PublishStandaloneTopicUseCase] Failed to cleanup content history (non-blocking)', {
+          topicId,
+          error: cleanupError.message,
+        });
+      }
     } catch (updateError) {
       logger.error('[PublishStandaloneTopicUseCase] Failed to update topic status', {
         topicId,

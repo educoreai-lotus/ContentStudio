@@ -362,6 +362,26 @@ export class PublishCourseUseCase {
         logger.info('[PublishCourseUseCase] Course status updated to archived in database', {
           courseId,
         });
+
+        // Cleanup content_history records for all topics in this course
+        try {
+          const { CleanupContentHistoryOnArchive } = await import('./cleanupContentHistoryOnArchive.js');
+          const cleanupService = new CleanupContentHistoryOnArchive();
+          const cleanupResult = await cleanupService.cleanupCourseHistory(courseId);
+          logger.info('[PublishCourseUseCase] Content history cleanup completed', {
+            courseId,
+            topicsProcessed: cleanupResult.topicsProcessed,
+            deletedFromStorage: cleanupResult.deletedFromStorage,
+            deletedFromDatabase: cleanupResult.deletedFromDatabase,
+            errorsCount: cleanupResult.errors?.length || 0,
+          });
+        } catch (cleanupError) {
+          // Non-blocking: log error but don't fail the entire operation
+          logger.warn('[PublishCourseUseCase] Failed to cleanup content history (non-blocking)', {
+            courseId,
+            error: cleanupError.message,
+          });
+        }
       } catch (updateError) {
         // Non-blocking: log error but don't fail the entire operation
         logger.warn('[PublishCourseUseCase] Failed to update course status in database (non-blocking)', {
