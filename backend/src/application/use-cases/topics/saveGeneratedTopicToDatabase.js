@@ -219,19 +219,17 @@ export async function saveGeneratedTopicToDatabase(generatedTopic, preferredLang
       }
     }
 
-    // Step 3: Update usage counters
+    // Step 3: Update generation_methods usage_count (method_id = 5 for full_ai_generated)
+    // NOTE: topic usage_count is NOT updated here - it should only be updated when a course
+    // containing this topic is published/sent to Course Builder (see PublishCourseUseCase)
     try {
-      // Update topic usage_count
-      const updateTopicUsageSql = `UPDATE topics SET usage_count = usage_count + 1 WHERE topic_id = ${topicId}`;
-      await db.query(updateTopicUsageSql);
-
       // Update generation_methods usage_count (method_id = 5)
       const updateMethodUsageSql = `UPDATE generation_methods SET usage_count = usage_count + 1 WHERE method_id = 5`;
       await db.query(updateMethodUsageSql);
 
-      logger.info('[UseCase] Usage counters updated', { topic_id: topicId });
+      logger.info('[UseCase] Generation method usage counter updated', { topic_id: topicId });
     } catch (usageError) {
-      logger.warn('[UseCase] Failed to update usage counters', {
+      logger.warn('[UseCase] Failed to update generation method usage counter', {
         error: usageError.message,
         topic_id: topicId,
       });

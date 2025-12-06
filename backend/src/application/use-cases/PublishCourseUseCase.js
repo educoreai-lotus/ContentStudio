@@ -338,7 +338,25 @@ export class PublishCourseUseCase {
       await sendCourseToCourseBuilder(courseData);
       
       // After successfully sending to Course Builder:
-      // 1. Update course status to "archived" in database
+      // 1. Increment usage_count for all topics in the course
+      try {
+        const topics = await this.topicRepository.findByCourseId(courseId);
+        for (const topic of topics) {
+          await this.topicRepository.incrementUsageCount(topic.topic_id);
+        }
+        logger.info('[PublishCourseUseCase] Usage count incremented for all topics in course', {
+          courseId,
+          topicsCount: topics.length,
+        });
+      } catch (usageCountError) {
+        // Non-blocking: log error but don't fail the entire operation
+        logger.warn('[PublishCourseUseCase] Failed to increment usage count for topics (non-blocking)', {
+          courseId,
+          error: usageCountError.message,
+        });
+      }
+      
+      // 2. Update course status to "archived" in database
       try {
         await this.courseRepository.update(courseId, { status: 'archived' });
         logger.info('[PublishCourseUseCase] Course status updated to archived in database', {
@@ -352,7 +370,7 @@ export class PublishCourseUseCase {
         });
       }
       
-      // 2. Update Directory with course status
+      // 3. Update Directory with course status
       if (courseData.trainer_id && courseData.course_id) {
         logger.info('[PublishCourseUseCase] Updating Directory with course status', {
           trainerId: courseData.trainer_id,
