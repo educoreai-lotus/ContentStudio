@@ -1,4 +1,3 @@
-import { sendCourseToCourseBuilder } from '../../infrastructure/courseBuilderClient/courseBuilderClient.js';
 import { logger } from '../../infrastructure/logging/Logger.js';
 
 /**
@@ -262,7 +261,10 @@ export class PublishStandaloneTopicUseCase {
   }
 
   /**
-   * Execute publish standalone topic (transfer to Course Builder)
+   * Execute mark standalone topic as ready
+   * NOTE: This does NOT send to Course Builder. Course Builder will request this lesson
+   * when needed through the hierarchical search, and usage_count will be incremented then.
+   * 
    * @param {number} topicId - Topic ID
    * @returns {Promise<{success: boolean, message: string}>}
    */
@@ -272,56 +274,27 @@ export class PublishStandaloneTopicUseCase {
     
     if (!validation.valid) {
       const errorMessages = validation.errors.map(err => err).join('\n');
-      throw new Error(`Cannot transfer the lesson:\n${errorMessages}`);
+      throw new Error(`Cannot mark lesson as ready:\n${errorMessages}`);
     }
 
-    // Build topic object
-    const topicData = await this.buildTopicObject(topicId);
-
     try {
-      // Send to Course Builder
-      await sendCourseToCourseBuilder(topicData);
-      
-      // After successfully sending to Course Builder:
-      // 1. Increment usage_count for the topic
-      try {
-        await this.topicRepository.incrementUsageCount(topicId);
-        logger.info('[PublishStandaloneTopicUseCase] Usage count incremented for topic', {
-          topicId,
-        });
-      } catch (usageCountError) {
-        // Non-blocking: log error but don't fail the entire operation
-        logger.warn('[PublishStandaloneTopicUseCase] Failed to increment usage count (non-blocking)', {
-          topicId,
-          error: usageCountError.message,
-        });
-      }
-      
-      // 2. Update topic status to "ready" or "completed"
-      try {
-        await this.topicRepository.update(topicId, { status: 'ready' });
-        logger.info('[PublishStandaloneTopicUseCase] Topic status updated to ready', {
-          topicId,
-        });
-      } catch (updateError) {
-        // Non-blocking: log error but don't fail the entire operation
-        logger.warn('[PublishStandaloneTopicUseCase] Failed to update topic status (non-blocking)', {
-          topicId,
-          error: updateError.message,
-        });
-      }
-    } catch (error) {
-      // If Course Builder transfer fails, throw error with appropriate message
-      logger.error('[PublishStandaloneTopicUseCase] Failed to transfer topic to Course Builder', {
+      // Only update topic status to "ready" - do NOT send to Course Builder
+      // Course Builder will request this lesson when needed, and usage_count will be incremented then
+      await this.topicRepository.update(topicId, { status: 'ready' });
+      logger.info('[PublishStandaloneTopicUseCase] Topic status updated to ready', {
         topicId,
-        error: error.message,
       });
-      throw new Error('Transfer failed — Course Builder could not receive the data. Please try again later.');
+    } catch (updateError) {
+      logger.error('[PublishStandaloneTopicUseCase] Failed to update topic status', {
+        topicId,
+        error: updateError.message,
+      });
+      throw new Error('Failed to mark lesson as ready. Please try again later.');
     }
 
     return {
       success: true,
-      message: 'The lesson has been successfully saved and sent to Course Builder.',
+      message: 'The lesson has been successfully marked as ready and will be available for use in personalized courses.',
     };
   }
 }

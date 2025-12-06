@@ -250,6 +250,30 @@ export default function TopicContentManager() {
     content => content.content_type_id === CONTENT_TYPES.find(t => t.id === 'avatar_video')?.dbId
   );
 
+  // Check if topic has DevLab exercises
+  const hasExercises = useMemo(() => {
+    if (!topicDetails?.devlab_exercises) {
+      return false;
+    }
+    // devlab_exercises can be a JSON string or an array
+    try {
+      const exercises = typeof topicDetails.devlab_exercises === 'string'
+        ? JSON.parse(topicDetails.devlab_exercises)
+        : topicDetails.devlab_exercises;
+      return Array.isArray(exercises) && exercises.length > 0;
+    } catch {
+      return false;
+    }
+  }, [topicDetails?.devlab_exercises]);
+
+  // For standalone lessons: check if ready (all formats + template + exercises)
+  const isStandaloneReady = useMemo(() => {
+    if (topicDetails?.course_id !== null) {
+      return false; // Not a standalone lesson
+    }
+    return hasAllFormats && topicDetails?.template_id && hasExercises;
+  }, [hasAllFormats, topicDetails?.template_id, topicDetails?.course_id, hasExercises]);
+
   // Get missing formats for display
   const getMissingFormats = useMemo(() => {
     if (!topicDetails?.template_format_order || topicDetails.template_format_order.length === 0) {
@@ -355,7 +379,7 @@ export default function TopicContentManager() {
   };
 
   const handlePublishStandalone = async () => {
-    if (!window.confirm('Are you sure you want to save and finish this lesson?\n\nThe lesson will be sent to Course Builder and can be used in personalized courses.')) {
+    if (!window.confirm('Are you sure you want to mark this lesson as ready?\n\nThe lesson will be available for use in personalized courses when Course Builder requests content.')) {
       return;
     }
 
@@ -364,7 +388,9 @@ export default function TopicContentManager() {
     setPublishSuccess(false);
 
     try {
-      const result = await topicsService.publishStandalone(parseInt(topicId));
+      // Only update status to 'ready' - do NOT send to Course Builder
+      // Course Builder will request this lesson when needed through the hierarchical search
+      await topicsService.update(parseInt(topicId), { status: 'ready' });
       setPublishSuccess(true);
       
       // Refresh topic details to get updated status
@@ -375,7 +401,7 @@ export default function TopicContentManager() {
         setPublishSuccess(false);
       }, 5000);
     } catch (err) {
-      setPublishError(err.error?.message || err.message || 'Failed to save and finish lesson');
+      setPublishError(err.error?.message || err.message || 'Failed to mark lesson as ready');
     } finally {
       setPublishing(false);
     }
@@ -1146,19 +1172,23 @@ export default function TopicContentManager() {
                 </div>
 
                 {/* Save and Finish Lesson Button - Only for standalone lessons */}
-                {!topicDetails?.course_id && hasAllFormats && topicDetails?.template_id && (
+                {!topicDetails?.course_id && (
                   <div className="relative inline-block group">
                     <button
                       onClick={handlePublishStandalone}
-                      disabled={publishing}
+                      disabled={publishing || !isStandaloneReady}
                       className={`px-8 py-4 text-white rounded-lg text-lg font-semibold transition-all ${
-                        publishing
+                        publishing || !isStandaloneReady
                           ? 'bg-gray-400 dark:bg-gray-600 opacity-60 cursor-not-allowed'
                           : theme === 'day-mode'
                           ? 'bg-blue-600 hover:bg-blue-700 shadow-lg cursor-pointer'
                           : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-lg shadow-blue-600/40 cursor-pointer'
                       }`}
-                      title="Save and finish this lesson. It will be sent to Course Builder and can be used in personalized courses."
+                      title={
+                        !isStandaloneReady
+                          ? `This button will be active once all content formats are generated, a template is selected, and DevLab exercises are created.`
+                          : 'Mark this lesson as ready. It will be available for use in personalized courses when Course Builder requests content.'
+                      }
                     >
                       {publishing ? (
                         <>
@@ -1168,10 +1198,34 @@ export default function TopicContentManager() {
                       ) : (
                         <>
                           <i className="fas fa-check-circle mr-2"></i>
-                          Save and Finish Lesson
+                          Mark Lesson as Ready
                         </>
                       )}
                     </button>
+                    {!isStandaloneReady && (
+                      <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 mt-2 w-64 px-3 py-2 text-xs rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none"
+                        style={{
+                          background: theme === 'day-mode' ? '#1f2937' : '#0f172a',
+                          color: '#e5e7eb',
+                          border: '1px solid rgba(156, 163, 175, 0.3)',
+                        }}
+                      >
+                        {!hasAllFormats ? (
+                          <>
+                            All content formats must be generated.
+                            {getMissingFormats.length > 0 && (
+                              <div className="mt-1 text-yellow-300">
+                                Missing: {getMissingFormats.map(f => f.replace('_', ' ')).join(', ')}
+                              </div>
+                            )}
+                          </>
+                        ) : !topicDetails?.template_id ? (
+                          'A template must be selected.'
+                        ) : !hasExercises ? (
+                          'DevLab exercises must be created.'
+                        ) : null}
+                      </div>
+                    )}
                   </div>
                 )}
 

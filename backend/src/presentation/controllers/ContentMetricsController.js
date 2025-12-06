@@ -24,6 +24,10 @@ import { buildFinalContentResponse } from '../../application/use-cases/content-r
  * Endpoint: POST /api/fill-content-metrics
  */
 export class ContentMetricsController {
+  constructor(topicRepository = null) {
+    this.topicRepository = topicRepository;
+  }
+
   /**
    * Fill content metrics based on serviceName
    * @param {Object} req - Express request object
@@ -449,10 +453,32 @@ export class ContentMetricsController {
       const addedTopicIds = new Set(); // Track added topic IDs to avoid duplicates
       
       // Priority 1: Add trainer topics first (most relevant)
+      // Increment usage_count for standalone trainer topics when they are used
       for (const topic of trainerTopics) {
         if (topic.topic_id && !addedTopicIds.has(topic.topic_id)) {
           resolvedTopics.push(topic);
           addedTopicIds.add(topic.topic_id);
+          
+          // Check if this is a standalone topic (course_id is null) and increment usage_count
+          // Note: searchTrainerTopics returns topics that may be standalone or belong to courses
+          // We only increment usage_count for standalone topics (those without a course_id)
+          if (this.topicRepository) {
+            try {
+              // Check if topic is standalone by querying the database
+              const topicDetails = await this.topicRepository.findById(topic.topic_id);
+              if (topicDetails && topicDetails.course_id === null) {
+                await this.topicRepository.incrementUsageCount(topic.topic_id);
+                logger.info('[ContentMetricsController] Incremented usage_count for standalone trainer topic', {
+                  topic_id: topic.topic_id,
+                });
+              }
+            } catch (usageCountError) {
+              logger.warn('[ContentMetricsController] Failed to increment usage_count for trainer topic (non-blocking)', {
+                topic_id: topic.topic_id,
+                error: usageCountError.message,
+              });
+            }
+          }
         }
       }
       
@@ -465,10 +491,26 @@ export class ContentMetricsController {
       }
       
       // Priority 3: Add standalone topics (avoid duplicates)
+      // Increment usage_count for standalone topics when they are used
       for (const topic of standaloneTopics) {
         if (topic.topic_id && !addedTopicIds.has(topic.topic_id)) {
           resolvedTopics.push(topic);
           addedTopicIds.add(topic.topic_id);
+          
+          // Increment usage_count for standalone topic (non-blocking)
+          if (this.topicRepository) {
+            try {
+              await this.topicRepository.incrementUsageCount(topic.topic_id);
+              logger.info('[ContentMetricsController] Incremented usage_count for standalone topic', {
+                topic_id: topic.topic_id,
+              });
+            } catch (usageCountError) {
+              logger.warn('[ContentMetricsController] Failed to increment usage_count for standalone topic (non-blocking)', {
+                topic_id: topic.topic_id,
+                error: usageCountError.message,
+              });
+            }
+          }
         }
       }
       

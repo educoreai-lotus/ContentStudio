@@ -1,8 +1,12 @@
 import express from 'express';
 import { ContentMetricsController } from '../controllers/ContentMetricsController.js';
+import { RepositoryFactory } from '../../infrastructure/database/repositories/RepositoryFactory.js';
 
 const router = express.Router();
-const contentMetricsController = new ContentMetricsController();
+
+// Initialize topic repository for usage_count updates
+const topicRepository = await RepositoryFactory.getTopicRepository();
+const contentMetricsController = new ContentMetricsController(topicRepository);
 
 /**
  * POST /api/fill-content-metrics
