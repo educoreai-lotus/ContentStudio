@@ -195,50 +195,7 @@ export const CourseList = () => {
                 onChange={handleSearch}
               />
             </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => handleStatusFilter('all')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  filters.status === 'all'
-                    ? theme === 'day-mode'
-                      ? 'bg-emerald-600 text-white shadow-lg'
-                      : 'bg-emerald-500 text-white shadow-lg'
-                    : theme === 'day-mode'
-                    ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    : 'bg-[#334155] text-[#f8fafc] hover:bg-[#475569]'
-                }`}
-              >
-                All
-              </button>
-              <button
-                onClick={() => handleStatusFilter('active')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  filters.status === 'active'
-                    ? theme === 'day-mode'
-                      ? 'bg-emerald-600 text-white shadow-lg'
-                      : 'bg-emerald-500 text-white shadow-lg'
-                    : theme === 'day-mode'
-                    ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    : 'bg-[#334155] text-[#f8fafc] hover:bg-[#475569]'
-                }`}
-              >
-                Active
-              </button>
-              <button
-                onClick={() => handleStatusFilter('archived')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  filters.status === 'archived'
-                    ? theme === 'day-mode'
-                      ? 'bg-emerald-600 text-white shadow-lg'
-                      : 'bg-emerald-500 text-white shadow-lg'
-                    : theme === 'day-mode'
-                    ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    : 'bg-[#334155] text-[#f8fafc] hover:bg-[#475569]'
-                }`}
-              >
-                Archived
-              </button>
-            </div>
+            {/* Status filter removed - only active courses are shown */}
             <button
               onClick={() => navigate('/courses/new')}
               className="px-4 py-2 rounded-lg text-sm font-medium transition-all"

@@ -2,6 +2,8 @@ import { db } from '../../../infrastructure/database/DatabaseConnection.js';
 import { logger } from '../../../infrastructure/logging/Logger.js';
 import { ContentDataCleaner } from '../../utils/ContentDataCleaner.js';
 import { AvatarVideoStorageService } from '../../../infrastructure/storage/AvatarVideoStorageService.js';
+import { generateAIExercises } from '../../../infrastructure/devlabClient/devlabClient.js';
+import { getLanguageName } from '../../utils/languageMapper.js';
 
 // Content type name to ID mapping
 const CONTENT_TYPE_MAP = {
@@ -234,6 +236,66 @@ export async function saveGeneratedTopicToDatabase(generatedTopic, preferredLang
         topic_id: topicId,
       });
       // Don't fail the whole operation if usage counters fail
+    }
+
+    // Step 4: Generate DevLab exercises for full AI-generated topics (default: code exercises)
+    try {
+      logger.info('[UseCase] Generating DevLab exercises for full AI-generated topic', {
+        topic_id: topicId,
+        topic_name: generatedTopic.topic_name,
+      });
+
+      // Build exercise request - default to code exercises
+      const exerciseRequest = {
+        topic_id: topicId.toString(),
+        topic_name: generatedTopic.topic_name || '',
+        skills: skillsArray,
+        question_type: 'code', // Default to code exercises
+        programming_language: 'javascript', // Default programming language
+        language: getLanguageName(topicLanguage) || 'english', // Convert language code to full name
+        amount: 4, // Always 4 exercises
+      };
+
+      // Generate exercises via DevLab
+      const exerciseResponse = await generateAIExercises(exerciseRequest);
+
+      if (exerciseResponse && exerciseResponse.answer) {
+        // Update topic with generated exercises
+        const updateExercisesSql = `
+          UPDATE topics 
+          SET devlab_exercises = $1::jsonb
+          WHERE topic_id = $2
+        `;
+        
+        // Parse the answer (HTML code) and save as JSON
+        const exercisesData = {
+          exercises: exerciseResponse.answer,
+          question_type: 'code',
+          programming_language: 'javascript',
+          generated_at: new Date().toISOString(),
+        };
+
+        await db.query(updateExercisesSql, [
+          JSON.stringify(exercisesData),
+          topicId,
+        ]);
+
+        logger.info('[UseCase] DevLab exercises generated and saved successfully', {
+          topic_id: topicId,
+          exercisesLength: exerciseResponse.answer.length,
+        });
+      } else {
+        logger.warn('[UseCase] DevLab exercises generation returned empty response', {
+          topic_id: topicId,
+        });
+      }
+    } catch (exerciseError) {
+      // Don't fail the whole operation if exercise generation fails
+      logger.warn('[UseCase] Failed to generate DevLab exercises for full AI-generated topic', {
+        error: exerciseError.message,
+        topic_id: topicId,
+        error_stack: exerciseError.stack,
+      });
     }
 
     // Return response
