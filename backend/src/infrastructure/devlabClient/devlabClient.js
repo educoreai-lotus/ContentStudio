@@ -1,5 +1,6 @@
 import { logger } from '../logging/Logger.js';
 import { postToCoordinator } from '../coordinatorClient/coordinatorClient.js';
+import { getLanguageName } from '../../utils/languageMapper.js';
 
 /**
  * DevLab Client
@@ -127,8 +128,9 @@ export class DevlabClient {
    * Used when trainer selects AI mode for exercise generation
    * 
    * IMPORTANT RULES:
-   * - Code questions: Can be generated via AI OR manual (4 questions sent together)
-   * - Theoretical questions: ONLY AI (manual not allowed)
+   * - Code questions: Can be generated via AI OR manual (always 4 questions)
+   * - Theoretical questions: ONLY AI (manual not allowed, always 4 questions)
+   * - Theoretical questions require theoretical_question_type: "multiple_choice" or "open_ended"
    * 
    * @param {Object} exerciseRequest - Exercise generation request:
    *   {
@@ -138,7 +140,8 @@ export class DevlabClient {
    *     question_type: "code" | "theoretical",
    *     programming_language: string (required only for code questions),
    *     Language: string,
-   *     amount: number (default 4, always 4 for code questions)
+   *     amount: number (always 4 for both code and theoretical),
+   *     theoretical_question_type: "multiple_choice" | "open_ended" (required only for theoretical questions)
    *   }
    * @returns {Promise<Object>} Response with exercises array and verified status:
    *   {
@@ -185,20 +188,26 @@ export class DevlabClient {
       // Build payload with required fields
       // Protocol: { requester_service: "content-studio", payload: { action, ... }, response: { answer: "" } }
       // For code questions: amount is always 4, programming_language is required
-      // For theoretical questions: amount can vary, no programming_language
+      // For theoretical questions: amount is always 4, theoretical_question_type is required (multiple_choice or open_ended)
+      // theoretical_question_type determines if questions are multiple choice (closed) or open ended
       const payloadData = {
         action: 'generate-questions',
         topic_id: exerciseRequest.topic_id || '',
         topic_name: exerciseRequest.topic_name || '',
         question_type: questionType,
         skills: Array.isArray(exerciseRequest.skills) ? exerciseRequest.skills : [],
-        humanLanguage: exerciseRequest.Language || exerciseRequest.language || 'en',
-        amount: questionType === 'code' ? 4 : (exerciseRequest.amount || 4),
+        humanLanguage: getLanguageName(exerciseRequest.language || 'en'), // Convert language code to full name
+        amount: 4, // Always 4 for both code and theoretical
       };
 
       // Add programming_language only for code questions
       if (questionType === 'code') {
         payloadData.programming_language = exerciseRequest.programming_language || '';
+      }
+
+      // Add theoretical_question_type only for theoretical questions
+      if (questionType === 'theoretical') {
+        payloadData.theoretical_question_type = exerciseRequest.theoretical_question_type || 'multiple_choice';
       }
 
       // Build full request envelope for Coordinator
@@ -216,6 +225,7 @@ export class DevlabClient {
         questionType: payloadData.question_type,
         amount: payloadData.amount,
         programmingLanguage: payloadData.programming_language || 'N/A',
+        theoreticalQuestionType: payloadData.theoretical_question_type || 'N/A',
       });
 
       // Send request via Coordinator
@@ -381,7 +391,7 @@ export class DevlabClient {
         question_type: 'code', // Manual is only for code questions
         programming_language: exerciseData.programming_language || '',
         skills: Array.isArray(exerciseData.skills) ? exerciseData.skills : [],
-        humanLanguage: exerciseData.Language || exerciseData.language || 'en',
+        humanLanguage: getLanguageName(exerciseData.Language || exerciseData.language || 'en'), // Convert language code to full name
         exercises: exercises.map(ex => {
           // Support both string format and object format for backward compatibility
           if (typeof ex === 'string') {

@@ -11,9 +11,10 @@ export const exercisesService = {
    *   {
    *     topic_id: number,
    *     question_type: "code" | "theoretical",
-   *     programming_language: string,
+   *     programming_language: string (required for code),
    *     language: string (optional),
-   *     amount: number (optional, default 4)
+   *     amount: number (always 4 for both code and theoretical),
+   *     theoretical_question_type: "multiple_choice" | "open_ended" (required for theoretical)
    *   }
    * @returns {Promise<Object>} Response with exercises array
    */

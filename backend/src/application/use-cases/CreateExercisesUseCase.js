@@ -19,15 +19,16 @@ export class CreateExercisesUseCase {
    *   {
    *     topic_id: number,
    *     question_type: "code" | "theoretical",
-   *     programming_language: string,
+   *     programming_language: string (required for code),
    *     language: string,
-   *     amount: number (default 4),
+   *     amount: number (always 4 for both code and theoretical),
+   *     theoretical_question_type: "multiple_choice" | "open_ended" (required for theoretical),
    *     created_by: string (trainer_id)
    *   }
    * @returns {Promise<Exercise[]>} Created exercises
    */
   async generateAIExercises(requestData) {
-    const { topic_id, question_type, programming_language, language, amount = 4, created_by } = requestData;
+    const { topic_id, question_type, programming_language, language, amount = 4, theoretical_question_type, created_by } = requestData;
 
     // Validate required fields
     if (!topic_id) {
@@ -57,8 +58,9 @@ export class CreateExercisesUseCase {
       skills: topic.skills || [],
       question_type: question_type || 'code',
       programming_language: programming_language || '',
-      Language: language || topic.language || 'en',
-      amount: amount,
+      language: language || topic.language || 'en', // Use lowercase 'language' for consistency
+      amount: amount, // Always 4 for both code and theoretical
+      theoretical_question_type: theoretical_question_type, // Only for theoretical questions
     };
 
     // Call Dabla to generate exercises
@@ -244,7 +246,7 @@ export class CreateExercisesUseCase {
       skills: skills || topic.skills || [],
       question_type: 'code',
       programming_language: programming_language,
-      Language: language || topic.language || 'en',
+      language: language || topic.language || 'en', // Use lowercase 'language' for consistency
       exercises: exercises.map(ex => {
         // Support both string format and object format
         if (typeof ex === 'string') {

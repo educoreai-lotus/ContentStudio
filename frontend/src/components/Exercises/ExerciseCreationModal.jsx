@@ -14,10 +14,10 @@ export default function ExerciseCreationModal({ isOpen, onClose, topicId, topicN
   const [manualExercises, setManualExercises] = useState([]);
   // For manual code exercises: always 4 exercises together
   const [manualExercisesArray, setManualExercisesArray] = useState([
-    { question_text: '', hint: '', solution: '' },
-    { question_text: '', hint: '', solution: '' },
-    { question_text: '', hint: '', solution: '' },
-    { question_text: '', hint: '', solution: '' },
+    { question_text: '' },
+    { question_text: '' },
+    { question_text: '' },
+    { question_text: '' },
   ]);
   const [manualProgrammingLanguage, setManualProgrammingLanguage] = useState('');
 
@@ -26,6 +26,7 @@ export default function ExerciseCreationModal({ isOpen, onClose, topicId, topicN
     question_type: 'code',
     programming_language: '',
     amount: 4,
+    theoretical_question_type: 'multiple_choice', // 'multiple_choice' or 'open_ended'
   });
 
   if (!isOpen) return null;
@@ -40,7 +41,8 @@ export default function ExerciseCreationModal({ isOpen, onClose, topicId, topicN
         question_type: aiConfig.question_type,
         programming_language: aiConfig.programming_language,
         language: topicLanguage || 'en',
-        amount: aiConfig.amount,
+        amount: aiConfig.question_type === 'theoretical' ? 4 : aiConfig.amount, // Always 4 for theoretical
+        theoretical_question_type: aiConfig.question_type === 'theoretical' ? aiConfig.theoretical_question_type : undefined,
       });
 
       if (response.success && response.exercises) {
@@ -77,6 +79,7 @@ export default function ExerciseCreationModal({ isOpen, onClose, topicId, topicN
       setError(null);
 
       // Send all 4 exercises together
+      // DevLab will generate hint and solution automatically
       const response = await exercisesService.createManual({
         topic_id: parseInt(topicId),
         topic_name: topicName,
@@ -86,8 +89,6 @@ export default function ExerciseCreationModal({ isOpen, onClose, topicId, topicN
         language: topicLanguage || 'en',
         exercises: manualExercisesArray.map(ex => ({
           question_text: ex.question_text.trim(),
-          hint: ex.hint?.trim() || null,
-          solution: ex.solution?.trim() || null,
         })),
       });
 
@@ -95,10 +96,10 @@ export default function ExerciseCreationModal({ isOpen, onClose, topicId, topicN
         setManualExercises(response.exercises);
         // Reset form
         setManualExercisesArray([
-          { question_text: '', hint: '', solution: '' },
-          { question_text: '', hint: '', solution: '' },
-          { question_text: '', hint: '', solution: '' },
-          { question_text: '', hint: '', solution: '' },
+          { question_text: '' },
+          { question_text: '' },
+          { question_text: '' },
+          { question_text: '' },
         ]);
         setManualProgrammingLanguage('');
       } else if (response.validation_failed) {
@@ -130,10 +131,10 @@ export default function ExerciseCreationModal({ isOpen, onClose, topicId, topicN
     setGeneratedExercises([]);
     setManualExercises([]);
     setManualExercisesArray([
-      { question_text: '', hint: '', solution: '' },
-      { question_text: '', hint: '', solution: '' },
-      { question_text: '', hint: '', solution: '' },
-      { question_text: '', hint: '', solution: '' },
+      { question_text: '' },
+      { question_text: '' },
+      { question_text: '' },
+      { question_text: '' },
     ]);
     setManualProgrammingLanguage('');
     onClose();
@@ -197,7 +198,10 @@ export default function ExerciseCreationModal({ isOpen, onClose, topicId, topicN
               <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
                 <p className="text-sm text-blue-800 dark:text-blue-200">
                   <i className="fas fa-info-circle mr-2"></i>
-                  AI will generate {aiConfig.question_type === 'code' ? '4' : aiConfig.amount} {aiConfig.question_type} exercises based on the topic: <strong>{topicName}</strong>
+                  AI will generate 4 {aiConfig.question_type} exercises based on the topic: <strong>{topicName}</strong>
+                  {aiConfig.question_type === 'theoretical' && (
+                    <span> ({aiConfig.theoretical_question_type === 'multiple_choice' ? 'Multiple Choice' : 'Open Ended'})</span>
+                  )}
                 </p>
               </div>
 
@@ -214,8 +218,8 @@ export default function ExerciseCreationModal({ isOpen, onClose, topicId, topicN
                         question_type: newType,
                         // Clear programming_language if switching to theoretical
                         programming_language: newType === 'theoretical' ? '' : aiConfig.programming_language,
-                        // For code: always 4, for theoretical: can vary
-                        amount: newType === 'code' ? 4 : aiConfig.amount,
+                        // Always 4 for both code and theoretical
+                        amount: 4,
                       });
                     }}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-[#334155] rounded-lg bg-white dark:bg-[#1e293b]"
@@ -241,15 +245,15 @@ export default function ExerciseCreationModal({ isOpen, onClose, topicId, topicN
 
                 {aiConfig.question_type === 'theoretical' && (
                   <div>
-                    <label className="block text-sm font-medium mb-2">Amount</label>
-                    <input
-                      type="number"
-                      min="1"
-                      max="10"
-                      value={aiConfig.amount}
-                      onChange={(e) => setAiConfig({ ...aiConfig, amount: parseInt(e.target.value) || 4 })}
+                    <label className="block text-sm font-medium mb-2">Question Format *</label>
+                    <select
+                      value={aiConfig.theoretical_question_type}
+                      onChange={(e) => setAiConfig({ ...aiConfig, theoretical_question_type: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-300 dark:border-[#334155] rounded-lg bg-white dark:bg-[#1e293b]"
-                    />
+                    >
+                      <option value="multiple_choice">Multiple Choice (Closed)</option>
+                      <option value="open_ended">Open Ended</option>
+                    </select>
                   </div>
                 )}
 
@@ -258,6 +262,14 @@ export default function ExerciseCreationModal({ isOpen, onClose, topicId, topicN
                     <p className="text-sm text-gray-600 dark:text-gray-400">
                       <i className="fas fa-info-circle mr-2"></i>
                       Code questions will generate exactly 4 exercises. Programming language is required.
+                    </p>
+                  </div>
+                )}
+                {aiConfig.question_type === 'theoretical' && (
+                  <div className="md:col-span-2">
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      <i className="fas fa-info-circle mr-2"></i>
+                      Theoretical questions will generate exactly 4 exercises. Select the question format above.
                     </p>
                   </div>
                 )}
@@ -272,7 +284,7 @@ export default function ExerciseCreationModal({ isOpen, onClose, topicId, topicN
                 {loading ? (
                   <span><i className="fas fa-spinner fa-spin mr-2"></i>Generating...</span>
                 ) : (
-                  <span><i className="fas fa-magic mr-2"></i>Generate {aiConfig.question_type === 'code' ? '4' : aiConfig.amount} {aiConfig.question_type === 'code' ? 'Code' : 'Theoretical'} Exercises</span>
+                  <span><i className="fas fa-magic mr-2"></i>Generate 4 {aiConfig.question_type === 'code' ? 'Code' : 'Theoretical'} Exercises</span>
                 )}
               </button>
 
@@ -343,7 +355,7 @@ export default function ExerciseCreationModal({ isOpen, onClose, topicId, topicN
                   <div key={index} className="border border-gray-200 dark:border-[#334155] rounded-lg p-4 bg-gray-50 dark:bg-[#0f172a]">
                     <h4 className="font-semibold mb-4">Exercise {index + 1} *</h4>
                     
-                    <div className="mb-4">
+                    <div>
                       <label className="block text-sm font-medium mb-2">Question Text *</label>
                       <textarea
                         value={exercise.question_text}
@@ -357,36 +369,10 @@ export default function ExerciseCreationModal({ isOpen, onClose, topicId, topicN
                         className="w-full px-3 py-2 border border-gray-300 dark:border-[#334155] rounded-lg bg-white dark:bg-[#1e293b]"
                         required
                       />
-                    </div>
-
-                    <div className="mb-4">
-                      <label className="block text-sm font-medium mb-2">Hint (Optional)</label>
-                      <textarea
-                        value={exercise.hint}
-                        onChange={(e) => {
-                          const newArray = [...manualExercisesArray];
-                          newArray[index].hint = e.target.value;
-                          setManualExercisesArray(newArray);
-                        }}
-                        rows="2"
-                        placeholder="Enter a hint for the exercise..."
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-[#334155] rounded-lg bg-white dark:bg-[#1e293b]"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium mb-2">Solution (Optional)</label>
-                      <textarea
-                        value={exercise.solution}
-                        onChange={(e) => {
-                          const newArray = [...manualExercisesArray];
-                          newArray[index].solution = e.target.value;
-                          setManualExercisesArray(newArray);
-                        }}
-                        rows="3"
-                        placeholder="Enter the solution..."
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-[#334155] rounded-lg bg-white dark:bg-[#1e293b]"
-                      />
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        <i className="fas fa-info-circle mr-1"></i>
+                        DevLab will automatically generate hint and solution for this exercise.
+                      </p>
                     </div>
                   </div>
                 ))}

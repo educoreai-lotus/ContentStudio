@@ -61,7 +61,7 @@ export class ExerciseController {
    */
   async generateAIExercises(req, res, next) {
     try {
-      const { topic_id, question_type, programming_language, language, amount } = req.body;
+      const { topic_id, question_type, programming_language, language, amount, theoretical_question_type } = req.body;
       const trainerId = req.auth?.trainer?.trainer_id || req.body.trainer_id;
 
       if (!trainerId) {
@@ -74,7 +74,8 @@ export class ExerciseController {
         topic_id,
         trainer_id: trainerId,
         question_type,
-        amount,
+        amount: amount || 4,
+        theoretical_question_type,
       });
 
       const exercises = await this.createExercisesUseCase.generateAIExercises({
@@ -82,7 +83,8 @@ export class ExerciseController {
         question_type,
         programming_language,
         language,
-        amount: amount || 4,
+        amount: amount || 4, // Always 4 for both code and theoretical
+        theoretical_question_type,
         created_by: trainerId,
       });
 
