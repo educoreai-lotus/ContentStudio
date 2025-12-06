@@ -3,7 +3,7 @@ import { logger } from '../../../infrastructure/logging/Logger.js';
 import { ContentDataCleaner } from '../../utils/ContentDataCleaner.js';
 import { AvatarVideoStorageService } from '../../../infrastructure/storage/AvatarVideoStorageService.js';
 import { generateAIExercises } from '../../../infrastructure/devlabClient/devlabClient.js';
-import { getLanguageName } from '../../utils/languageMapper.js';
+import { getLanguageName } from '../../../utils/languageMapper.js';
 
 // Content type name to ID mapping
 const CONTENT_TYPE_MAP = {
