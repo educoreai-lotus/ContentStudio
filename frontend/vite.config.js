@@ -1,50 +1,11 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-// Ensure global is defined before any imports
-// This must run BEFORE any module loading, including webidl-conversions
-if (typeof global === 'undefined') {
-  // eslint-disable-next-line no-global-assign
-  global = typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : {});
-}
-
-// Ensure globalThis has global reference
-if (typeof globalThis !== 'undefined' && typeof globalThis.global === 'undefined') {
-  Object.defineProperty(globalThis, 'global', {
-    value: global,
-    writable: true,
-    configurable: true,
-    enumerable: false,
-  });
-}
-
-// Polyfill Map and WeakMap for webidl-conversions
-if (typeof globalThis !== 'undefined') {
-  if (typeof globalThis.Map === 'undefined' && typeof Map !== 'undefined') {
-    globalThis.Map = Map;
-    if (typeof global !== 'undefined') {
-      global.Map = Map;
-    }
-  }
-  if (typeof globalThis.WeakMap === 'undefined' && typeof WeakMap !== 'undefined') {
-    globalThis.WeakMap = WeakMap;
-    if (typeof global !== 'undefined') {
-      global.WeakMap = WeakMap;
-    }
-  }
-}
-
 export default defineConfig({
   plugins: [react()],
-  resolve: {
-    // Ensure webidl-conversions and whatwg-url are resolved correctly
-    alias: {
-      // Don't alias - let them resolve normally but ensure they're external in test
-    },
-  },
   test: {
     globals: true,
-    environment: 'jsdom',
+    environment: 'happy-dom',
     setupFiles: ['./tests/setup.js'],
     coverage: {
       provider: 'v8',
@@ -54,31 +15,6 @@ export default defineConfig({
         '**/*.config.js',
         '**/setup.js',
       ],
-    },
-    server: {
-      deps: {
-        // Exclude problematic packages from transformation
-        external: ['whatwg-url', 'webidl-conversions'],
-      },
-    },
-    // Use threads pool instead of forks to avoid webidl-conversions issues
-    pool: 'threads',
-    poolOptions: {
-      threads: {
-        singleThread: false,
-      },
-    },
-    define: {
-      'global': 'globalThis',
-    },
-  },
-  optimizeDeps: {
-    // Don't pre-bundle whatwg-url and webidl-conversions
-    // Let them be loaded normally after setup.js runs
-    esbuildOptions: {
-      define: {
-        global: 'globalThis',
-      },
     },
   },
   build: {
@@ -108,8 +44,5 @@ export default defineConfig({
     'import.meta.env.VITE_API_BASE_URL': JSON.stringify(
       process.env.VITE_API_BASE_URL || ''
     ),
-    // Ensure global is defined for webidl-conversions
-    'global': 'globalThis',
   },
 });
-

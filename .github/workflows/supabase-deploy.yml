@@ -147,18 +147,9 @@ jobs:
             attempts=0
             until [ "$attempts" -ge 3 ]; do
               # Wrap migration in a transaction to ensure atomicity
-              if PGPASSWORD="$PGPASSWORD" psql -4 -v ON_ERROR_STOP=1 -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" <<EOF
-BEGIN;
-\i $file
--- Log successful migration
-INSERT INTO migration_log (file_name, success, execution_duration_ms)
-VALUES ('$filename', true, 0)
-ON CONFLICT (file_name) DO UPDATE SET
-  success = true,
-  executed_at = CURRENT_TIMESTAMP,
-  error_message = NULL;
-COMMIT;
-EOF
+              # Use -f to execute file and then log the result
+              if PGPASSWORD="$PGPASSWORD" psql -4 -v ON_ERROR_STOP=1 -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -f "$file" && \
+                 PGPASSWORD="$PGPASSWORD" psql -4 -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -c "INSERT INTO migration_log (file_name, success, execution_duration_ms) VALUES ('$filename', true, 0) ON CONFLICT (file_name) DO UPDATE SET success = true, executed_at = CURRENT_TIMESTAMP, error_message = NULL;"
               then
                 echo "✅ Executed $file"
                 return 0
