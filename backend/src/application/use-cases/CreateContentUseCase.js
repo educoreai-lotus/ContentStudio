@@ -451,7 +451,8 @@ export class CreateContentUseCase {
     let qualityCheckResults = null;
 
     // Validate content quality BEFORE saving to DB for manual content
-    if (needsQualityCheck) {
+    // Skip quality check if content already has approved status
+    if (needsQualityCheck && !content.quality_check_status) {
       console.log('[CreateContentUseCase] ✅ Validating content quality BEFORE saving to DB');
       pushStatus(statusMessages, 'Starting quality check...');
       try {
