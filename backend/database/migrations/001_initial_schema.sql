@@ -1,6 +1,7 @@
 -- ============================================
--- Content Studio Database Migration
--- PostgreSQL Migration for Content Studio Microservice
+-- Content Studio Database Schema Migration
+-- PostgreSQL Schema for Content Studio Microservice
+-- Initial schema for fresh Supabase database
 -- Last Updated: 2025-01-22
 -- ============================================
 
@@ -13,9 +14,6 @@ CREATE TYPE content_status AS ENUM ('active', 'archived', 'deleted');
 
 -- Template Type Enum
 CREATE TYPE "TemplateType" AS ENUM ('ready_template', 'ai_generated', 'manual', 'mixed_ai_manual');
-
--- Note: Content Types and Generation Methods are stored in lookup tables
--- No ENUMs needed - using dynamic lookup tables for flexibility
 
 -- ============================================
 -- Table 1: trainer_courses
@@ -30,6 +28,8 @@ CREATE TABLE trainer_courses (
     language VARCHAR(10) DEFAULT 'en',
     status content_status DEFAULT 'active',
     company_logo VARCHAR(500),
+    permissions TEXT,
+    usage_count INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -40,8 +40,13 @@ CREATE INDEX idx_trainer_courses_status ON trainer_courses(status);
 CREATE INDEX idx_trainer_courses_created_at ON trainer_courses(created_at);
 CREATE INDEX idx_trainer_courses_skills ON trainer_courses USING GIN (skills);
 
+-- Comments for trainer_courses
+COMMENT ON TABLE trainer_courses IS 'Stores course-level data created by trainers';
+COMMENT ON COLUMN trainer_courses.permissions IS 'Stores trainer allowed organizations or scopes from Directory microservice';
+COMMENT ON COLUMN trainer_courses.usage_count IS 'Counts how many times this course was fetched or served to other microservices';
+
 -- ============================================
--- Table 2: templates (Created before topics to avoid FK circular dependency)
+-- Table 2: templates
 -- ============================================
 
 CREATE TABLE templates (
@@ -58,8 +63,61 @@ CREATE INDEX idx_templates_template_type ON templates(template_type);
 CREATE INDEX idx_templates_created_by ON templates(created_by);
 CREATE INDEX idx_templates_format_order ON templates USING GIN (format_order);
 
+-- Comments for templates
+COMMENT ON TABLE templates IS 'Stores both structural templates (format order) and AI prompt templates';
+
 -- ============================================
--- Table 3: topics (Lessons)
+-- Table 3: content_types (Lookup Table)
+-- ============================================
+
+CREATE TABLE content_types (
+    type_id SERIAL PRIMARY KEY,
+    type_name VARCHAR(50) NOT NULL UNIQUE,
+    display_name VARCHAR(100) NOT NULL
+);
+
+-- Indexes for content_types
+CREATE INDEX idx_content_types_type_name ON content_types(type_name);
+
+-- Seed Data for content_types
+INSERT INTO content_types (type_name, display_name) VALUES
+('text', 'Text Content'),
+('code', 'Code Example'),
+('presentation', 'Presentation'),
+('audio', 'Audio Narration'),
+('mind_map', 'Mind Map'),
+('avatar_video', 'Avatar Video');
+
+-- Comments for content_types
+COMMENT ON TABLE content_types IS 'Lookup table for content type metadata and characteristics';
+
+-- ============================================
+-- Table 4: generation_methods (Lookup Table)
+-- ============================================
+
+CREATE TABLE generation_methods (
+    method_id SERIAL PRIMARY KEY,
+    method_name VARCHAR(50) NOT NULL UNIQUE,
+    display_name VARCHAR(100) NOT NULL,
+    usage_count INTEGER NOT NULL DEFAULT 0
+);
+
+-- Indexes for generation_methods
+CREATE INDEX idx_generation_methods_method_name ON generation_methods(method_name);
+
+-- Seed Data for generation_methods
+INSERT INTO generation_methods (method_name, display_name) VALUES
+('manual', 'Manual Creation'),
+('ai_assisted', 'AI-Assisted'),
+('manual_edited', 'AI-Generated & Manually Edited'),
+('video_to_lesson', 'Video to Lesson');
+
+-- Comments for generation_methods
+COMMENT ON TABLE generation_methods IS 'Lookup table for generation method metadata and characteristics';
+COMMENT ON COLUMN generation_methods.usage_count IS 'Counts how many times this generation method was used';
+
+-- ============================================
+-- Table 5: topics (Lessons)
 -- ============================================
 
 CREATE TABLE topics (
@@ -74,6 +132,7 @@ CREATE TABLE topics (
     template_id INTEGER,
     generation_methods_id INTEGER,
     usage_count INTEGER DEFAULT 0,
+    devlab_exercises JSONB,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     
@@ -93,45 +152,11 @@ CREATE INDEX idx_topics_status ON topics(status);
 CREATE INDEX idx_topics_generation_methods_id ON topics(generation_methods_id);
 CREATE INDEX idx_topics_skills ON topics USING GIN (skills);
 
--- ============================================
--- Table 4: content_types (Lookup Table) - Created before content table
--- ============================================
-
-CREATE TABLE content_types (
-    type_id SERIAL PRIMARY KEY,
-    type_name VARCHAR(50) NOT NULL UNIQUE,
-    display_name VARCHAR(100) NOT NULL
-);
-
--- Indexes for content_types
-
--- Seed Data for content_types
-INSERT INTO content_types (type_name, display_name) VALUES
-('text', 'Text Content'),
-('code', 'Code Example'),
-('presentation', 'Presentation'),
-('audio', 'Audio Narration'),
-('mind_map', 'Mind Map'),
-('avatar_video', 'Avatar Video');
-
--- ============================================
--- Table 5: generation_methods (Lookup Table) - Created before content table
--- ============================================
-
-CREATE TABLE generation_methods (
-    method_id SERIAL PRIMARY KEY,
-    method_name VARCHAR(50) NOT NULL UNIQUE,
-    display_name VARCHAR(100) NOT NULL
-);
-
--- Indexes for generation_methods
-
--- Seed Data for generation_methods
-INSERT INTO generation_methods (method_name, display_name) VALUES
-('manual', 'Manual Creation'),
-('ai_assisted', 'AI-Assisted'),
-('manual_edited', 'AI-Generated & Manually Edited'),
-('video_to_lesson', 'Video to Lesson');
+-- Comments for topics
+COMMENT ON TABLE topics IS 'Represents lessons (topics) - can belong to course or be stand-alone';
+COMMENT ON COLUMN topics.course_id IS 'Nullable for stand-alone lessons';
+COMMENT ON COLUMN topics.usage_count IS 'Starts at zero, returned to Course Builder when adapted to learner';
+COMMENT ON COLUMN topics.devlab_exercises IS 'Stores DevLab exercises as JSONB. Can contain array of exercise objects with question_text, question_type, programming_language, etc.';
 
 -- ============================================
 -- Table 6: content
@@ -169,23 +194,28 @@ CREATE INDEX idx_content_content_data ON content USING GIN (content_data);
 CREATE INDEX idx_content_quality_check_status ON content(quality_check_status);
 CREATE INDEX idx_content_quality_check_data ON content USING GIN (quality_check_data);
 
+-- Comments for content
+COMMENT ON TABLE content IS 'Stores each content item (format-specific data) belonging to a topic';
+COMMENT ON COLUMN content.quality_check_data IS 'Stores all quality check results (clarity, difficulty, structure, plagiarism)';
+COMMENT ON COLUMN content.quality_check_status IS 'Status: pending, passed, failed, flagged';
+COMMENT ON COLUMN content.content_type_id IS 'References content_types.type_id (INTEGER)';
+COMMENT ON COLUMN content.generation_method_id IS 'References generation_methods.method_id (INTEGER)';
+
 -- ============================================
 -- Table 7: content_history
 -- ============================================
 
 CREATE TABLE content_history (
     history_id SERIAL PRIMARY KEY,
-    content_id INTEGER NOT NULL,
     topic_id INTEGER NOT NULL,
     content_type_id INTEGER NOT NULL,
-    version_number INTEGER NOT NULL,
     content_data JSONB NOT NULL,
     generation_method_id INTEGER NOT NULL,
+    deleted_at TIMESTAMP NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     
     -- Foreign Keys
-    CONSTRAINT fk_content_history_content_id FOREIGN KEY (content_id) 
-        REFERENCES content(content_id) ON DELETE RESTRICT,
     CONSTRAINT fk_content_history_topic_id FOREIGN KEY (topic_id) 
         REFERENCES topics(topic_id) ON DELETE RESTRICT,
     CONSTRAINT fk_content_history_content_type_id FOREIGN KEY (content_type_id) 
@@ -195,13 +225,15 @@ CREATE TABLE content_history (
 );
 
 -- Indexes for content_history
-CREATE INDEX idx_content_history_content_id ON content_history(content_id);
 CREATE INDEX idx_content_history_topic_id ON content_history(topic_id);
-CREATE INDEX idx_content_history_version_number ON content_history(version_number);
 CREATE INDEX idx_content_history_content_data ON content_history USING GIN (content_data);
 CREATE INDEX idx_content_history_created_at ON content_history(created_at);
+CREATE INDEX idx_content_history_updated_at ON content_history(topic_id, content_type_id, updated_at DESC);
 
--- Note: content_types and generation_methods tables are created above (before content table)
+-- Comments for content_history
+COMMENT ON TABLE content_history IS 'Stores all version history of content for audit, rollback, and analytics';
+COMMENT ON COLUMN content_history.content_type_id IS 'References content_types.type_id (INTEGER)';
+COMMENT ON COLUMN content_history.generation_method_id IS 'References generation_methods.method_id (INTEGER)';
 
 -- ============================================
 -- Table 8: language_stats
@@ -233,6 +265,26 @@ VALUES
 ON CONFLICT (language_code) DO UPDATE SET
     is_frequent = EXCLUDED.is_frequent,
     is_predefined = EXCLUDED.is_predefined;
+
+-- Comments for language_stats
+COMMENT ON TABLE language_stats IS 'Tracks language usage statistics and frequency for multilingual content management';
+
+-- ============================================
+-- Table 9: migration_log
+-- ============================================
+
+CREATE TABLE migration_log (
+    id SERIAL PRIMARY KEY,
+    file_name VARCHAR(255) UNIQUE NOT NULL,
+    executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    execution_duration_ms INTEGER,
+    success BOOLEAN DEFAULT true,
+    error_message TEXT
+);
+
+-- Indexes for migration_log
+CREATE INDEX idx_migration_log_file_name ON migration_log(file_name);
+CREATE INDEX idx_migration_log_executed_at ON migration_log(executed_at DESC);
 
 -- ============================================
 -- Functions for Language Statistics
@@ -316,6 +368,10 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- ============================================
+-- Views
+-- ============================================
+
 -- View for cleanup monitoring
 CREATE OR REPLACE VIEW language_cleanup_candidates AS
 SELECT 
@@ -335,24 +391,6 @@ WHERE is_frequent = false
 ORDER BY last_used ASC;
 
 -- ============================================
--- Comments for Documentation
--- ============================================
-
-COMMENT ON TABLE trainer_courses IS 'Stores course-level data created by trainers';
-COMMENT ON TABLE topics IS 'Represents lessons (topics) - can belong to course or be stand-alone';
-COMMENT ON TABLE templates IS 'Stores both structural templates (format order) and AI prompt templates';
-COMMENT ON TABLE content IS 'Stores each content item (format-specific data) belonging to a topic';
-COMMENT ON TABLE content_history IS 'Stores all version history of content for audit, rollback, and analytics';
-COMMENT ON TABLE generation_methods IS 'Lookup table for generation method metadata and characteristics';
-COMMENT ON TABLE content_types IS 'Lookup table for content type metadata and characteristics';
-COMMENT ON TABLE language_stats IS 'Tracks language usage statistics and frequency for multilingual content management';
-
-COMMENT ON COLUMN topics.course_id IS 'Nullable for stand-alone lessons';
-COMMENT ON COLUMN topics.usage_count IS 'Starts at zero, returned to Course Builder when adapted to learner';
-COMMENT ON COLUMN content.quality_check_data IS 'Stores all quality check results (clarity, difficulty, structure, plagiarism)';
-COMMENT ON COLUMN content.quality_check_status IS 'Status: pending, passed, failed, flagged';
-
--- ============================================
--- Migration Complete
+-- End of Unified Schema
 -- ============================================
 
