@@ -26,6 +26,13 @@ jest.mock('axios', () => ({
   },
 }));
 
+// Mock heygenVoicesConfig to avoid redefinition issues
+const mockGetVoiceIdForLanguage = jest.fn().mockReturnValue('test-voice-id');
+jest.mock('../../../../src/infrastructure/ai/heygenVoicesConfig.js', () => ({
+  getVoiceIdForLanguage: (...args) => mockGetVoiceIdForLanguage(...args),
+  loadHeygenVoicesConfig: jest.fn(),
+}));
+
 describe('HeygenClient Avatar Validation', () => {
   let originalReadFileSync;
   let originalExistsSync;
@@ -35,13 +42,27 @@ describe('HeygenClient Avatar Validation', () => {
     jest.clearAllMocks();
     clearCache();
     
+    // Reset voice mock
+    mockGetVoiceIdForLanguage.mockReturnValue('test-voice-id');
+    
     // Save original fs methods
     originalReadFileSync = fs.readFileSync;
     originalExistsSync = fs.existsSync;
 
     // Mock fs methods
     fs.existsSync = jest.fn(() => true);
-    fs.readFileSync = jest.fn(() => {
+    fs.readFileSync = jest.fn((filePath, encoding) => {
+      // Return JSON string when encoding is 'utf8'
+      if (encoding === 'utf8') {
+        return JSON.stringify({
+          avatar_id: 'test-avatar-id-123',
+          name: 'Test Avatar',
+          gender: 'female',
+          style: 'natural',
+          selectedAt: '2025-01-01T00:00:00.000Z',
+        });
+      }
+      // Default behavior
       return JSON.stringify({
         avatar_id: 'test-avatar-id-123',
         name: 'Test Avatar',
@@ -164,13 +185,8 @@ describe('HeygenClient Avatar Validation', () => {
         },
       });
 
-      // Mock successful voice lookup
-      const voiceModule = await import('../../../../src/infrastructure/ai/heygenVoicesConfig.js');
-      Object.defineProperty(voiceModule, 'getVoiceIdForLanguage', {
-        value: jest.fn().mockReturnValue('test-voice-id'),
-        writable: true,
-        configurable: true,
-      });
+      // Voice lookup is already mocked at module level
+      mockGetVoiceIdForLanguage.mockReturnValue('test-voice-id');
 
       const client = new HeygenClient({ apiKey: 'test-api-key' });
       
@@ -218,13 +234,8 @@ describe('HeygenClient Avatar Validation', () => {
         },
       });
 
-      // Mock voice lookup
-      const voiceModule = await import('../../../../src/infrastructure/ai/heygenVoicesConfig.js');
-      Object.defineProperty(voiceModule, 'getVoiceIdForLanguage', {
-        value: jest.fn().mockReturnValue('test-voice-id'),
-        writable: true,
-        configurable: true,
-      });
+      // Voice lookup is already mocked at module level
+      mockGetVoiceIdForLanguage.mockReturnValue('test-voice-id');
 
       const client = new HeygenClient({ apiKey: 'test-api-key' });
       

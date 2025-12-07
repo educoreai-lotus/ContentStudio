@@ -6,46 +6,26 @@
 import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
 import { GammaClient, isRTL, normalizeLanguage, RTL_LANGUAGES, buildLanguageRules } from '../../../../src/infrastructure/gamma/GammaClient.js';
 
-// Mock axios module - use module-level variables that are accessible
-let mockAxiosPost;
-let mockAxiosGet;
+// Mock axios module
+// IMPORTANT: axios is imported as default, and GammaClient uses axios.post() and axios.get() as static methods
+// Use a factory function that creates mocks and stores them in a way we can access
+const mockFunctions = {
+  post: jest.fn(),
+  get: jest.fn(),
+};
 
-// Mock axios before importing GammaClient
-// IMPORTANT: axios is imported as default, so we need to mock both default and named exports
 jest.mock('axios', () => {
-  // Create new mocks for each test run
-  const mockPost = jest.fn();
-  const mockGet = jest.fn();
-  
-  // Store references in module scope
-  mockAxiosPost = mockPost;
-  mockAxiosGet = mockGet;
-  
   return {
     __esModule: true,
-    default: {
-      post: (...args) => mockPost(...args),
-      get: (...args) => mockGet(...args),
-    },
-    post: (...args) => mockPost(...args),
-    get: (...args) => mockGet(...args),
+    default: mockFunctions,
+    post: mockFunctions.post,
+    get: mockFunctions.get,
   };
 });
 
 // Get references to the mocked functions
-const getMockAxiosPost = () => {
-  if (!mockAxiosPost) {
-    throw new Error('mockAxiosPost not initialized - jest.mock may not have run');
-  }
-  return mockAxiosPost;
-};
-
-const getMockAxiosGet = () => {
-  if (!mockAxiosGet) {
-    throw new Error('mockAxiosGet not initialized - jest.mock may not have run');
-  }
-  return mockAxiosGet;
-};
+const getMockAxiosPost = () => mockFunctions.post;
+const getMockAxiosGet = () => mockFunctions.get;
 
 describe('GammaClient Language Support', () => {
   let gammaClient;
