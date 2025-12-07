@@ -49,6 +49,11 @@ export class ContentRepository extends IContentRepository {
     return results;
   }
 
+  async findAllByTopicId(topicId, filters = {}) {
+    // findAllByTopicId is an alias for findByTopicId in in-memory repository
+    return this.findByTopicId(topicId, filters);
+  }
+
   async update(contentId, updates) {
     const index = this.contents.findIndex(c => c.content_id === contentId);
     if (index === -1) {

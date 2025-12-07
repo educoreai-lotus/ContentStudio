@@ -5,6 +5,7 @@ export class ContentVersionDTO {
   static toVersionResponse(version) {
     return {
       version_id: version.version_id,
+      content_id: version.content_id || null,
       version_number: version.version_number || null, // Deprecated: kept for backward compatibility
       content_data: version.content_data,
       created_by: version.created_by,

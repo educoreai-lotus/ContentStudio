@@ -32,8 +32,12 @@ export class CreateContentVersionUseCase {
     );
     const parentVersionId = currentVersion ? currentVersion.version_id : null;
 
+    // Mark all previous versions as not current before creating new one
+    await this.contentVersionRepository.markAllAsNotCurrent(topic_id, content_type_id);
+
     const now = new Date();
     const version = new ContentVersion({
+      content_id: contentId, // Include content_id in version
       version_number: null, // Deprecated: use timestamps instead
       content_data: contentData,
       created_by: createdBy,
