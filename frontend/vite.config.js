@@ -1,6 +1,12 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
+// Ensure global is defined before any imports
+if (typeof global === 'undefined') {
+  // eslint-disable-next-line no-global-assign
+  global = globalThis;
+}
+
 export default defineConfig({
   plugins: [react()],
   test: {
@@ -15,11 +21,8 @@ export default defineConfig({
         inline: ['whatwg-url', 'webidl-conversions'],
       },
     },
-    pool: 'threads',
-    poolOptions: {
-      threads: {
-        singleThread: true,
-      },
+    define: {
+      'global': 'globalThis',
     },
   },
   optimizeDeps: {

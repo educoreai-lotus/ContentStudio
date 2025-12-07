@@ -160,6 +160,7 @@ export class DevlabClient {
    */
   async generateAIExercises(exerciseRequest) {
     // Coordinator URL is now handled by postToCoordinator
+    const endpoint = '/api/fill-content-metrics';
 
     // Validate question type
     const questionType = exerciseRequest.question_type || 'code';
@@ -230,7 +231,7 @@ export class DevlabClient {
 
       // Send request via Coordinator
       const coordinatorResponse = await postToCoordinator(envelope, {
-        endpoint: '/api/fill-content-metrics',
+        endpoint,
         timeout: 60000, // 60 seconds timeout for AI generation
       });
 
@@ -356,6 +357,7 @@ export class DevlabClient {
    */
   async validateManualExercise(exerciseData) {
     // Coordinator URL is now handled by postToCoordinator
+    const endpoint = '/api/fill-content-metrics';
 
     // Validate that only code questions can be manual
     const questionType = exerciseData.question_type || 'code';
@@ -419,7 +421,7 @@ export class DevlabClient {
 
       // Send request via Coordinator
       const coordinatorResponse = await postToCoordinator(envelope, {
-        endpoint: '/api/fill-content-metrics',
+        endpoint,
         timeout: 30000, // 30 seconds timeout
       });
 

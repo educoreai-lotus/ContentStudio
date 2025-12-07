@@ -576,8 +576,7 @@ export class PostgreSQLContentRepository extends IContentRepository {
           // getGenerationMethodName returned the ID (not found in DB)
           // Check if it's a valid numeric ID (1-6)
           if (generationMethodId >= 1 && generationMethodId <= 6) {
-            // Keep as number - it's valid
-            generationMethodId = generationMethodId;
+            // Keep as number - it's valid (no assignment needed, already correct)
           } else {
             // Invalid ID, fallback to manual
             console.warn('[PostgreSQLContentRepository] Invalid generation_method_id, using fallback:', {
