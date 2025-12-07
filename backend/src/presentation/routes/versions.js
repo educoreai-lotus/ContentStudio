@@ -11,7 +11,7 @@ const contentVersionRepository = new ContentVersionRepository();
 const contentRepository = new ContentRepository();
 
 // Export for test access
-export { contentRepository };
+export { contentRepository, contentVersionRepository };
 
 // Initialize controller
 const contentVersionController = new ContentVersionController({

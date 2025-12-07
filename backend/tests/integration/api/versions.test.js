@@ -180,8 +180,19 @@ describe('Content Versions API Integration Tests', () => {
     });
 
     it('should return empty array if no versions exist', async () => {
+      // Create a content item first
+      const testContent = new Content({
+        topic_id: 1,
+        content_type_id: 'text',
+        content_data: { text: 'Test content' },
+        generation_method_id: 'manual',
+      });
+      const createdContent = await testContentRepository.create(testContent);
+      const contentId = createdContent.content_id;
+
+      // Now get versions for this content (should be empty)
       const response = await request(app)
-        .get('/api/content/99999/versions')
+        .get(`/api/content/${contentId}/versions`)
         .expect(200);
 
       expect(response.body.success).toBe(true);
