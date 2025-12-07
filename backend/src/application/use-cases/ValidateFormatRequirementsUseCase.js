@@ -4,7 +4,7 @@ export class ValidateFormatRequirementsUseCase {
   }
 
   async execute(topicId, contentItems = []) {
-    if (!topicId) {
+    if (!topicId || isNaN(topicId)) {
       throw new Error('Topic ID is required');
     }
 

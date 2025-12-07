@@ -176,6 +176,15 @@ export class TopicController {
   async validateFormatRequirements(req, res, next) {
     try {
       const topicId = parseInt(req.params.id);
+      if (!topicId || isNaN(topicId)) {
+        return res.status(400).json({
+          error: {
+            code: 'INVALID_TOPIC_ID',
+            message: 'Topic ID is required',
+            timestamp: new Date().toISOString(),
+          },
+        });
+      }
       const contentItems = req.body.content_items || [];
 
       const result = await this.validateFormatRequirementsUseCase.execute(topicId, contentItems);

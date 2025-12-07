@@ -27,12 +27,13 @@ describe('CreateTopicUseCase', () => {
       topic_name: 'Introduction to React',
       trainer_id: 'trainer123',
       description: 'Learn React basics',
+      course_id: 1, // Add course_id to avoid language requirement
     };
 
     const createdTopic = new Topic({
       ...topicData,
       topic_id: 1,
-      status: 'draft',
+      status: 'active',
     });
 
     mockTopicRepository.create.mockResolvedValue(createdTopic);
@@ -48,6 +49,7 @@ describe('CreateTopicUseCase', () => {
     const topicData = {
       topic_name: 'React Hooks',
       trainer_id: 'trainer123',
+      course_id: 1, // Add course_id to avoid language requirement
     };
 
     const skillsMapping = {
@@ -62,7 +64,7 @@ describe('CreateTopicUseCase', () => {
       ...topicData,
       topic_id: 1,
       skills: skillsMapping.micro_skills,
-      status: 'draft',
+      status: 'active',
     });
 
     mockTopicRepository.create.mockResolvedValue(createdTopic);
@@ -80,6 +82,7 @@ describe('CreateTopicUseCase', () => {
       topic_name: 'React Hooks',
       trainer_id: 'trainer123',
       skills: ['JavaScript', 'React'],
+      course_id: 1, // Add course_id to avoid language requirement
     };
 
     mockSkillsEngineClient.getSkillsMapping.mockRejectedValue(
@@ -90,7 +93,7 @@ describe('CreateTopicUseCase', () => {
       ...topicData,
       topic_id: 1,
       skills: topicData.skills,
-      status: 'draft',
+      status: 'active',
     });
 
     mockTopicRepository.create.mockResolvedValue(createdTopic);

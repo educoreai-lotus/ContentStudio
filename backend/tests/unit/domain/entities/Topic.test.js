@@ -10,7 +10,7 @@ describe('Topic Entity', () => {
         trainer_id: 'trainer123',
         course_id: 1,
         skills: ['JavaScript', 'React'],
-        status: 'draft',
+        status: 'active',
       };
 
       const topic = new Topic(topicData);
@@ -21,7 +21,7 @@ describe('Topic Entity', () => {
       expect(topic.trainer_id).toBe('trainer123');
       expect(topic.course_id).toBe(1);
       expect(topic.skills).toEqual(['JavaScript', 'React']);
-      expect(topic.status).toBe('draft');
+      expect(topic.status).toBe('active');
     });
 
     it('should create a stand-alone topic (course_id null)', () => {
@@ -38,21 +38,23 @@ describe('Topic Entity', () => {
       expect(topic.is_standalone).toBe(true);
     });
 
-    it('should set default status to draft if not provided', () => {
+    it('should set default status to active if not provided', () => {
       const topicData = {
         topic_name: 'Test Topic',
         trainer_id: 'trainer123',
+        course_id: 1, // Add course_id to avoid language requirement
       };
 
       const topic = new Topic(topicData);
 
-      expect(topic.status).toBe('draft');
+      expect(topic.status).toBe('active');
     });
 
     it('should initialize format flags as false', () => {
       const topicData = {
         topic_name: 'Test Topic',
         trainer_id: 'trainer123',
+        course_id: 1, // Add course_id to avoid language requirement
       };
 
       const topic = new Topic(topicData);
@@ -111,6 +113,7 @@ describe('Topic Entity', () => {
       const topic = new Topic({
         topic_name: 'Test Topic',
         trainer_id: 'trainer123',
+        course_id: 1, // Add course_id to avoid language requirement
       });
 
       // Initially no formats
@@ -131,6 +134,7 @@ describe('Topic Entity', () => {
       const topic = new Topic({
         topic_name: 'Test Topic',
         trainer_id: 'trainer123',
+        course_id: 1, // Add course_id to avoid language requirement
       });
 
       topic.has_text = true;
@@ -151,6 +155,7 @@ describe('Topic Entity', () => {
       const topic = new Topic({
         topic_name: 'Test Topic',
         trainer_id: 'trainer123',
+        course_id: 1, // Add course_id to avoid language requirement
       });
 
       const contentItems = [

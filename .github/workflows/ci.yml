@@ -212,7 +212,7 @@ jobs:
       - name: Start backend server
         working-directory: ./backend
         run: |
-          npm run build
+          # Backend doesn't need build - it runs directly with node
           npm start &
           sleep 10
 

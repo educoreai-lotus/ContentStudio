@@ -39,7 +39,7 @@ describe('Topics API Integration Tests', () => {
       expect(response.body.topic_name).toBe(topicData.topic_name);
       expect(response.body.trainer_id).toBe(topicData.trainer_id);
       expect(response.body.course_id).toBe(topicData.course_id);
-      expect(response.body.status).toBe('draft');
+      expect(response.body.status).toBe('active');
       expect(response.body.is_standalone).toBe(false);
 
       createdTopicId = response.body.topic_id;

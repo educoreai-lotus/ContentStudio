@@ -185,10 +185,10 @@ jobs:
         working-directory: ./backend
         run: npm ci
 
-      - name: Build and analyze bundle
+      - name: Analyze bundle
         working-directory: ./backend
         run: |
-          npm run build
+          # Backend doesn't need build - it runs directly with node
           npm run analyze || echo "Bundle analysis not configured"
 
       - name: Check for performance regressions

@@ -3,20 +3,20 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 const AppContext = createContext();
 
 export const AppProvider = ({ children }) => {
-  const [theme, setTheme] = useState('day-mode');
+  // Lazy initialization to avoid setState in effect
+  const [theme, setTheme] = useState(() => {
+    const savedTheme = localStorage.getItem('theme') || 'day-mode';
+    if (typeof document !== 'undefined') {
+      document.documentElement.classList.toggle('dark', savedTheme === 'night-mode');
+    }
+    return savedTheme;
+  });
   const [lessons, setLessons] = useState([]);
   const [error, setError] = useState(null);
   const [sidebarState, setSidebarState] = useState({
     isOpen: false,
     isCollapsed: false,
   });
-
-  useEffect(() => {
-    // Load theme from localStorage
-    const savedTheme = localStorage.getItem('theme') || 'day-mode';
-    setTheme(savedTheme);
-    document.documentElement.classList.toggle('dark', savedTheme === 'night-mode');
-  }, []);
 
   const toggleTheme = () => {
     const newTheme = theme === 'day-mode' ? 'night-mode' : 'day-mode';

@@ -125,16 +125,32 @@ export class CourseRepository extends ICourseRepository {
     };
   }
 
-  async update(course) {
-    // TODO: Replace with actual database UPDATE
-    const index = this.courses.findIndex(c => c.course_id === course.course_id);
+  async update(courseOrId, updates = null) {
+    // Support both update(course) and update(courseId, updates) signatures
+    let courseId;
+    let updateData;
+    
+    if (typeof courseOrId === 'number' || typeof courseOrId === 'string') {
+      // Called as update(courseId, updates)
+      courseId = parseInt(courseOrId);
+      updateData = updates || {};
+    } else {
+      // Called as update(course) - legacy support
+      courseId = courseOrId.course_id;
+      updateData = courseOrId.toJSON ? courseOrId.toJSON() : courseOrId;
+    }
+
+    const index = this.courses.findIndex(c => c.course_id === courseId);
 
     if (index === -1) {
       return null;
     }
 
+    const existingCourse = this.courses[index];
     const updatedCourse = new Course({
-      ...course.toJSON(),
+      ...existingCourse.toJSON(),
+      ...updateData,
+      course_id: courseId, // Ensure ID doesn't change
       updated_at: new Date().toISOString(),
     });
 

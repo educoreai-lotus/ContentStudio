@@ -1,33 +1,31 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext.jsx';
 
 export const SearchBar = ({ onSearch, placeholder = 'Search courses, lessons, content...' }) => {
   const { theme } = useApp();
   const [query, setQuery] = useState('');
-  const [debounceTimer, setDebounceTimer] = useState(null);
+  const debounceTimerRef = useRef(null);
 
   useEffect(() => {
     // Clear previous timer
-    if (debounceTimer) {
-      clearTimeout(debounceTimer);
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
     }
 
     // Set new timer for debounced search
-    const timer = setTimeout(() => {
+    debounceTimerRef.current = setTimeout(() => {
       if (onSearch) {
         onSearch(query);
       }
     }, 300); // 300ms debounce
 
-    setDebounceTimer(timer);
-
     // Cleanup
     return () => {
-      if (debounceTimer) {
-        clearTimeout(debounceTimer);
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
       }
     };
-  }, [query]);
+  }, [query, onSearch]);
 
   return (
     <div className="relative w-full">
