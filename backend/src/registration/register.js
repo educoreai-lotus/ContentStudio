@@ -909,7 +909,7 @@ export async function uploadMigration() {
             }
           }
         ],
-        migrations: []
+        migrations: [] // Database migrations are managed separately
       },
       events: {
         publishes: [
