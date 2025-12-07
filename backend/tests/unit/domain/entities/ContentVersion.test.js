@@ -52,9 +52,8 @@ describe('ContentVersion Entity', () => {
   describe('Validation', () => {
     it('should validate required fields', () => {
       const invalidData = {
-        version_number: 1,
-        content_data: { text: 'Content' },
-        // missing content_id
+        version_data: { text: 'Content' },
+        // missing content_data (required field)
       };
 
       expect(() => new ContentVersion(invalidData)).toThrow(
@@ -106,7 +105,7 @@ describe('ContentVersion Entity', () => {
         content_id: 1,
         version_number: 1,
         content_data: { text: 'Content' },
-        // missing created_by
+        created_by: '', // empty string should fail validation
       };
 
       expect(() => new ContentVersion(invalidData)).toThrow(
