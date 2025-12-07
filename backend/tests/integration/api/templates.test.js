@@ -106,12 +106,12 @@ describe('Templates API Integration Tests', () => {
 
   describe('GET /api/templates/:id', () => {
     it('should get template by ID', async () => {
-      // First create a template
+      // First create a template with all mandatory formats
       const createResponse = await request(app)
         .post('/api/templates')
         .send({
           template_name: 'Get Test Template',
-          format_order: ['text'],
+          format_order: ['text', 'code', 'presentation', 'audio', 'mind_map'],
           created_by: 'trainer123',
         })
         .expect(201);
@@ -138,30 +138,30 @@ describe('Templates API Integration Tests', () => {
 
   describe('PUT /api/templates/:id', () => {
     it('should update template successfully', async () => {
-      // Create template
+      // Create template with all mandatory formats
       const createResponse = await request(app)
         .post('/api/templates')
         .send({
           template_name: 'Update Test Template',
-          format_order: ['text'],
+          format_order: ['text', 'code', 'presentation', 'audio', 'mind_map'],
           created_by: 'trainer123',
         })
         .expect(201);
 
       const templateId = createResponse.body.data.template_id;
 
-      // Update it
+      // Update it - must include all 5 mandatory formats
       const updateResponse = await request(app)
         .put(`/api/templates/${templateId}`)
         .send({
           template_name: 'Updated Template Name',
-          format_order: ['code', 'text'],
+          format_order: ['code', 'text', 'presentation', 'audio', 'mind_map'],
         })
         .expect(200);
 
       expect(updateResponse.body.success).toBe(true);
       expect(updateResponse.body.data.template_name).toBe('Updated Template Name');
-      expect(updateResponse.body.data.format_order).toEqual(['code', 'text']);
+      expect(updateResponse.body.data.format_order).toEqual(['code', 'text', 'presentation', 'audio', 'mind_map']);
     });
 
     it('should return 404 if template not found', async () => {
