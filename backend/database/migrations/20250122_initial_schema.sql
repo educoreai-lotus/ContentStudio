@@ -5,8 +5,8 @@
 -- Last Updated: 2025-01-22
 -- ============================================
 
--- Start transaction to ensure atomicity
-BEGIN;
+-- Note: This migration is wrapped in a transaction by the deployment workflow
+-- All CREATE statements use IF NOT EXISTS for idempotency
 
 -- ============================================
 -- ENUM Types
@@ -404,7 +404,4 @@ ORDER BY last_used ASC;
 -- ============================================
 -- End of Unified Schema
 -- ============================================
-
--- Commit transaction
-COMMIT;
 

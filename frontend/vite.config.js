@@ -57,8 +57,15 @@ export default defineConfig({
     },
     server: {
       deps: {
-        // Don't inline these packages - let them be resolved normally
-        // This prevents webidl-conversions from being loaded before setup.js runs
+        // Exclude problematic packages from transformation
+        external: ['whatwg-url', 'webidl-conversions'],
+      },
+    },
+    // Use threads pool instead of forks to avoid webidl-conversions issues
+    pool: 'threads',
+    poolOptions: {
+      threads: {
+        singleThread: false,
       },
     },
     define: {
