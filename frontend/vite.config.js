@@ -15,10 +15,23 @@ export default defineConfig({
     setupFiles: ['./tests/setup.js'],
     coverage: {
       provider: 'v8',
+      exclude: [
+        'node_modules/**',
+        'tests/**',
+        '**/*.config.js',
+        '**/setup.js',
+      ],
     },
     server: {
       deps: {
         inline: ['whatwg-url', 'webidl-conversions'],
+      },
+    },
+    // Workaround for webidl-conversions - use node environment for these packages
+    pool: 'forks',
+    poolOptions: {
+      forks: {
+        singleFork: true,
       },
     },
     define: {

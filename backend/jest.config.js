@@ -21,5 +21,9 @@ export default {
   },
   verbose: true,
   testTimeout: 10000, // 10 seconds timeout per test to prevent hanging
+  // Force Jest to exit after tests complete to prevent hanging on async operations
+  forceExit: true,
+  // Set test environment variable so server.js knows it's running in tests
+  setupFiles: ['<rootDir>/tests/setup.js'],
 };
 

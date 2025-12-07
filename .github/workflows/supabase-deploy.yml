@@ -5,6 +5,7 @@ on:
     branches: [ main ]
     paths:
       - 'database/**'
+      - 'backend/database/**'
   workflow_dispatch:
 
 jobs:
@@ -107,35 +108,53 @@ jobs:
           host "${{ steps.parse-db.outputs.host }}" || true
           dig +short "${{ steps.parse-db.outputs.host }}" || true
 
-      # ✅ Run all SQL files under database/migrations/
-      - name: Run Custom Migrations from /database/migrations
+      # ✅ Run all SQL files under database/migrations/ and backend/database/migrations/
+      - name: Run Custom Migrations
         run: |
           set -euo pipefail
           export PGSSLMODE=require
-          echo "🚀 Running custom migrations from database/migrations..."
+          echo "🚀 Running custom migrations from database/migrations and backend/database/migrations..."
           echo "Testing IPv4 connectivity to $PGHOST:$PGPORT..."
           if ! PGPASSWORD="$PGPASSWORD" psql -4 -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -c '\conninfo' >/dev/null 2>&1; then
             echo "❌ ERROR: Cannot reach $PGHOST via IPv4. Exiting."
             exit 1
           fi
 
-          for file in database/migrations/*.sql; do
+          # Function to run migration file with retry logic
+          run_migration() {
+            local file=$1
             echo "Executing $file..."
             attempts=0
             until [ "$attempts" -ge 3 ]; do
               if PGPASSWORD="$PGPASSWORD" psql -4 -v ON_ERROR_STOP=1 -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -f "$file"; then
                 echo "✅ Executed $file"
-                break
+                return 0
               fi
               attempts=$((attempts+1))
               echo "Attempt $attempts failed, retrying in $((attempts*5)) seconds..."
               sleep $((attempts*5))
             done
-            if [ "$attempts" -ge 3 ]; then
-              echo "❌ ERROR: Failed to execute $file after $attempts attempts."
-              exit 2
-            fi
-          done
+            echo "❌ ERROR: Failed to execute $file after $attempts attempts."
+            return 1
+          }
+
+          # Run migrations from database/migrations/ if it exists
+          if [ -d "database/migrations" ]; then
+            for file in database/migrations/*.sql; do
+              if [ -f "$file" ]; then
+                run_migration "$file" || exit 2
+              fi
+            done
+          fi
+
+          # Run migrations from backend/database/migrations/ if it exists
+          if [ -d "backend/database/migrations" ]; then
+            for file in backend/database/migrations/*.sql; do
+              if [ -f "$file" ]; then
+                run_migration "$file" || exit 2
+              fi
+            done
+          fi
 
           echo "✅ All migrations executed successfully."
         env:

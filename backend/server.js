@@ -224,57 +224,66 @@ function startServer() {
     });
     
     // Register service with Coordinator (non-blocking)
-    try {
-      const { registerService, uploadMigration } = await import('./src/registration/register.js');
-      // Register service first
-      registerService().then(async (registrationResult) => {
-        // After registration (or if already registered), upload migration
-        // Wait a bit to ensure registration is complete
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        uploadMigration().catch(error => {
-          logger.error('Migration upload error (non-critical)', { 
+    // Skip registration in test environment to prevent Jest from hanging
+    if (process.env.NODE_ENV !== 'test' && !process.env.JEST_WORKER_ID) {
+      try {
+        const { registerService, uploadMigration } = await import('./src/registration/register.js');
+        // Register service first
+        registerService().then(async (registrationResult) => {
+          // After registration (or if already registered), upload migration
+          // Wait a bit to ensure registration is complete
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          uploadMigration().catch(error => {
+            logger.error('Migration upload error (non-critical)', { 
+              error: error.message 
+            });
+          });
+        }).catch(async (error) => {
+          logger.error('Service registration error (non-critical)', { 
             error: error.message 
           });
-        });
-      }).catch(async (error) => {
-        logger.error('Service registration error (non-critical)', { 
-          error: error.message 
-        });
-        // Even if registration fails, try to upload migration if SERVICE_ID exists
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        uploadMigration().catch(err => {
-          logger.error('Migration upload error (non-critical)', { 
-            error: err.message 
+          // Even if registration fails, try to upload migration if SERVICE_ID exists
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          uploadMigration().catch(err => {
+            logger.error('Migration upload error (non-critical)', { 
+              error: err.message 
+            });
           });
         });
-      });
-    } catch (error) {
-      logger.warn('Failed to load registration module (non-critical)', { 
-        error: error.message 
-      });
+      } catch (error) {
+        logger.warn('Failed to load registration module (non-critical)', { 
+          error: error.message 
+        });
+      }
     }
     
     // Initialize database in the background (non-blocking)
-    initializeDatabase().catch(error => {
+    // Skip in test environment to prevent Jest from hanging
+    if (process.env.NODE_ENV !== 'test' && !process.env.JEST_WORKER_ID) {
+      initializeDatabase().catch(error => {
         console.error('Background database initialization failed:', error.message);
-      logger.error('Background database initialization failed', { 
-        error: error.message 
+        logger.error('Background database initialization failed', { 
+          error: error.message 
+        });
       });
-    });
+    }
     
     // Start background jobs (if enabled)
-    if (process.env.ENABLE_BACKGROUND_JOBS !== 'false') {
-      try {
-        const { getJobScheduler } = await import('./src/infrastructure/jobs/JobScheduler.js');
-        const scheduler = getJobScheduler();
-        await scheduler.start();
-        logger.info('Background jobs scheduler started');
-      } catch (error) {
-        logger.error('Failed to start background jobs scheduler', { error: error.message });
-        logger.warn('Continuing without background jobs...');
+    // Skip in test environment to prevent Jest from hanging
+    if (process.env.NODE_ENV !== 'test' && !process.env.JEST_WORKER_ID) {
+      if (process.env.ENABLE_BACKGROUND_JOBS !== 'false') {
+        try {
+          const { getJobScheduler } = await import('./src/infrastructure/jobs/JobScheduler.js');
+          const scheduler = getJobScheduler();
+          await scheduler.start();
+          logger.info('Background jobs scheduler started');
+        } catch (error) {
+          logger.error('Failed to start background jobs scheduler', { error: error.message });
+          logger.warn('Continuing without background jobs...');
+        }
+      } else {
+        logger.info('Background jobs disabled (ENABLE_BACKGROUND_JOBS=false)');
       }
-    } else {
-      logger.info('Background jobs disabled (ENABLE_BACKGROUND_JOBS=false)');
     }
   });
 

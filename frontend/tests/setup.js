@@ -28,6 +28,36 @@
       enumerable: false,
     });
   }
+
+  // Polyfill for webidl-conversions - ensure URL and URLSearchParams exist
+  if (typeof globalThis !== 'undefined') {
+    if (typeof globalThis.URL === 'undefined' && typeof URL !== 'undefined') {
+      globalThis.URL = URL;
+      if (typeof global !== 'undefined') {
+        global.URL = URL;
+      }
+    }
+    if (typeof globalThis.URLSearchParams === 'undefined' && typeof URLSearchParams !== 'undefined') {
+      globalThis.URLSearchParams = URLSearchParams;
+      if (typeof global !== 'undefined') {
+        global.URLSearchParams = URLSearchParams;
+      }
+    }
+  }
+
+  // Additional polyfill for webidl-conversions - ensure process exists
+  if (typeof globalThis !== 'undefined' && typeof globalThis.process === 'undefined') {
+    globalThis.process = {
+      env: {},
+      version: '',
+      versions: {},
+      platform: 'browser',
+      nextTick: (fn) => setTimeout(fn, 0),
+    };
+    if (typeof global !== 'undefined') {
+      global.process = globalThis.process;
+    }
+  }
 })();
 
 // Import polyfills AFTER global is set up
