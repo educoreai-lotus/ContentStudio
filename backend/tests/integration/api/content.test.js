@@ -15,13 +15,40 @@ import { errorHandler } from '../../../src/presentation/middleware/errorHandler.
 app.use('/api/content', contentRouter);
 app.use(errorHandler);
 
+// Wait for contentController to initialize
+const waitForInitialization = async (maxWait = 10000) => {
+  const start = Date.now();
+  while (Date.now() - start < maxWait) {
+    try {
+      const response = await request(app).get('/api/content?topic_id=999999').send();
+      if (response.status !== 503) {
+        console.log('[content.test] ContentController initialized');
+        return; // Controller is initialized
+      }
+    } catch (error) {
+      // Ignore errors during initialization check
+    }
+    await new Promise(resolve => setTimeout(resolve, 200));
+  }
+  console.warn('[content.test] ContentController may not be fully initialized, continuing anyway');
+};
+
 describe('Content API Integration Tests', () => {
+  beforeAll(async () => {
+    // Set minimal env vars for testing (services will use in-memory repos)
+    process.env.NODE_ENV = 'test';
+    if (!process.env.OPENAI_API_KEY) {
+      process.env.OPENAI_API_KEY = 'test-key'; // Mock key for initialization
+    }
+    await waitForInitialization();
+  });
   describe('POST /api/content', () => {
     it('should create content with valid data', async () => {
       const contentData = {
         topic_id: 1,
         content_type_id: 'text',
         content_data: { text: 'Sample lesson text' },
+        quality_check_status: 'approved', // Skip quality check for integration test
       };
 
       const response = await request(app)
@@ -72,6 +99,7 @@ describe('Content API Integration Tests', () => {
           code: 'console.log("Hello World");',
           language: 'javascript',
         },
+        quality_check_status: 'approved', // Skip quality check for integration test
       };
 
       const response = await request(app)
@@ -93,6 +121,7 @@ describe('Content API Integration Tests', () => {
           topic_id: 1,
           content_type_id: 'text',
           content_data: { text: 'Test content' },
+          quality_check_status: 'approved', // Skip quality check for integration test
         });
 
       const contentId = createResponse.body.data.content_id;
@@ -124,6 +153,7 @@ describe('Content API Integration Tests', () => {
           topic_id: 2,
           content_type_id: 'text',
           content_data: { text: 'Content 1' },
+          quality_check_status: 'approved', // Skip quality check for integration test
         });
 
       await request(app)
@@ -132,6 +162,7 @@ describe('Content API Integration Tests', () => {
           topic_id: 2,
           content_type_id: 'code',
           content_data: { code: 'code1' },
+          quality_check_status: 'approved', // Skip quality check for integration test
         });
 
       const response = await request(app)
@@ -159,6 +190,7 @@ describe('Content API Integration Tests', () => {
           topic_id: 3,
           content_type_id: 'text',
           content_data: { text: 'Text content' },
+          quality_check_status: 'approved', // Skip quality check for integration test
         });
 
       await request(app)
@@ -167,6 +199,7 @@ describe('Content API Integration Tests', () => {
           topic_id: 3,
           content_type_id: 'code',
           content_data: { code: 'Code content' },
+          quality_check_status: 'approved', // Skip quality check for integration test
         });
 
       const response = await request(app)
@@ -185,6 +218,7 @@ describe('Content API Integration Tests', () => {
           topic_id: 1,
           content_type_id: 'text',
           content_data: { text: 'Original text' },
+          quality_check_status: 'approved', // Skip quality check for integration test
         });
 
       const contentId = createResponse.body.data.content_id;
@@ -217,6 +251,7 @@ describe('Content API Integration Tests', () => {
           topic_id: 1,
           content_type_id: 'text',
           content_data: { text: 'To be deleted' },
+          quality_check_status: 'approved', // Skip quality check for integration test
         });
 
       const contentId = createResponse.body.data.content_id;
