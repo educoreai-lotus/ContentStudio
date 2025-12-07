@@ -120,13 +120,46 @@ jobs:
             exit 1
           fi
 
+          # Function to check if migration was already executed successfully
+          check_migration_executed() {
+            local file=$1
+            local filename=$(basename "$file")
+            # Check if migration_log table exists and if this file was executed successfully
+            local result=$(PGPASSWORD="$PGPASSWORD" psql -4 -t -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -c "SELECT COUNT(*) FROM migration_log WHERE file_name = '$filename' AND success = true;" 2>/dev/null || echo "0")
+            if [ "$result" -gt 0 ] 2>/dev/null; then
+              echo "⏭️ Migration $filename already executed successfully, skipping..."
+              return 0
+            fi
+            return 1
+          }
+
           # Function to run migration file with retry logic
           run_migration() {
             local file=$1
+            local filename=$(basename "$file")
+            
+            # Check if migration was already executed successfully
+            if check_migration_executed "$file"; then
+              return 0
+            fi
+            
             echo "Executing $file..."
             attempts=0
             until [ "$attempts" -ge 3 ]; do
-              if PGPASSWORD="$PGPASSWORD" psql -4 -v ON_ERROR_STOP=1 -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -f "$file"; then
+              # Wrap migration in a transaction to ensure atomicity
+              if PGPASSWORD="$PGPASSWORD" psql -4 -v ON_ERROR_STOP=1 -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" <<EOF
+BEGIN;
+\i $file
+-- Log successful migration
+INSERT INTO migration_log (file_name, success, execution_duration_ms)
+VALUES ('$filename', true, 0)
+ON CONFLICT (file_name) DO UPDATE SET
+  success = true,
+  executed_at = CURRENT_TIMESTAMP,
+  error_message = NULL;
+COMMIT;
+EOF
+              then
                 echo "✅ Executed $file"
                 return 0
               fi
@@ -135,6 +168,8 @@ jobs:
               sleep $((attempts*5))
             done
             echo "❌ ERROR: Failed to execute $file after $attempts attempts."
+            # Log failed migration
+            PGPASSWORD="$PGPASSWORD" psql -4 -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -c "INSERT INTO migration_log (file_name, success, error_message) VALUES ('$filename', false, 'Failed after 3 attempts') ON CONFLICT (file_name) DO UPDATE SET success = false, error_message = 'Failed after 3 attempts';" 2>/dev/null || true
             return 1
           }
 

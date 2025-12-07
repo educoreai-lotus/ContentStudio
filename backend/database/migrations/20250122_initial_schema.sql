@@ -5,21 +5,32 @@
 -- Last Updated: 2025-01-22
 -- ============================================
 
+-- Start transaction to ensure atomicity
+BEGIN;
+
 -- ============================================
 -- ENUM Types
 -- ============================================
 
 -- Content Status Enum
-CREATE TYPE content_status AS ENUM ('active', 'archived', 'deleted');
+DO $$ BEGIN
+    CREATE TYPE content_status AS ENUM ('active', 'archived', 'deleted');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
 -- Template Type Enum
-CREATE TYPE "TemplateType" AS ENUM ('ready_template', 'ai_generated', 'manual', 'mixed_ai_manual');
+DO $$ BEGIN
+    CREATE TYPE "TemplateType" AS ENUM ('ready_template', 'ai_generated', 'manual', 'mixed_ai_manual');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
 -- ============================================
 -- Table 1: trainer_courses
 -- ============================================
 
-CREATE TABLE trainer_courses (
+CREATE TABLE IF NOT EXISTS trainer_courses (
     course_id SERIAL PRIMARY KEY,
     course_name VARCHAR(255) NOT NULL,
     trainer_id VARCHAR(50) NOT NULL,
@@ -35,10 +46,10 @@ CREATE TABLE trainer_courses (
 );
 
 -- Indexes for trainer_courses
-CREATE INDEX idx_trainer_courses_trainer_id ON trainer_courses(trainer_id);
-CREATE INDEX idx_trainer_courses_status ON trainer_courses(status);
-CREATE INDEX idx_trainer_courses_created_at ON trainer_courses(created_at);
-CREATE INDEX idx_trainer_courses_skills ON trainer_courses USING GIN (skills);
+CREATE INDEX IF NOT EXISTS idx_trainer_courses_trainer_id ON trainer_courses(trainer_id);
+CREATE INDEX IF NOT EXISTS idx_trainer_courses_status ON trainer_courses(status);
+CREATE INDEX IF NOT EXISTS idx_trainer_courses_created_at ON trainer_courses(created_at);
+CREATE INDEX IF NOT EXISTS idx_trainer_courses_skills ON trainer_courses USING GIN (skills);
 
 -- Comments for trainer_courses
 COMMENT ON TABLE trainer_courses IS 'Stores course-level data created by trainers';
@@ -49,7 +60,7 @@ COMMENT ON COLUMN trainer_courses.usage_count IS 'Counts how many times this cou
 -- Table 2: templates
 -- ============================================
 
-CREATE TABLE templates (
+CREATE TABLE IF NOT EXISTS templates (
     template_id SERIAL PRIMARY KEY,
     template_name VARCHAR(255) NOT NULL,
     template_type "TemplateType" NOT NULL,
@@ -59,9 +70,9 @@ CREATE TABLE templates (
 );
 
 -- Indexes for templates
-CREATE INDEX idx_templates_template_type ON templates(template_type);
-CREATE INDEX idx_templates_created_by ON templates(created_by);
-CREATE INDEX idx_templates_format_order ON templates USING GIN (format_order);
+CREATE INDEX IF NOT EXISTS idx_templates_template_type ON templates(template_type);
+CREATE INDEX IF NOT EXISTS idx_templates_created_by ON templates(created_by);
+CREATE INDEX IF NOT EXISTS idx_templates_format_order ON templates USING GIN (format_order);
 
 -- Comments for templates
 COMMENT ON TABLE templates IS 'Stores both structural templates (format order) and AI prompt templates';
@@ -70,14 +81,14 @@ COMMENT ON TABLE templates IS 'Stores both structural templates (format order) a
 -- Table 3: content_types (Lookup Table)
 -- ============================================
 
-CREATE TABLE content_types (
+CREATE TABLE IF NOT EXISTS content_types (
     type_id SERIAL PRIMARY KEY,
     type_name VARCHAR(50) NOT NULL UNIQUE,
     display_name VARCHAR(100) NOT NULL
 );
 
 -- Indexes for content_types
-CREATE INDEX idx_content_types_type_name ON content_types(type_name);
+CREATE INDEX IF NOT EXISTS idx_content_types_type_name ON content_types(type_name);
 
 -- Seed Data for content_types
 INSERT INTO content_types (type_name, display_name) VALUES
@@ -95,7 +106,7 @@ COMMENT ON TABLE content_types IS 'Lookup table for content type metadata and ch
 -- Table 4: generation_methods (Lookup Table)
 -- ============================================
 
-CREATE TABLE generation_methods (
+CREATE TABLE IF NOT EXISTS generation_methods (
     method_id SERIAL PRIMARY KEY,
     method_name VARCHAR(50) NOT NULL UNIQUE,
     display_name VARCHAR(100) NOT NULL,
@@ -103,7 +114,7 @@ CREATE TABLE generation_methods (
 );
 
 -- Indexes for generation_methods
-CREATE INDEX idx_generation_methods_method_name ON generation_methods(method_name);
+CREATE INDEX IF NOT EXISTS idx_generation_methods_method_name ON generation_methods(method_name);
 
 -- Seed Data for generation_methods
 INSERT INTO generation_methods (method_name, display_name) VALUES
@@ -120,7 +131,7 @@ COMMENT ON COLUMN generation_methods.usage_count IS 'Counts how many times this 
 -- Table 5: topics (Lessons)
 -- ============================================
 
-CREATE TABLE topics (
+CREATE TABLE IF NOT EXISTS topics (
     topic_id SERIAL PRIMARY KEY,
     course_id INTEGER,
     topic_name VARCHAR(255) NOT NULL,
@@ -146,11 +157,11 @@ CREATE TABLE topics (
 );
 
 -- Indexes for topics
-CREATE INDEX idx_topics_course_id ON topics(course_id);
-CREATE INDEX idx_topics_trainer_id ON topics(trainer_id);
-CREATE INDEX idx_topics_status ON topics(status);
-CREATE INDEX idx_topics_generation_methods_id ON topics(generation_methods_id);
-CREATE INDEX idx_topics_skills ON topics USING GIN (skills);
+CREATE INDEX IF NOT EXISTS idx_topics_course_id ON topics(course_id);
+CREATE INDEX IF NOT EXISTS idx_topics_trainer_id ON topics(trainer_id);
+CREATE INDEX IF NOT EXISTS idx_topics_status ON topics(status);
+CREATE INDEX IF NOT EXISTS idx_topics_generation_methods_id ON topics(generation_methods_id);
+CREATE INDEX IF NOT EXISTS idx_topics_skills ON topics USING GIN (skills);
 
 -- Comments for topics
 COMMENT ON TABLE topics IS 'Represents lessons (topics) - can belong to course or be stand-alone';
@@ -162,7 +173,7 @@ COMMENT ON COLUMN topics.devlab_exercises IS 'Stores DevLab exercises as JSONB. 
 -- Table 6: content
 -- ============================================
 
-CREATE TABLE content (
+CREATE TABLE IF NOT EXISTS content (
     content_id SERIAL PRIMARY KEY,
     topic_id INTEGER NOT NULL,
     content_type_id INTEGER NOT NULL,
@@ -187,12 +198,12 @@ CREATE TABLE content (
 );
 
 -- Indexes for content
-CREATE INDEX idx_content_topic_id ON content(topic_id);
-CREATE INDEX idx_content_content_type_id ON content(content_type_id);
-CREATE INDEX idx_content_generation_method_id ON content(generation_method_id);
-CREATE INDEX idx_content_content_data ON content USING GIN (content_data);
-CREATE INDEX idx_content_quality_check_status ON content(quality_check_status);
-CREATE INDEX idx_content_quality_check_data ON content USING GIN (quality_check_data);
+CREATE INDEX IF NOT EXISTS idx_content_topic_id ON content(topic_id);
+CREATE INDEX IF NOT EXISTS idx_content_content_type_id ON content(content_type_id);
+CREATE INDEX IF NOT EXISTS idx_content_generation_method_id ON content(generation_method_id);
+CREATE INDEX IF NOT EXISTS idx_content_content_data ON content USING GIN (content_data);
+CREATE INDEX IF NOT EXISTS idx_content_quality_check_status ON content(quality_check_status);
+CREATE INDEX IF NOT EXISTS idx_content_quality_check_data ON content USING GIN (quality_check_data);
 
 -- Comments for content
 COMMENT ON TABLE content IS 'Stores each content item (format-specific data) belonging to a topic';
@@ -205,7 +216,7 @@ COMMENT ON COLUMN content.generation_method_id IS 'References generation_methods
 -- Table 7: content_history
 -- ============================================
 
-CREATE TABLE content_history (
+CREATE TABLE IF NOT EXISTS content_history (
     history_id SERIAL PRIMARY KEY,
     topic_id INTEGER NOT NULL,
     content_type_id INTEGER NOT NULL,
@@ -225,10 +236,10 @@ CREATE TABLE content_history (
 );
 
 -- Indexes for content_history
-CREATE INDEX idx_content_history_topic_id ON content_history(topic_id);
-CREATE INDEX idx_content_history_content_data ON content_history USING GIN (content_data);
-CREATE INDEX idx_content_history_created_at ON content_history(created_at);
-CREATE INDEX idx_content_history_updated_at ON content_history(topic_id, content_type_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_content_history_topic_id ON content_history(topic_id);
+CREATE INDEX IF NOT EXISTS idx_content_history_content_data ON content_history USING GIN (content_data);
+CREATE INDEX IF NOT EXISTS idx_content_history_created_at ON content_history(created_at);
+CREATE INDEX IF NOT EXISTS idx_content_history_updated_at ON content_history(topic_id, content_type_id, updated_at DESC);
 
 -- Comments for content_history
 COMMENT ON TABLE content_history IS 'Stores all version history of content for audit, rollback, and analytics';
@@ -239,7 +250,7 @@ COMMENT ON COLUMN content_history.generation_method_id IS 'References generation
 -- Table 8: language_stats
 -- ============================================
 
-CREATE TABLE language_stats (
+CREATE TABLE IF NOT EXISTS language_stats (
     language_code VARCHAR(10) PRIMARY KEY,
     language_name VARCHAR(100) NOT NULL,
     total_requests INT DEFAULT 0,
@@ -252,9 +263,9 @@ CREATE TABLE language_stats (
 );
 
 -- Indexes for language_stats
-CREATE INDEX idx_language_stats_is_frequent ON language_stats(is_frequent);
-CREATE INDEX idx_language_stats_total_requests ON language_stats(total_requests DESC);
-CREATE INDEX idx_language_stats_last_used ON language_stats(last_used DESC);
+CREATE INDEX IF NOT EXISTS idx_language_stats_is_frequent ON language_stats(is_frequent);
+CREATE INDEX IF NOT EXISTS idx_language_stats_total_requests ON language_stats(total_requests DESC);
+CREATE INDEX IF NOT EXISTS idx_language_stats_last_used ON language_stats(last_used DESC);
 
 -- Insert predefined languages
 INSERT INTO language_stats (language_code, language_name, is_frequent, is_predefined)
@@ -273,7 +284,7 @@ COMMENT ON TABLE language_stats IS 'Tracks language usage statistics and frequen
 -- Table 9: migration_log
 -- ============================================
 
-CREATE TABLE migration_log (
+CREATE TABLE IF NOT EXISTS migration_log (
     id SERIAL PRIMARY KEY,
     file_name VARCHAR(255) UNIQUE NOT NULL,
     executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -283,8 +294,8 @@ CREATE TABLE migration_log (
 );
 
 -- Indexes for migration_log
-CREATE INDEX idx_migration_log_file_name ON migration_log(file_name);
-CREATE INDEX idx_migration_log_executed_at ON migration_log(executed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_migration_log_file_name ON migration_log(file_name);
+CREATE INDEX IF NOT EXISTS idx_migration_log_executed_at ON migration_log(executed_at DESC);
 
 -- ============================================
 -- Functions for Language Statistics
@@ -393,4 +404,7 @@ ORDER BY last_used ASC;
 -- ============================================
 -- End of Unified Schema
 -- ============================================
+
+-- Commit transaction
+COMMIT;
 
