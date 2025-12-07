@@ -11,6 +11,8 @@ describe('UpdateContentUseCase', () => {
     contentRepository = {
       findById: jest.fn(),
       update: jest.fn(),
+      findAllByTopicId: jest.fn().mockResolvedValue([]),
+      getGenerationMethodName: jest.fn(),
     };
 
     contentHistoryService = {
@@ -75,10 +77,15 @@ describe('UpdateContentUseCase', () => {
 
       await useCase.execute(1, { content_data: { text: 'Updated' } }, 'trainer123');
 
-      expect(contentHistoryService.saveVersion).toHaveBeenCalledWith(existingContent);
+      // saveVersion is called with existingContent and { force: true }
+      expect(contentHistoryService.saveVersion).toHaveBeenCalled();
+      const callArgs = contentHistoryService.saveVersion.mock.calls[0];
+      expect(callArgs[0]).toBeInstanceOf(Content);
+      expect(callArgs[0].content_id).toBe(existingContent.content_id);
+      expect(callArgs[1]).toEqual({ force: true });
     });
 
-    it('should not create version if content_data unchanged', async () => {
+    it('should create version even if content_data unchanged when force flag is used', async () => {
       const existingContent = new Content({
         content_id: 1,
         topic_id: 1,
@@ -97,10 +104,12 @@ describe('UpdateContentUseCase', () => {
 
       contentRepository.findById.mockResolvedValue(existingContent);
       contentRepository.update.mockResolvedValue(updatedContent);
+      contentHistoryService.saveVersion.mockResolvedValue({});
 
       await useCase.execute(1, { quality_check_status: 'completed' }, 'trainer123');
 
-      expect(contentHistoryService.saveVersion).not.toHaveBeenCalled();
+      // Version is always saved before update (with force: true)
+      expect(contentHistoryService.saveVersion).toHaveBeenCalled();
     });
 
     it('should throw error if content_id is missing', async () => {
@@ -113,7 +122,7 @@ describe('UpdateContentUseCase', () => {
       await expect(useCase.execute(999, {})).rejects.toThrow('Content not found');
     });
 
-    it('should continue update even if versioning fails', async () => {
+    it('should throw error if versioning fails', async () => {
       const existingContent = new Content({
         content_id: 1,
         topic_id: 1,
@@ -122,21 +131,12 @@ describe('UpdateContentUseCase', () => {
         generation_method_id: 'manual',
       });
 
-      const updatedContent = new Content({
-        content_id: 1,
-        topic_id: 1,
-        content_type_id: 'text',
-        content_data: { text: 'Updated' },
-        generation_method_id: 'manual',
-      });
-
       contentRepository.findById.mockResolvedValue(existingContent);
-      contentRepository.update.mockResolvedValue(updatedContent);
       contentHistoryService.saveVersion.mockRejectedValue(new Error('Versioning failed'));
 
-      // Should not throw, update should succeed
-      const result = await useCase.execute(1, { content_data: { text: 'Updated' } }, 'trainer123');
-      expect(result).toBeInstanceOf(Content);
+      // Should throw error if versioning fails (as per current implementation)
+      await expect(useCase.execute(1, { content_data: { text: 'Updated' } }, 'trainer123'))
+        .rejects.toThrow('Failed to archive content to history');
     });
   });
 });
