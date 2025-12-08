@@ -99,6 +99,7 @@ export class CreateContentUseCase {
       hasQualityCheckService: !!this.qualityCheckService,
       needsQualityCheck,
       hasExistingContent: !!existingContent,
+      quality_check_status: content.quality_check_status,
     });
 
     // STEP 1: Language validation BEFORE quality check and DB operations (to save tokens)
@@ -452,7 +453,7 @@ export class CreateContentUseCase {
 
     // Validate content quality BEFORE saving to DB for manual content
     // Skip quality check if content already has approved status
-    if (needsQualityCheck && !content.quality_check_status) {
+    if (needsQualityCheck && content.quality_check_status !== 'approved') {
       console.log('[CreateContentUseCase] ✅ Validating content quality BEFORE saving to DB');
       pushStatus(statusMessages, 'Starting quality check...');
       try {

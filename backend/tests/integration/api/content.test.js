@@ -2,6 +2,11 @@ import request from 'supertest';
 import express from 'express';
 import cors from 'cors';
 
+// Set mock OpenAI API key BEFORE importing routes (services are initialized on module load)
+if (!process.env.OPENAI_API_KEY) {
+  process.env.OPENAI_API_KEY = 'test-key';
+}
+
 // Create test app similar to courses.test.js
 const app = express();
 app.use(cors());
@@ -10,42 +15,64 @@ app.use(express.urlencoded({ extended: true }));
 
 // Import routes
 import contentRouter from '../../../src/presentation/routes/content.js';
+import topicsRouter from '../../../src/presentation/routes/topics.js';
 import { errorHandler } from '../../../src/presentation/middleware/errorHandler.js';
 
+app.use('/api/topics', topicsRouter);
 app.use('/api/content', contentRouter);
 app.use(errorHandler);
 
 // Wait for contentController to initialize
-const waitForInitialization = async (maxWait = 10000) => {
+const waitForInitialization = async (maxWait = 15000) => {
   const start = Date.now();
   while (Date.now() - start < maxWait) {
     try {
       const response = await request(app).get('/api/content?topic_id=999999').send();
       if (response.status !== 503) {
         console.log('[content.test] ContentController initialized');
+        // Wait a bit more to ensure all services are ready
+        await new Promise(resolve => setTimeout(resolve, 500));
         return; // Controller is initialized
       }
     } catch (error) {
       // Ignore errors during initialization check
     }
-    await new Promise(resolve => setTimeout(resolve, 200));
+    await new Promise(resolve => setTimeout(resolve, 300));
   }
   console.warn('[content.test] ContentController may not be fully initialized, continuing anyway');
 };
 
 describe('Content API Integration Tests', () => {
+  let topicId;
+
   beforeAll(async () => {
     // Set minimal env vars for testing (services will use in-memory repos)
     process.env.NODE_ENV = 'test';
-    if (!process.env.OPENAI_API_KEY) {
-      process.env.OPENAI_API_KEY = 'test-key'; // Mock key for initialization
-    }
     await waitForInitialization();
+    
+    // Create a topic for testing
+    const topicResponse = await request(app)
+      .post('/api/topics')
+      .send({
+        topic_name: 'Test Topic',
+        description: 'Test Description',
+        course_id: 1,
+        created_by: 'test-trainer',
+        language: 'en',
+      });
+    
+    if (topicResponse.status === 201) {
+      topicId = topicResponse.body.topic_id;
+    } else {
+      // Fallback: use topic_id 1 if creation fails
+      topicId = 1;
+    }
   });
+
   describe('POST /api/content', () => {
     it('should create content with valid data', async () => {
       const contentData = {
-        topic_id: 1,
+        topic_id: topicId,
         content_type_id: 'text',
         content_data: { text: 'Sample lesson text' },
         quality_check_status: 'approved', // Skip quality check for integration test
@@ -58,7 +85,7 @@ describe('Content API Integration Tests', () => {
 
       expect(response.body.success).toBe(true);
       expect(response.body.data).toHaveProperty('content_id');
-      expect(response.body.data.topic_id).toBe(1);
+      expect(response.body.data.topic_id).toBe(topicId);
       expect(response.body.data.content_type_id).toBe('text');
       expect(response.body.data.generation_method_id).toBe('manual');
     });
@@ -79,7 +106,7 @@ describe('Content API Integration Tests', () => {
 
     it('should return 400 if content_type_id is missing', async () => {
       const contentData = {
-        topic_id: 1,
+        topic_id: topicId,
         content_data: { text: 'Sample' },
       };
 
@@ -93,7 +120,7 @@ describe('Content API Integration Tests', () => {
 
     it('should create code content', async () => {
       const contentData = {
-        topic_id: 1,
+        topic_id: topicId,
         content_type_id: 'code',
         content_data: {
           code: 'console.log("Hello World");',
@@ -118,7 +145,7 @@ describe('Content API Integration Tests', () => {
       const createResponse = await request(app)
         .post('/api/content')
         .send({
-          topic_id: 1,
+          topic_id: topicId,
           content_type_id: 'text',
           content_data: { text: 'Test content' },
           quality_check_status: 'approved', // Skip quality check for integration test
@@ -150,7 +177,7 @@ describe('Content API Integration Tests', () => {
       await request(app)
         .post('/api/content')
         .send({
-          topic_id: 2,
+          topic_id: topicId,
           content_type_id: 'text',
           content_data: { text: 'Content 1' },
           quality_check_status: 'approved', // Skip quality check for integration test
@@ -166,7 +193,7 @@ describe('Content API Integration Tests', () => {
         });
 
       const response = await request(app)
-        .get('/api/content?topic_id=2')
+        .get(`/api/content?topic_id=${topicId}`)
         .expect(200);
 
       expect(response.body.success).toBe(true);
@@ -187,7 +214,7 @@ describe('Content API Integration Tests', () => {
       await request(app)
         .post('/api/content')
         .send({
-          topic_id: 3,
+          topic_id: topicId,
           content_type_id: 'text',
           content_data: { text: 'Text content' },
           quality_check_status: 'approved', // Skip quality check for integration test
@@ -203,7 +230,7 @@ describe('Content API Integration Tests', () => {
         });
 
       const response = await request(app)
-        .get('/api/content?topic_id=3&content_type_id=text')
+        .get(`/api/content?topic_id=${topicId}&content_type_id=text`)
         .expect(200);
 
       expect(response.body.data.contents.every(c => c.content_type_id === 'text')).toBe(true);

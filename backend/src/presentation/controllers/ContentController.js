@@ -55,6 +55,7 @@ export class ContentController {
         content_type_id: req.body.content_type_id,
         content_data: req.body.content_data,
         generation_method_id: req.body.generation_method_id || 'manual',
+        quality_check_status: req.body.quality_check_status, // Pass through quality_check_status if provided
       };
 
       const content = await this.createContentUseCase.execute(contentData);
