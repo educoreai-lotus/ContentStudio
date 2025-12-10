@@ -160,7 +160,7 @@ export class DevlabClient {
    */
   async generateAIExercises(exerciseRequest) {
     // Coordinator URL is now handled by postToCoordinator
-    const endpoint = '/api/fill-content-metrics';
+    const endpoint = '/api/fill-content-metrics/';
 
     // Validate question type
     const questionType = exerciseRequest.question_type || 'code';

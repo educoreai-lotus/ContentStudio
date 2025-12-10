@@ -163,6 +163,7 @@ export class CourseBuilderClient {
       const courseObject = {
         microservice_name: 'content_studio',
         payload: {
+          action: 'send this trainer course to publish',
           course_id: courseData.course_id || '',
           course_name: courseData.course_name || '',
           course_description: courseData.course_description || '',

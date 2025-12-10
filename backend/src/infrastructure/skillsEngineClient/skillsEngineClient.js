@@ -161,6 +161,7 @@ export class SkillsEngineClient {
     const payload = {
       trainer_id: trainerId,
       trainer_name: '',
+      action: 'fetch this topic array of skills',
       topic: topic,
       skills: [],
     };
