@@ -4,43 +4,56 @@ import { logger } from '../infrastructure/logging/Logger.js';
 /**
  * Build message for ECDSA signing
  * Format: "educoreai-{serviceName}-{payloadHash}"
- * Matches Coordinator specification exactly
- * @param {string} serviceName - Service name (e.g., "content-studio")
- * @param {Object} payload - Payload object to sign (optional)
- * @returns {string} Message string for signing
+ * payloadHash = sha256(JSON.stringify(payload)) in hex
+ *
+ * If payload is null/undefined, we fall back to:
+ *   "educoreai-{serviceName}"
  */
 export function buildMessage(serviceName, payload) {
-  // Start with base message
+  if (!serviceName || typeof serviceName !== 'string') {
+    throw new Error('Service name is required and must be a string');
+  }
+
   let message = `educoreai-${serviceName}`;
-  
-  // If payload exists, add SHA256 hash of the payload
-  // IMPORTANT: Use JSON.stringify (not stableStringify) to match Coordinator's implementation
-  if (payload) {
+  let payloadHash = null;
+
+  if (payload !== undefined && payload !== null) {
     const payloadString = JSON.stringify(payload);
-    const payloadHash = crypto.createHash('sha256')
+    payloadHash = crypto
+      .createHash('sha256')
       .update(payloadString)
       .digest('hex');
+
     message = `${message}-${payloadHash}`;
   }
 
   logger.info('[Signature] Built message for signing', {
     serviceName,
-    message: message.substring(0, 100) + (message.length > 100 ? '...' : ''),
+    message: message.length > 120
+      ? message.substring(0, 120) + '...'
+      : message,
     messageLength: message.length,
-    hasPayload: !!payload,
-    payloadHash: payload ? crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex').substring(0, 16) + '...' : null,
+    hasPayload: payload !== undefined && payload !== null,
+    payloadHash: payloadHash
+      ? payloadHash.substring(0, 16) + '...'
+      : null,
   });
 
   return message;
 }
 
 /**
- * Generate ECDSA P-256 signature
- * @param {string} serviceName - Service name (e.g., "content-studio")
- * @param {string} privateKeyPem - Private key in PEM format (from env var)
- * @param {Object} payload - Payload object to sign
- * @returns {string} Base64-encoded signature
- * @throws {Error} If private key is invalid or signing fails
+ * Generate ECDSA P-256 signature (DER, Base64)
+ *
+ * IMPORTANT:
+ * - Uses Node's createSign("SHA256") → sign(privateKeyPem, "base64")
+ * - Output is DER-encoded ECDSA signature in Base64, with no whitespace.
+ * - Message format is: "educoreai-{serviceName}-{sha256(JSON.stringify(payload))}"
+ *
+ * @param {string} serviceName - Service name (e.g. "content-studio")
+ * @param {string} privateKeyPem - Private key in PEM format
+ * @param {Object} payload - Payload object to sign (must match the object actually sent)
+ * @returns {string} Base64-encoded DER signature (no whitespace)
  */
 export function generateSignature(serviceName, privateKeyPem, payload) {
   if (!privateKeyPem || typeof privateKeyPem !== 'string') {
@@ -51,54 +64,30 @@ export function generateSignature(serviceName, privateKeyPem, payload) {
     throw new Error('Service name is required and must be a string');
   }
 
+  const message = buildMessage(serviceName, payload);
+
   try {
-    // Build message for signing
-    const message = buildMessage(serviceName, payload);
-    
-    // Create private key object from PEM string
-    let privateKey;
-    try {
-      // Try to create key from PEM format
-      privateKey = crypto.createPrivateKey({
-        key: privateKeyPem,
-        format: 'pem',
-      });
-    } catch (pemError) {
-      // If PEM format fails, try DER format (base64 decoded)
-      try {
-        const keyBuffer = Buffer.from(privateKeyPem, 'base64');
-        privateKey = crypto.createPrivateKey({
-          key: keyBuffer,
-          format: 'der',
-          type: 'pkcs8',
-        });
-      } catch (derError) {
-        throw new Error(`Failed to parse private key: ${pemError.message}`);
-      }
-    }
-    
-    // Sign the message using ECDSA P-256
-    const signature = crypto.sign('sha256', Buffer.from(message, 'utf8'), {
-      key: privateKey,
-      dsaEncoding: 'ieee-p1363', // ECDSA P-256 uses IEEE P1363 encoding
-    });
-    
-    // Return Base64-encoded signature
-    const base64Signature = signature.toString('base64');
-    
+    // DER-encoded ECDSA via createSign
+    const signer = crypto.createSign('SHA256');
+    signer.update(message, 'utf8');
+    signer.end();
+
+    // Node's default for ECDSA here is DER; we request Base64 string
+    const signatureBase64 = signer.sign(privateKeyPem, 'base64');
+
+    // Ensure no whitespace / newlines
+    const cleanSignature = signatureBase64.replace(/\s+/g, '');
+
     logger.info('[Signature] Generated ECDSA signature', {
       serviceName,
-      message,
-      signatureLength: base64Signature.length,
-      signaturePrefix: base64Signature.substring(0, 20) + '...',
-      signatureFull: base64Signature, // Full signature for debugging
+      signatureLength: cleanSignature.length,
+      signaturePrefix: cleanSignature.substring(0, 20) + '...',
     });
-    
-    return base64Signature;
+
+    return cleanSignature;
   } catch (error) {
     logger.error('[Signature] Failed to generate signature', {
       error: error.message,
-      stack: error.stack,
       serviceName,
     });
     throw new Error(`Signature generation failed: ${error.message}`);
@@ -106,11 +95,15 @@ export function generateSignature(serviceName, privateKeyPem, payload) {
 }
 
 /**
- * Verify ECDSA P-256 signature (optional, for future use)
- * @param {string} serviceName - Service name
+ * Verify ECDSA P-256 signature (optional use)
+ *
+ * NOW also uses DER-compatible verification via createVerify("SHA256")
+ * to match the DER encoding used in generateSignature.
+ *
+ * @param {string} serviceName - Service name (used in message construction)
  * @param {string} publicKeyPem - Public key in PEM format
  * @param {Object} payload - Payload object that was signed
- * @param {string} signature - Base64-encoded signature to verify
+ * @param {string} signature - Base64-encoded DER ECDSA signature
  * @returns {boolean} True if signature is valid
  */
 export function verifySignature(serviceName, publicKeyPem, payload, signature) {
@@ -119,50 +112,20 @@ export function verifySignature(serviceName, publicKeyPem, payload, signature) {
   }
 
   try {
-    // Build the same message that was signed
     const message = buildMessage(serviceName, payload);
-    
-    // Create public key object from PEM string
-    let publicKey;
-    try {
-      publicKey = crypto.createPublicKey({
-        key: publicKeyPem,
-        format: 'pem',
-      });
-    } catch (pemError) {
-      // Try DER format if PEM fails
-      try {
-        const keyBuffer = Buffer.from(publicKeyPem, 'base64');
-        publicKey = crypto.createPublicKey({
-          key: keyBuffer,
-          format: 'der',
-          type: 'spki',
-        });
-      } catch (derError) {
-        logger.error('[Signature] Failed to parse public key for verification', {
-          error: pemError.message,
-        });
-        return false;
-      }
-    }
-    
-    // Verify the signature
-    const signatureBuffer = Buffer.from(signature, 'base64');
-    const isValid = crypto.verify(
-      'sha256',
-      Buffer.from(message, 'utf8'),
-      {
-        key: publicKey,
-        dsaEncoding: 'ieee-p1363',
-      },
-      signatureBuffer
-    );
-    
+
+    const verifier = crypto.createVerify('SHA256');
+    verifier.update(message, 'utf8');
+    verifier.end();
+
+    // Verify against DER Base64 signature
+    const isValid = verifier.verify(publicKeyPem, signature, 'base64');
+
     logger.debug('[Signature] Signature verification result', {
       serviceName,
       isValid,
     });
-    
+
     return isValid;
   } catch (error) {
     logger.error('[Signature] Signature verification failed', {
@@ -172,4 +135,3 @@ export function verifySignature(serviceName, publicKeyPem, payload, signature) {
     return false;
   }
 }
-

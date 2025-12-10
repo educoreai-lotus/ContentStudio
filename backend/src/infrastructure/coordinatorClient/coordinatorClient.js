@@ -17,7 +17,7 @@ const SERVICE_NAME = process.env.SERVICE_NAME || 'content-studio';
 export async function postToCoordinator(envelope, options = {}) {
   const coordinatorUrl = process.env.COORDINATOR_URL;
   const privateKey = process.env.CS_COORDINATOR_PRIVATE_KEY;
-  const coordinatorPublicKey = process.env.CONTENT_STUDIO_COORDINATOR_PUBLIC_KEY || null;
+  const coordinatorPublicKey = process.env.COORDINATOR_PUBLIC_KEY || null;
 
   // Validate required environment variables
   if (!coordinatorUrl) {
@@ -30,19 +30,20 @@ export async function postToCoordinator(envelope, options = {}) {
 
   // Clean URL (remove trailing slash)
   const cleanCoordinatorUrl = coordinatorUrl.replace(/\/$/, '');
-  
+
   // Default endpoint is /api/fill-content-metrics/ (Coordinator proxy endpoint)
   let endpoint = options.endpoint || '/api/fill-content-metrics/';
-  
+
   // Normalize endpoint to always end with exactly one slash
   endpoint = endpoint.replace(/\/+$/, '') + '/';
-  
+
   const registrationUrl = `${cleanCoordinatorUrl}${endpoint}`;
-  
+
   const timeout = options.timeout || 30000;
 
   try {
-    // Generate ECDSA signature for the envelope
+    // IMPORTANT:
+    // Sign EXACTLY the same object we send (the envelope)
     const signature = generateSignature(SERVICE_NAME, privateKey, envelope);
 
     // Send POST request with signature headers
@@ -70,6 +71,7 @@ export async function postToCoordinator(envelope, options = {}) {
           response.data,
           responseSignature
         );
+
         if (!isValid) {
           logger.warn('[CoordinatorClient] Response signature verification failed', {
             endpoint,
@@ -112,4 +114,3 @@ export function getCoordinatorClient() {
     post: postToCoordinator,
   };
 }
-
