@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import { logger } from '../infrastructure/logging/Logger.js';
 
 /**
- * Build message for ECDSA signing
+ * Build message for ECDSA 
  * Format: "educoreai-{serviceName}-{payloadHash}"
  * payloadHash = sha256(JSON.stringify(payload)) in hex
  *
