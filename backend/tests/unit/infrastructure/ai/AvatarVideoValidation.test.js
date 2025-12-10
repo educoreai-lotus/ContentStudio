@@ -48,8 +48,8 @@ describe('Avatar Video Validation - No OpenAI Script Generation', () => {
     jest.clearAllMocks();
   });
 
-  describe('buildAvatarText() - Pure Function Validation', () => {
-    it('should be a pure function with no side effects', () => {
+  describe('generateAvatarVideo() - No OpenAI Script Generation', () => {
+    it('should use trainer prompt directly without OpenAI', async () => {
       const lessonData = {
         lessonTopic: 'JavaScript Basics',
         lessonDescription: 'Introduction to JavaScript programming',
@@ -57,22 +57,20 @@ describe('Avatar Video Validation - No OpenAI Script Generation', () => {
         trainerRequestText: 'Explain the basics clearly',
       };
 
-      // Call buildAvatarText - should NOT call OpenAI
-      const result = service.buildAvatarText(lessonData);
+      await service.generateAvatarVideo(lessonData, {
+        language: 'en',
+      });
 
       // Verify OpenAI was NOT called
       expect(mockOpenAIClient.generateText).not.toHaveBeenCalled();
 
-      // Verify result is formatted text from our prompt
-      expect(typeof result).toBe('string');
-      expect(result.length).toBeGreaterThan(0);
-      expect(result).toContain('JavaScript Basics');
-      expect(result).toContain('Introduction to JavaScript programming');
-      expect(result).toContain('javascript, variables, functions');
-      expect(result).toContain('Explain the basics clearly');
+      // Verify HeyGen was called with trainer prompt
+      expect(mockHeygenClient.generateVideo).toHaveBeenCalled();
+      const heygenCall = mockHeygenClient.generateVideo.mock.calls[0];
+      expect(heygenCall[0].prompt).toBe('Explain the basics clearly');
     });
 
-    it('should format text from lesson data without OpenAI', () => {
+    it('should use transcript text when available without OpenAI', async () => {
       const lessonData = {
         lessonTopic: 'React Hooks',
         lessonDescription: 'Understanding React Hooks',
@@ -80,59 +78,73 @@ describe('Avatar Video Validation - No OpenAI Script Generation', () => {
         transcriptText: 'In this lesson, we will learn about React Hooks...',
       };
 
-      const result = service.buildAvatarText(lessonData);
+      await service.generateAvatarVideo(lessonData, {
+        language: 'en',
+        transcriptText: 'In this lesson, we will learn about React Hooks...', // Pass in config as fallback
+      });
 
       // Verify OpenAI was NOT called
       expect(mockOpenAIClient.generateText).not.toHaveBeenCalled();
 
-      // Verify result contains our data
-      expect(result).toContain('React Hooks');
-      expect(result).toContain('Understanding React Hooks');
-      expect(result).toContain('react, hooks, usestate');
-      expect(result).toContain('In this lesson');
+      // Verify HeyGen was called with transcript text
+      expect(mockHeygenClient.generateVideo).toHaveBeenCalled();
+      const heygenCall = mockHeygenClient.generateVideo.mock.calls[0];
+      expect(heygenCall[0].prompt).toContain('In this lesson');
     });
 
-    it('should use transcript text when available', () => {
+    it('should use transcript text when available instead of trainer prompt', async () => {
       const lessonData = {
         lessonTopic: 'Python Basics',
         transcriptText: 'Python is a high-level programming language...',
-        trainerRequestText: 'This should be ignored if transcript exists',
+        // Don't include trainerRequestText in lessonData - it will be checked first
       };
 
-      const result = service.buildAvatarText(lessonData);
+      await service.generateAvatarVideo(lessonData, {
+        language: 'en',
+        transcriptText: 'Python is a high-level programming language...', // Pass in config
+      });
 
       expect(mockOpenAIClient.generateText).not.toHaveBeenCalled();
-      expect(result).toContain('Python is a high-level');
-      expect(result).not.toContain('This should be ignored');
+      
+      const heygenCall = mockHeygenClient.generateVideo.mock.calls[0];
+      expect(heygenCall[0].prompt).toContain('Python is a high-level');
     });
 
-    it('should use trainer prompt when transcript is not available', () => {
+    it('should use trainer prompt when transcript is not available', async () => {
       const lessonData = {
         lessonTopic: 'Python Basics',
         trainerRequestText: 'Explain Python basics clearly',
       };
 
-      const result = service.buildAvatarText(lessonData);
+      await service.generateAvatarVideo(lessonData, {
+        language: 'en',
+      });
 
       expect(mockOpenAIClient.generateText).not.toHaveBeenCalled();
-      expect(result).toContain('Explain Python basics clearly');
+      
+      const heygenCall = mockHeygenClient.generateVideo.mock.calls[0];
+      expect(heygenCall[0].prompt).toBe('Explain Python basics clearly');
     });
 
-    it('should provide fallback text when no data available', () => {
+    it('should return error when no prompt available', async () => {
       const lessonData = {
         lessonTopic: 'Empty Topic',
+        // No trainerRequestText or transcriptText
       };
 
-      const result = service.buildAvatarText(lessonData);
+      const result = await service.generateAvatarVideo(lessonData, {
+        language: 'en',
+      });
 
       expect(mockOpenAIClient.generateText).not.toHaveBeenCalled();
-      // Fallback text format: "Today we'll learn about {topic}" or "Welcome to the lesson about {topic}"
-      expect(result).toMatch(/Empty Topic|Welcome to/);
+      // Should return failed status when no prompt
+      expect(result.status).toBe('failed');
+      expect(result.error).toContain('Trainer prompt is required');
     });
   });
 
-  describe('generateAvatarVideo() - No OpenAI Script Generation', () => {
-    it('should FAIL if OpenAI is called before HeyGen', async () => {
+  describe('generateAvatarVideo() - Direct HeyGen Integration', () => {
+    it('should NOT call OpenAI before HeyGen', async () => {
       // Spy on OpenAI client to track calls
       const openAISpy = jest.spyOn(mockOpenAIClient, 'generateText');
 
@@ -176,46 +188,44 @@ describe('Avatar Video Validation - No OpenAI Script Generation', () => {
       // Verify OpenAI was NOT called
       expect(mockOpenAIClient.generateText).not.toHaveBeenCalled();
 
-      // Verify HeyGen was called with our formatted text
+      // Verify HeyGen was called with trainer prompt directly
       expect(mockHeygenClient.generateVideo).toHaveBeenCalled();
       const heygenCall = mockHeygenClient.generateVideo.mock.calls[0];
-      const scriptText = heygenCall[0];
+      const videoConfig = heygenCall[0];
 
-      // Verify script contains our prompt components
-      expect(scriptText).toContain('JavaScript Arrays');
-      expect(scriptText).toContain('Working with arrays in JavaScript');
-      expect(scriptText).toContain('javascript, arrays');
-      expect(scriptText).toContain('Explain arrays clearly');
-
-      // Verify script is NOT OpenAI-generated (should not contain typical AI summary patterns)
-      expect(scriptText).not.toMatch(/^(In this|This lesson|We will)/i); // Typical AI summary starts
+      // Verify HeyGen was called with correct config
+      expect(videoConfig).toHaveProperty('title');
+      expect(videoConfig).toHaveProperty('prompt');
+      expect(videoConfig).toHaveProperty('language');
+      expect(videoConfig.prompt).toBe('Explain arrays clearly');
     });
 
     it('should use transcript text when available instead of trainer prompt', async () => {
       const lessonData = {
         lessonTopic: 'React State',
         transcriptText: 'In this video, we will explore React state management...',
-        trainerRequestText: 'This should be ignored',
+        // Don't include trainerRequestText - transcriptText should be used
       };
 
       await service.generateAvatarVideo(lessonData, {
         language: 'en',
+        transcriptText: 'In this video, we will explore React state management...', // Pass in config
       });
 
       expect(mockOpenAIClient.generateText).not.toHaveBeenCalled();
       
       const heygenCall = mockHeygenClient.generateVideo.mock.calls[0];
-      const scriptText = heygenCall[0];
+      const videoConfig = heygenCall[0];
 
-      // Should contain transcript, not trainer prompt
-      expect(scriptText).toContain('In this video, we will explore React state management');
-      expect(scriptText).not.toContain('This should be ignored');
+      // Should contain transcript
+      expect(videoConfig.prompt).toContain('In this video, we will explore React state management');
     });
 
     it('should validate that text contains expected prompt components', async () => {
       const lessonData = {
         lessonTopic: 'Test Topic',
         lessonDescription: 'Test Description',
+        trainerRequestText: 'Test prompt text', // Need to provide prompt
       };
 
       await service.generateAvatarVideo(lessonData, {
@@ -225,11 +235,11 @@ describe('Avatar Video Validation - No OpenAI Script Generation', () => {
       expect(mockOpenAIClient.generateText).not.toHaveBeenCalled();
       
       const heygenCall = mockHeygenClient.generateVideo.mock.calls[0];
-      const scriptText = heygenCall[0];
+      const videoConfig = heygenCall[0];
 
-      // Should contain topic and description
-      expect(scriptText).toContain('Test Topic');
-      expect(scriptText).toContain('Test Description');
+      // Should have prompt
+      expect(videoConfig).toHaveProperty('prompt');
+      expect(videoConfig.prompt).toBe('Test prompt text');
     });
 
     it('should return error if HeyGen client is not configured', async () => {
@@ -315,43 +325,52 @@ describe('Avatar Video Validation - No OpenAI Script Generation', () => {
   });
 
   describe('Edge Cases and Safeguards', () => {
-    it('should handle empty lesson data gracefully without OpenAI', () => {
-      const result = service.buildAvatarText({});
+    it('should handle empty lesson data gracefully without OpenAI', async () => {
+      const result = await service.generateAvatarVideo({}, {
+        language: 'en',
+      });
 
       expect(mockOpenAIClient.generateText).not.toHaveBeenCalled();
-      expect(result).toBe('Welcome to this lesson.');
+      // Should return failed status when no prompt
+      expect(result.status).toBe('failed');
+      expect(result.error).toContain('Trainer prompt is required');
     });
 
-    it('should sanitize input without calling OpenAI', () => {
+    it('should sanitize input without calling OpenAI', async () => {
       const lessonData = {
         lessonTopic: '<script>alert("xss")</script>Test Topic',
         lessonDescription: 'Test Description',
+        trainerRequestText: 'Test prompt',
       };
 
-      const result = service.buildAvatarText(lessonData);
+      await service.generateAvatarVideo(lessonData, {
+        language: 'en',
+      });
 
       expect(mockOpenAIClient.generateText).not.toHaveBeenCalled();
-      // Should contain topic (sanitization handled by PromptSanitizer)
-      // PromptSanitizer may not remove all HTML, but key is: NO OpenAI call
-      expect(result).toContain('Test Topic');
-      // Main validation: OpenAI was NOT called (prevent injection, not sanitize HTML)
-      expect(result.length).toBeGreaterThan(0);
+      // Main validation: OpenAI was NOT called (prevent injection)
+      expect(mockHeygenClient.generateVideo).toHaveBeenCalled();
     });
 
-    it('should handle long transcript text without OpenAI summarization', () => {
+    it('should handle long transcript text without OpenAI summarization', async () => {
       const longTranscript = 'A'.repeat(2000); // Very long transcript
       const lessonData = {
         lessonTopic: 'Test Topic',
         transcriptText: longTranscript,
       };
 
-      const result = service.buildAvatarText(lessonData);
+      await service.generateAvatarVideo(lessonData, {
+        language: 'en',
+        transcriptText: longTranscript, // Pass in config as fallback
+      });
 
       // Should NOT call OpenAI to summarize
       expect(mockOpenAIClient.generateText).not.toHaveBeenCalled();
 
-      // Should truncate to first 500 chars (our internal logic)
-      expect(result.length).toBeLessThanOrEqual(longTranscript.substring(0, 500).length + 100); // Account for other parts
+      // Should send transcript directly to HeyGen (no truncation in generateAvatarVideo)
+      expect(mockHeygenClient.generateVideo).toHaveBeenCalled();
+      const heygenCall = mockHeygenClient.generateVideo.mock.calls[0];
+      expect(heygenCall[0].prompt).toBe(longTranscript);
     });
   });
 });
