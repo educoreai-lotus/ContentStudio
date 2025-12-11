@@ -75,7 +75,7 @@ export class DevlabClient {
       // Verify Coordinator signature
       const signature = responseHeaders['x-service-signature'] || responseHeaders['X-Service-Signature'];
       const signer = responseHeaders['x-service-name'] || responseHeaders['X-Service-Name'];
-      const coordinatorPublicKey = process.env.COORDINATOR_PUBLIC_KEY || process.env.CONTENT_STUDIO_COORDINATOR_PUBLIC_KEY;
+      const coordinatorPublicKey = process.env.COORDINATOR_PUBLIC_KEY;
 
       logger.info('[DevlabClient] Verifying Coordinator signature (sendRequest)', {
         hasSignature: !!signature,
@@ -422,65 +422,82 @@ export class DevlabClient {
       }
 
       // Support both old and new response formats
-      let payloadString = null;
-      if (responseData.data?.payload && typeof responseData.data.payload === 'string') {
-        // New format: { success: true, data: { payload: "..." } }
-        payloadString = responseData.data.payload;
-      } else if (responseData.payload && typeof responseData.payload === 'string') {
-        // Old format: { serviceName: "ContentStudio", payload: "..." }
-        payloadString = responseData.payload;
-      } else if (responseData.data?.answer && typeof responseData.data.answer === 'string') {
-        // Alternative format: { success: true, data: { answer: "..." } }
-        // The answer might be the payload itself
-        payloadString = responseData.data.answer;
-        logger.info('[DevlabClient] Using data.answer as payload (alternative format)', {
-          answerLength: responseData.data.answer.length,
+      // Priority: 1. data.answer (direct answer), 2. data.payload (JSON stringified), 3. payload (old format)
+      let answer = null;
+      let responseStructure = null;
+      
+      // Check if we have direct answer in data.answer (new format)
+      if (responseData.data?.answer && typeof responseData.data.answer === 'string') {
+        // Direct answer format: { success: true, data: { answer: "..." } }
+        answer = responseData.data.answer;
+        logger.info('[DevlabClient] Using data.answer directly (new format)', {
+          answerLength: answer.length,
+          answerPreview: answer.substring(0, 100),
         });
-      } else if (responseData.data && typeof responseData.data === 'object') {
-        // Last resort: try to stringify the data object
-        payloadString = JSON.stringify(responseData.data);
-        logger.info('[DevlabClient] Using JSON.stringify(data) as payload (fallback)', {
-          dataKeys: Object.keys(responseData.data),
-        });
+      } else {
+        // Try to find payload (old format or nested format)
+        let payloadString = null;
+        
+        if (responseData.data?.payload && typeof responseData.data.payload === 'string') {
+          // New format: { success: true, data: { payload: "..." } }
+          payloadString = responseData.data.payload;
+        } else if (responseData.payload && typeof responseData.payload === 'string') {
+          // Old format: { serviceName: "ContentStudio", payload: "..." }
+          payloadString = responseData.payload;
+        }
+        
+        if (payloadString) {
+          // Parse payload to get the nested structure
+          try {
+            responseStructure = JSON.parse(payloadString);
+            logger.info('[DevlabClient] Parsed payload successfully', {
+              payloadLength: payloadString.length,
+              structureKeys: responseStructure ? Object.keys(responseStructure) : [],
+            });
+            
+            // Extract answer from nested structure
+            // Structure: { requester_service: "content-studio", payload: {...}, response: { answer: "string" } }
+            if (responseStructure.response && typeof responseStructure.response.answer === 'string') {
+              answer = responseStructure.response.answer;
+            } else if (responseStructure.answer && typeof responseStructure.answer === 'string') {
+              // Alternative structure: { answer: "string" }
+              answer = responseStructure.answer;
+            }
+          } catch (parseError) {
+            logger.error('[DevlabClient] Failed to parse payload as JSON', {
+              payloadLength: payloadString.length,
+              payloadPreview: payloadString.substring(0, 200),
+              error: parseError.message,
+            });
+            throw new Error(`Failed to parse response payload: ${parseError.message}. Payload preview: ${payloadString.substring(0, 100)}`);
+          }
+        }
       }
 
-      if (!payloadString) {
-        logger.error('[DevlabClient] Missing or invalid payload in response', {
+      // Check if we have an answer
+      if (!answer || answer.trim().length === 0) {
+        // Check if this is an error response
+        if (responseData.success === false || (responseData.data && responseData.data.error)) {
+          const errorMessage = responseData.data?.error || responseData.error || 'Unknown error from Coordinator';
+          logger.error('[DevlabClient] Coordinator returned error response', {
+            error: errorMessage,
+            responseData: JSON.stringify(responseData).substring(0, 500),
+          });
+          throw new Error(`Coordinator error: ${errorMessage}`);
+        }
+        
+        // If no answer and no error, this is an unexpected response format
+        logger.error('[DevlabClient] Missing answer in response', {
           responseDataKeys: responseData ? Object.keys(responseData) : [],
           hasData: !!responseData.data,
           dataKeys: responseData.data ? Object.keys(responseData.data) : [],
+          responseDataPreview: JSON.stringify(responseData).substring(0, 500),
+          success: responseData.success,
         });
-        throw new Error('Missing or invalid payload in response');
-      }
-
-      // Parse response structure
-      // Coordinator returns: { serviceName: "ContentStudio", payload: "<stringified JSON>" }
-      // OR new format: { success: true, data: { payload: "<stringified JSON>" }, metadata: {...} }
-      // Inside payload: { requester_service: "content-studio", payload: {...}, response: { verified: boolean, answer: "string" } }
-      // answer is ALWAYS a plain string (code, explanation, or error message) - NEVER JSON
-      let responseStructure;
-      try {
-        responseStructure = JSON.parse(payloadString);
-      } catch (parseError) {
-        throw new Error(`Failed to parse response payload: ${parseError.message}`);
-      }
-
-      // Validate response structure
-      if (typeof responseStructure !== 'object' || responseStructure === null) {
-        throw new Error('Invalid payload structure in response');
-      }
-
-      // Extract response object
-      if (!responseStructure.response || typeof responseStructure.response !== 'object') {
-        throw new Error('Missing or invalid response field in payload');
+        throw new Error('Missing answer in response. Expected data.answer, data.payload, or payload field. Response: ' + JSON.stringify(responseData).substring(0, 200));
       }
 
       // answer is ALWAYS a plain string (code HTML/CSS/JS or error message) - NEVER JSON
-      // Response structure: { response: { answer: "string" } }
-      // NO verified field in response! Only answer.
-      const answer = typeof responseStructure.response.answer === 'string' 
-        ? responseStructure.response.answer 
-        : '';
 
       // Check if answer is an error message or code
       // Error messages typically don't contain HTML/CSS/JS code patterns
