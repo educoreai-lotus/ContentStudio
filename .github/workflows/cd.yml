@@ -40,18 +40,33 @@ jobs:
         working-directory: ./backend
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
-          RAILWAY_SERVICE_ID: ${{ secrets.RAILWAY_SERVICE_ID }}
         run: |
           # Deploy to Railway using environment variables
           # Railway CLI v4+ uses RAILWAY_TOKEN from environment automatically
-          # Note: Root Directory in Railway Dashboard should be set to "/backend" or left empty
-          echo "Linking to Railway project..."
+          # Check if Railway token is set
+          if [ -z "$RAILWAY_TOKEN" ]; then
+            echo "⚠️ RAILWAY_TOKEN is not set in GitHub secrets"
+            echo "Please add RAILWAY_TOKEN in: Settings → Secrets and variables → Actions"
+            echo "To get a token:"
+            echo "  1. Go to Railway Dashboard → Project Settings → Tokens"
+            echo "  2. Create a new token with 'Deploy' permissions"
+            echo "  3. Copy the token and add it to GitHub Secrets as RAILWAY_TOKEN"
+            echo "  4. Or run locally: railway login && railway link"
+            echo "  5. Then get token from: cat ~/.railway/config.json"
+            exit 1
+          fi
+          
+          echo "Deploying to Railway..."
           # Railway CLI v4+ automatically uses RAILWAY_TOKEN from environment
-          # Try to link project - if it fails, continue (project might already be linked)
-          npx @railway/cli@latest link --project $RAILWAY_PROJECT_ID 2>&1 || echo "Project may already be linked, continuing..."
-          echo "Deploying to Railway service..."
-          npx @railway/cli@latest up --service $RAILWAY_SERVICE_ID --detach
+          # The project is already linked via railway.json, so we can deploy directly
+          # Use 'railway up' which deploys from the current directory
+          npx @railway/cli@latest up --detach || {
+            echo "⚠️ Railway deployment failed. This might be because:"
+            echo "  1. RAILWAY_TOKEN is invalid or expired"
+            echo "  2. Project is not linked (check railway.json exists)"
+            echo "  3. Service permissions issue"
+            exit 1
+          }
 
       - name: Check Vercel configuration
         run: |
