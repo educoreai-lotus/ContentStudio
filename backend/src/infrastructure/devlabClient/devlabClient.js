@@ -324,9 +324,25 @@ export class DevlabClient {
       });
 
       // Send request via Coordinator
+      logger.info('[DevlabClient] About to send request to Coordinator', {
+        endpoint,
+        timeout: 180000,
+        envelopePayloadKeys: Object.keys(envelope.payload),
+        hasTargetService: !!envelope.payload.target_service,
+        targetServiceValue: envelope.payload.target_service,
+        actionValue: envelope.payload.action,
+      });
+      
       const coordinatorResponse = await postToCoordinator(envelope, {
         endpoint,
         timeout: 180000, // 3 minutes timeout for AI generation (passed to Coordinator via X-Request-Timeout header)
+      });
+      
+      logger.info('[DevlabClient] Received response from Coordinator', {
+        hasData: !!coordinatorResponse.data,
+        hasRawBody: !!coordinatorResponse.rawBodyString,
+        dataKeys: coordinatorResponse.data ? Object.keys(coordinatorResponse.data) : [],
+        responsePreview: JSON.stringify(coordinatorResponse.data || coordinatorResponse).substring(0, 500),
       });
 
       // Extract response components
