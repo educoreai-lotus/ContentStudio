@@ -350,6 +350,23 @@ export class DevlabClient {
       const rawBodyString = coordinatorResponse.rawBodyString || JSON.stringify(responseData);
       const responseHeaders = coordinatorResponse.headers || {};
 
+      // Try to parse rawBodyString to see if it contains the actual response from devlab-service
+      let parsedRawBody = null;
+      try {
+        parsedRawBody = JSON.parse(rawBodyString);
+        logger.info('[DevlabClient] Parsed rawBodyString', {
+          parsedKeys: parsedRawBody ? Object.keys(parsedRawBody) : [],
+          hasResponse: !!parsedRawBody?.response,
+          responseKeys: parsedRawBody?.response ? Object.keys(parsedRawBody.response) : [],
+          hasResponseAnswer: !!parsedRawBody?.response?.answer,
+          responseAnswerLength: parsedRawBody?.response?.answer?.length || 0,
+        });
+      } catch (parseError) {
+        logger.warn('[DevlabClient] Failed to parse rawBodyString', {
+          error: parseError.message,
+        });
+      }
+
       // Log full response structure to see what Coordinator actually returns
       logger.info('[DevlabClient] Full Coordinator response (before processing)', {
         responseDataType: typeof responseData,
@@ -366,6 +383,8 @@ export class DevlabClient {
         responseAnswerLength: responseData.response?.answer?.length || 0,
         hasPayload: !!responseData.payload,
         payloadType: typeof responseData.payload,
+        parsedRawBodyKeys: parsedRawBody ? Object.keys(parsedRawBody) : [],
+        parsedRawBodyResponseAnswer: parsedRawBody?.response?.answer,
         fullResponseData: JSON.stringify(responseData, null, 2).substring(0, 2000),
         rawBodyString: rawBodyString.substring(0, 500),
       });
