@@ -273,9 +273,12 @@ export class HeygenClient {
    * 
    * @param {Object} payload - Request payload
    * @param {string} payload.title - Video title (default: 'EduCore Lesson')
-   * @param {string} payload.prompt - Trainer's exact prompt (unmodified) - REQUIRED
+   * @param {string} payload.prompt - Trainer's exact prompt or OpenAI-generated explanation - REQUIRED
    * @param {string} payload.language - Language code (e.g., 'en', 'ar', 'he', 'en-US') - REQUIRED
-   * @param {number} payload.duration - Video duration in seconds (default: 15) - used for response only
+   * @param {number} payload.duration - Video duration in seconds (default: 15, max: 900 for presentation videos)
+   * @param {string} payload.presentation_file_url - Optional: URL to presentation file (PPTX/PDF) to use as background
+   * @param {string} payload.avatar_id - Optional: Custom avatar ID (overrides default from config)
+   * @param {boolean} payload.use_presentation_background - Optional: Whether to use presentation as background (default: false)
    * @returns {Promise<Object>} Video data with URL
    */
   async generateVideo(payload) {
@@ -316,10 +319,11 @@ export class HeygenClient {
       // Get language from payload (needed for language preservation)
       const language = payload.language || 'en';
       
-      // HeyGen has a limit of 180 seconds per video
-      // Approximate: ~10 characters per second of speech = ~1800 characters max
-      // To be safe, we'll limit to 1500 characters (approximately 150 seconds)
-      const MAX_PROMPT_LENGTH = 1500;
+      // HeyGen has a limit of 900 seconds (15 minutes) per video for presentation-based videos
+      // Approximate: ~10 characters per second of speech = ~9000 characters max
+      // To be safe, we'll limit to 8000 characters (approximately 800 seconds)
+      // For regular videos (without presentation), limit is 1500 characters (150 seconds)
+      const MAX_PROMPT_LENGTH = payload.presentation_file_url ? 8000 : 1500;
       let finalPrompt = prompt.trim();
       let wasTruncated = false;
 
@@ -462,21 +466,36 @@ export class HeygenClient {
       };
       const heygenLanguage = heygenLanguageMap[language] || language;
 
+      // Use custom avatar_id if provided, otherwise use default
+      const avatarId = payload.avatar_id || this.avatarId;
+      
+      // Check if we should use presentation as background
+      const usePresentationBackground = payload.use_presentation_background || !!payload.presentation_file_url;
+      
       requestPayload = {
         title: title || 'EduCore Lesson',
         video_inputs: [
           {
             character: {
               type: 'avatar',
-              avatar_id: this.avatarId,
+              avatar_id: avatarId,
               avatar_style: 'normal',
             },
             voice: {
               type: 'text',
-              input_text: finalPrompt, // Use truncated prompt if needed to prevent 180s limit
+              input_text: finalPrompt, // Use truncated prompt if needed
               voice_id: voiceId,
               language_code: heygenLanguage, // Explicitly set language code for HeyGen
             },
+            // Add presentation as background if provided
+            // Note: HeyGen API v2 may require different format - check documentation
+            // For now, we'll add it as a background media item
+            ...(usePresentationBackground && payload.presentation_file_url ? {
+              background: {
+                type: 'media',
+                url: payload.presentation_file_url,
+              },
+            } : {}),
           },
         ],
         dimension: {

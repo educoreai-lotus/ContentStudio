@@ -842,5 +842,24 @@ This presentation should be educational and suitable for ${audience}.`;
       };
     }
   }
+
+  /**
+   * Generate avatar video from presentation
+   * New workflow: presentation → extract text → OpenAI explanation → HeyGen video with presentation background
+   * 
+   * @param {Object} params - Request parameters
+   * @param {number} params.presentation_content_id - Content ID of the presentation
+   * @param {string} params.custom_prompt - Optional custom prompt from trainer
+   * @param {string} params.avatar_id - Optional custom avatar ID
+   * @param {string} params.language - Language code
+   * @returns {Promise<Object>} Video generation result
+   */
+  async generateAvatarVideoFromPresentation(params) {
+    const { GenerateAvatarVideoFromPresentationUseCase } = await import('../use-cases/GenerateAvatarVideoFromPresentationUseCase.js');
+    
+    // This will be initialized by the controller with proper dependencies
+    // For now, return a placeholder that indicates this needs to be called from controller
+    throw new Error('generateAvatarVideoFromPresentation must be called from controller with proper dependencies');
+  }
 }
 

@@ -124,5 +124,10 @@ router.post('/generate/avatar-video', async (req, res, next) => {
   return controller.generateAvatarVideo(req, res, next);
 });
 
+router.post('/generate/avatar-video-from-presentation', async (req, res, next) => {
+  const controller = await initServices();
+  return controller.generateAvatarVideoFromPresentation(req, res, next);
+});
+
 export default router;
 

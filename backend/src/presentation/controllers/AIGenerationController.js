@@ -249,6 +249,96 @@ export class AIGenerationController {
   async generateAvatarVideo(req, res, next) {
     return this.handleGeneration(req, res, next, 'avatar_video');
   }
+
+  /**
+   * Generate avatar video from presentation
+   * New workflow: presentation → extract text → OpenAI explanation → HeyGen video
+   * 
+   * POST /api/ai-generation/generate/avatar-video-from-presentation
+   * Body: {
+   *   presentation_content_id: number,
+   *   custom_prompt?: string,
+   *   avatar_id?: string,
+   *   language?: string
+   * }
+   */
+  async generateAvatarVideoFromPresentation(req, res, next) {
+    try {
+      const { presentation_content_id, custom_prompt, avatar_id, language } = req.body;
+
+      if (!presentation_content_id) {
+        return res.status(400).json({
+          success: false,
+          error: 'presentation_content_id is required',
+        });
+      }
+
+      // Import dependencies
+      const { RepositoryFactory } = await import('../../infrastructure/database/repositories/RepositoryFactory.js');
+      const { GenerateAvatarVideoFromPresentationUseCase } = await import('../../application/use-cases/GenerateAvatarVideoFromPresentationUseCase.js');
+      const { OpenAIClient } = await import('../../infrastructure/external-apis/openai/OpenAIClient.js');
+      
+      const contentRepository = await RepositoryFactory.getContentRepository();
+      const heygenClient = this.generateContentUseCase.aiGenerationService.heygenClient;
+      const openaiClient = this.generateContentUseCase.aiGenerationService.openaiClient;
+
+      if (!heygenClient) {
+        return res.status(503).json({
+          success: false,
+          error: 'HeyGen client not configured',
+        });
+      }
+
+      if (!openaiClient) {
+        return res.status(503).json({
+          success: false,
+          error: 'OpenAI client not configured',
+        });
+      }
+
+      // Create use case instance
+      const useCase = new GenerateAvatarVideoFromPresentationUseCase({
+        heygenClient,
+        openaiClient,
+        contentRepository,
+        language: language || 'en',
+      });
+
+      // Execute
+      const result = await useCase.execute({
+        presentation_content_id,
+        custom_prompt,
+        avatar_id,
+        language: language || 'en',
+      });
+
+      if (!result.success) {
+        return res.status(500).json({
+          success: false,
+          error: result.error || 'Failed to generate avatar video',
+          status: result.status,
+        });
+      }
+
+      return res.json({
+        success: true,
+        data: {
+          videoId: result.videoId,
+          videoUrl: result.videoUrl,
+          duration_seconds: result.duration_seconds,
+          status: result.status,
+          metadata: result.metadata,
+        },
+      });
+
+    } catch (error) {
+      logger.error('[AIGenerationController] Error generating avatar video from presentation', {
+        error: error.message,
+        stack: error.stack,
+      });
+      next(error);
+    }
+  }
 }
 
 
