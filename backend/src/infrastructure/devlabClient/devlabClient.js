@@ -434,12 +434,42 @@ export class DevlabClient {
       // Check if we have direct answer in data.answer (new format)
       if (responseData.data?.answer && typeof responseData.data.answer === 'string') {
         // Direct answer format: { success: true, data: { answer: "..." } }
-        answer = responseData.data.answer;
-        logger.info('[DevlabClient] Using data.answer directly (new format)', {
-          answerLength: answer.length,
-          answerPreview: answer.substring(0, 100),
-          answerValue: answer, // Log full answer to see what devlab-service returns
-        });
+        // The answer might be a JSON stringified object that contains the HTML
+        let rawAnswer = responseData.data.answer;
+        
+        // Try to parse as JSON first (devlab-service returns JSON stringified response)
+        try {
+          const parsedAnswer = JSON.parse(rawAnswer);
+          logger.info('[DevlabClient] Parsed data.answer as JSON', {
+            parsedKeys: Object.keys(parsedAnswer),
+            hasData: !!parsedAnswer.data,
+            dataKeys: parsedAnswer.data ? Object.keys(parsedAnswer.data) : [],
+            hasHtml: !!parsedAnswer.data?.html,
+            htmlLength: parsedAnswer.data?.html?.length || 0,
+          });
+          
+          // Extract HTML from parsed answer (devlab-service format: { success, data: { html, questions, metadata } })
+          if (parsedAnswer.data?.html && typeof parsedAnswer.data.html === 'string') {
+            answer = parsedAnswer.data.html;
+            logger.info('[DevlabClient] Extracted HTML from parsed answer', {
+              htmlLength: answer.length,
+              htmlPreview: answer.substring(0, 100),
+            });
+          } else {
+            // Fallback: use the raw answer if no HTML field found
+            answer = rawAnswer;
+            logger.warn('[DevlabClient] No HTML field in parsed answer, using raw answer', {
+              parsedKeys: Object.keys(parsedAnswer),
+            });
+          }
+        } catch (parseError) {
+          // If parsing fails, treat it as plain HTML string
+          answer = rawAnswer;
+          logger.info('[DevlabClient] data.answer is not JSON, using as plain HTML string', {
+            answerLength: answer.length,
+            answerPreview: answer.substring(0, 100),
+          });
+        }
       } else {
         // Try to find payload (old format or nested format)
         let payloadString = null;
