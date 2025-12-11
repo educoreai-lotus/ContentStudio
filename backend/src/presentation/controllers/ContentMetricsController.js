@@ -143,6 +143,11 @@ export class ContentMetricsController {
             filledData = await fillManagement(parsedPayload);
             break;
 
+          case 'managementreporting':
+            // ManagementReporting uses the same structure as Analytics/Management
+            filledData = await fillManagement(parsedPayload);
+            break;
+
           default:
             logger.error('[ContentMetricsController] Unknown requester_service', {
               requester_service: requesterService,
