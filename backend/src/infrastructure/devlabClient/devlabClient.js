@@ -350,6 +350,26 @@ export class DevlabClient {
       const rawBodyString = coordinatorResponse.rawBodyString || JSON.stringify(responseData);
       const responseHeaders = coordinatorResponse.headers || {};
 
+      // Log full response structure to see what Coordinator actually returns
+      logger.info('[DevlabClient] Full Coordinator response (before processing)', {
+        responseDataType: typeof responseData,
+        responseDataKeys: responseData ? Object.keys(responseData) : [],
+        hasData: !!responseData.data,
+        dataKeys: responseData.data ? Object.keys(responseData.data) : [],
+        dataAnswer: responseData.data?.answer,
+        dataAnswerType: typeof responseData.data?.answer,
+        dataAnswerLength: responseData.data?.answer?.length || 0,
+        hasResponse: !!responseData.response,
+        responseKeys: responseData.response ? Object.keys(responseData.response) : [],
+        responseAnswer: responseData.response?.answer,
+        responseAnswerType: typeof responseData.response?.answer,
+        responseAnswerLength: responseData.response?.answer?.length || 0,
+        hasPayload: !!responseData.payload,
+        payloadType: typeof responseData.payload,
+        fullResponseData: JSON.stringify(responseData, null, 2).substring(0, 2000),
+        rawBodyString: rawBodyString.substring(0, 500),
+      });
+
       // Verify Coordinator signature
       const signature = responseHeaders['x-service-signature'] || responseHeaders['X-Service-Signature'];
       const signer = responseHeaders['x-service-name'] || responseHeaders['X-Service-Name'];
@@ -443,12 +463,65 @@ export class DevlabClient {
       });
 
       // Support both old and new response formats
-      // Priority: 1. data.answer (direct answer), 2. data.payload (JSON stringified), 3. payload (old format)
+      // Coordinator may return the response in different formats:
+      // 1. { response: { answer: "..." } } - envelope format from devlab-service (PRIORITY)
+      // 2. { success: true, data: { answer: "..." } } - new format
+      // 3. { data: { payload: "..." } } - payload format
+      // 4. { payload: "..." } - old format
+      // Priority: 1. response.answer (envelope format), 2. data.answer (new format), 3. data.payload (JSON stringified), 4. payload (old format)
       let answer = null;
       let responseStructure = null;
       
+      // First, check if we have response.answer (envelope format from devlab-service)
+      // This is the format devlab-service returns: { requester_service, payload, response: { answer: "..." } }
+      // Also check parsedRawBody in case Coordinator wraps it differently
+      const responseAnswer = responseData.response?.answer || parsedRawBody?.response?.answer;
+      
+      if (responseAnswer && typeof responseAnswer === 'string') {
+        logger.info('[DevlabClient] Found response.answer (envelope format from devlab-service)', {
+          answerLength: responseAnswer.length,
+          answerPreview: responseAnswer.substring(0, 100),
+          source: responseData.response?.answer ? 'responseData.response' : 'parsedRawBody.response',
+        });
+        // This is the answer from devlab-service - it's JSON stringified
+        let rawAnswer = responseAnswer;
+        
+        // Try to parse as JSON first (devlab-service returns JSON stringified response)
+        try {
+          const parsedAnswer = JSON.parse(rawAnswer);
+          logger.info('[DevlabClient] Parsed response.answer as JSON', {
+            parsedKeys: Object.keys(parsedAnswer),
+            hasData: !!parsedAnswer.data,
+            dataKeys: parsedAnswer.data ? Object.keys(parsedAnswer.data) : [],
+            hasHtml: !!parsedAnswer.data?.html,
+            htmlLength: parsedAnswer.data?.html?.length || 0,
+          });
+          
+          // Extract HTML from parsed answer (devlab-service format: { success, data: { html, questions, metadata } })
+          if (parsedAnswer.data?.html && typeof parsedAnswer.data.html === 'string') {
+            answer = parsedAnswer.data.html;
+            logger.info('[DevlabClient] Extracted HTML from response.answer', {
+              htmlLength: answer.length,
+              htmlPreview: answer.substring(0, 100),
+            });
+          } else {
+            // Fallback: use the raw answer if no HTML field found
+            answer = rawAnswer;
+            logger.warn('[DevlabClient] No HTML field in parsed response.answer, using raw answer', {
+              parsedKeys: Object.keys(parsedAnswer),
+            });
+          }
+        } catch (parseError) {
+          // If parsing fails, treat it as plain HTML string
+          answer = rawAnswer;
+          logger.info('[DevlabClient] response.answer is not JSON, using as plain HTML string', {
+            answerLength: answer.length,
+            answerPreview: answer.substring(0, 100),
+          });
+        }
+      }
       // Check if we have direct answer in data.answer (new format)
-      if (responseData.data?.answer && typeof responseData.data.answer === 'string') {
+      else if (responseData.data?.answer && typeof responseData.data.answer === 'string') {
         // Direct answer format: { success: true, data: { answer: "..." } }
         // The answer might be a JSON stringified object that contains the HTML
         let rawAnswer = responseData.data.answer;
