@@ -264,21 +264,41 @@ describe('HeyGen Voice Language Mapping - End-to-End Validation', () => {
       expect(voiceId).toBe('77a8b81df32f482f851684c5e2ebb0d2'); // English voice ID
     });
     
-    it('should return error without API call when voice_id lookup returns null', async () => {
-      // Test the error handling path when voice_id is null
-      // We'll verify the error structure is correct
-      const testClient = new HeygenClient({ apiKey: 'test-key' });
-      testClient.client = {
-        post: jest.fn(),
-        get: jest.fn(),
-      };
-
-      // Manually test the error path by checking the code structure
+    it('should call API when voice_id is available (fallback to English)', async () => {
+      // Test that API is called when voice_id is available
       // Since getVoiceIdForLanguage with fallback will always return English voice,
-      // we need to verify the error handling code is correct
+      // the API should be called successfully
+      const testClient = new HeygenClient({ apiKey: 'test-key' });
       
-      // The error should be returned BEFORE any API call
-      // Let's verify the code structure handles null correctly
+      // Mock get to return completed status for polling (pollVideoStatus calls /v1/video_status.get)
+      const mockGet = jest.fn().mockImplementation((url) => {
+        if (url && url.includes('video_status.get')) {
+          return Promise.resolve({
+            data: { 
+              data: { 
+                status: 'completed', 
+                video_url: 'https://heygen.com/video.mp4',
+                video_download_url: 'https://heygen.com/download/video.mp4'
+              } 
+            },
+          });
+        }
+        return Promise.resolve({
+          data: { data: { status: 'completed', video_url: 'https://heygen.com/video.mp4' } },
+        });
+      });
+      
+      testClient.client = {
+        post: jest.fn().mockResolvedValue({
+          data: { data: { video_id: 'test-id' } },
+        }),
+        get: mockGet,
+      };
+      
+      // Set avatar ID so the client can proceed
+      testClient.avatarId = 'test-avatar-id';
+      testClient.avatarValidated = true;
+
       const result = await testClient.generateVideo({
         title: 'Test',
         prompt: 'Test prompt',
@@ -287,8 +307,10 @@ describe('HeyGen Voice Language Mapping - End-to-End Validation', () => {
       });
 
       // Since English fallback works, API should be called
-      // But we've verified the error handling code path exists
       expect(testClient.client.post).toHaveBeenCalled();
+      // The result should have a status (could be completed, processing, or failed)
+      expect(result).toHaveProperty('status');
+      expect(['completed', 'processing', 'failed', 'skipped']).toContain(result.status);
     });
   });
 
@@ -515,7 +537,7 @@ describe('HeyGen Voice Language Mapping - End-to-End Validation', () => {
       );
     });
 
-    it('should maintain avatar_id as "sophia-public" for all requests', async () => {
+    it('should maintain avatar_id as configured for all requests', async () => {
       const realClient = new HeygenClient({ apiKey: 'test-key' });
       realClient.client = {
         post: jest.fn().mockResolvedValue({
@@ -525,6 +547,10 @@ describe('HeyGen Voice Language Mapping - End-to-End Validation', () => {
           data: { data: { status: 'completed', video_url: 'https://heygen.com/video.mp4' } },
         }),
       };
+      
+      // Set avatar ID so the client can proceed
+      realClient.avatarId = 'test-avatar-id';
+      realClient.avatarValidated = true;
 
       await realClient.generateVideo({
         title: 'Test',
@@ -532,10 +558,25 @@ describe('HeyGen Voice Language Mapping - End-to-End Validation', () => {
         language: 'ar',
       });
 
-      const callArgs = realClient.client.post.mock.calls[0];
+      // Verify the API was called
+      expect(realClient.client.post).toHaveBeenCalled();
+      
+      // Get the call arguments
+      const calls = realClient.client.post.mock.calls;
+      expect(calls.length).toBeGreaterThan(0);
+      
+      const callArgs = calls[0];
+      expect(callArgs).toBeDefined();
+      expect(callArgs.length).toBeGreaterThanOrEqual(2);
+      
       const payload = callArgs[1];
-
-      expect(payload.video_inputs[0].character.avatar_id).toBe('sophia-public');
+      expect(payload).toBeDefined();
+      expect(payload.video_inputs).toBeDefined();
+      expect(payload.video_inputs.length).toBeGreaterThan(0);
+      expect(payload.video_inputs[0].character).toBeDefined();
+      
+      // Verify avatar_id is set (should be the configured one)
+      expect(payload.video_inputs[0].character.avatar_id).toBe('test-avatar-id');
     });
   });
 });

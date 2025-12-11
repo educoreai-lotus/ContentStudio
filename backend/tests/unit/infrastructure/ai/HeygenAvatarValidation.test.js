@@ -30,6 +30,10 @@ const mockGetVoiceConfig = jest.fn();
 jest.mock('../../../../src/config/heygen.js', () => ({
   getSafeAvatarId: (...args) => mockGetSafeAvatarId(...args),
   getVoiceConfig: (...args) => mockGetVoiceConfig(...args),
+  loadAvatarConfig: jest.fn(() => ({
+    avatar_id: 'test-avatar-id-123',
+    name: 'Test Avatar',
+  })),
 }));
 
 // Now import modules that use fs and config
@@ -93,9 +97,13 @@ describe('HeygenClient Avatar Validation', () => {
       style: 'natural',
     }));
     
-    // Setup default avatar config mocks
+    // Setup default avatar config mocks - ensure these are called correctly
     mockGetSafeAvatarId.mockReturnValue('test-avatar-id-123');
     mockGetAvatarId.mockReturnValue(mockAvatarConfig.avatar_id);
+    
+    // Reset axios mocks
+    mockAxiosGet.mockReset();
+    mockAxiosPost.mockReset();
   });
 
   afterEach(() => {

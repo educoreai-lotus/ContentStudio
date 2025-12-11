@@ -5,27 +5,16 @@
 
 import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
 import { GammaClient, isRTL, normalizeLanguage, RTL_LANGUAGES, buildLanguageRules } from '../../../../src/infrastructure/gamma/GammaClient.js';
+import axios from 'axios';
 
 // Mock axios module
 // IMPORTANT: axios is imported as default, and GammaClient uses axios.post() and axios.get() as static methods
-// Use a factory function that creates mocks and stores them in a way we can access
-const mockFunctions = {
-  post: jest.fn(),
-  get: jest.fn(),
-};
-
-jest.mock('axios', () => {
-  return {
-    __esModule: true,
-    default: mockFunctions,
-    post: mockFunctions.post,
-    get: mockFunctions.get,
-  };
-});
+// Use jest.spyOn to mock axios methods
+let mockPost, mockGet;
 
 // Get references to the mocked functions
-const getMockAxiosPost = () => mockFunctions.post;
-const getMockAxiosGet = () => mockFunctions.get;
+const getMockAxiosPost = () => mockPost;
+const getMockAxiosGet = () => mockGet;
 
 describe('GammaClient Language Support', () => {
   let gammaClient;
@@ -35,18 +24,14 @@ describe('GammaClient Language Support', () => {
     // Reset mocks FIRST - before creating new client
     jest.clearAllMocks();
     
-    // Setup default mocks BEFORE creating client
-    // IMPORTANT: Set up mocks BEFORE any async operations
-    const mockPost = getMockAxiosPost();
-    const mockGet = getMockAxiosGet();
-    
-    mockPost.mockResolvedValue({
+    // Setup axios mocks using jest.spyOn
+    mockPost = jest.spyOn(axios, 'post').mockResolvedValue({
       data: {
         generationId: 'test-generation-id',
       },
     });
 
-    mockGet
+    mockGet = jest.spyOn(axios, 'get')
       .mockResolvedValueOnce({
         data: {
           status: 'completed',
@@ -81,6 +66,7 @@ describe('GammaClient Language Support', () => {
 
   afterEach(() => {
     jest.clearAllMocks();
+    jest.restoreAllMocks();
   });
 
   describe('RTL Language Detection', () => {
@@ -187,9 +173,10 @@ describe('GammaClient Language Support', () => {
       
       // Setup default successful API responses for all integration tests
       // IMPORTANT: Set up mocks BEFORE any async operations
-      const mockPost = getMockAxiosPost();
-      const mockGet = getMockAxiosGet();
+      mockPost.mockReset();
+      mockGet.mockReset();
       
+      // Setup successful responses
       mockPost.mockResolvedValue({
         data: { generationId: 'test-id' },
       });
