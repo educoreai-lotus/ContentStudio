@@ -58,6 +58,16 @@ jobs:
         run: npm test
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/content_studio_test
+          NODE_ENV: test
+          SUPABASE_URL: http://localhost:54321
+          SUPABASE_SERVICE_ROLE_KEY: test-service-role-key
+          SUPABASE_ANON_KEY: test-anon-key
+          SUPABASE_BUCKET_NAME: media
+          # Optional: Add other required env vars for AIGenerationService initialization
+          OPENAI_API_KEY: test-openai-key
+          GEMINI_API_KEY: test-gemini-key
+          HEYGEN_API_KEY: test-heygen-key
+          GAMMA_API: test-gamma-key
 
       - name: Upload coverage reports
         uses: codecov/codecov-action@v3

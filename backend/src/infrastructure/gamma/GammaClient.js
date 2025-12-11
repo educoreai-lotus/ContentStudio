@@ -151,10 +151,10 @@ export function buildLanguageRules(language) {
 export class GammaClient {
   constructor({ apiKey, storageClient }) {
     if (!apiKey) {
-      if (logger && typeof logger.warn === 'function') {
+      // Only log warning in non-test environments
+      const isTestEnv = process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID;
+      if (!isTestEnv && logger && typeof logger.warn === 'function') {
         logger.warn('[GammaClient] API key not provided. Gamma integration disabled.');
-      } else {
-        console.warn('[GammaClient] API key not provided. Gamma integration disabled.');
       }
       this.enabled = false;
       return;

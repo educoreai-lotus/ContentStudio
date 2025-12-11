@@ -303,7 +303,10 @@ function startServer() {
 }
 
 // Start the application
-startServer();
+// Skip server startup in test environment to prevent Jest from hanging
+if (process.env.NODE_ENV !== 'test' && !process.env.JEST_WORKER_ID) {
+  startServer();
+}
 
 export default app;
 

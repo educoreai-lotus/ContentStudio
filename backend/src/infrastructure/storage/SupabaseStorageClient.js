@@ -13,20 +13,38 @@ export class SupabaseStorageClient {
     supabaseServiceKey,
     bucketName,
   }) {
+    // Resolve URL: parameter first, then environment variables
+    const resolvedUrl = supabaseUrl || process.env.SUPABASE_URL;
+    
+    // Resolve key: parameter first, then environment variables (including test override)
     const resolvedKey =
       supabaseKey ||
       supabaseServiceKey ||
+      process.env.TEST_SUPABASE_SERVICE_KEY ||
       process.env.SUPABASE_SERVICE_ROLE_KEY ||
       process.env.SUPABASE_KEY ||
       process.env.SUPABASE_SECRET_KEY;
 
-    if (!supabaseUrl || !resolvedKey) {
-      console.warn('Supabase credentials not provided, using mock storage');
-      this.client = null;
-      return;
+    const isTestEnv = process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID;
+
+    // In test environment: use mock storage silently if no credentials
+    // In dev/prod: throw error if credentials are missing
+    if (!resolvedUrl || !resolvedKey) {
+      if (isTestEnv) {
+        // Silent fallback to mock storage in tests
+        this.client = null;
+        this.bucketName = bucketName || process.env.SUPABASE_BUCKET_NAME || 'media';
+        this.integrityService = new FileIntegrityService();
+        return;
+      } else {
+        // In development/production, throw error if credentials are missing
+        throw new Error(
+          'Supabase credentials are required. Please provide SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables.'
+        );
+      }
     }
 
-    this.client = createClient(supabaseUrl, resolvedKey);
+    this.client = createClient(resolvedUrl, resolvedKey);
     // Use bucket name from parameter, env var, or default to 'media' (Railway default)
     this.bucketName = bucketName || process.env.SUPABASE_BUCKET_NAME || 'media';
     this.integrityService = new FileIntegrityService();
@@ -49,7 +67,10 @@ export class SupabaseStorageClient {
    */
   async uploadFile(fileBuffer, fileName, contentType = 'application/octet-stream') {
     if (!this.isConfigured()) {
-      console.warn('[SupabaseStorageClient] Not configured, skipping upload');
+      // Only log warning in non-test environments
+      if (process.env.NODE_ENV !== 'test' && !process.env.JEST_WORKER_ID) {
+        logger.warn('[SupabaseStorageClient] Not configured, skipping upload');
+      }
       return { url: null, path: null };
     }
 
@@ -170,7 +191,10 @@ export class SupabaseStorageClient {
       const text = await data.text();
       return JSON.parse(text);
     } catch (error) {
-      console.warn(`Failed to retrieve content from Supabase: ${error.message}`);
+      // Only log warning in non-test environments
+      if (process.env.NODE_ENV !== 'test' && !process.env.JEST_WORKER_ID) {
+        logger.warn(`Failed to retrieve content from Supabase: ${error.message}`);
+      }
       return null;
     }
   }
@@ -224,7 +248,10 @@ export class SupabaseStorageClient {
         );
         storageUrls[formatType] = url;
       } catch (error) {
-        console.error(`Failed to store ${formatType} for ${languageCode}:`, error);
+        // Only log error in non-test environments
+        if (process.env.NODE_ENV !== 'test' && !process.env.JEST_WORKER_ID) {
+          logger.error(`Failed to store ${formatType} for ${languageCode}:`, error);
+        }
       }
     }
 
@@ -256,7 +283,10 @@ export class SupabaseStorageClient {
           .remove(filePaths);
       }
     } catch (error) {
-      console.error(`Failed to delete lesson content: ${error.message}`);
+      // Only log error in non-test environments
+      if (process.env.NODE_ENV !== 'test' && !process.env.JEST_WORKER_ID) {
+        logger.error(`Failed to delete lesson content: ${error.message}`);
+      }
     }
   }
 }

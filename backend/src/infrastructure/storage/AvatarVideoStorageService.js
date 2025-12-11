@@ -8,17 +8,23 @@ import { FileIntegrityService } from '../security/FileIntegrityService.js';
  */
 export class AvatarVideoStorageService {
   constructor() {
-    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      logger.warn('[AvatarVideoStorageService] Supabase not configured');
+    const isTestEnv = process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID;
+    const supabaseUrl = process.env.SUPABASE_URL || process.env.TEST_SUPABASE_URL;
+    const supabaseKey = process.env.TEST_SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !supabaseKey) {
+      // In test environment: silent fallback
+      // In dev/prod: log warning
+      if (!isTestEnv) {
+        logger.warn('[AvatarVideoStorageService] Supabase not configured');
+      }
       this.client = null;
-      this.bucketName = 'media';
+      this.bucketName = process.env.SUPABASE_BUCKET_NAME || 'media';
+      this.integrityService = new FileIntegrityService();
       return;
     }
 
-    this.client = createClient(
-      process.env.SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY
-    );
+    this.client = createClient(supabaseUrl, supabaseKey);
     this.bucketName = process.env.SUPABASE_BUCKET_NAME || 'media';
     this.integrityService = new FileIntegrityService();
   }

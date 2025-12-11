@@ -5,6 +5,7 @@ import { AITranslationService } from '../ai/AITranslationService.js';
 import { LanguageStatsRepository } from '../database/repositories/LanguageStatsRepository.js';
 import { SupabaseStorageClient } from '../storage/SupabaseStorageClient.js';
 import { RepositoryFactory } from '../database/repositories/RepositoryFactory.js';
+import { logger } from '../logging/Logger.js';
 
 /**
  * Job Scheduler
@@ -26,25 +27,32 @@ export class JobScheduler {
    */
   async start() {
     if (this.isRunning) {
-      console.warn('Job scheduler is already running');
+      // Only log warning in non-test environments
+      if (process.env.NODE_ENV !== 'test' && !process.env.JEST_WORKER_ID) {
+        logger.warn('Job scheduler is already running');
+      }
       return;
     }
 
-    console.log('Starting job scheduler...');
+    logger.info('Starting job scheduler...');
     this.isRunning = true;
 
     // Initialize services
     const languageStatsRepository = new LanguageStatsRepository();
+    // SupabaseStorageClient will handle test environment automatically
     const supabaseStorageClient = new SupabaseStorageClient({
       supabaseUrl: process.env.SUPABASE_URL,
-      supabaseKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+      supabaseServiceKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
     });
     const contentRepository = await RepositoryFactory.getContentRepository();
     const topicRepository = await RepositoryFactory.getTopicRepository();
     const databaseReady = await RepositoryFactory.testConnection();
 
     if (!databaseReady) {
-      console.warn('Database not reachable. Skipping background job startup.');
+      // Only log warning in non-test environments
+      if (process.env.NODE_ENV !== 'test' && !process.env.JEST_WORKER_ID) {
+        logger.warn('Database not reachable. Skipping background job startup.');
+      }
       this.isRunning = false;
       return;
     }
@@ -141,7 +149,10 @@ export class JobScheduler {
    */
   stop() {
     if (!this.isRunning) {
-      console.warn('Job scheduler is not running');
+      // Only log warning in non-test environments
+      if (process.env.NODE_ENV !== 'test' && !process.env.JEST_WORKER_ID) {
+        logger.warn('Job scheduler is not running');
+      }
       return;
     }
 
@@ -186,9 +197,10 @@ export class JobScheduler {
     // This is a simplified version - in production, you'd want to store references
     if (jobName === 'Language Evaluation') {
       const languageStatsRepository = new LanguageStatsRepository();
+      // SupabaseStorageClient will handle test environment automatically
       const supabaseStorageClient = new SupabaseStorageClient({
         supabaseUrl: process.env.SUPABASE_URL,
-        supabaseKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+        supabaseServiceKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
       });
       const contentRepository = await RepositoryFactory.getContentRepository();
       const topicRepository = await RepositoryFactory.getTopicRepository();

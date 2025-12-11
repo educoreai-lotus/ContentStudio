@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { getSafeAvatarId, getVoiceConfig } from '../../config/heygen.js';
 import { AvatarVideoStorageService } from '../storage/AvatarVideoStorageService.js';
+import { logger } from '../logging/Logger.js';
 
 /**
  * Heygen API Client
@@ -13,10 +14,15 @@ import { AvatarVideoStorageService } from '../storage/AvatarVideoStorageService.
  * 
  * Voice ID is automatically selected from config based on language
  */
+
 export class HeygenClient {
   constructor({ apiKey }) {
     if (!apiKey) {
-      console.warn('[HeygenClient] API key not provided - avatar video generation will be disabled');
+      // Only log warning in non-test environments
+      const isTestEnv = process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID;
+      if (!isTestEnv) {
+        logger.warn('[HeygenClient] API key not provided - avatar video generation will be disabled');
+      }
       this.client = null;
       this.avatarId = null;
       this.avatarValidated = false;
@@ -45,12 +51,19 @@ export class HeygenClient {
 
     // Validate avatar on startup (async, non-blocking)
     // Skip validation for anna-public (no longer available)
-    if (this.avatarId && this.avatarId !== 'anna-public') {
+    // Skip validation in test environment
+    const isTestEnv = process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID;
+    if (!isTestEnv && this.avatarId && this.avatarId !== 'anna-public') {
       this.validateAvatar().catch(error => {
-        console.error('[HeygenClient] Failed to validate avatar on startup:', error.message);
+        // Only log error in non-test environments
+        if (process.env.NODE_ENV !== 'test' && !process.env.JEST_WORKER_ID) {
+          logger.error('[HeygenClient] Failed to validate avatar on startup:', { error: error.message });
+        }
       });
     } else if (this.avatarId === 'anna-public') {
-      console.log('[HeyGen] Skipping startup validation for anna-public (no longer available)');
+      if (!isTestEnv) {
+        logger.info('[HeyGen] Skipping startup validation for anna-public (no longer available)');
+      }
     }
   }
 
