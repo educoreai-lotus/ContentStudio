@@ -6,22 +6,30 @@ import { OpenAIClient } from '../../infrastructure/external-apis/openai/OpenAICl
  * Generate Avatar Video from Presentation Use Case
  * 
  * New workflow:
- * 1. Extract text from presentation (PPTX/PDF)
- * 2. Generate explanation using OpenAI GPT-4o
- * 3. Create avatar video with presentation as background
- * 4. Support up to 15 minutes (900 seconds)
- * 5. Allow custom avatar selection
+ * 1. Extract text from presentation (PPTX/PDF) using FileTextExtractor
+ * 2. Validate language using CreateContentUseCase.extractTextForLanguageValidation
+ * 3. Validate quality/relevance using QualityCheckService
+ * 4. Generate explanation using OpenAI GPT-4o
+ * 5. Create avatar video with presentation as background
+ * 6. Support up to 15 minutes (900 seconds)
+ * 7. Allow custom avatar selection
  */
 export class GenerateAvatarVideoFromPresentationUseCase {
   constructor({
     heygenClient,
     openaiClient,
     contentRepository,
+    qualityCheckService,
+    topicRepository,
+    courseRepository,
     language = 'en',
   }) {
     this.heygenClient = heygenClient;
     this.openaiClient = openaiClient;
     this.contentRepository = contentRepository;
+    this.qualityCheckService = qualityCheckService;
+    this.topicRepository = topicRepository;
+    this.courseRepository = courseRepository;
     this.language = language;
   }
 
@@ -58,34 +66,55 @@ export class GenerateAvatarVideoFromPresentationUseCase {
         throw new Error(`Content is not a presentation (type: ${presentationContent.content_type_id})`);
       }
 
-      // Step 2: Extract text from presentation
+      // Step 2: Extract text from presentation using QualityCheckService (same as CreateContentUseCase)
       logger.info('[GenerateAvatarVideoFromPresentation] Step 2: Extracting text from presentation');
 
-      let presentationText = '';
+      // Get presentation file URL first (needed for HeyGen background)
       const presentationFileUrl = presentationContent.content_data?.fileUrl || 
                                   presentationContent.content_data?.presentationUrl ||
                                   presentationContent.content_data?.url;
 
-      if (presentationFileUrl) {
+      let presentationText = '';
+      
+      // Use QualityCheckService.extractTextFromContent (same method used in CreateContentUseCase)
+      // This handles all the same extraction logic: slides, fileUrl, fallbacks, etc.
+      if (this.qualityCheckService) {
         try {
-          presentationText = await FileTextExtractor.extractTextFromUrl(
-            presentationFileUrl,
-            presentationContent.content_data,
-            this.openaiClient
-          );
+          presentationText = await this.qualityCheckService.extractTextFromContent(presentationContent);
+          logger.info('[GenerateAvatarVideoFromPresentation] Text extracted via QualityCheckService', {
+            textLength: presentationText?.length || 0,
+            preview: presentationText?.substring(0, 200) || '',
+          });
         } catch (extractError) {
-          logger.error('[GenerateAvatarVideoFromPresentation] Failed to extract text from presentation', {
+          logger.warn('[GenerateAvatarVideoFromPresentation] QualityCheckService extraction failed, trying fallback', {
             error: extractError.message,
           });
-          throw new Error(`Failed to extract text from presentation: ${extractError.message}`);
         }
-      } else {
-        // Fallback: try to extract from content_data.slides
-        if (presentationContent.content_data?.slides && Array.isArray(presentationContent.content_data.slides)) {
-          presentationText = presentationContent.content_data.slides
-            .map(slide => slide.text || slide.title || slide.content || slide.body || '')
-            .filter(Boolean)
-            .join('\n\n');
+      }
+      
+      // Fallback: Use FileTextExtractor directly if QualityCheckService failed or not available
+      if (!presentationText || presentationText.trim().length === 0) {
+        if (presentationFileUrl) {
+          try {
+            presentationText = await FileTextExtractor.extractTextFromUrl(
+              presentationFileUrl,
+              presentationContent.content_data,
+              this.openaiClient
+            );
+          } catch (extractError) {
+            logger.error('[GenerateAvatarVideoFromPresentation] Failed to extract text from presentation', {
+              error: extractError.message,
+            });
+            throw new Error(`Failed to extract text from presentation: ${extractError.message}`);
+          }
+        } else {
+          // Last fallback: try to extract from content_data.slides
+          if (presentationContent.content_data?.slides && Array.isArray(presentationContent.content_data.slides)) {
+            presentationText = presentationContent.content_data.slides
+              .map(slide => slide.text || slide.title || slide.content || slide.body || '')
+              .filter(Boolean)
+              .join('\n\n');
+          }
         }
       }
 
@@ -97,6 +126,38 @@ export class GenerateAvatarVideoFromPresentationUseCase {
         textLength: presentationText.length,
         preview: presentationText.substring(0, 200),
       });
+
+      // Step 2.5: Validate quality/relevance (same as CreateContentUseCase.validateContentQualityBeforeSave)
+      if (this.qualityCheckService && presentationContent.topic_id) {
+        logger.info('[GenerateAvatarVideoFromPresentation] Step 2.5: Validating presentation quality and relevance');
+        
+        try {
+          // Use QualityCheckService to validate quality (same as CreateContentUseCase)
+          const qualityResult = await this.qualityCheckService.validateContentQualityBeforeSave(
+            presentationContent,
+            presentationContent.topic_id
+          );
+          
+          if (!qualityResult.passed) {
+            logger.warn('[GenerateAvatarVideoFromPresentation] Quality check failed', {
+              relevance: qualityResult.relevance_score,
+              originality: qualityResult.originality_score,
+              reasons: qualityResult.reasons,
+            });
+            // Don't block - just log warning (presentation might still be usable)
+          } else {
+            logger.info('[GenerateAvatarVideoFromPresentation] Quality check passed', {
+              relevance: qualityResult.relevance_score,
+              originality: qualityResult.originality_score,
+            });
+          }
+        } catch (qualityError) {
+          logger.warn('[GenerateAvatarVideoFromPresentation] Quality check failed (non-blocking)', {
+            error: qualityError.message,
+          });
+          // Don't block - continue with generation
+        }
+      }
 
       // Step 3: Generate explanation using OpenAI GPT-4o
       logger.info('[GenerateAvatarVideoFromPresentation] Step 3: Generating explanation with OpenAI');

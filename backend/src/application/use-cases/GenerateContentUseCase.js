@@ -475,72 +475,80 @@ ${basePrompt}`;
         }
 
         case 6: { // avatar_video
-          // ⚠️ CRITICAL: Avatar video generation MUST NOT use OpenAI for script generation.
-          // The narration must come ONLY from HeyGen using our formatted prompt.
-          // 
-          // ❌ FORBIDDEN: Do NOT call OpenAI to generate "video script" or "narration text"
-          // ✅ REQUIRED: Format our prompt (topic, description, skills, trainer_prompt/transcript) 
-          //              and send directly to HeyGen
-          //
-          // Build lesson data for avatar text generation (NO GPT)
-          // Ensure skillsList is an array
-          const skillsListArray = Array.isArray(promptVariables.skillsListArray)
-            ? promptVariables.skillsListArray
-            : Array.isArray(promptVariables.skillsList)
-            ? promptVariables.skillsList
-            : typeof promptVariables.skillsList === 'string'
-            ? promptVariables.skillsList.split(',').map(s => s.trim()).filter(Boolean)
-            : [];
+          // ⚠️ NEW WORKFLOW: Avatar video MUST be created from a presentation
+          // Check if presentation_content_id is provided in generationRequest
+          const presentationContentId = generationRequest.presentation_content_id;
           
-          // ⚠️ CRITICAL: For avatar video, pass ONLY the trainer's prompt
-          // Do NOT modify, rewrite, or add narration text
-          // The prompt comes from: generationRequest.prompt (from frontend body.prompt)
-          // For VideoToLesson flow, use transcriptText as fallback if no prompt is provided
-          const lessonData = {
-            prompt: generationRequest.prompt || promptVariables.trainerRequestText || promptVariables.transcriptText || '', // Trainer's exact prompt or transcript
-            lessonTopic: promptVariables.lessonTopic, // For fallback only
-          };
-
-          // Generate avatar video - NO GPT, uses buildAvatarText()
-          // ⚠️ This calls buildAvatarText() which returns the trainer's prompt as-is.
-          // No OpenAI script generation occurs in this flow.
-          const avatarResult = await this.aiGenerationService.generateAvatarVideo(lessonData, {
-            language: promptVariables.language,
-            topicName: promptVariables.lessonTopic, // For logging only
-          });
-          
-          // Handle skipped status differently from failed
-          if (avatarResult.status === 'skipped') {
-            contentData = {
-              script: avatarResult.script || null,
-              videoUrl: null,
-              videoId: null,
-              status: 'skipped',
-              reason: avatarResult.reason || 'forced_avatar_unavailable',
-              // No error fields for skipped status
-            };
-            // Don't break - continue to save skipped content (not failed)
-          } else if (avatarResult.status === 'failed') {
-            // Create failed content data structure (without status - removed for consistency)
-            const failedMetadata = {};
-            if (avatarResult.metadata?.heygen_video_url) {
-              failedMetadata.heygen_video_url = avatarResult.metadata.heygen_video_url;
+          if (!presentationContentId) {
+            // Try to find presentation in topic
+            const allContent = await this.contentRepository.findByTopicId(generationRequest.topic_id);
+            const presentationContent = allContent.find(c => c.content_type_id === 3); // presentation type
+            
+            if (!presentationContent) {
+              // No presentation found - return error
+              contentData = {
+                status: 'failed',
+                error: 'Avatar video requires a presentation. Please create or upload a presentation first.',
+                errorCode: 'PRESENTATION_REQUIRED',
+                reason: 'Avatar video can only be created from a presentation',
+              };
+              break;
             }
             
+            // Use found presentation
+            generationRequest.presentation_content_id = presentationContent.content_id;
+          }
+
+          // Use new workflow: generate from presentation
+          const { GenerateAvatarVideoFromPresentationUseCase } = await import('./GenerateAvatarVideoFromPresentationUseCase.js');
+          const { RepositoryFactory } = await import('../../infrastructure/database/repositories/RepositoryFactory.js');
+          
+          const topicRepository = await RepositoryFactory.getTopicRepository();
+          const courseRepository = await RepositoryFactory.getCourseRepository();
+          
+          const useCase = new GenerateAvatarVideoFromPresentationUseCase({
+            heygenClient: this.aiGenerationService.heygenClient,
+            openaiClient: this.aiGenerationService.openaiClient,
+            contentRepository: this.contentRepository,
+            qualityCheckService: this.qualityCheckService, // For language and quality validation
+            topicRepository,     // For getting topic language
+            courseRepository,    // For quality check context
+            language: promptVariables.language || 'en',
+          });
+
+          const result = await useCase.execute({
+            presentation_content_id: generationRequest.presentation_content_id,
+            custom_prompt: generationRequest.prompt || generationRequest.custom_prompt,
+            avatar_id: generationRequest.avatar_id,
+            language: promptVariables.language || 'en',
+          });
+          
+          // Handle result from new workflow
+          if (!result.success) {
+            // Failed or skipped
             contentData = {
-              script: avatarResult.script || null,
               videoUrl: null,
-              videoId: avatarResult.videoId || null,
-              error: avatarResult.error || avatarResult.errorMessage || 'Avatar video generation failed',
-              errorCode: avatarResult.errorCode || 'UNKNOWN_ERROR',
-              reason: avatarResult.reason || 'Avatar video failed due to unsupported voice engine. Please choose another voice.',
-              // Keep only heygen_video_url in metadata (remove generation_status, storage_fallback)
-              metadata: Object.keys(failedMetadata).length > 0 ? failedMetadata : undefined,
+              videoId: result.videoId || null,
+              status: result.status || 'failed',
+              error: result.error || 'Avatar video generation failed',
+              errorCode: result.status === 'failed' ? 'GENERATION_FAILED' : 'SKIPPED',
+              reason: result.error || result.status || 'Avatar video generation failed',
+              metadata: result.metadata || {},
             };
-            // Don't break - continue to save failed content
           } else {
-            // Clean content data: remove redundant topic/skills metadata, status, generation_status, storage_fallback
-            contentData = ContentDataCleaner.cleanAvatarVideoData(avatarResult);
+            // Success - use new workflow result structure
+            contentData = {
+              videoUrl: result.videoUrl,
+              videoId: result.videoId,
+              duration_seconds: result.duration_seconds || 900,
+              status: 'completed',
+              explanation: result.explanation, // Store the generated explanation
+              metadata: {
+                ...result.metadata,
+                presentation_content_id: generationRequest.presentation_content_id,
+                generated_at: new Date().toISOString(),
+              },
+            };
           }
           break;
         }

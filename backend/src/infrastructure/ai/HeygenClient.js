@@ -488,11 +488,11 @@ export class HeygenClient {
               language_code: heygenLanguage, // Explicitly set language code for HeyGen
             },
             // Add presentation as background if provided
-            // Note: HeyGen API v2 may require different format - check documentation
-            // For now, we'll add it as a background media item
+            // HeyGen API v2 supports background media in video_inputs
+            // The presentation will appear behind the avatar
             ...(usePresentationBackground && payload.presentation_file_url ? {
               background: {
-                type: 'media',
+                type: 'image',
                 url: payload.presentation_file_url,
               },
             } : {}),
@@ -504,11 +504,16 @@ export class HeygenClient {
         },
       };
 
-      console.log('[HeyGen] Request payload with language', {
+      console.log('[HeyGen] Request payload with language and presentation', {
         language,
         heygenLanguage,
         voiceId,
         hasLanguageInVoice: !!requestPayload.video_inputs[0].voice.language_code,
+        hasPresentationBackground: usePresentationBackground,
+        presentationFileUrl: payload.presentation_file_url || 'none',
+        avatarId: avatarId,
+        promptLength: finalPrompt.length,
+        maxPromptLength: MAX_PROMPT_LENGTH,
       });
 
       // Log request payload for debugging

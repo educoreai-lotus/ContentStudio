@@ -246,8 +246,58 @@ export class AIGenerationController {
     return this.handleGeneration(req, res, next, 'mind_map');
   }
 
+  /**
+   * Generate avatar video - NEW WORKFLOW: Requires presentation first
+   * Avatar videos can only be created from presentations now
+   */
   async generateAvatarVideo(req, res, next) {
-    return this.handleGeneration(req, res, next, 'avatar_video');
+    try {
+      const { topic_id, presentation_content_id } = req.body;
+
+      // NEW WORKFLOW: Avatar video must be created from a presentation
+      // Check if presentation_content_id is provided
+      if (presentation_content_id) {
+        // Use new workflow: generate from presentation
+        return this.generateAvatarVideoFromPresentation(req, res, next);
+      }
+
+      // If no presentation_content_id, check if topic has a presentation
+      if (topic_id) {
+        const { RepositoryFactory } = await import('../../infrastructure/database/repositories/RepositoryFactory.js');
+        const contentRepository = await RepositoryFactory.getContentRepository();
+        
+        // Find presentation content for this topic
+        const allContent = await contentRepository.findByTopicId(parseInt(topic_id));
+        const presentationContent = allContent.find(c => c.content_type_id === 3); // presentation type
+        
+        if (presentationContent) {
+          // Found presentation - use new workflow
+          req.body.presentation_content_id = presentationContent.content_id;
+          return this.generateAvatarVideoFromPresentation(req, res, next);
+        } else {
+          // No presentation found - block creation
+          return res.status(400).json({
+            success: false,
+            error: 'Avatar video can only be created from a presentation. Please create or upload a presentation first.',
+            requires_presentation: true,
+          });
+        }
+      }
+
+      // No topic_id and no presentation_content_id - block creation
+      return res.status(400).json({
+        success: false,
+        error: 'Avatar video requires a presentation. Please provide presentation_content_id or topic_id with an existing presentation.',
+        requires_presentation: true,
+      });
+
+    } catch (error) {
+      logger.error('[AIGenerationController] Error in generateAvatarVideo', {
+        error: error.message,
+        stack: error.stack,
+      });
+      next(error);
+    }
   }
 
   /**
@@ -276,11 +326,13 @@ export class AIGenerationController {
       // Import dependencies
       const { RepositoryFactory } = await import('../../infrastructure/database/repositories/RepositoryFactory.js');
       const { GenerateAvatarVideoFromPresentationUseCase } = await import('../../application/use-cases/GenerateAvatarVideoFromPresentationUseCase.js');
-      const { OpenAIClient } = await import('../../infrastructure/external-apis/openai/OpenAIClient.js');
       
       const contentRepository = await RepositoryFactory.getContentRepository();
+      const topicRepository = await RepositoryFactory.getTopicRepository();
+      const courseRepository = await RepositoryFactory.getCourseRepository();
       const heygenClient = this.generateContentUseCase.aiGenerationService.heygenClient;
       const openaiClient = this.generateContentUseCase.aiGenerationService.openaiClient;
+      const qualityCheckService = this.generateContentUseCase.qualityCheckService;
 
       if (!heygenClient) {
         return res.status(503).json({
@@ -296,11 +348,14 @@ export class AIGenerationController {
         });
       }
 
-      // Create use case instance
+      // Create use case instance with all required services (same as CreateContentUseCase)
       const useCase = new GenerateAvatarVideoFromPresentationUseCase({
         heygenClient,
         openaiClient,
         contentRepository,
+        qualityCheckService, // For language and quality validation
+        topicRepository,     // For getting topic language
+        courseRepository,    // For quality check context
         language: language || 'en',
       });
 
