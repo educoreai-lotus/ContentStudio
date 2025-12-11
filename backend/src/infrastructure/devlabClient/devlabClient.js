@@ -3,6 +3,8 @@ import { postToCoordinator } from '../coordinatorClient/coordinatorClient.js';
 import { getLanguageName } from '../../utils/languageMapper.js';
 import { verifyCoordinatorSignature } from '../utils/verifyCoordinatorSignature.js';
 
+const SERVICE_NAME = process.env.SERVICE_NAME || 'content-studio';
+
 /**
  * DevLab Client
  * Handles communication between Content Studio and DevLab microservice
@@ -59,6 +61,14 @@ export class DevlabClient {
 
       logger.info('[DevlabClient] Sending request to DevLab via Coordinator', {
         payloadKeys: Object.keys(payload),
+      });
+
+      // Log full request envelope (what we send to Coordinator)
+      logger.info('[DevlabClient] Full request envelope to Coordinator (sendRequest)', {
+        envelope: JSON.stringify(envelope, null, 2),
+        envelopeKeys: Object.keys(envelope),
+        payloadKeys: Object.keys(payload),
+        fullPayload: JSON.stringify(payload, null, 2),
       });
 
       // Send request via Coordinator
@@ -298,6 +308,14 @@ export class DevlabClient {
         theoreticalQuestionType: payloadData.theoretical_question_type || 'N/A',
       });
 
+      // Log full request envelope (what we send to Coordinator)
+      logger.info('[DevlabClient] Full request envelope to Coordinator (generateAIExercises)', {
+        envelope: JSON.stringify(envelope, null, 2),
+        envelopeKeys: Object.keys(envelope),
+        payloadKeys: Object.keys(payloadData),
+        fullPayload: JSON.stringify(payloadData, null, 2),
+      });
+
       // Send request via Coordinator
       const coordinatorResponse = await postToCoordinator(envelope, {
         endpoint,
@@ -342,47 +360,17 @@ export class DevlabClient {
       }
 
       if (coordinatorPublicKey) {
-        // Try multiple verification strategies:
-        // 1. Full raw body string (most common)
-        // 2. data.payload if exists (new format)
-        // 3. payload if exists (old format)
-        // 4. data.answer if exists (alternative format)
-        // 5. JSON.stringify(responseData.data) if data exists
-        
-        let bodyToVerify = rawBodyString;
-        let verificationStrategy = 'rawBodyString';
-        
-        // Check if response has new format with data.payload
-        if (responseData?.data?.payload && typeof responseData.data.payload === 'string') {
-          logger.info('[DevlabClient] Response has data.payload, trying signature verification on payload', {
-            payloadLength: responseData.data.payload.length,
-          });
-          bodyToVerify = responseData.data.payload;
-          verificationStrategy = 'data.payload';
-        } else if (responseData?.payload && typeof responseData.payload === 'string') {
-          // Old format: response.payload
-          logger.info('[DevlabClient] Response has payload, trying signature verification on payload', {
-            payloadLength: responseData.payload.length,
-          });
-          bodyToVerify = responseData.payload;
-          verificationStrategy = 'payload';
-        } else if (responseData?.data && typeof responseData.data === 'object') {
-          // Try verifying on data object as JSON string
-          logger.info('[DevlabClient] Response has data object, trying signature verification on JSON.stringify(data)', {
-            dataKeys: Object.keys(responseData.data),
-          });
-          bodyToVerify = JSON.stringify(responseData.data);
-          verificationStrategy = 'JSON.stringify(data)';
-        }
+        // IMPORTANT: Always verify signature on the FULL raw response body
+        // Coordinator signs the entire response body, not just parts of it
+        const bodyToVerify = rawBodyString;
         
         logger.info('[DevlabClient] Verifying signature with public key (generateAIExercises)', {
           signatureLength: signature?.length || 0,
           signaturePreview: signature?.substring(0, 50) || '',
           publicKeyLength: coordinatorPublicKey?.length || 0,
           publicKeyPreview: coordinatorPublicKey?.substring(0, 50) || '',
-          bodyToVerifyLength: bodyToVerify?.length || 0,
-          bodyToVerifyPreview: bodyToVerify?.substring(0, 200) || '',
-          verificationStrategy,
+          rawBodyLength: rawBodyString?.length || 0,
+          rawBodyPreview: rawBodyString?.substring(0, 200) || '',
         });
         
         const isValid = verifyCoordinatorSignature(coordinatorPublicKey, signature, bodyToVerify);
@@ -390,8 +378,7 @@ export class DevlabClient {
         logger.info('[DevlabClient] Signature verification result (generateAIExercises)', {
           isValid,
           signatureLength: signature?.length || 0,
-          bodyToVerifyLength: bodyToVerify?.length || 0,
-          verificationStrategy,
+          rawBodyLength: rawBodyString?.length || 0,
         });
         
         if (!isValid) {
@@ -400,12 +387,9 @@ export class DevlabClient {
             signaturePreview: signature?.substring(0, 100) || '',
             rawBodyLength: rawBodyString?.length || 0,
             rawBodyPreview: rawBodyString?.substring(0, 500) || '',
-            bodyToVerifyLength: bodyToVerify?.length || 0,
-            bodyToVerifyPreview: bodyToVerify?.substring(0, 500) || '',
             publicKeyLength: coordinatorPublicKey?.length || 0,
             publicKeyPreview: coordinatorPublicKey?.substring(0, 100) || '',
             responseDataKeys: responseData ? Object.keys(responseData) : [],
-            verificationStrategy,
           });
           // Don't throw error - just log warning and continue
           // The signature verification might be failing due to Coordinator changes
@@ -421,6 +405,20 @@ export class DevlabClient {
         throw new Error('Invalid response structure from Coordinator');
       }
 
+      // Log full response structure for debugging
+      logger.info('[DevlabClient] Full Coordinator response structure', {
+        responseDataKeys: responseData ? Object.keys(responseData) : [],
+        hasData: !!responseData.data,
+        dataKeys: responseData.data ? Object.keys(responseData.data) : [],
+        dataAnswer: responseData.data?.answer,
+        dataAnswerType: typeof responseData.data?.answer,
+        dataAnswerLength: responseData.data?.answer?.length || 0,
+        dataPayload: responseData.data?.payload ? responseData.data.payload.substring(0, 100) : null,
+        hasPayload: !!responseData.payload,
+        payloadType: typeof responseData.payload,
+        fullResponse: JSON.stringify(responseData).substring(0, 1000),
+      });
+
       // Support both old and new response formats
       // Priority: 1. data.answer (direct answer), 2. data.payload (JSON stringified), 3. payload (old format)
       let answer = null;
@@ -433,6 +431,7 @@ export class DevlabClient {
         logger.info('[DevlabClient] Using data.answer directly (new format)', {
           answerLength: answer.length,
           answerPreview: answer.substring(0, 100),
+          answerValue: answer, // Log full answer to see what devlab-service returns
         });
       } else {
         // Try to find payload (old format or nested format)
@@ -498,6 +497,16 @@ export class DevlabClient {
       }
 
       // answer is ALWAYS a plain string (code HTML/CSS/JS or error message) - NEVER JSON
+
+      // Check if answer is a service name (invalid response from Coordinator)
+      if (answer === 'content-studio' || answer === SERVICE_NAME) {
+        logger.error('[DevlabClient] Coordinator returned service name instead of answer - invalid response', {
+          topicId: payloadData.topic_id,
+          answer,
+          responseData: JSON.stringify(responseData).substring(0, 500),
+        });
+        throw new Error('Invalid response from Coordinator: received service name instead of exercise code. This indicates a Coordinator routing or processing error.');
+      }
 
       // Check if answer is an error message or code
       // Error messages typically don't contain HTML/CSS/JS code patterns
@@ -644,6 +653,15 @@ export class DevlabClient {
         questionType: payloadData.question_type,
         exercisesCount: exercises.length,
         programmingLanguage: payloadData.programming_language,
+      });
+
+      // Log full request envelope (what we send to Coordinator)
+      logger.info('[DevlabClient] Full request envelope to Coordinator (validateManualExercise)', {
+        envelope: JSON.stringify(envelope, null, 2),
+        envelopeKeys: Object.keys(envelope),
+        payloadKeys: Object.keys(payloadData),
+        fullPayload: JSON.stringify(payloadData, null, 2),
+        exercisesPreview: exercises.map(ex => typeof ex === 'string' ? ex.substring(0, 100) : ex).slice(0, 2),
       });
 
       // Send request via Coordinator
