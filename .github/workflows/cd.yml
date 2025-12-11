@@ -48,25 +48,43 @@ jobs:
             echo "⚠️ RAILWAY_TOKEN is not set in GitHub secrets"
             echo "Please add RAILWAY_TOKEN in: Settings → Secrets and variables → Actions"
             echo "To get a token:"
-            echo "  1. Go to Railway Dashboard → Project Settings → Tokens"
-            echo "  2. Create a new token with 'Deploy' permissions"
-            echo "  3. Copy the token and add it to GitHub Secrets as RAILWAY_TOKEN"
-            echo "  4. Or run locally: railway login && railway link"
-            echo "  5. Then get token from: cat ~/.railway/config.json"
+            echo "  1. Go to Railway Dashboard → https://railway.app/dashboard"
+            echo "  2. Select project 'merry-art'"
+            echo "  3. Go to Project Settings → Tokens"
+            echo "  4. Create a new token with 'Deploy' permissions"
+            echo "  5. Copy the token and add it to GitHub Secrets as RAILWAY_TOKEN"
             exit 1
           fi
           
-          echo "Deploying to Railway..."
-          # Railway CLI v4+ automatically uses RAILWAY_TOKEN from environment
-          # The project is already linked via railway.json, so we can deploy directly
-          # Use 'railway up' which deploys from the current directory
-          npx @railway/cli@latest up --detach || {
-            echo "⚠️ Railway deployment failed. This might be because:"
-            echo "  1. RAILWAY_TOKEN is invalid or expired"
-            echo "  2. Project is not linked (check railway.json exists)"
-            echo "  3. Service permissions issue"
+          echo "Checking Railway connection..."
+          # Verify token is valid by checking whoami
+          npx @railway/cli@latest whoami || {
+            echo "❌ Railway authentication failed. RAILWAY_TOKEN is invalid or expired."
+            echo "Please create a new token from Railway Dashboard → Project Settings → Tokens"
             exit 1
           }
+          
+          echo "Linking to Railway project..."
+          # Link to project using project ID from railway.json or environment
+          # Project ID: 73dfff8a-7dc3-4989-9132-d1fe63e61e71 (from railway variables)
+          npx @railway/cli@latest link --project 73dfff8a-7dc3-4989-9132-d1fe63e61e71 || {
+            echo "⚠️ Project linking failed, but continuing (might already be linked)..."
+          }
+          
+          echo "Deploying to Railway..."
+          # Railway CLI v4+ automatically uses RAILWAY_TOKEN from environment
+          # Use 'railway up' which deploys from the current directory
+          npx @railway/cli@latest up --detach || {
+            echo "❌ Railway deployment failed"
+            echo "Debugging info:"
+            echo "  - RAILWAY_TOKEN is set: $([ -n "$RAILWAY_TOKEN" ] && echo 'yes' || echo 'no')"
+            echo "  - Current directory: $(pwd)"
+            echo "  - Railway.json exists: $([ -f railway.json ] && echo 'yes' || echo 'no')"
+            npx @railway/cli@latest status || echo "  - Cannot get Railway status"
+            exit 1
+          }
+          
+          echo "✅ Railway deployment initiated successfully"
 
       - name: Check Vercel configuration
         run: |
