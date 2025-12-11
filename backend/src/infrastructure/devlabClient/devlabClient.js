@@ -1,6 +1,7 @@
 import { logger } from '../logging/Logger.js';
 import { postToCoordinator } from '../coordinatorClient/coordinatorClient.js';
 import { getLanguageName } from '../../utils/languageMapper.js';
+import { verifyCoordinatorSignature } from '../utils/verifyCoordinatorSignature.js';
 
 /**
  * DevLab Client
@@ -63,21 +64,45 @@ export class DevlabClient {
       // Send request via Coordinator
       const coordinatorResponse = await postToCoordinator(envelope, {
         endpoint: '/api/fill-content-metrics',
-        timeout: 30000,
+        timeout: 120000, // 2 minutes timeout
       });
 
+      // Extract response components
+      const responseData = coordinatorResponse.data || coordinatorResponse; // Support both new and old format
+      const rawBodyString = coordinatorResponse.rawBodyString || JSON.stringify(responseData);
+      const responseHeaders = coordinatorResponse.headers || {};
+
+      // Verify Coordinator signature
+      const signature = responseHeaders['x-service-signature'] || responseHeaders['X-Service-Signature'];
+      const signer = responseHeaders['x-service-name'] || responseHeaders['X-Service-Name'];
+      const coordinatorPublicKey = process.env.COORDINATOR_PUBLIC_KEY;
+
+      if (!signature || !signer) {
+        throw new Error('Missing coordinator signature');
+      }
+      if (signer !== 'coordinator') {
+        throw new Error('Unexpected signer: ' + signer);
+      }
+
+      if (coordinatorPublicKey) {
+        const isValid = verifyCoordinatorSignature(coordinatorPublicKey, signature, rawBodyString);
+        if (!isValid) {
+          throw new Error('Invalid coordinator signature');
+        }
+      }
+
       // Coordinator returns: { serviceName: "ContentStudio", payload: "<stringified JSON>" }
-      if (!coordinatorResponse || typeof coordinatorResponse !== 'object' || coordinatorResponse === null) {
+      if (!responseData || typeof responseData !== 'object' || responseData === null) {
         logger.warn('[DevlabClient] Coordinator returned invalid response structure, using rollback mock data', {
-          responseType: typeof coordinatorResponse,
+          responseType: typeof responseData,
         });
         return this.getRollbackMockData(payload);
       }
 
-      if (!coordinatorResponse.payload || typeof coordinatorResponse.payload !== 'string') {
+      if (!responseData.payload || typeof responseData.payload !== 'string') {
         logger.warn('[DevlabClient] Coordinator response missing or invalid payload field, using rollback mock data', {
-          payloadType: typeof coordinatorResponse.payload,
-          serviceName: coordinatorResponse.serviceName,
+          payloadType: typeof responseData.payload,
+          serviceName: responseData.serviceName,
         });
         return this.getRollbackMockData(payload);
       }
@@ -85,12 +110,12 @@ export class DevlabClient {
       // Parse payload string - Coordinator returns payload as stringified JSON
       let responsePayload;
       try {
-        responsePayload = JSON.parse(coordinatorResponse.payload);
+        responsePayload = JSON.parse(responseData.payload);
       } catch (parseError) {
         logger.warn('[DevlabClient] Failed to parse payload from Coordinator response, using rollback mock data', {
           error: parseError.message,
-          payload: coordinatorResponse.payload.substring(0, 200),
-          serviceName: coordinatorResponse.serviceName,
+          payload: responseData.payload.substring(0, 200),
+          serviceName: responseData.serviceName,
         });
         return this.getRollbackMockData(payload);
       }
@@ -235,12 +260,36 @@ export class DevlabClient {
         timeout: 60000, // 60 seconds timeout for AI generation
       });
 
+      // Extract response components
+      const responseData = coordinatorResponse.data || coordinatorResponse; // Support both new and old format
+      const rawBodyString = coordinatorResponse.rawBodyString || JSON.stringify(responseData);
+      const responseHeaders = coordinatorResponse.headers || {};
+
+      // Verify Coordinator signature
+      const signature = responseHeaders['x-service-signature'] || responseHeaders['X-Service-Signature'];
+      const signer = responseHeaders['x-service-name'] || responseHeaders['X-Service-Name'];
+      const coordinatorPublicKey = process.env.COORDINATOR_PUBLIC_KEY;
+
+      if (!signature || !signer) {
+        throw new Error('Missing coordinator signature');
+      }
+      if (signer !== 'coordinator') {
+        throw new Error('Unexpected signer: ' + signer);
+      }
+
+      if (coordinatorPublicKey) {
+        const isValid = verifyCoordinatorSignature(coordinatorPublicKey, signature, rawBodyString);
+        if (!isValid) {
+          throw new Error('Invalid coordinator signature');
+        }
+      }
+
       // Coordinator returns: { serviceName: "ContentStudio", payload: "<stringified JSON>" }
-      if (!coordinatorResponse || typeof coordinatorResponse !== 'object' || coordinatorResponse === null) {
+      if (!responseData || typeof responseData !== 'object' || responseData === null) {
         throw new Error('Invalid response structure from Coordinator');
       }
 
-      if (!coordinatorResponse.payload || typeof coordinatorResponse.payload !== 'string') {
+      if (!responseData.payload || typeof responseData.payload !== 'string') {
         throw new Error('Missing or invalid payload in response');
       }
 
@@ -250,7 +299,7 @@ export class DevlabClient {
       // answer is ALWAYS a plain string (code, explanation, or error message) - NEVER JSON
       let responseStructure;
       try {
-        responseStructure = JSON.parse(coordinatorResponse.payload);
+        responseStructure = JSON.parse(responseData.payload);
       } catch (parseError) {
         throw new Error(`Failed to parse response payload: ${parseError.message}`);
       }
@@ -422,15 +471,39 @@ export class DevlabClient {
       // Send request via Coordinator
       const coordinatorResponse = await postToCoordinator(envelope, {
         endpoint,
-        timeout: 30000, // 30 seconds timeout
+        timeout: 120000, // 2 minutes timeout
       });
 
+      // Extract response components
+      const responseData = coordinatorResponse.data || coordinatorResponse; // Support both new and old format
+      const rawBodyString = coordinatorResponse.rawBodyString || JSON.stringify(responseData);
+      const responseHeaders = coordinatorResponse.headers || {};
+
+      // Verify Coordinator signature
+      const signature = responseHeaders['x-service-signature'] || responseHeaders['X-Service-Signature'];
+      const signer = responseHeaders['x-service-name'] || responseHeaders['X-Service-Name'];
+      const coordinatorPublicKey = process.env.COORDINATOR_PUBLIC_KEY;
+
+      if (!signature || !signer) {
+        throw new Error('Missing coordinator signature');
+      }
+      if (signer !== 'coordinator') {
+        throw new Error('Unexpected signer: ' + signer);
+      }
+
+      if (coordinatorPublicKey) {
+        const isValid = verifyCoordinatorSignature(coordinatorPublicKey, signature, rawBodyString);
+        if (!isValid) {
+          throw new Error('Invalid coordinator signature');
+        }
+      }
+
       // Coordinator returns: { serviceName: "ContentStudio", payload: "<stringified JSON>" }
-      if (!coordinatorResponse || typeof coordinatorResponse !== 'object' || coordinatorResponse === null) {
+      if (!responseData || typeof responseData !== 'object' || responseData === null) {
         throw new Error('Invalid response structure from Coordinator');
       }
 
-      if (!coordinatorResponse.payload || typeof coordinatorResponse.payload !== 'string') {
+      if (!responseData.payload || typeof responseData.payload !== 'string') {
         throw new Error('Missing or invalid payload in response');
       }
 
@@ -440,7 +513,7 @@ export class DevlabClient {
       // The answer field contains the actual response data
       let responseStructure;
       try {
-        responseStructure = JSON.parse(coordinatorResponse.payload);
+        responseStructure = JSON.parse(responseData.payload);
       } catch (parseError) {
         throw new Error(`Failed to parse response payload: ${parseError.message}`);
       }

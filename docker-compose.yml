@@ -5,8 +5,10 @@ networks:
     driver: bridge
 
 services:
+
   backend:
-    image: lotus-backend
+    container_name: lotus-backend
+    image: zaheya10/lotus-backend:latest
     restart: unless-stopped
     ports:
       - "3001:3000"
@@ -16,7 +18,8 @@ services:
       - app-network
 
   frontend:
-    image: lotus-frontend
+    container_name: lotus-frontend
+    image: zaheya10/lotus-frontend:latest
     restart: unless-stopped
     ports:
       - "8080:80"

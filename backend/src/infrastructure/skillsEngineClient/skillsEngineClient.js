@@ -1,5 +1,6 @@
 import { logger } from '../logging/Logger.js';
 import { postToCoordinator } from '../coordinatorClient/coordinatorClient.js';
+import { verifyCoordinatorSignature } from '../utils/verifyCoordinatorSignature.js';
 
 /**
  * Skills Engine Client
@@ -60,21 +61,45 @@ export class SkillsEngineClient {
       // Send request via Coordinator
       const coordinatorResponse = await postToCoordinator(envelope, {
         endpoint: '/api/fill-content-metrics',
-        timeout: 30000,
+        timeout: 120000, // 2 minutes timeout
       });
 
+      // Extract response components
+      const responseData = coordinatorResponse.data || coordinatorResponse; // Support both new and old format
+      const rawBodyString = coordinatorResponse.rawBodyString || JSON.stringify(responseData);
+      const responseHeaders = coordinatorResponse.headers || {};
+
+      // Verify Coordinator signature
+      const signature = responseHeaders['x-service-signature'] || responseHeaders['X-Service-Signature'];
+      const signer = responseHeaders['x-service-name'] || responseHeaders['X-Service-Name'];
+      const coordinatorPublicKey = process.env.COORDINATOR_PUBLIC_KEY;
+
+      if (!signature || !signer) {
+        throw new Error('Missing coordinator signature');
+      }
+      if (signer !== 'coordinator') {
+        throw new Error('Unexpected signer: ' + signer);
+      }
+
+      if (coordinatorPublicKey) {
+        const isValid = verifyCoordinatorSignature(coordinatorPublicKey, signature, rawBodyString);
+        if (!isValid) {
+          throw new Error('Invalid coordinator signature');
+        }
+      }
+
       // Coordinator returns: { serviceName: "ContentStudio", payload: "<stringified JSON>" }
-      if (!coordinatorResponse || typeof coordinatorResponse !== 'object' || coordinatorResponse === null) {
+      if (!responseData || typeof responseData !== 'object' || responseData === null) {
         logger.warn('[SkillsEngineClient] Coordinator returned invalid response structure, using rollback mock data', {
-          responseType: typeof coordinatorResponse,
+          responseType: typeof responseData,
         });
         return this.getRollbackMockData(payload);
       }
 
-      if (!coordinatorResponse.payload || typeof coordinatorResponse.payload !== 'string') {
+      if (!responseData.payload || typeof responseData.payload !== 'string') {
         logger.warn('[SkillsEngineClient] Coordinator response missing or invalid payload field, using rollback mock data', {
-          payloadType: typeof coordinatorResponse.payload,
-          serviceName: coordinatorResponse.serviceName,
+          payloadType: typeof responseData.payload,
+          serviceName: responseData.serviceName,
         });
         return this.getRollbackMockData(payload);
       }
@@ -82,12 +107,12 @@ export class SkillsEngineClient {
       // Parse payload string - Coordinator always returns payload as stringified JSON
       let responsePayload;
       try {
-        responsePayload = JSON.parse(coordinatorResponse.payload);
+        responsePayload = JSON.parse(responseData.payload);
       } catch (parseError) {
         logger.warn('[SkillsEngineClient] Failed to parse payload from Coordinator response, using rollback mock data', {
           error: parseError.message,
-          payload: coordinatorResponse.payload.substring(0, 200),
-          serviceName: coordinatorResponse.serviceName,
+          payload: responseData.payload.substring(0, 200),
+          serviceName: responseData.serviceName,
         });
         return this.getRollbackMockData(payload);
       }

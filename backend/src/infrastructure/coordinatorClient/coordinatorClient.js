@@ -10,7 +10,7 @@ const SERVICE_NAME = process.env.SERVICE_NAME || 'content-studio';
  * @param {Object} envelope - Request envelope (exactly as it was before)
  * @param {Object} options - Optional configuration
  * @param {string} options.endpoint - Custom endpoint (default: /api/fill-content-metrics)
- * @param {number} options.timeout - Request timeout in ms (default: 30000)
+ * @param {number} options.timeout - Request timeout in ms (default: 120000 = 2 minutes)
  * @returns {Promise<Object>} Response data from Coordinator
  * @throws {Error} If request fails
  */
@@ -39,7 +39,7 @@ export async function postToCoordinator(envelope, options = {}) {
 
   const registrationUrl = `${cleanCoordinatorUrl}${endpoint}`;
 
-  const timeout = options.timeout || 30000;
+  const timeout = options.timeout || 120000; // 2 minutes default timeout
 
   try {
     // IMPORTANT:
@@ -47,6 +47,7 @@ export async function postToCoordinator(envelope, options = {}) {
     const signature = generateSignature(SERVICE_NAME, privateKey, envelope);
 
     // Send POST request with signature headers
+    // Use responseType: 'text' to get raw response body for signature verification
     const response = await axios.post(registrationUrl, envelope, {
       headers: {
         'Content-Type': 'application/json',
@@ -54,6 +55,7 @@ export async function postToCoordinator(envelope, options = {}) {
         'X-Signature': signature,
       },
       timeout,
+      responseType: 'text', // Get raw response as string
     });
 
     logger.debug('[CoordinatorClient] Request successful', {
@@ -61,36 +63,28 @@ export async function postToCoordinator(envelope, options = {}) {
       status: response.status,
     });
 
-    // Optional: Verify response signature if Coordinator provides one
-    if (coordinatorPublicKey && response.headers['x-service-signature']) {
-      const responseSignature = response.headers['x-service-signature'];
-      try {
-        const isValid = verifySignature(
-          'coordinator',
-          coordinatorPublicKey,
-          response.data,
-          responseSignature
-        );
+    // Get raw response body string (before parsing)
+    const rawBodyString = response.data;
 
-        if (!isValid) {
-          logger.warn('[CoordinatorClient] Response signature verification failed', {
-            endpoint,
-            status: response.status,
-          });
-        } else {
-          logger.debug('[CoordinatorClient] Response signature verified successfully', {
-            endpoint,
-          });
-        }
-      } catch (verifyError) {
-        logger.warn('[CoordinatorClient] Response signature verification error (non-blocking)', {
-          endpoint,
-          error: verifyError.message,
-        });
-      }
+    // Parse JSON from raw body
+    let parsedData;
+    try {
+      parsedData = JSON.parse(rawBodyString);
+    } catch (parseError) {
+      logger.error('[CoordinatorClient] Failed to parse response JSON', {
+        endpoint,
+        error: parseError.message,
+      });
+      throw new Error(`Failed to parse Coordinator response: ${parseError.message}`);
     }
 
-    return response.data;
+    // Return object with raw body, headers, and parsed data
+    // This allows clients to verify signature before using parsed data
+    return {
+      data: parsedData, // Parsed JSON (for backward compatibility)
+      rawBodyString: rawBodyString, // Raw response body as string
+      headers: response.headers, // Response headers (including X-Service-Name, X-Service-Signature)
+    };
   } catch (error) {
     logger.error('[CoordinatorClient] Request failed', {
       endpoint,

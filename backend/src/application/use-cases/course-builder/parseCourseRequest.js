@@ -2,11 +2,11 @@
  * Step 1 - Parses and validates Course Builder request data.
  * This function is only called after the POST /api/fill-content-metrics endpoint
  * receives a request from Course Builder. It is the first step in the workflow.
- * Next steps will fetch preferred language, search company courses, search
- * standalone topics, and generate missing content using AI if needed.
+ * Next steps will use preferred language from Course Builder (or fallback to Directory),
+ * search company courses, search standalone topics, and generate missing content using AI if needed.
  * 
  * @param {Object} requestData - The parsed request data from Course Builder
- * @returns {Object} Clean object with learner_id, learner_name, learner_company, skills
+ * @returns {Object} Clean object with learner_id, learner_name, learner_company, skills, preferred_language
  * @throws {Error} If validation fails
  */
 export function parseCourseRequest(requestData) {
@@ -43,6 +43,7 @@ export function parseCourseRequest(requestData) {
     learner_company: payload.learner_company,
     skills: payload.skills,
     trainer_id: payload.trainer_id || null, // Optional: trainer_id for searching existing content
+    preferred_language: payload.preferred_language || null, // Preferred language from Course Builder
   };
 }
 
