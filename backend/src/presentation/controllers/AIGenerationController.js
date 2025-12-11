@@ -272,19 +272,44 @@ export class AIGenerationController {
         });
         
         // Find presentation content for this topic
-        const allContent = await contentRepository.findByTopicId(parseInt(topic_id));
+        const numericTopicId = parseInt(topic_id);
+        
+        logger.info('[AIGenerationController] Searching for presentation in topic', {
+          topic_id: numericTopicId,
+          topic_id_type: typeof numericTopicId,
+          original_topic_id: topic_id,
+          original_topic_id_type: typeof topic_id,
+        });
+        
+        const allContent = await contentRepository.findByTopicId(numericTopicId);
         
         logger.info('[AIGenerationController] Found content in topic', {
-          topic_id: parseInt(topic_id),
+          topic_id: numericTopicId,
           contentCount: allContent?.length || 0,
           contentTypes: allContent?.map(c => ({ 
             content_id: c.content_id, 
             content_type_id: c.content_type_id,
+            content_type_id_type: typeof c.content_type_id,
+            topic_id: c.topic_id,
+            topic_id_type: typeof c.topic_id,
             hasFileUrl: !!(c.content_data?.fileUrl || c.content_data?.presentationUrl),
+            contentDataKeys: c.content_data ? Object.keys(c.content_data) : [],
           })) || [],
         });
         
-        const presentationContent = allContent?.find(c => c.content_type_id === 3); // presentation type
+        // Search for presentation (content_type_id = 3)
+        // Handle both number and string types for content_type_id
+        const presentationContent = allContent?.find(c => {
+          const contentTypeId = c.content_type_id;
+          const isPresentation = contentTypeId === 3 || contentTypeId === '3' || contentTypeId === 'presentation';
+          logger.debug('[AIGenerationController] Checking content for presentation', {
+            content_id: c.content_id,
+            content_type_id: contentTypeId,
+            content_type_id_type: typeof contentTypeId,
+            isPresentation,
+          });
+          return isPresentation;
+        });
         
         if (presentationContent) {
           // Found presentation - use new workflow

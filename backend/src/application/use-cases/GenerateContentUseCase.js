@@ -482,19 +482,96 @@ ${basePrompt}`;
           
           if (!presentationContentId) {
             // Try to find presentation in topic
+            const topicId = generationRequest.topic_id;
+            const topicIdType = typeof topicId;
+            const topicIdValue = topicId;
+            
             logger.info('[GenerateContentUseCase] Searching for presentation in topic', {
-              topic_id: generationRequest.topic_id,
+              topic_id: topicId,
+              topic_id_type: topicIdType,
+              topic_id_value: topicIdValue,
             });
             
-            const allContent = await this.contentRepository.findByTopicId(generationRequest.topic_id);
+            // Ensure topic_id is a number for database query
+            const numericTopicId = typeof topicId === 'string' ? parseInt(topicId, 10) : topicId;
+            
+            if (isNaN(numericTopicId)) {
+              logger.error('[GenerateContentUseCase] Invalid topic_id, cannot search for presentation', {
+                topic_id: topicId,
+                topic_id_type: topicIdType,
+              });
+              contentData = {
+                status: 'failed',
+                error: 'Invalid topic_id provided',
+                errorCode: 'INVALID_TOPIC_ID',
+              };
+              break;
+            }
+            
+            const allContent = await this.contentRepository.findByTopicId(numericTopicId);
+            
+            // Also try direct DB query to verify content exists
+            let directDbCheck = null;
+            try {
+              const { db } = await import('../../infrastructure/database/DatabaseConnection.js');
+              await db.ready;
+              if (db.isConnected()) {
+                const directQuery = await db.query(
+                  'SELECT content_id, content_type_id, topic_id, content_data FROM content WHERE topic_id = $1',
+                  [numericTopicId]
+                );
+                directDbCheck = {
+                  count: directQuery.rows.length,
+                  rows: directQuery.rows.map(r => ({
+                    content_id: r.content_id,
+                    content_type_id: r.content_type_id,
+                    topic_id: r.topic_id,
+                    content_type_id_type: typeof r.content_type_id,
+                    hasContentData: !!r.content_data,
+                    contentDataKeys: r.content_data ? Object.keys(r.content_data) : [],
+                  })),
+                };
+              }
+            } catch (dbError) {
+              logger.warn('[GenerateContentUseCase] Direct DB check failed', {
+                error: dbError.message,
+              });
+            }
             
             logger.info('[GenerateContentUseCase] Found content in topic', {
-              topic_id: generationRequest.topic_id,
+              topic_id: numericTopicId,
+              topic_id_type: typeof numericTopicId,
               contentCount: allContent?.length || 0,
-              contentTypes: allContent?.map(c => ({ id: c.content_id, type: c.content_type_id })) || [],
+              contentTypes: allContent?.map(c => ({ 
+                id: c.content_id, 
+                type: c.content_type_id,
+                typeName: typeof c.content_type_id,
+                topicId: c.topic_id,
+                topicIdType: typeof c.topic_id,
+              })) || [],
+              allContentDetails: allContent?.map(c => ({
+                content_id: c.content_id,
+                content_type_id: c.content_type_id,
+                topic_id: c.topic_id,
+                hasFileUrl: !!c.content_data?.fileUrl,
+                hasPresentationUrl: !!c.content_data?.presentationUrl,
+                contentDataKeys: c.content_data ? Object.keys(c.content_data) : [],
+              })) || [],
+              directDbCheck, // Direct DB query results for comparison
             });
             
-            const presentationContent = allContent?.find(c => c.content_type_id === 3); // presentation type
+            // Search for presentation (content_type_id = 3)
+            const presentationContent = allContent?.find(c => {
+              const contentTypeId = c.content_type_id;
+              const isPresentation = contentTypeId === 3 || contentTypeId === '3' || contentTypeId === 'presentation';
+              logger.debug('[GenerateContentUseCase] Checking content for presentation', {
+                content_id: c.content_id,
+                content_type_id: contentTypeId,
+                content_type_id_type: typeof contentTypeId,
+                isPresentation,
+              });
+              return isPresentation;
+            });
             
             if (!presentationContent) {
               // No presentation found - return error with helpful message
