@@ -100,7 +100,7 @@ export async function generateDevLabExercisesForTopic(topic) {
     // Send request via Coordinator
     const coordinatorResponse = await postToCoordinator(envelope, {
       endpoint: '/api/fill-content-metrics',
-      timeout: 60000,
+      timeout: 120000, // 2 minutes timeout
     });
 
     if (!coordinatorResponse || typeof coordinatorResponse !== 'object' || !coordinatorResponse.payload) {
