@@ -508,16 +508,17 @@ ${basePrompt}`;
               break;
             }
             
-            const allContent = await this.contentRepository.findByTopicId(numericTopicId);
+            // Try to find content with includeArchived: true to see all content
+            const allContent = await this.contentRepository.findByTopicId(numericTopicId, { includeArchived: true });
             
-            // Also try direct DB query to verify content exists
+            // Also try direct DB query to verify content exists (including status)
             let directDbCheck = null;
             try {
               const { db } = await import('../../infrastructure/database/DatabaseConnection.js');
               await db.ready;
               if (db.isConnected()) {
                 const directQuery = await db.query(
-                  'SELECT content_id, content_type_id, topic_id, content_data FROM content WHERE topic_id = $1',
+                  'SELECT content_id, content_type_id, topic_id, content_data, status, quality_check_status FROM content WHERE topic_id = $1',
                   [numericTopicId]
                 );
                 directDbCheck = {
@@ -527,6 +528,8 @@ ${basePrompt}`;
                     content_type_id: r.content_type_id,
                     topic_id: r.topic_id,
                     content_type_id_type: typeof r.content_type_id,
+                    status: r.status,
+                    quality_check_status: r.quality_check_status,
                     hasContentData: !!r.content_data,
                     contentDataKeys: r.content_data ? Object.keys(r.content_data) : [],
                   })),

@@ -281,7 +281,8 @@ export class AIGenerationController {
           original_topic_id_type: typeof topic_id,
         });
         
-        const allContent = await contentRepository.findByTopicId(numericTopicId);
+        // Include archived content to find presentations that might be archived
+        const allContent = await contentRepository.findByTopicId(numericTopicId, { includeArchived: true });
         
         logger.info('[AIGenerationController] Found content in topic', {
           topic_id: numericTopicId,
