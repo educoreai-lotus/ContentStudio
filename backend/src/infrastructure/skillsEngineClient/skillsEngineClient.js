@@ -61,7 +61,7 @@ export class SkillsEngineClient {
       // Send request via Coordinator
       const coordinatorResponse = await postToCoordinator(envelope, {
         endpoint: '/api/fill-content-metrics',
-        timeout: 120000, // 2 minutes timeout
+        timeout: 180000, // 3 minutes timeout
       });
 
       // Extract response components

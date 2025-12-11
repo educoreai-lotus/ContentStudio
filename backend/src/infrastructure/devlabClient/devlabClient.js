@@ -64,7 +64,7 @@ export class DevlabClient {
       // Send request via Coordinator
       const coordinatorResponse = await postToCoordinator(envelope, {
         endpoint: '/api/fill-content-metrics',
-        timeout: 120000, // 2 minutes timeout
+        timeout: 180000, // 3 minutes timeout
       });
 
       // Extract response components
@@ -257,7 +257,7 @@ export class DevlabClient {
       // Send request via Coordinator
       const coordinatorResponse = await postToCoordinator(envelope, {
         endpoint,
-        timeout: 60000, // 60 seconds timeout for AI generation
+        timeout: 180000, // 3 minutes timeout for AI generation (passed to Coordinator via X-Request-Timeout header)
       });
 
       // Extract response components
@@ -471,7 +471,7 @@ export class DevlabClient {
       // Send request via Coordinator
       const coordinatorResponse = await postToCoordinator(envelope, {
         endpoint,
-        timeout: 120000, // 2 minutes timeout
+        timeout: 180000, // 3 minutes timeout
       });
 
       // Extract response components
