@@ -72,7 +72,7 @@ export class SkillsEngineClient {
       // Verify Coordinator signature
       const signature = responseHeaders['x-service-signature'] || responseHeaders['X-Service-Signature'];
       const signer = responseHeaders['x-service-name'] || responseHeaders['X-Service-Name'];
-      const coordinatorPublicKey = process.env.COORDINATOR_PUBLIC_KEY;
+      const coordinatorPublicKey = process.env.COORDINATOR_PUBLIC_KEY || process.env.CONTENT_STUDIO_COORDINATOR_PUBLIC_KEY;
 
       if (!signature || !signer) {
         throw new Error('Missing coordinator signature');
