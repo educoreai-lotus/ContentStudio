@@ -383,10 +383,16 @@ export class DevlabClient {
         responseAnswerLength: responseData.response?.answer?.length || 0,
         hasPayload: !!responseData.payload,
         payloadType: typeof responseData.payload,
+        hasMetadata: !!responseData.metadata,
+        metadataKeys: responseData.metadata ? Object.keys(responseData.metadata) : [],
+        metadataContent: responseData.metadata ? JSON.stringify(responseData.metadata) : null,
         parsedRawBodyKeys: parsedRawBody ? Object.keys(parsedRawBody) : [],
         parsedRawBodyResponseAnswer: parsedRawBody?.response?.answer,
+        parsedRawBodyData: parsedRawBody?.data ? JSON.stringify(parsedRawBody.data).substring(0, 500) : null,
         fullResponseData: JSON.stringify(responseData, null, 2).substring(0, 2000),
         rawBodyString: rawBodyString.substring(0, 500),
+        // Deep inspection: check if answer is nested in metadata or other fields
+        allNestedFields: JSON.stringify(responseData, null, 2),
       });
 
       // Verify Coordinator signature
@@ -494,7 +500,11 @@ export class DevlabClient {
       // First, check if we have response.answer (envelope format from devlab-service)
       // This is the format devlab-service returns: { requester_service, payload, response: { answer: "..." } }
       // Also check parsedRawBody in case Coordinator wraps it differently
-      const responseAnswer = responseData.response?.answer || parsedRawBody?.response?.answer;
+      // Also check metadata.response.answer in case Coordinator puts it there
+      const responseAnswer = responseData.response?.answer || 
+                            parsedRawBody?.response?.answer ||
+                            responseData.metadata?.response?.answer ||
+                            parsedRawBody?.metadata?.response?.answer;
       
       if (responseAnswer && typeof responseAnswer === 'string') {
         logger.info('[DevlabClient] Found response.answer (envelope format from devlab-service)', {
@@ -542,47 +552,71 @@ export class DevlabClient {
       // Check if we have direct answer in data.answer (new format)
       else if (responseData.data?.answer && typeof responseData.data.answer === 'string') {
         // Direct answer format: { success: true, data: { answer: "..." } }
-        // The answer might be a JSON stringified object that contains the HTML
-        let rawAnswer = responseData.data.answer;
-        
-        // Try to parse as JSON first (devlab-service returns JSON stringified response)
-        try {
-          const parsedAnswer = JSON.parse(rawAnswer);
-          logger.info('[DevlabClient] Parsed data.answer as JSON', {
-            parsedKeys: Object.keys(parsedAnswer),
-            hasData: !!parsedAnswer.data,
-            dataKeys: parsedAnswer.data ? Object.keys(parsedAnswer.data) : [],
-            hasHtml: !!parsedAnswer.data?.html,
-            htmlLength: parsedAnswer.data?.html?.length || 0,
+        // BUT: If answer is "content-studio", this is an error - Coordinator didn't get the real answer
+        if (responseData.data.answer === 'content-studio' || responseData.data.answer === SERVICE_NAME) {
+          logger.error('[DevlabClient] Coordinator returned service name in data.answer - this indicates Coordinator did not receive answer from devlab-service', {
+            answer: responseData.data.answer,
+            metadata: responseData.metadata,
+            fullResponse: JSON.stringify(responseData).substring(0, 1000),
           });
+          // Don't set answer here - let it fall through to error handling
+        } else {
+          // The answer might be a JSON stringified object that contains the HTML
+          let rawAnswer = responseData.data.answer;
           
-          // Extract HTML from parsed answer (devlab-service format: { success, data: { html, questions, metadata } })
-          if (parsedAnswer.data?.html && typeof parsedAnswer.data.html === 'string') {
-            answer = parsedAnswer.data.html;
-            logger.info('[DevlabClient] Extracted HTML from parsed answer', {
-              htmlLength: answer.length,
-              htmlPreview: answer.substring(0, 100),
-            });
-          } else {
-            // Fallback: use the raw answer if no HTML field found
-            answer = rawAnswer;
-            logger.warn('[DevlabClient] No HTML field in parsed answer, using raw answer', {
+          // Try to parse as JSON first (devlab-service returns JSON stringified response)
+          try {
+            const parsedAnswer = JSON.parse(rawAnswer);
+            logger.info('[DevlabClient] Parsed data.answer as JSON', {
               parsedKeys: Object.keys(parsedAnswer),
+              hasData: !!parsedAnswer.data,
+              dataKeys: parsedAnswer.data ? Object.keys(parsedAnswer.data) : [],
+              hasHtml: !!parsedAnswer.data?.html,
+              htmlLength: parsedAnswer.data?.html?.length || 0,
+            });
+            
+            // Extract HTML from parsed answer (devlab-service format: { success, data: { html, questions, metadata } })
+            if (parsedAnswer.data?.html && typeof parsedAnswer.data.html === 'string') {
+              answer = parsedAnswer.data.html;
+              logger.info('[DevlabClient] Extracted HTML from parsed answer', {
+                htmlLength: answer.length,
+                htmlPreview: answer.substring(0, 100),
+              });
+            } else {
+              // Fallback: use the raw answer if no HTML field found
+              answer = rawAnswer;
+              logger.warn('[DevlabClient] No HTML field in parsed answer, using raw answer', {
+                parsedKeys: Object.keys(parsedAnswer),
+              });
+            }
+          } catch (parseError) {
+            // If parsing fails, treat it as plain HTML string
+            answer = rawAnswer;
+            logger.info('[DevlabClient] data.answer is not JSON, using as plain HTML string', {
+              answerLength: answer.length,
+              answerPreview: answer.substring(0, 100),
             });
           }
-        } catch (parseError) {
-          // If parsing fails, treat it as plain HTML string
-          answer = rawAnswer;
-          logger.info('[DevlabClient] data.answer is not JSON, using as plain HTML string', {
-            answerLength: answer.length,
-            answerPreview: answer.substring(0, 100),
-          });
         }
       } else {
         // Try to find payload (old format or nested format)
+        // Also check metadata for nested response
         let payloadString = null;
         
-        if (responseData.data?.payload && typeof responseData.data.payload === 'string') {
+        // Check metadata.response.answer or metadata.data.answer
+        if (responseData.metadata?.response?.answer && typeof responseData.metadata.response.answer === 'string') {
+          logger.info('[DevlabClient] Found answer in metadata.response.answer', {
+            answerLength: responseData.metadata.response.answer.length,
+            answerPreview: responseData.metadata.response.answer.substring(0, 100),
+          });
+          answer = responseData.metadata.response.answer;
+        } else if (responseData.metadata?.data?.answer && typeof responseData.metadata.data.answer === 'string') {
+          logger.info('[DevlabClient] Found answer in metadata.data.answer', {
+            answerLength: responseData.metadata.data.answer.length,
+            answerPreview: responseData.metadata.data.answer.substring(0, 100),
+          });
+          answer = responseData.metadata.data.answer;
+        } else if (responseData.data?.payload && typeof responseData.data.payload === 'string') {
           // New format: { success: true, data: { payload: "..." } }
           payloadString = responseData.data.payload;
         } else if (responseData.payload && typeof responseData.payload === 'string') {
@@ -620,6 +654,23 @@ export class DevlabClient {
 
       // Check if we have an answer
       if (!answer || answer.trim().length === 0) {
+        // Special case: If data.answer is "content-studio", this is a Coordinator error
+        if (responseData.data?.answer === 'content-studio' || responseData.data?.answer === SERVICE_NAME) {
+          logger.error('[DevlabClient] Coordinator returned service name instead of devlab-service answer', {
+            topicId: payloadData.topic_id,
+            answer: responseData.data.answer,
+            metadata: responseData.metadata,
+            fullResponse: JSON.stringify(responseData).substring(0, 1000),
+            possibleCauses: [
+              'devlab-service did not respond correctly',
+              'Coordinator routing error',
+              'devlab-service returned error that Coordinator converted to service name',
+              'Timeout or connection issue between Coordinator and devlab-service',
+            ],
+          });
+          throw new Error('Coordinator returned service name instead of exercise code. This indicates a Coordinator routing or processing error. Check Coordinator logs and devlab-service status.');
+        }
+        
         // Check if this is an error response
         if (responseData.success === false || (responseData.data && responseData.data.error)) {
           const errorMessage = responseData.data?.error || responseData.error || 'Unknown error from Coordinator';
@@ -635,10 +686,13 @@ export class DevlabClient {
           responseDataKeys: responseData ? Object.keys(responseData) : [],
           hasData: !!responseData.data,
           dataKeys: responseData.data ? Object.keys(responseData.data) : [],
-          responseDataPreview: JSON.stringify(responseData).substring(0, 500),
+          dataAnswer: responseData.data?.answer,
+          hasMetadata: !!responseData.metadata,
+          metadataKeys: responseData.metadata ? Object.keys(responseData.metadata) : [],
+          responseDataPreview: JSON.stringify(responseData).substring(0, 1000),
           success: responseData.success,
         });
-        throw new Error('Missing answer in response. Expected data.answer, data.payload, or payload field. Response: ' + JSON.stringify(responseData).substring(0, 200));
+        throw new Error('Missing answer in response. Expected data.answer, data.payload, or payload field. Response: ' + JSON.stringify(responseData).substring(0, 500));
       }
 
       // answer is ALWAYS a plain string (code HTML/CSS/JS or error message) - NEVER JSON
