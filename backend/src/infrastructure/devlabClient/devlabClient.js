@@ -52,9 +52,10 @@ export class DevlabClient {
     }
 
     try {
-      // Ensure payload has target_service for Coordinator routing
-      if (!payload.target_service) {
-        payload.target_service = 'devlab-service';
+      // Coordinator routes automatically based on action - no need for target_service
+      // Remove target_service if it exists (should not be needed)
+      if (payload.target_service) {
+        delete payload.target_service;
       }
 
       // Build envelope for Coordinator (standard structure)
@@ -271,14 +272,13 @@ export class DevlabClient {
       }
 
       // Build payload with required fields
-      // Protocol: { requester_service: "content-studio", payload: { action, target_service, ... }, response: { answer: "" } }
-      // IMPORTANT: Coordinator needs target_service to know where to route the request
+      // Protocol: { requester_service: "content-studio", payload: { action, ... }, response: { answer: "" } }
+      // Coordinator routes automatically based on action - no need for target_service
       // For code questions: amount is always 4, programming_language is required
       // For theoretical questions: amount is always 4, theoretical_question_type is required (multiple_choice or open_ended)
       // theoretical_question_type determines if questions are multiple choice (closed) or open ended
       const payloadData = {
         action: 'generate-questions',
-        target_service: 'devlab-service', // Tell Coordinator to route to devlab-service
         topic_id: exerciseRequest.topic_id || '',
         topic_name: exerciseRequest.topic_name || '',
         question_type: questionType,
@@ -675,10 +675,9 @@ export class DevlabClient {
       // Protocol: { requester_service: "content-studio", payload: { action, ... }, response: { answer: "" } }
       // For manual code exercises: always send 4 questions together
       // exercises is an array of strings (question texts)
-      // IMPORTANT: Coordinator needs target_service to know where to route the request
+      // Coordinator routes automatically based on action - no need for target_service
       const payloadData = {
         action: 'validate-question',
-        target_service: 'devlab-service', // Tell Coordinator to route to devlab-service
         topic_id: exerciseData.topic_id || '',
         topic_name: exerciseData.topic_name || '',
         question_type: 'code', // Manual is only for code questions

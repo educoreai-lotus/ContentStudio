@@ -204,6 +204,11 @@ export class PostgreSQLContentRepository extends IContentRepository {
     return await this.mapRowToContent(result.rows[0]);
   }
 
+  async findByTopicId(topicId, filters = {}) {
+    // findByTopicId is an alias for findAllByTopicId in PostgreSQL repository
+    return this.findAllByTopicId(topicId, filters);
+  }
+
   async findAllByTopicId(topicId, filters = {}) {
     if (!this.db.isConnected()) {
       throw new Error('Database not connected. Using in-memory repository.');
@@ -214,6 +219,14 @@ export class PostgreSQLContentRepository extends IContentRepository {
     let paramIndex = 2;
 
     const supportsStatus = await this.ensureStatusSupport();
+    
+    console.log('[PostgreSQLContentRepository] findAllByTopicId', {
+      topicId,
+      topicIdType: typeof topicId,
+      filters,
+      supportsStatus,
+      includeArchived: filters.includeArchived,
+    });
 
     if (!filters.includeArchived) {
       if (supportsStatus) {
@@ -226,6 +239,11 @@ export class PostgreSQLContentRepository extends IContentRepository {
         paramIndex++;
       }
     }
+    
+    console.log('[PostgreSQLContentRepository] Query before filters', {
+      query,
+      params,
+    });
 
     if (filters.content_type_id) {
       // Convert type_name to type_id if it's a string
@@ -250,8 +268,26 @@ export class PostgreSQLContentRepository extends IContentRepository {
     }
 
     query += ' ORDER BY created_at DESC';
+    
+    console.log('[PostgreSQLContentRepository] Final query', {
+      query,
+      params,
+      paramCount: params.length,
+    });
 
     const result = await this.db.query(query, params);
+    
+    console.log('[PostgreSQLContentRepository] Query result', {
+      rowCount: result.rows.length,
+      rows: result.rows.map(r => ({
+        content_id: r.content_id,
+        content_type_id: r.content_type_id,
+        topic_id: r.topic_id,
+        status: r.status,
+        quality_check_status: r.quality_check_status,
+      })),
+    });
+    
     return await Promise.all(result.rows.map(row => this.mapRowToContent(row)));
   }
 

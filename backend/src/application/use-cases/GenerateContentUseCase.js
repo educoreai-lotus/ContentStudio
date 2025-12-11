@@ -511,18 +511,29 @@ ${basePrompt}`;
             // Try to find content with includeArchived: true to see all content
             const allContent = await this.contentRepository.findByTopicId(numericTopicId, { includeArchived: true });
             
-            // Also try direct DB query to verify content exists (including status)
+            // Also try direct DB query to verify content exists (check if status column exists first)
             let directDbCheck = null;
             try {
               const { db } = await import('../../infrastructure/database/DatabaseConnection.js');
               await db.ready;
               if (db.isConnected()) {
+                // Check if status column exists in content table
+                const columnCheck = await db.query(`
+                  SELECT column_name 
+                  FROM information_schema.columns 
+                  WHERE table_name = 'content' AND column_name = 'status'
+                `);
+                const hasStatusColumn = columnCheck.rows.length > 0;
+                
+                // Build query based on whether status column exists
+                const statusField = hasStatusColumn ? 'status' : 'NULL as status';
                 const directQuery = await db.query(
-                  'SELECT content_id, content_type_id, topic_id, content_data, status, quality_check_status FROM content WHERE topic_id = $1',
+                  `SELECT content_id, content_type_id, topic_id, content_data, ${statusField}, quality_check_status FROM content WHERE topic_id = $1`,
                   [numericTopicId]
                 );
                 directDbCheck = {
                   count: directQuery.rows.length,
+                  hasStatusColumn,
                   rows: directQuery.rows.map(r => ({
                     content_id: r.content_id,
                     content_type_id: r.content_type_id,
@@ -538,6 +549,7 @@ ${basePrompt}`;
             } catch (dbError) {
               logger.warn('[GenerateContentUseCase] Direct DB check failed', {
                 error: dbError.message,
+                stack: dbError.stack,
               });
             }
             
