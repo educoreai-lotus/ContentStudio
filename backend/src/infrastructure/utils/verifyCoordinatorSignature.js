@@ -9,12 +9,44 @@ import crypto from 'crypto';
  */
 export function verifyCoordinatorSignature(publicKey, signature, rawBodyString) {
   try {
+    // Log for debugging
+    console.log('[verifyCoordinatorSignature] Starting verification', {
+      publicKeyLength: publicKey?.length || 0,
+      publicKeyPreview: publicKey?.substring(0, 100) || '',
+      signatureLength: signature?.length || 0,
+      signaturePreview: signature?.substring(0, 50) || '',
+      rawBodyLength: rawBodyString?.length || 0,
+      rawBodyPreview: rawBodyString?.substring(0, 200) || '',
+    });
+
+    // Ensure public key is in PEM format
+    let pemKey = publicKey;
+    if (!pemKey.includes('-----BEGIN')) {
+      // If key doesn't have PEM headers, add them
+      pemKey = `-----BEGIN PUBLIC KEY-----\n${pemKey}\n-----END PUBLIC KEY-----`;
+    }
+
     const verifier = crypto.createVerify('SHA256');
-    verifier.update(rawBodyString);
+    verifier.update(rawBodyString, 'utf8');
     verifier.end();
-    return verifier.verify(publicKey, Buffer.from(signature, 'base64'));
+    
+    const signatureBuffer = Buffer.from(signature, 'base64');
+    const isValid = verifier.verify(pemKey, signatureBuffer);
+    
+    console.log('[verifyCoordinatorSignature] Verification result', {
+      isValid,
+      signatureBufferLength: signatureBuffer.length,
+    });
+    
+    return isValid;
   } catch (err) {
-    console.error('Signature verification failed:', err);
+    console.error('[verifyCoordinatorSignature] Signature verification failed:', {
+      error: err.message,
+      stack: err.stack,
+      publicKeyLength: publicKey?.length || 0,
+      signatureLength: signature?.length || 0,
+      rawBodyLength: rawBodyString?.length || 0,
+    });
     return false;
   }
 }

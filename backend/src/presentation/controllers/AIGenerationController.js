@@ -1,5 +1,6 @@
 import { GenerateContentUseCase } from '../../application/use-cases/GenerateContentUseCase.js';
 import { ContentDTO } from '../../application/dtos/ContentDTO.js';
+import { logger } from '../../infrastructure/logging/Logger.js';
 
 /**
  * AI Generation Controller
@@ -266,20 +267,49 @@ export class AIGenerationController {
         const { RepositoryFactory } = await import('../../infrastructure/database/repositories/RepositoryFactory.js');
         const contentRepository = await RepositoryFactory.getContentRepository();
         
+        logger.info('[AIGenerationController] Searching for presentation in topic', {
+          topic_id: parseInt(topic_id),
+        });
+        
         // Find presentation content for this topic
         const allContent = await contentRepository.findByTopicId(parseInt(topic_id));
-        const presentationContent = allContent.find(c => c.content_type_id === 3); // presentation type
+        
+        logger.info('[AIGenerationController] Found content in topic', {
+          topic_id: parseInt(topic_id),
+          contentCount: allContent?.length || 0,
+          contentTypes: allContent?.map(c => ({ 
+            content_id: c.content_id, 
+            content_type_id: c.content_type_id,
+            hasFileUrl: !!(c.content_data?.fileUrl || c.content_data?.presentationUrl),
+          })) || [],
+        });
+        
+        const presentationContent = allContent?.find(c => c.content_type_id === 3); // presentation type
         
         if (presentationContent) {
           // Found presentation - use new workflow
+          logger.info('[AIGenerationController] Found presentation, using it for avatar video', {
+            presentation_content_id: presentationContent.content_id,
+            topic_id: parseInt(topic_id),
+            hasFileUrl: !!(presentationContent.content_data?.fileUrl || presentationContent.content_data?.presentationUrl),
+          });
+          
           req.body.presentation_content_id = presentationContent.content_id;
           return this.generateAvatarVideoFromPresentation(req, res, next);
         } else {
           // No presentation found - block creation
+          logger.warn('[AIGenerationController] No presentation found in topic', {
+            topic_id: parseInt(topic_id),
+            availableContentTypes: allContent?.map(c => c.content_type_id) || [],
+            totalContent: allContent?.length || 0,
+          });
+          
           return res.status(400).json({
             success: false,
             error: 'Avatar video can only be created from a presentation. Please create or upload a presentation first.',
             requires_presentation: true,
+            availableContentTypes: allContent?.map(c => c.content_type_id) || [],
+            totalContent: allContent?.length || 0,
           });
         }
       }

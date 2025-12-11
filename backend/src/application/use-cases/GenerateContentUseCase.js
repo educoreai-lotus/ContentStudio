@@ -1,6 +1,7 @@
 import { Content } from '../../domain/entities/Content.js';
 import { ContentDataCleaner } from '../utils/ContentDataCleaner.js';
 import { PromptSanitizer } from '../../infrastructure/security/PromptSanitizer.js';
+import { logger } from '../../infrastructure/logging/Logger.js';
 
 const PROMPT_BUILDERS = {
   text: ({ lessonTopic, lessonDescription, language, skillsList }) => `You are an expert educational content creator in EduCore Content Studio.
@@ -481,19 +482,42 @@ ${basePrompt}`;
           
           if (!presentationContentId) {
             // Try to find presentation in topic
+            logger.info('[GenerateContentUseCase] Searching for presentation in topic', {
+              topic_id: generationRequest.topic_id,
+            });
+            
             const allContent = await this.contentRepository.findByTopicId(generationRequest.topic_id);
-            const presentationContent = allContent.find(c => c.content_type_id === 3); // presentation type
+            
+            logger.info('[GenerateContentUseCase] Found content in topic', {
+              topic_id: generationRequest.topic_id,
+              contentCount: allContent?.length || 0,
+              contentTypes: allContent?.map(c => ({ id: c.content_id, type: c.content_type_id })) || [],
+            });
+            
+            const presentationContent = allContent?.find(c => c.content_type_id === 3); // presentation type
             
             if (!presentationContent) {
-              // No presentation found - return error
+              // No presentation found - return error with helpful message
+              logger.warn('[GenerateContentUseCase] No presentation found in topic', {
+                topic_id: generationRequest.topic_id,
+                availableContentTypes: allContent?.map(c => c.content_type_id) || [],
+                totalContent: allContent?.length || 0,
+              });
+              
               contentData = {
                 status: 'failed',
                 error: 'Avatar video requires a presentation. Please create or upload a presentation first.',
                 errorCode: 'PRESENTATION_REQUIRED',
                 reason: 'Avatar video can only be created from a presentation',
+                availableContentTypes: allContent?.map(c => c.content_type_id) || [],
               };
               break;
             }
+            
+            logger.info('[GenerateContentUseCase] Found presentation, using it for avatar video', {
+              presentation_content_id: presentationContent.content_id,
+              topic_id: generationRequest.topic_id,
+            });
             
             // Use found presentation
             generationRequest.presentation_content_id = presentationContent.content_id;

@@ -77,18 +77,62 @@ export class DevlabClient {
       const signer = responseHeaders['x-service-name'] || responseHeaders['X-Service-Name'];
       const coordinatorPublicKey = process.env.COORDINATOR_PUBLIC_KEY;
 
+      logger.info('[DevlabClient] Verifying Coordinator signature (sendRequest)', {
+        hasSignature: !!signature,
+        hasSigner: !!signer,
+        signer,
+        hasPublicKey: !!coordinatorPublicKey,
+        rawBodyLength: rawBodyString?.length || 0,
+        rawBodyPreview: rawBodyString?.substring(0, 200) || '',
+        allHeaders: Object.keys(responseHeaders),
+      });
+
       if (!signature || !signer) {
+        logger.error('[DevlabClient] Missing coordinator signature headers (sendRequest)', {
+          hasSignature: !!signature,
+          hasSigner: !!signer,
+          allHeaders: Object.keys(responseHeaders),
+        });
         throw new Error('Missing coordinator signature');
       }
       if (signer !== 'coordinator') {
+        logger.error('[DevlabClient] Unexpected signer (sendRequest)', {
+          expected: 'coordinator',
+          received: signer,
+        });
         throw new Error('Unexpected signer: ' + signer);
       }
 
       if (coordinatorPublicKey) {
+        logger.info('[DevlabClient] Verifying signature with public key (sendRequest)', {
+          signatureLength: signature?.length || 0,
+          signaturePreview: signature?.substring(0, 50) || '',
+          publicKeyLength: coordinatorPublicKey?.length || 0,
+          publicKeyPreview: coordinatorPublicKey?.substring(0, 50) || '',
+          rawBodyLength: rawBodyString?.length || 0,
+        });
+        
         const isValid = verifyCoordinatorSignature(coordinatorPublicKey, signature, rawBodyString);
+        
+        logger.info('[DevlabClient] Signature verification result (sendRequest)', {
+          isValid,
+          signatureLength: signature?.length || 0,
+          rawBodyLength: rawBodyString?.length || 0,
+        });
+        
         if (!isValid) {
+          logger.error('[DevlabClient] Invalid coordinator signature (sendRequest)', {
+            signatureLength: signature?.length || 0,
+            signaturePreview: signature?.substring(0, 100) || '',
+            rawBodyLength: rawBodyString?.length || 0,
+            rawBodyPreview: rawBodyString?.substring(0, 500) || '',
+            publicKeyLength: coordinatorPublicKey?.length || 0,
+            publicKeyPreview: coordinatorPublicKey?.substring(0, 100) || '',
+          });
           throw new Error('Invalid coordinator signature');
         }
+      } else {
+        logger.warn('[DevlabClient] COORDINATOR_PUBLIC_KEY not set, skipping signature verification (sendRequest)');
       }
 
       // Coordinator returns: { serviceName: "ContentStudio", payload: "<stringified JSON>" }
@@ -270,18 +314,62 @@ export class DevlabClient {
       const signer = responseHeaders['x-service-name'] || responseHeaders['X-Service-Name'];
       const coordinatorPublicKey = process.env.COORDINATOR_PUBLIC_KEY;
 
+      logger.info('[DevlabClient] Verifying Coordinator signature (generateAIExercises)', {
+        hasSignature: !!signature,
+        hasSigner: !!signer,
+        signer,
+        hasPublicKey: !!coordinatorPublicKey,
+        rawBodyLength: rawBodyString?.length || 0,
+        rawBodyPreview: rawBodyString?.substring(0, 200) || '',
+        allHeaders: Object.keys(responseHeaders),
+      });
+
       if (!signature || !signer) {
+        logger.error('[DevlabClient] Missing coordinator signature headers (generateAIExercises)', {
+          hasSignature: !!signature,
+          hasSigner: !!signer,
+          allHeaders: Object.keys(responseHeaders),
+        });
         throw new Error('Missing coordinator signature');
       }
       if (signer !== 'coordinator') {
+        logger.error('[DevlabClient] Unexpected signer (generateAIExercises)', {
+          expected: 'coordinator',
+          received: signer,
+        });
         throw new Error('Unexpected signer: ' + signer);
       }
 
       if (coordinatorPublicKey) {
+        logger.info('[DevlabClient] Verifying signature with public key (generateAIExercises)', {
+          signatureLength: signature?.length || 0,
+          signaturePreview: signature?.substring(0, 50) || '',
+          publicKeyLength: coordinatorPublicKey?.length || 0,
+          publicKeyPreview: coordinatorPublicKey?.substring(0, 50) || '',
+          rawBodyLength: rawBodyString?.length || 0,
+        });
+        
         const isValid = verifyCoordinatorSignature(coordinatorPublicKey, signature, rawBodyString);
+        
+        logger.info('[DevlabClient] Signature verification result (generateAIExercises)', {
+          isValid,
+          signatureLength: signature?.length || 0,
+          rawBodyLength: rawBodyString?.length || 0,
+        });
+        
         if (!isValid) {
+          logger.error('[DevlabClient] Invalid coordinator signature (generateAIExercises)', {
+            signatureLength: signature?.length || 0,
+            signaturePreview: signature?.substring(0, 100) || '',
+            rawBodyLength: rawBodyString?.length || 0,
+            rawBodyPreview: rawBodyString?.substring(0, 500) || '',
+            publicKeyLength: coordinatorPublicKey?.length || 0,
+            publicKeyPreview: coordinatorPublicKey?.substring(0, 100) || '',
+          });
           throw new Error('Invalid coordinator signature');
         }
+      } else {
+        logger.warn('[DevlabClient] COORDINATOR_PUBLIC_KEY not set, skipping signature verification (generateAIExercises)');
       }
 
       // Coordinator returns: { serviceName: "ContentStudio", payload: "<stringified JSON>" }
@@ -484,18 +572,62 @@ export class DevlabClient {
       const signer = responseHeaders['x-service-name'] || responseHeaders['X-Service-Name'];
       const coordinatorPublicKey = process.env.COORDINATOR_PUBLIC_KEY;
 
+      logger.info('[DevlabClient] Verifying Coordinator signature (validateManualExercise)', {
+        hasSignature: !!signature,
+        hasSigner: !!signer,
+        signer,
+        hasPublicKey: !!coordinatorPublicKey,
+        rawBodyLength: rawBodyString?.length || 0,
+        rawBodyPreview: rawBodyString?.substring(0, 200) || '',
+        allHeaders: Object.keys(responseHeaders),
+      });
+
       if (!signature || !signer) {
+        logger.error('[DevlabClient] Missing coordinator signature headers (validateManualExercise)', {
+          hasSignature: !!signature,
+          hasSigner: !!signer,
+          allHeaders: Object.keys(responseHeaders),
+        });
         throw new Error('Missing coordinator signature');
       }
       if (signer !== 'coordinator') {
+        logger.error('[DevlabClient] Unexpected signer (validateManualExercise)', {
+          expected: 'coordinator',
+          received: signer,
+        });
         throw new Error('Unexpected signer: ' + signer);
       }
 
       if (coordinatorPublicKey) {
+        logger.info('[DevlabClient] Verifying signature with public key (validateManualExercise)', {
+          signatureLength: signature?.length || 0,
+          signaturePreview: signature?.substring(0, 50) || '',
+          publicKeyLength: coordinatorPublicKey?.length || 0,
+          publicKeyPreview: coordinatorPublicKey?.substring(0, 50) || '',
+          rawBodyLength: rawBodyString?.length || 0,
+        });
+        
         const isValid = verifyCoordinatorSignature(coordinatorPublicKey, signature, rawBodyString);
+        
+        logger.info('[DevlabClient] Signature verification result (validateManualExercise)', {
+          isValid,
+          signatureLength: signature?.length || 0,
+          rawBodyLength: rawBodyString?.length || 0,
+        });
+        
         if (!isValid) {
+          logger.error('[DevlabClient] Invalid coordinator signature (validateManualExercise)', {
+            signatureLength: signature?.length || 0,
+            signaturePreview: signature?.substring(0, 100) || '',
+            rawBodyLength: rawBodyString?.length || 0,
+            rawBodyPreview: rawBodyString?.substring(0, 500) || '',
+            publicKeyLength: coordinatorPublicKey?.length || 0,
+            publicKeyPreview: coordinatorPublicKey?.substring(0, 100) || '',
+          });
           throw new Error('Invalid coordinator signature');
         }
+      } else {
+        logger.warn('[DevlabClient] COORDINATOR_PUBLIC_KEY not set, skipping signature verification (validateManualExercise)');
       }
 
       // Coordinator returns: { serviceName: "ContentStudio", payload: "<stringified JSON>" }
