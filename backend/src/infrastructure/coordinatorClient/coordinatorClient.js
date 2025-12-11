@@ -53,6 +53,7 @@ export async function postToCoordinator(envelope, options = {}) {
         'Content-Type': 'application/json',
         'X-Service-Name': SERVICE_NAME,
         'X-Signature': signature,
+        'X-Request-Timeout': String(timeout), // Pass timeout to Coordinator so it can use it for downstream requests
       },
       timeout,
       responseType: 'text', // Get raw response as string
