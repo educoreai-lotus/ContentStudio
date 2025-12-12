@@ -961,6 +961,102 @@ export class HeygenClient {
   }
   
   /**
+   * Generate video from pre-built HeyGen payload (from pipeline)
+   * @param {Object} heygenPayload - Pre-built HeyGen API payload
+   * @param {Object} options - Additional options
+   * @returns {Promise<Object>} Video generation result
+   */
+  async generateVideoFromPayload(heygenPayload, options = {}) {
+    if (!this.client) {
+      return {
+        status: 'skipped',
+        videoId: null,
+        videoUrl: null,
+        reason: 'api_key_not_configured',
+      };
+    }
+
+    logger.info('[HeyGen] Generating video from pre-built payload', {
+      hasTitle: !!heygenPayload.title,
+      hasVideoInputs: !!heygenPayload.video_inputs,
+      videoInputsCount: heygenPayload.video_inputs?.length || 0,
+      hasCaptions: !!heygenPayload.captions,
+    });
+
+    let response;
+    try {
+      response = await this.client.post('/v2/video/generate', heygenPayload);
+    } catch (error) {
+      const errorMessage = error.response?.data?.message || error.message || 'Unknown error';
+      const errorDetails = error.response?.data || {};
+      
+      logger.error('[HeyGen] API error when generating from payload', {
+        status: error.response?.status,
+        message: errorMessage,
+        details: errorDetails,
+      });
+
+      return {
+        status: 'failed',
+        videoId: null,
+        error: errorMessage,
+        errorCode: error.response?.status === 400 ? 'INVALID_REQUEST' : 'API_ERROR',
+        errorDetail: JSON.stringify(errorDetails),
+      };
+    }
+
+    // Extract video_id from v2 API response
+    const videoId = response.data?.data?.video_id || response.data?.video_id;
+    if (!videoId) {
+      logger.error('[HeyGen] No video_id in response', {
+        responseData: response.data,
+      });
+      return {
+        status: 'failed',
+        videoId: null,
+        error: 'HeyGen did not return a video_id',
+        errorCode: 'MISSING_VIDEO_ID',
+      };
+    }
+
+    // Poll for video completion
+    const duration = options.duration || 15;
+    try {
+      const pollResult = await this.pollVideoStatus(videoId, 120, 5000);
+      
+      if (pollResult.status === 'failed') {
+        return {
+          status: 'failed',
+          videoId,
+          error: pollResult.error || 'Video generation failed',
+          errorCode: pollResult.errorCode || 'GENERATION_FAILED',
+        };
+      }
+
+      return {
+        videoId,
+        videoUrl: pollResult.videoUrl,
+        heygenVideoUrl: pollResult.shareUrl,
+        duration_seconds: pollResult.duration || duration,
+        status: 'completed',
+        metadata: pollResult.metadata || {},
+      };
+    } catch (pollError) {
+      logger.warn('[HeyGen] Polling failed, returning partial result', {
+        videoId,
+        error: pollError.message,
+      });
+      
+      return {
+        videoId,
+        videoUrl: pollError.videoUrl || `https://app.heygen.com/share/${videoId}`,
+        status: pollError.status || 'processing',
+        duration_seconds: duration,
+      };
+    }
+  }
+
+  /**
    * Download video from URL
    * @param {string} videoUrl - Video URL
    * @returns {Promise<Buffer>} Video buffer

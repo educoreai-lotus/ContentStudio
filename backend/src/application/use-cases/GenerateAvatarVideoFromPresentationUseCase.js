@@ -1,6 +1,7 @@
 import { logger } from '../../infrastructure/logging/Logger.js';
 import { FileTextExtractor } from '../../services/FileTextExtractor.js';
 import { OpenAIClient } from '../../infrastructure/external-apis/openai/OpenAIClient.js';
+import { GenerateAvatarVideoFromPresentationPipeline } from './GenerateAvatarVideoFromPresentationPipeline.js';
 
 /**
  * Generate Avatar Video from Presentation Use Case
@@ -162,6 +163,10 @@ export class GenerateAvatarVideoFromPresentationUseCase {
       });
 
       // Step 4: Create avatar video with presentation as background
+      // Option 1: Use new detailed pipeline (per-slide narration)
+      // Option 2: Use existing simple workflow (single explanation)
+      // For now, use existing workflow but can be enhanced to use pipeline
+      
       logger.info('[GenerateAvatarVideoFromPresentation] Step 4: Creating avatar video with HeyGen');
 
       const videoResult = await this.heygenClient.generateVideo({

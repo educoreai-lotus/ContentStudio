@@ -189,5 +189,89 @@ export class PptxExtractorPro {
 
     return texts;
   }
+
+  /**
+   * Extract slides as structured array with titles and body text
+   * @param {string} filePath - Path to PPTX file
+   * @returns {Promise<Array>} Array of slides with {index, title, body, text}
+   */
+  static async extractSlides(filePath) {
+    try {
+      const buffer = readFileSync(filePath);
+      const zip = await JSZip.loadAsync(buffer);
+      
+      const parser = new XMLParser({
+        ignoreAttributes: false,
+        attributeNamePrefix: "@_",
+        textNodeName: "#text",
+        ignoreNameSpace: false,
+        parseTagValue: true,
+        parseNodeValue: true,
+        trimValues: true,
+      });
+
+      // Get all slide files, sorted by number
+      const slideFiles = Object.keys(zip.files)
+        .filter(file => file.startsWith("ppt/slides/slide") && file.endsWith(".xml"))
+        .sort((a, b) => {
+          // Extract slide numbers for sorting
+          const numA = parseInt(a.match(/slide(\d+)/)?.[1] || '0');
+          const numB = parseInt(b.match(/slide(\d+)/)?.[1] || '0');
+          return numA - numB;
+        });
+
+      logger.info('[PptxExtractorPro] Found slides for structured extraction:', { count: slideFiles.length });
+
+      const slides = [];
+
+      for (let i = 0; i < slideFiles.length; i++) {
+        const slideFile = slideFiles[i];
+        try {
+          const slideXml = await zip.files[slideFile].async("string");
+          const slideData = parser.parse(slideXml);
+          
+          // Extract all text from slide
+          const slideTexts = this._extractTextFromSlide(slideData);
+          const fullText = slideTexts.join(" ").trim();
+          
+          // Try to identify title (usually first line or largest text)
+          // For now, we'll use the first non-empty text segment as title, rest as body
+          const textSegments = slideTexts.filter(t => t.trim().length > 0);
+          const title = textSegments.length > 0 ? textSegments[0] : '';
+          const body = textSegments.length > 1 ? textSegments.slice(1).join(" ") : '';
+          
+          slides.push({
+            index: i + 1,
+            title: title || `Slide ${i + 1}`,
+            body: body || fullText,
+            text: fullText, // Full text for fallback
+          });
+        } catch (slideError) {
+          logger.warn('[PptxExtractorPro] Failed to extract structured slide:', {
+            slide: slideFile,
+            index: i + 1,
+            error: slideError.message,
+          });
+          // Add placeholder slide
+          slides.push({
+            index: i + 1,
+            title: `Slide ${i + 1}`,
+            body: '',
+            text: '',
+          });
+        }
+      }
+
+      logger.info('[PptxExtractorPro] Structured slide extraction completed:', {
+        slideCount: slides.length,
+        slidesWithContent: slides.filter(s => s.text.length > 0).length,
+      });
+
+      return slides;
+    } catch (error) {
+      logger.error('[PptxExtractorPro] Structured extraction failed:', error.message);
+      throw error;
+    }
+  }
 }
 
