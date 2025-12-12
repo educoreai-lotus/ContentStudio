@@ -430,8 +430,10 @@ export class DevlabClient {
       if (coordinatorPublicKey) {
         // IMPORTANT: Always verify signature on the FULL raw response body
         // Coordinator signs the entire response body, not just parts of it
-        const bodyToVerify = rawBodyString;
+        // We MUST verify on rawBodyString (the complete JSON string), NOT on responseData.data
+        const bodyToVerify = rawBodyString; // Full object: {"success":true,"data":{...},"metadata":{...}}
         
+        // Log what we're verifying to ensure we're using the full object
         logger.info('[DevlabClient] Verifying signature with public key (generateAIExercises)', {
           signatureLength: signature?.length || 0,
           signaturePreview: signature?.substring(0, 50) || '',
@@ -439,6 +441,11 @@ export class DevlabClient {
           publicKeyPreview: coordinatorPublicKey?.substring(0, 50) || '',
           rawBodyLength: rawBodyString?.length || 0,
           rawBodyPreview: rawBodyString?.substring(0, 200) || '',
+          bodyToVerifyLength: bodyToVerify?.length || 0,
+          bodyToVerifyPreview: bodyToVerify?.substring(0, 200) || '',
+          // Ensure we're NOT verifying only on data
+          dataOnlyLength: responseData.data ? JSON.stringify(responseData.data).length : 0,
+          verifyingFullObject: true,
         });
         
         const isValid = verifyCoordinatorSignature(coordinatorPublicKey, signature, bodyToVerify);
