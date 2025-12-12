@@ -157,9 +157,32 @@ export class GenerateAvatarVideoFromPresentationUseCase {
         throw new Error('Failed to generate explanation from presentation');
       }
 
-      logger.info('[GenerateAvatarVideoFromPresentation] Explanation generated successfully', {
-        explanationLength: explanationText.length,
-        preview: explanationText.substring(0, 200),
+      // Step 3.5: Truncate explanation to fit 3-minute video limit (max ~2250 characters)
+      // HeyGen limits videos to 3 minutes maximum
+      // ~150 words per minute = ~450 words for 3 minutes
+      // ~5 characters per word = ~2250 characters maximum
+      const MAX_EXPLANATION_LENGTH = 2250;
+      let finalExplanationText = explanationText.trim();
+      
+      if (finalExplanationText.length > MAX_EXPLANATION_LENGTH) {
+        logger.warn('[GenerateAvatarVideoFromPresentation] Explanation exceeds 3-minute limit, truncating', {
+          originalLength: finalExplanationText.length,
+          maxLength: MAX_EXPLANATION_LENGTH,
+        });
+        
+        // Truncate at word boundary to avoid cutting words
+        const truncated = finalExplanationText.substring(0, MAX_EXPLANATION_LENGTH);
+        const lastSpaceIndex = truncated.lastIndexOf(' ');
+        finalExplanationText = lastSpaceIndex > 0 
+          ? truncated.substring(0, lastSpaceIndex) + '...'
+          : truncated + '...';
+      }
+
+      logger.info('[GenerateAvatarVideoFromPresentation] Explanation prepared for HeyGen', {
+        originalLength: explanationText.length,
+        finalLength: finalExplanationText.length,
+        truncated: explanationText.length > MAX_EXPLANATION_LENGTH,
+        preview: finalExplanationText.substring(0, 200),
       });
 
       // Step 4: Create avatar video with presentation as background
@@ -171,9 +194,9 @@ export class GenerateAvatarVideoFromPresentationUseCase {
 
       const videoResult = await this.heygenClient.generateVideo({
         title: presentationContent.content_data?.title || 'EduCore Presentation',
-        prompt: explanationText,
+        prompt: finalExplanationText, // Use truncated explanation
         language: language,
-        duration: 900, // 15 minutes max
+        duration: 180, // 3 minutes max (HeyGen limit)
         presentation_file_url: presentationFileUrl,
         avatar_id: avatar_id, // Custom avatar if provided
         use_presentation_background: true,
@@ -199,8 +222,8 @@ export class GenerateAvatarVideoFromPresentationUseCase {
         status: 'completed',
         videoId: videoResult.videoId,
         videoUrl: videoResult.videoUrl,
-        duration_seconds: videoResult.duration_seconds || 900,
-        explanation: explanationText,
+        duration_seconds: videoResult.duration_seconds || 180, // 3 minutes max
+        explanation: finalExplanationText, // Truncated explanation
         metadata: {
           presentation_content_id,
           presentation_file_url: presentationFileUrl,
@@ -229,6 +252,7 @@ export class GenerateAvatarVideoFromPresentationUseCase {
 
   /**
    * Generate explanation with custom prompt
+   * Note: Explanation will be truncated to ~2250 characters (3 minutes max) before sending to HeyGen
    * @param {string} presentationText - Extracted text from presentation
    * @param {string} customPrompt - Trainer's custom prompt
    * @param {string} language - Language code
@@ -269,6 +293,7 @@ Generate the explanation:`;
 
   /**
    * Auto-generate explanation without custom prompt
+   * Note: Explanation will be truncated to ~2250 characters (3 minutes max) before sending to HeyGen
    * @param {string} presentationText - Extracted text from presentation
    * @param {string} language - Language code
    * @returns {Promise<string>} Generated explanation
