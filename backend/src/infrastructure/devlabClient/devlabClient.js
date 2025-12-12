@@ -646,6 +646,7 @@ export class DevlabClient {
               answerPreview: answer.substring(0, 100),
             });
           }
+          }
         }
       } else {
         // Try to find payload (old format or nested format)
