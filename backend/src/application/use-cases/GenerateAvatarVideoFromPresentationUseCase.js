@@ -245,14 +245,15 @@ Keep the explanation in ${language} language.
 Generate the explanation:`;
 
     try {
-      const response = await this.openaiClient.generateText({
-        prompt: prompt,
+      // generateText expects (prompt: string, options: object)
+      const response = await this.openaiClient.generateText(prompt, {
         model: 'gpt-4o',
         temperature: 0.7,
         max_tokens: 4000,
       });
 
-      return response.text || response.content || '';
+      // generateText returns a string directly, not an object
+      return response || '';
     } catch (error) {
       logger.error('[GenerateAvatarVideoFromPresentation] OpenAI generation failed', {
         error: error.message,
@@ -280,14 +281,15 @@ Keep the explanation in ${language} language.
 Generate the explanation:`;
 
     try {
-      const response = await this.openaiClient.generateText({
-        prompt: prompt,
+      // generateText expects (prompt: string, options: object)
+      const response = await this.openaiClient.generateText(prompt, {
         model: 'gpt-4o',
         temperature: 0.7,
         max_tokens: 4000,
       });
 
-      return response.text || response.content || '';
+      // generateText returns a string directly, not an object
+      return response || '';
     } catch (error) {
       logger.error('[GenerateAvatarVideoFromPresentation] OpenAI generation failed', {
         error: error.message,
