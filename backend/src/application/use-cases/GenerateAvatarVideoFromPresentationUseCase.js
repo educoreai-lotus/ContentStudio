@@ -127,37 +127,10 @@ export class GenerateAvatarVideoFromPresentationUseCase {
         preview: presentationText.substring(0, 200),
       });
 
-      // Step 2.5: Validate quality/relevance (same as CreateContentUseCase.validateContentQualityBeforeSave)
-      if (this.qualityCheckService && presentationContent.topic_id) {
-        logger.info('[GenerateAvatarVideoFromPresentation] Step 2.5: Validating presentation quality and relevance');
-        
-        try {
-          // Use QualityCheckService to validate quality (same as CreateContentUseCase)
-          const qualityResult = await this.qualityCheckService.validateContentQualityBeforeSave(
-            presentationContent,
-            presentationContent.topic_id
-          );
-          
-          if (!qualityResult.passed) {
-            logger.warn('[GenerateAvatarVideoFromPresentation] Quality check failed', {
-              relevance: qualityResult.relevance_score,
-              originality: qualityResult.originality_score,
-              reasons: qualityResult.reasons,
-            });
-            // Don't block - just log warning (presentation might still be usable)
-          } else {
-            logger.info('[GenerateAvatarVideoFromPresentation] Quality check passed', {
-              relevance: qualityResult.relevance_score,
-              originality: qualityResult.originality_score,
-            });
-          }
-        } catch (qualityError) {
-          logger.warn('[GenerateAvatarVideoFromPresentation] Quality check failed (non-blocking)', {
-            error: qualityError.message,
-          });
-          // Don't block - continue with generation
-        }
-      }
+      // NOTE: Quality check is NOT performed here because:
+      // 1. If presentation was created manually - it was already checked in CreateContentUseCase
+      // 2. If presentation was created by AI - quality check is not needed (AI generates quality content)
+      // 3. The presentation already exists in the database, so validation should have been done at creation time
 
       // Step 3: Generate explanation using OpenAI GPT-4o
       logger.info('[GenerateAvatarVideoFromPresentation] Step 3: Generating explanation with OpenAI');
