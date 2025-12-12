@@ -206,7 +206,28 @@ export class PostgreSQLContentRepository extends IContentRepository {
 
   async findByTopicId(topicId, filters = {}) {
     // findByTopicId is an alias for findAllByTopicId in PostgreSQL repository
-    return this.findAllByTopicId(topicId, filters);
+    console.log('[PostgreSQLContentRepository] findByTopicId called', {
+      topicId,
+      topicIdType: typeof topicId,
+      filters,
+    });
+    try {
+      const result = await this.findAllByTopicId(topicId, filters);
+      console.log('[PostgreSQLContentRepository] findByTopicId result', {
+        topicId,
+        resultCount: result?.length || 0,
+        resultTypes: result?.map(r => r?.content_type_id) || [],
+      });
+      return result;
+    } catch (error) {
+      console.error('[PostgreSQLContentRepository] findByTopicId failed', {
+        error: error.message,
+        stack: error.stack,
+        topicId,
+        filters,
+      });
+      throw error;
+    }
   }
 
   async findAllByTopicId(topicId, filters = {}) {
@@ -275,7 +296,18 @@ export class PostgreSQLContentRepository extends IContentRepository {
       paramCount: params.length,
     });
 
-    const result = await this.db.query(query, params);
+    let result;
+    try {
+      result = await this.db.query(query, params);
+    } catch (queryError) {
+      console.error('[PostgreSQLContentRepository] Query failed', {
+        error: queryError.message,
+        stack: queryError.stack,
+        query,
+        params,
+      });
+      throw queryError;
+    }
     
     console.log('[PostgreSQLContentRepository] Query result', {
       rowCount: result.rows.length,
@@ -288,7 +320,29 @@ export class PostgreSQLContentRepository extends IContentRepository {
       })),
     });
     
-    return await Promise.all(result.rows.map(row => this.mapRowToContent(row)));
+    // Map rows to content objects with error handling
+    const mappedContent = [];
+    for (const row of result.rows) {
+      try {
+        const content = await this.mapRowToContent(row);
+        mappedContent.push(content);
+      } catch (mapError) {
+        console.error('[PostgreSQLContentRepository] Failed to map row to content', {
+          error: mapError.message,
+          stack: mapError.stack,
+          content_id: row.content_id,
+          content_type_id: row.content_type_id,
+        });
+        // Continue with other rows even if one fails
+      }
+    }
+    
+    console.log('[PostgreSQLContentRepository] Mapped content result', {
+      mappedCount: mappedContent.length,
+      originalRowCount: result.rows.length,
+    });
+    
+    return mappedContent;
   }
 
   async update(contentId, updates) {
