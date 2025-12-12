@@ -462,6 +462,172 @@ export class AIGenerationController {
       next(error);
     }
   }
+
+  /**
+   * Generate avatar video using Gamma + HeyGen orchestrator
+   * POST /api/ai-generation/generate/avatar-orchestrator
+   * 
+   * Body:
+   * {
+   *   trainer_id: string,
+   *   topic_id: number,
+   *   language_code: string (e.g., "he", "en", "ar"),
+   *   mode: string (must be "avatar" to proceed),
+   *   input_text: string (text for Gamma generation),
+   *   ai_slide_explanations: Array<string|Object> (AI-generated slide explanations)
+   * }
+   * 
+   * Returns:
+   * - 200 with { status: "skipped" } if mode != "avatar"
+   * - 202 with { video_id, jobId } if mode == "avatar"
+   * - 400 if validation fails
+   * - 503 if services not configured
+   */
+  async generateAvatarOrchestrator(req, res, next) {
+    try {
+      const { trainer_id, topic_id, language_code, mode, input_text, ai_slide_explanations } = req.body;
+
+      // Input validation
+      if (!trainer_id || typeof trainer_id !== 'string') {
+        return res.status(400).json({
+          success: false,
+          error: 'Missing or invalid trainer_id',
+        });
+      }
+
+      if (!topic_id || typeof topic_id !== 'number') {
+        return res.status(400).json({
+          success: false,
+          error: 'Missing or invalid topic_id',
+        });
+      }
+
+      if (!language_code || typeof language_code !== 'string') {
+        return res.status(400).json({
+          success: false,
+          error: 'Missing or invalid language_code',
+        });
+      }
+
+      if (!mode || typeof mode !== 'string') {
+        return res.status(400).json({
+          success: false,
+          error: 'Missing or invalid mode',
+        });
+      }
+
+      // If mode != "avatar", return 200 with "skipped"
+      if (mode !== 'avatar') {
+        logger.info('[AIGenerationController] Avatar orchestrator skipped - mode is not "avatar"', {
+          trainer_id,
+          topic_id,
+          mode,
+        });
+        return res.status(200).json({
+          success: true,
+          status: 'skipped',
+          message: `Mode "${mode}" is not "avatar", skipping orchestrator`,
+        });
+      }
+
+      // Validate required fields for avatar mode
+      if (!input_text || typeof input_text !== 'string' || input_text.trim().length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Missing or invalid input_text (required for avatar mode)',
+        });
+      }
+
+      if (!ai_slide_explanations || !Array.isArray(ai_slide_explanations) || ai_slide_explanations.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Missing or invalid ai_slide_explanations (required for avatar mode)',
+        });
+      }
+
+      // Get required services from aiGenerationService
+      const gammaClient = this.generateContentUseCase.aiGenerationService.gammaClient;
+      const storageClient = this.generateContentUseCase.aiGenerationService.storageClient;
+      const heygenClient = this.generateContentUseCase.aiGenerationService.heygenClient;
+
+      if (!gammaClient || !gammaClient.isEnabled()) {
+        return res.status(503).json({
+          success: false,
+          error: 'Gamma client not configured or disabled',
+        });
+      }
+
+      if (!storageClient || !storageClient.isConfigured()) {
+        return res.status(503).json({
+          success: false,
+          error: 'Storage client not configured',
+        });
+      }
+
+      if (!heygenClient || !heygenClient.client) {
+        return res.status(503).json({
+          success: false,
+          error: 'HeyGen client not configured',
+        });
+      }
+
+      // Import orchestrator
+      const { GammaHeyGenAvatarOrchestrator } = await import('../../services/GammaHeyGenAvatarOrchestrator.js');
+
+      // Create orchestrator instance
+      const orchestrator = new GammaHeyGenAvatarOrchestrator({
+        gammaClient,
+        storageClient,
+        heygenClient,
+      });
+
+      // Execute orchestrator asynchronously (don't block on polling)
+      // Return 202 Accepted immediately with jobId
+      const jobId = `job-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+      // Execute in background (fire and forget)
+      orchestrator.execute({
+        trainerId: trainer_id,
+        topicId: topic_id,
+        languageCode: language_code,
+        mode,
+        inputText: input_text,
+        aiSlideExplanations: ai_slide_explanations,
+        jobId,
+      }).then(result => {
+        logger.info('[AIGenerationController] Avatar orchestrator completed successfully', {
+          jobId: result.jobId,
+          video_id: result.video_id,
+          trainer_id,
+          topic_id,
+        });
+      }).catch(error => {
+        logger.error('[AIGenerationController] Avatar orchestrator failed', {
+          jobId,
+          error: error.message,
+          step: error.step,
+          trainer_id,
+          topic_id,
+        });
+      });
+
+      // Return 202 Accepted immediately (don't wait for completion)
+      return res.status(202).json({
+        success: true,
+        status: 'accepted',
+        message: 'Avatar video generation started',
+        video_id: null, // Will be available after completion
+        jobId,
+      });
+
+    } catch (error) {
+      logger.error('[AIGenerationController] Error in avatar orchestrator', {
+        error: error.message,
+        stack: error.stack,
+      });
+      next(error);
+    }
+  }
 }
 
 

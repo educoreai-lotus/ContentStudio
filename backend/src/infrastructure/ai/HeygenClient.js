@@ -1082,4 +1082,135 @@ export class HeygenClient {
       throw new Error(`Failed to download video: ${error.message}`);
     }
   }
+
+  /**
+   * Generate video from HeyGen Template v2
+   * @param {string} templateId - HeyGen template ID
+   * @param {Object} payload - Template payload (from HeyGenTemplatePayloadBuilder)
+   * @param {Object} [options] - Optional settings
+   * @param {number} [options.maxRetries=3] - Maximum retry attempts for 5xx errors
+   * @param {number} [options.retryDelay=1000] - Delay between retries in ms
+   * @returns {Promise<Object>} Result with video_id
+   * @throws {Error} If generation fails after retries
+   */
+  async generateTemplateVideo(templateId, payload, options = {}) {
+    if (!this.client) {
+      throw new Error('Heygen client not configured');
+    }
+
+    if (!templateId || typeof templateId !== 'string' || templateId.trim().length === 0) {
+      throw new Error('templateId is required and must be a non-empty string');
+    }
+
+    if (!payload || typeof payload !== 'object') {
+      throw new Error('payload is required and must be an object');
+    }
+
+    const { maxRetries = 3, retryDelay = 1000 } = options;
+    const endpoint = `/v2/template/${templateId}/generate`;
+
+    let lastError = null;
+    let lastResponse = null;
+
+    // Retry loop for transient 5xx errors
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        logger.info('[HeyGen] Generating template video', {
+          templateId,
+          attempt: attempt + 1,
+          maxRetries: maxRetries + 1,
+          endpoint,
+        });
+
+        const response = await this.client.post(endpoint, payload);
+
+        // Extract video_id from response
+        const videoId = response.data?.data?.video_id || response.data?.video_id;
+        
+        if (!videoId) {
+          const errorMessage = 'HeyGen did not return a video_id in template response';
+          const responseSnippet = JSON.stringify(response.data || {}).substring(0, 500);
+          
+          logger.error('[HeyGen] No video_id in template response', {
+            templateId,
+            responseSnippet,
+            statusCode: response.status,
+          });
+
+          throw new Error(`${errorMessage}. Response: ${responseSnippet}`);
+        }
+
+        logger.info('[HeyGen] Template video generation initiated', {
+          templateId,
+          videoId,
+          attempt: attempt + 1,
+        });
+
+        return {
+          success: true,
+          video_id: videoId,
+          template_id: templateId,
+        };
+
+      } catch (error) {
+        lastError = error;
+        lastResponse = error.response;
+
+        const statusCode = error.response?.status;
+        const isTransientError = statusCode >= 500 && statusCode < 600;
+        const isLastAttempt = attempt >= maxRetries;
+
+        // Log error details
+        const errorDetails = {
+          templateId,
+          attempt: attempt + 1,
+          statusCode: statusCode || 'N/A',
+          statusText: error.response?.statusText || 'N/A',
+          errorMessage: error.message,
+          responseBody: error.response?.data ? JSON.stringify(error.response.data).substring(0, 500) : 'N/A',
+          isTransientError,
+          willRetry: isTransientError && !isLastAttempt,
+        };
+
+        if (isTransientError && !isLastAttempt) {
+          logger.warn('[HeyGen] Transient error, retrying template generation', {
+            ...errorDetails,
+            retryDelay,
+            nextAttempt: attempt + 2,
+          });
+
+          // Wait before retry
+          await new Promise(resolve => setTimeout(resolve, retryDelay * (attempt + 1))); // Exponential backoff
+          continue;
+        }
+
+        // Non-retryable error or last attempt
+        logger.error('[HeyGen] Template video generation failed', errorDetails);
+
+        // Build error message with proper error surface
+        const errorMessage = lastResponse?.data?.message 
+          || lastResponse?.data?.error_message 
+          || lastError?.message 
+          || 'Template video generation failed';
+
+        const errorCode = lastResponse?.data?.error_code 
+          || lastResponse?.data?.code 
+          || (statusCode === 400 ? 'INVALID_REQUEST' : statusCode >= 500 ? 'SERVER_ERROR' : 'API_ERROR');
+
+        const responseBodySnippet = lastResponse?.data 
+          ? JSON.stringify(lastResponse.data).substring(0, 500) 
+          : 'No response body';
+
+        throw new Error(
+          `Template video generation failed: ${errorMessage}. ` +
+          `Status: ${statusCode || 'N/A'}, ` +
+          `Code: ${errorCode}, ` +
+          `Response: ${responseBodySnippet}`
+        );
+      }
+    }
+
+    // This should never be reached, but TypeScript/ESLint might complain
+    throw lastError || new Error('Template video generation failed after retries');
+  }
 }

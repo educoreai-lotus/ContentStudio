@@ -137,5 +137,28 @@ router.post('/generate/avatar-video-from-presentation', async (req, res, next) =
   return controller.generateAvatarVideoFromPresentation(req, res, next);
 });
 
+/**
+ * POST /api/ai-generation/generate/avatar-orchestrator
+ * Generate avatar video using Gamma + HeyGen orchestrator
+ * 
+ * Body:
+ * {
+ *   trainer_id: string,
+ *   topic_id: number,
+ *   language_code: string,
+ *   mode: string,
+ *   input_text: string,
+ *   ai_slide_explanations: Array<string|Object>
+ * }
+ * 
+ * Returns:
+ * - 200 with { status: "skipped" } if mode != "avatar"
+ * - 202 with { video_id, jobId } if mode == "avatar"
+ */
+router.post('/generate/avatar-orchestrator', async (req, res, next) => {
+  const controller = await initServices();
+  return controller.generateAvatarOrchestrator(req, res, next);
+});
+
 export default router;
 

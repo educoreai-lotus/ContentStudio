@@ -183,6 +183,7 @@ export class GammaClient {
    * @param {string} options.topicName - Topic name for file naming
    * @param {string} options.language - Language code (e.g., 'en', 'he', 'ar')
    * @param {string} options.audience - Target audience (e.g., 'beginner developers', 'students')
+   * @param {number} options.maxSlides - Maximum number of slides (default: 10, hard limit: 10)
    * @returns {Promise<Object>} Presentation data with storage info
    * @returns {string} presentationUrl - Public URL to view the presentation
    * @returns {string} storagePath - Storage path in Supabase
@@ -197,7 +198,32 @@ export class GammaClient {
       throw new Error('Input text is required for presentation generation');
     }
 
-    const { topicName = 'presentation', language = 'en', audience = 'beginner developers' } = options;
+    const { topicName = 'presentation', language = 'en', audience = 'beginner developers', maxSlides = 10 } = options;
+    
+    // Enforce hard limit of 10 slides and minimum of 1 slide
+    // Gamma cannot generate a presentation without slides, so minimum is 1
+    const HARD_LIMIT = 10;
+    const MIN_SLIDES = 1;
+    const sanitizedMaxSlides = Math.max(MIN_SLIDES, maxSlides);
+    const effectiveMaxSlides = Math.min(sanitizedMaxSlides, HARD_LIMIT);
+    
+    // Log warning if requested slides exceed limit
+    if (maxSlides > HARD_LIMIT) {
+      logger.warn('[GammaClient] Requested slides exceed hard limit, enforcing limit', {
+        requested: maxSlides,
+        enforced: HARD_LIMIT,
+        topicName,
+      });
+    }
+    
+    // Log warning if requested slides is 0 (invalid for Gamma)
+    if (maxSlides < MIN_SLIDES) {
+      logger.warn('[GammaClient] Requested slides is less than minimum, enforcing minimum', {
+        requested: maxSlides,
+        enforced: MIN_SLIDES,
+        topicName,
+      });
+    }
 
     try {
       // Normalize language to Gamma's supported codes
@@ -209,16 +235,27 @@ export class GammaClient {
         language, 
         normalizedLanguage,
         isRTL: rtl,
-        inputTextLength: inputText.length 
+        inputTextLength: inputText.length,
+        maxSlides: effectiveMaxSlides,
+        requestedSlides: maxSlides,
       });
 
       // Step 1: Build language rules instruction
       // CRITICAL: Inject language rules BEFORE the actual content to ensure Gamma follows them
       const languageRules = buildLanguageRules(language);
       
-      // Step 2: Combine language rules with input text
-      // Language rules must come FIRST to ensure Gamma processes them correctly
+      // Step 2: Build slide limit instruction
+      const slideLimitInstruction = `IMPORTANT — SLIDE LIMIT:
+
+The presentation MUST contain exactly ${effectiveMaxSlides} slides, no more, no less.
+Do NOT create more than ${effectiveMaxSlides} slides.
+Each slide should be focused and concise.`;
+      
+      // Step 3: Combine language rules, slide limit, and input text
+      // Language rules and slide limit must come FIRST to ensure Gamma processes them correctly
       const enhancedInputText = `${languageRules}
+
+${slideLimitInstruction}
 
 ---
 
