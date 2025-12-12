@@ -557,30 +557,72 @@ export class DevlabClient {
         }
       }
       // Check if we have direct answer in data.answer (new format)
-      else if (responseData.data?.answer && typeof responseData.data.answer === 'string') {
-        // Direct answer format: { success: true, data: { answer: "..." } }
-        // BUT: If answer is "content-studio", this is an error - Coordinator didn't get the real answer
-        if (responseData.data.answer === 'content-studio' || responseData.data.answer === SERVICE_NAME) {
-          logger.error('[DevlabClient] Coordinator returned service name in data.answer - this indicates Coordinator did not receive answer from devlab-service', {
-            answer: responseData.data.answer,
-            metadata: responseData.metadata,
-            fullResponse: JSON.stringify(responseData).substring(0, 1000),
-          });
-          // Don't set answer here - let it fall through to error handling
-        } else {
-          // The answer might be a JSON stringified object that contains the HTML
-          let rawAnswer = responseData.data.answer;
-          
-          // Try to parse as JSON first (devlab-service returns JSON stringified response)
-          try {
-            const parsedAnswer = JSON.parse(rawAnswer);
-            logger.info('[DevlabClient] Parsed data.answer as JSON', {
-              parsedKeys: Object.keys(parsedAnswer),
-              hasData: !!parsedAnswer.data,
-              dataKeys: parsedAnswer.data ? Object.keys(parsedAnswer.data) : [],
-              hasHtml: !!parsedAnswer.data?.html,
-              htmlLength: parsedAnswer.data?.html?.length || 0,
+      else if (responseData.data?.answer) {
+        // Handle case where data.answer is an object (error response from service)
+        if (typeof responseData.data.answer === 'object' && responseData.data.answer !== null) {
+          // Check for nested error structure: { answer: { answer: { error: "..." } } }
+          const nestedAnswer = responseData.data.answer.answer;
+          if (nestedAnswer && typeof nestedAnswer === 'object' && nestedAnswer.error) {
+            const errorMessage = nestedAnswer.error;
+            logger.error('[DevlabClient] Service returned error in nested answer structure', {
+              error: errorMessage,
+              nestedStructure: JSON.stringify(responseData.data.answer).substring(0, 200),
+              metadata: responseData.metadata,
             });
+            throw new Error(`Service error: ${errorMessage}`);
+          }
+          // Check for direct error: { answer: { error: "..." } }
+          if (responseData.data.answer.error) {
+            const errorMessage = responseData.data.answer.error;
+            logger.error('[DevlabClient] Service returned error in answer', {
+              error: errorMessage,
+              metadata: responseData.metadata,
+            });
+            throw new Error(`Service error: ${errorMessage}`);
+          }
+          // If it's an object but no error field, try to stringify it
+          logger.warn('[DevlabClient] data.answer is an object (not string), attempting to extract content', {
+            answerKeys: Object.keys(responseData.data.answer),
+            answerType: typeof responseData.data.answer,
+          });
+          // Try to find any string field that might contain the actual answer
+          const answerString = responseData.data.answer.html || 
+                              responseData.data.answer.content || 
+                              responseData.data.answer.text ||
+                              JSON.stringify(responseData.data.answer);
+          if (answerString && typeof answerString === 'string' && answerString.length > 0) {
+            answer = answerString;
+            logger.info('[DevlabClient] Extracted answer from object', {
+              source: responseData.data.answer.html ? 'html' : responseData.data.answer.content ? 'content' : 'stringified',
+              answerLength: answer.length,
+            });
+          }
+        }
+        // Handle string answer
+        else if (typeof responseData.data.answer === 'string') {
+          // Direct answer format: { success: true, data: { answer: "..." } }
+          // BUT: If answer is "content-studio", this is an error - Coordinator didn't get the real answer
+          if (responseData.data.answer === 'content-studio' || responseData.data.answer === SERVICE_NAME) {
+            logger.error('[DevlabClient] Coordinator returned service name in data.answer - this indicates Coordinator did not receive answer from devlab-service', {
+              answer: responseData.data.answer,
+              metadata: responseData.metadata,
+              fullResponse: JSON.stringify(responseData).substring(0, 1000),
+            });
+            // Don't set answer here - let it fall through to error handling
+          } else {
+            // The answer might be a JSON stringified object that contains the HTML
+            let rawAnswer = responseData.data.answer;
+            
+            // Try to parse as JSON first (devlab-service returns JSON stringified response)
+            try {
+              const parsedAnswer = JSON.parse(rawAnswer);
+              logger.info('[DevlabClient] Parsed data.answer as JSON', {
+                parsedKeys: Object.keys(parsedAnswer),
+                hasData: !!parsedAnswer.data,
+                dataKeys: parsedAnswer.data ? Object.keys(parsedAnswer.data) : [],
+                hasHtml: !!parsedAnswer.data?.html,
+                htmlLength: parsedAnswer.data?.html?.length || 0,
+              });
             
             // Extract HTML from parsed answer (devlab-service format: { success, data: { html, questions, metadata } })
             if (parsedAnswer.data?.html && typeof parsedAnswer.data.html === 'string') {
