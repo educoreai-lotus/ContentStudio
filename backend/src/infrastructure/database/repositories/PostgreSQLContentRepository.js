@@ -335,7 +335,18 @@ export class PostgreSQLContentRepository extends IContentRepository {
     const mappedContent = [];
     for (const row of result.rows) {
       try {
+        console.log('[PostgreSQLContentRepository] Mapping row to content', {
+          content_id: row.content_id,
+          content_type_id: row.content_type_id,
+          topic_id: row.topic_id,
+        });
         const content = await this.mapRowToContent(row);
+        console.log('[PostgreSQLContentRepository] Successfully mapped row to content', {
+          content_id: content?.content_id,
+          content_type_id: content?.content_type_id,
+          topic_id: content?.topic_id,
+          hasContentData: !!content?.content_data,
+        });
         mappedContent.push(content);
       } catch (mapError) {
         console.error('[PostgreSQLContentRepository] Failed to map row to content', {
@@ -351,6 +362,8 @@ export class PostgreSQLContentRepository extends IContentRepository {
     console.log('[PostgreSQLContentRepository] Mapped content result', {
       mappedCount: mappedContent.length,
       originalRowCount: result.rows.length,
+      mappedContentIds: mappedContent.map(c => c?.content_id),
+      mappedContentTypes: mappedContent.map(c => c?.content_type_id),
     });
     
     return mappedContent;
