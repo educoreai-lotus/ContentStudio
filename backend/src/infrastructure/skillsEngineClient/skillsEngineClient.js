@@ -69,6 +69,12 @@ export class SkillsEngineClient {
       const rawBodyString = coordinatorResponse.rawBodyString || JSON.stringify(responseData);
       const responseHeaders = coordinatorResponse.headers || {};
 
+      // Log full response body from Coordinator
+      logger.info('[SkillsEngineClient] Full Coordinator response body', {
+        rawBodyString: rawBodyString,
+        rawBodyLength: rawBodyString?.length || 0,
+      });
+
       // Verify Coordinator signature
       const signature = responseHeaders['x-service-signature'] || responseHeaders['X-Service-Signature'];
       const signer = responseHeaders['x-service-name'] || responseHeaders['X-Service-Name'];

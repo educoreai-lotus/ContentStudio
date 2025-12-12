@@ -345,6 +345,13 @@ export class DevlabClient {
         responsePreview: JSON.stringify(coordinatorResponse.data || coordinatorResponse).substring(0, 500),
       });
 
+      // Log full response body from Coordinator
+      const rawBodyString = coordinatorResponse.rawBodyString || JSON.stringify(coordinatorResponse.data || coordinatorResponse);
+      logger.info('[DevlabClient] Full Coordinator response body', {
+        rawBodyString: rawBodyString,
+        rawBodyLength: rawBodyString?.length || 0,
+      });
+
       // Extract response components
       const responseData = coordinatorResponse.data || coordinatorResponse; // Support both new and old format
       const rawBodyString = coordinatorResponse.rawBodyString || JSON.stringify(responseData);
