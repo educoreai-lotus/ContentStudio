@@ -105,8 +105,37 @@ export class DirectoryClient {
       }
 
       if (coordinatorPublicKey) {
-        const isValid = verifyCoordinatorSignature(coordinatorPublicKey, signature, rawBodyString);
+        // IMPORTANT: Always verify signature on the FULL raw response body
+        // Coordinator signs the entire response body, not just parts of it
+        // We MUST verify on rawBodyString (the complete JSON string), NOT on responseData.data
+        const bodyToVerify = rawBodyString; // Full object: {"success":true,"data":{...},"metadata":{...}}
+        
+        logger.info('[DirectoryClient] Verifying signature with public key', {
+          signatureLength: signature?.length || 0,
+          signaturePreview: signature?.substring(0, 50) || '',
+          publicKeyLength: coordinatorPublicKey?.length || 0,
+          rawBodyLength: rawBodyString?.length || 0,
+          rawBodyPreview: rawBodyString?.substring(0, 200) || '',
+          bodyToVerifyLength: bodyToVerify?.length || 0,
+          verifyingFullObject: true,
+        });
+        
+        const isValid = verifyCoordinatorSignature(coordinatorPublicKey, signature, bodyToVerify);
+        
+        logger.info('[DirectoryClient] Signature verification result', {
+          isValid,
+          signatureLength: signature?.length || 0,
+          rawBodyLength: rawBodyString?.length || 0,
+        });
+        
         if (!isValid) {
+          logger.error('[DirectoryClient] Invalid coordinator signature', {
+            signatureLength: signature?.length || 0,
+            signaturePreview: signature?.substring(0, 100) || '',
+            rawBodyLength: rawBodyString?.length || 0,
+            rawBodyPreview: rawBodyString?.substring(0, 500) || '',
+            publicKeyLength: coordinatorPublicKey?.length || 0,
+          });
           throw new Error('Invalid coordinator signature');
         }
       }
