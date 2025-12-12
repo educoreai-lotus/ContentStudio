@@ -5,11 +5,15 @@
  * Steps:
  * 1. Generate Gamma PPTX with hard maxSlides=10
  * 2. Extract slide images (public URLs)
- * 3. Build slide speeches from AI explanations
+ * 3. Extract slide text from PPTX and generate short narrations with OpenAI (15-20 seconds, max 50 words per slide)
+ *    - If OpenAI client is available: generates short narrations using strict prompt
+ *    - Falls back to aiSlideExplanations if OpenAI is not available or extraction fails
  * 4. Combine into SlidePlan[]
  * 5. Resolve voice_id via VoiceIdResolver
  * 6. Build HeyGen payload using template_id
  * 7. Call HeyGen, return video_id
+ * 
+ * Video duration: Maximum 3 minutes (10 slides × 15-20 seconds = 2.5-3.3 minutes)
  */
 
 import { randomUUID } from 'crypto';
@@ -19,6 +23,10 @@ import { SlideSpeechBuilder } from './SlideSpeechBuilder.js';
 import { VoiceIdResolver } from './VoiceIdResolver.js';
 import { HeyGenTemplatePayloadBuilder } from './HeyGenTemplatePayloadBuilder.js';
 import { SlidePlan } from '../domain/slides/SlidePlan.js';
+import { PptxExtractorPro } from './PptxExtractorPro.js';
+import { tmpdir } from 'os';
+import { join } from 'path';
+import { writeFileSync, unlinkSync } from 'fs';
 
 /**
  * Domain Error for orchestrator steps
@@ -43,6 +51,7 @@ export class GammaHeyGenAvatarOrchestrator {
    * @param {Object} dependencies.gammaClient - GammaClient instance
    * @param {Object} dependencies.storageClient - SupabaseStorageClient instance
    * @param {Object} dependencies.heygenClient - HeygenClient instance
+   * @param {Object} [dependencies.openaiClient] - OpenAIClient instance (required for generating short narrations)
    * @param {string} [dependencies.templateId] - HeyGen template ID (default: '2c01158bec1149c49d35effb4bd79791')
    * @param {Object} [dependencies.slideImageExtractor] - SlideImageExtractor instance (optional, will be created)
    * @param {Object} [dependencies.slideSpeechBuilder] - SlideSpeechBuilder instance (optional, will be created)
@@ -53,6 +62,7 @@ export class GammaHeyGenAvatarOrchestrator {
     gammaClient,
     storageClient,
     heygenClient,
+    openaiClient = null,
     templateId = '2c01158bec1149c49d35effb4bd79791',
     slideImageExtractor = null,
     slideSpeechBuilder = null,
@@ -72,6 +82,7 @@ export class GammaHeyGenAvatarOrchestrator {
     this.gammaClient = gammaClient;
     this.storageClient = storageClient;
     this.heygenClient = heygenClient;
+    this.openaiClient = openaiClient;
     this.templateId = templateId;
 
     // Initialize services (or use provided instances)
@@ -184,11 +195,12 @@ export class GammaHeyGenAvatarOrchestrator {
       });
 
       let slideImages;
+      let pptxBuffer; // Store buffer for later use in Step 3
       try {
         // Download PPTX to buffer for extraction
         const axios = (await import('axios')).default;
         const pptxResponse = await axios.get(pptxUrl, { responseType: 'arraybuffer' });
-        const pptxBuffer = Buffer.from(pptxResponse.data);
+        pptxBuffer = Buffer.from(pptxResponse.data);
 
         slideImages = await this.slideImageExtractor.extractSlideImages(
           pptxBuffer,
@@ -218,20 +230,79 @@ export class GammaHeyGenAvatarOrchestrator {
         slideCount: slideImages.length,
       });
 
-      // Step 3: Build slide speeches from AI explanations
-      logger.info('[GammaHeyGenAvatarOrchestrator] Step 3: Building slide speeches', {
+      // Step 3: Extract slide text from PPTX and generate short narrations with OpenAI
+      logger.info('[GammaHeyGenAvatarOrchestrator] Step 3: Extracting slides and generating short narrations', {
         jobId: finalJobId,
-        explanationCount: aiSlideExplanations?.length || 0,
+        hasOpenAIClient: !!this.openaiClient,
+        hasAiExplanations: !!aiSlideExplanations && aiSlideExplanations.length > 0,
       });
 
       let slideSpeeches;
       try {
-        slideSpeeches = this.slideSpeechBuilder.buildSpeakerText(aiSlideExplanations || []);
-        jobState.steps.speechBuilding = {
-          status: 'completed',
-          completedAt: new Date().toISOString(),
-          speechCount: slideSpeeches.length,
-        };
+        // If OpenAI client is available, generate short narrations (15-20 seconds, max 50 words per slide)
+        if (this.openaiClient && pptxBuffer) {
+          // Extract slides from PPTX
+          const tempPptxPath = join(tmpdir(), `pptx-${finalJobId}.pptx`);
+          try {
+            writeFileSync(tempPptxPath, pptxBuffer);
+            const slides = await PptxExtractorPro.extractSlides(tempPptxPath);
+            unlinkSync(tempPptxPath); // Clean up temp file
+
+            // Generate short narrations for each slide
+            const narrations = [];
+            for (const slide of slides.slice(0, 10)) { // Max 10 slides
+              try {
+                const narration = await this.generateShortNarration(slide, languageCode);
+                narrations.push({
+                  index: slide.index,
+                  speakerText: narration,
+                });
+              } catch (error) {
+                logger.warn('[GammaHeyGenAvatarOrchestrator] Failed to generate narration for slide', {
+                  jobId: finalJobId,
+                  slideIndex: slide.index,
+                  error: error.message,
+                });
+                // Fallback to slide text (truncated to 50 words)
+                const fallbackText = (slide.text || slide.body || slide.title || '').split(/\s+/).slice(0, 50).join(' ');
+                narrations.push({
+                  index: slide.index,
+                  speakerText: fallbackText,
+                });
+              }
+            }
+
+            slideSpeeches = narrations;
+            jobState.steps.speechBuilding = {
+              status: 'completed',
+              completedAt: new Date().toISOString(),
+              speechCount: slideSpeeches.length,
+              method: 'openai_generated',
+            };
+          } catch (extractionError) {
+            logger.warn('[GammaHeyGenAvatarOrchestrator] Failed to extract slides from PPTX, falling back to aiSlideExplanations', {
+              jobId: finalJobId,
+              error: extractionError.message,
+            });
+            // Fallback to using aiSlideExplanations
+            slideSpeeches = this.slideSpeechBuilder.buildSpeakerText(aiSlideExplanations || []);
+            jobState.steps.speechBuilding = {
+              status: 'completed',
+              completedAt: new Date().toISOString(),
+              speechCount: slideSpeeches.length,
+              method: 'fallback_ai_explanations',
+            };
+          }
+        } else {
+          // No OpenAI client or no PPTX buffer, use provided aiSlideExplanations
+          slideSpeeches = this.slideSpeechBuilder.buildSpeakerText(aiSlideExplanations || []);
+          jobState.steps.speechBuilding = {
+            status: 'completed',
+            completedAt: new Date().toISOString(),
+            speechCount: slideSpeeches.length,
+            method: 'ai_explanations',
+          };
+        }
       } catch (error) {
         const stepError = new OrchestratorStepError('speech_building', error.message, error);
         stepError.jobId = finalJobId;
@@ -438,6 +509,96 @@ export class GammaHeyGenAvatarOrchestrator {
       jobState.failedAt = new Date().toISOString();
       jobState.failedStep = 'unknown';
       throw stepError;
+    }
+  }
+
+  /**
+   * Generate a short narration (15-20 seconds, max 50 words) for a single slide using OpenAI
+   * @param {Object} slide - Slide object with {index, title, body, text}
+   * @param {string} languageCode - Language code (e.g., "he", "en", "ar")
+   * @returns {Promise<string>} Short narration text (max 50 words)
+   */
+  async generateShortNarration(slide, languageCode) {
+    if (!this.openaiClient) {
+      throw new Error('OpenAI client not available');
+    }
+
+    // Get language name for prompt
+    const languageMap = {
+      'he': 'Hebrew',
+      'en': 'English',
+      'ar': 'Arabic',
+      'es': 'Spanish',
+      'fr': 'French',
+      'de': 'German',
+      'it': 'Italian',
+      'pt': 'Portuguese',
+      'ru': 'Russian',
+      'zh': 'Chinese',
+      'ja': 'Japanese',
+      'ko': 'Korean',
+    };
+    const languageName = languageMap[languageCode] || languageCode;
+
+    // Build prompt with strict constraints
+    const prompt = `You are an expert teacher explaining a single presentation slide to students.
+
+Slide information:
+
+Title: ${slide.title || 'Untitled'}
+
+Content: ${slide.body || slide.text || 'No content'}
+
+IMPORTANT CONSTRAINTS:
+
+- This narration MUST be suitable for ~15–20 seconds of speech.
+
+- Do NOT exceed 50 words.
+
+- Be clear, simple, and focused on the main idea only.
+
+Instructions:
+
+- Explain the slide as if speaking to students.
+
+- No long introductions.
+
+- No repetition.
+
+- No extra examples unless strictly necessary.
+
+Output:
+
+- A short spoken narration.
+
+- Language: ${languageName}
+
+Generate the narration now.`;
+
+    try {
+      const narration = await this.openaiClient.generateText(prompt, {
+        model: 'gpt-4o',
+        temperature: 0.7,
+        max_tokens: 100, // Limit tokens to ensure short output
+      });
+
+      // Ensure narration doesn't exceed 50 words
+      const words = narration.trim().split(/\s+/);
+      if (words.length > 50) {
+        logger.warn('[GammaHeyGenAvatarOrchestrator] Narration exceeded 50 words, truncating', {
+          originalLength: words.length,
+          slideIndex: slide.index,
+        });
+        return words.slice(0, 50).join(' ');
+      }
+
+      return narration.trim();
+    } catch (error) {
+      logger.error('[GammaHeyGenAvatarOrchestrator] Failed to generate narration with OpenAI', {
+        slideIndex: slide.index,
+        error: error.message,
+      });
+      throw error;
     }
   }
 }

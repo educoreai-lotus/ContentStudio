@@ -549,6 +549,7 @@ export class AIGenerationController {
       const gammaClient = this.generateContentUseCase.aiGenerationService.gammaClient;
       const storageClient = this.generateContentUseCase.aiGenerationService.storageClient;
       const heygenClient = this.generateContentUseCase.aiGenerationService.heygenClient;
+      const openaiClient = this.generateContentUseCase.aiGenerationService.openaiClient;
 
       if (!gammaClient || !gammaClient.isEnabled()) {
         return res.status(503).json({
@@ -571,6 +572,13 @@ export class AIGenerationController {
         });
       }
 
+      if (!openaiClient) {
+        return res.status(503).json({
+          success: false,
+          error: 'OpenAI client not configured',
+        });
+      }
+
       // Import orchestrator
       const { GammaHeyGenAvatarOrchestrator } = await import('../../services/GammaHeyGenAvatarOrchestrator.js');
 
@@ -579,6 +587,7 @@ export class AIGenerationController {
         gammaClient,
         storageClient,
         heygenClient,
+        openaiClient, // Pass OpenAI client for generating short narrations
       });
 
       // Execute orchestrator asynchronously (don't block on polling)
