@@ -212,6 +212,18 @@ export class AIGenerationController {
         status: responseStatus,
       });
 
+      // If avatar video was skipped, return appropriate response
+      if (isResponseAvatarVideo && (isSkipped || hasSkippedReason)) {
+        return res.status(200).json({
+          success: false,
+          status: 'skipped',
+          data: responseData,
+          message: content.content_data?.reason || 'Avatar video generation was skipped',
+          reason: content.content_data?.reason || 'avatar_unavailable',
+          errorCode: content.content_data?.errorCode || 'SKIPPED',
+        });
+      }
+
       res.status(201).json({
         success: true,
         data: responseData,
