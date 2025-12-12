@@ -1,7 +1,6 @@
 import express from 'express';
 import { AIGenerationController } from '../controllers/AIGenerationController.js';
 import { AIGenerationService } from '../../infrastructure/ai/AIGenerationService.js';
-import { ContentRepository } from '../../infrastructure/database/repositories/ContentRepository.js';
 import { PromptTemplateRepository } from '../../infrastructure/database/repositories/PromptTemplateRepository.js';
 import { PromptTemplateService } from '../../infrastructure/services/PromptTemplateService.js';
 import { RepositoryFactory } from '../../infrastructure/database/repositories/RepositoryFactory.js';
@@ -10,7 +9,6 @@ import { QualityCheckService } from '../../infrastructure/ai/QualityCheckService
 const router = express.Router();
 
 // Initialize repositories and services
-const contentRepository = new ContentRepository();
 const promptTemplateRepository = new PromptTemplateRepository();
 const promptTemplateService = new PromptTemplateService({
   promptTemplateRepository,
@@ -34,6 +32,7 @@ const aiGenerationService = new AIGenerationService({
 });
 
 // Initialize repositories and services asynchronously
+let contentRepository = null;
 let topicRepository = null;
 let qualityCheckService = null;
 let aiGenerationController = null;
@@ -44,6 +43,8 @@ const initServices = async () => {
   }
 
   try {
+    // Get PostgreSQL repository if connected, otherwise in-memory fallback
+    contentRepository = await RepositoryFactory.getContentRepository();
     topicRepository = await RepositoryFactory.getTopicRepository();
     const courseRepository = await RepositoryFactory.getCourseRepository();
     const qualityCheckRepository = await RepositoryFactory.getQualityCheckRepository();
@@ -72,12 +73,19 @@ const initServices = async () => {
   } catch (error) {
     console.error('[AI Generation Routes] Failed to initialize services:', error);
     // Fallback: create controller without quality check service
+    // But still try to get contentRepository from factory
+    try {
+      contentRepository = await RepositoryFactory.getContentRepository();
+      topicRepository = await RepositoryFactory.getTopicRepository();
+    } catch (repoError) {
+      console.error('[AI Generation Routes] Failed to get repositories:', repoError);
+    }
     aiGenerationController = new AIGenerationController({
-      contentRepository,
+      contentRepository: contentRepository || null,
       aiGenerationService,
       promptTemplateService,
       qualityCheckService: null,
-      topicRepository: null,
+      topicRepository: topicRepository || null,
     });
     return aiGenerationController;
   }

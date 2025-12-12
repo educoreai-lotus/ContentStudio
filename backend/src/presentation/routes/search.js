@@ -1,29 +1,49 @@
 import express from 'express';
 import { SearchController } from '../controllers/SearchController.js';
 import { SearchService } from '../../infrastructure/database/services/SearchService.js';
-import { CourseRepository } from '../../infrastructure/database/repositories/CourseRepository.js';
-import { TopicRepository } from '../../infrastructure/database/repositories/TopicRepository.js';
-import { ContentRepository } from '../../infrastructure/database/repositories/ContentRepository.js';
+import { RepositoryFactory } from '../../infrastructure/database/repositories/RepositoryFactory.js';
 
 const router = express.Router();
 
-// Initialize repositories
-const courseRepository = new CourseRepository();
-const topicRepository = new TopicRepository();
-const contentRepository = new ContentRepository();
+// Initialize repositories and services asynchronously
+let courseRepository = null;
+let topicRepository = null;
+let contentRepository = null;
+let searchService = null;
+let searchController = null;
 
-// Initialize search service
-const searchService = new SearchService({
-  courseRepository,
-  topicRepository,
-  contentRepository,
+const initServices = async () => {
+  if (searchController) {
+    return searchController; // Already initialized
+  }
+
+  try {
+    courseRepository = await RepositoryFactory.getCourseRepository();
+    topicRepository = await RepositoryFactory.getTopicRepository();
+    contentRepository = await RepositoryFactory.getContentRepository();
+
+    // Initialize search service
+    searchService = new SearchService({
+      courseRepository,
+      topicRepository,
+      contentRepository,
+    });
+
+    // Initialize controller
+    searchController = new SearchController({ searchService });
+
+    return searchController;
+  } catch (error) {
+    console.error('[Search Routes] Failed to initialize services:', error);
+    throw error;
+  }
+};
+
+// Routes - ensure services are initialized before handling requests
+router.get('/', async (req, res, next) => {
+  const controller = await initServices();
+  return controller.search(req, res, next);
 });
-
-// Initialize controller
-const searchController = new SearchController({ searchService });
-
-// Routes
-router.get('/', (req, res, next) => searchController.search(req, res, next));
 
 export default router;
 
