@@ -509,7 +509,21 @@ ${basePrompt}`;
             }
             
             // Try to find content with includeArchived: true to see all content
+            logger.info('[GenerateContentUseCase] Calling findByTopicId', {
+              topic_id: numericTopicId,
+              filters: { includeArchived: true },
+            });
             const allContent = await this.contentRepository.findByTopicId(numericTopicId, { includeArchived: true });
+            logger.info('[GenerateContentUseCase] Received content from findByTopicId', {
+              topic_id: numericTopicId,
+              allContentType: typeof allContent,
+              allContentIsArray: Array.isArray(allContent),
+              allContentLength: allContent?.length || 0,
+              allContentPreview: allContent?.slice(0, 2).map(c => ({
+                content_id: c?.content_id,
+                content_type_id: c?.content_type_id,
+              })) || [],
+            });
             
             // Also try direct DB query to verify content exists (check if status column exists first)
             let directDbCheck = null;
