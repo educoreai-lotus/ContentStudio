@@ -235,6 +235,17 @@ export class PostgreSQLContentRepository extends IContentRepository {
       throw new Error('Database not connected. Using in-memory repository.');
     }
 
+    // Log stack trace to see who called this method
+    const stack = new Error().stack;
+    const caller = stack.split('\n')[2] || 'unknown';
+    console.log('[PostgreSQLContentRepository] findAllByTopicId called', {
+      topicId,
+      topicIdType: typeof topicId,
+      filters,
+      caller: caller.trim(),
+      includeArchived: filters.includeArchived,
+    });
+
     let query = 'SELECT * FROM content WHERE topic_id = $1';
     const params = [topicId];
     let paramIndex = 2;
