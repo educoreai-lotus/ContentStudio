@@ -100,13 +100,16 @@ export function generateSignature(serviceName, privateKeyPem, payload) {
  * NOW also uses DER-compatible verification via createVerify("SHA256")
  * to match the DER encoding used in generateSignature.
  *
+ * IMPORTANT: Parameter order matches Coordinator's verifySignature:
+ * verifySignature(microserviceName, signature, publicKey, payload = null)
+ *
  * @param {string} serviceName - Service name (used in message construction)
+ * @param {string} signature - Base64-encoded DER ECDSA signature
  * @param {string} publicKeyPem - Public key in PEM format
  * @param {Object} payload - Payload object that was signed
- * @param {string} signature - Base64-encoded DER ECDSA signature
  * @returns {boolean} True if signature is valid
  */
-export function verifySignature(serviceName, publicKeyPem, payload, signature) {
+export function verifySignature(serviceName, signature, publicKeyPem, payload = null) {
   if (!publicKeyPem || !signature) {
     return false;
   }
