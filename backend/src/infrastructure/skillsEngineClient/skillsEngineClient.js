@@ -117,7 +117,9 @@ export class SkillsEngineClient {
         }
       }
 
-      // Coordinator returns: { serviceName: "ContentStudio", payload: "<stringified JSON>" }
+      // Coordinator returns different formats:
+      // 1. Old format: { serviceName: "ContentStudio", payload: "<stringified JSON>" }
+      // 2. New format: { success: true, data: { payload: {...} } }
       if (!responseData || typeof responseData !== 'object' || responseData === null) {
         logger.warn('[SkillsEngineClient] Coordinator returned invalid response structure, using rollback mock data', {
           responseType: typeof responseData,
@@ -125,18 +127,43 @@ export class SkillsEngineClient {
         return this.getRollbackMockData(payload);
       }
 
-      if (!responseData.payload || typeof responseData.payload !== 'string') {
+      // Try to extract payload from different possible locations
+      let payloadString = null;
+      
+      // Check new format: data.payload (object, not stringified)
+      if (responseData.data?.payload) {
+        if (typeof responseData.data.payload === 'object') {
+          // Payload is already an object, use it directly
+          logger.info('[SkillsEngineClient] Found payload in data.payload (object format)', {
+            payloadKeys: Object.keys(responseData.data.payload),
+          });
+          return responseData.data.payload;
+        } else if (typeof responseData.data.payload === 'string') {
+          payloadString = responseData.data.payload;
+        }
+      }
+      
+      // Check old format: payload (stringified JSON)
+      if (!payloadString && responseData.payload && typeof responseData.payload === 'string') {
+        payloadString = responseData.payload;
+      }
+
+      if (!payloadString) {
         logger.warn('[SkillsEngineClient] Coordinator response missing or invalid payload field, using rollback mock data', {
           payloadType: typeof responseData.payload,
+          hasDataPayload: !!responseData.data?.payload,
+          dataPayloadType: typeof responseData.data?.payload,
           serviceName: responseData.serviceName,
+          responseDataKeys: Object.keys(responseData),
+          dataKeys: responseData.data ? Object.keys(responseData.data) : [],
         });
         return this.getRollbackMockData(payload);
       }
 
-      // Parse payload string - Coordinator always returns payload as stringified JSON
+      // Parse payload string - Coordinator may return payload as stringified JSON
       let responsePayload;
       try {
-        responsePayload = JSON.parse(responseData.payload);
+        responsePayload = JSON.parse(payloadString);
       } catch (parseError) {
         logger.warn('[SkillsEngineClient] Failed to parse payload from Coordinator response, using rollback mock data', {
           error: parseError.message,
