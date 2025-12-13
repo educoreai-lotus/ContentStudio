@@ -3,9 +3,9 @@
  * Orchestrates the complete flow from Gamma PPTX generation to HeyGen avatar video
  * 
  * Steps:
- * 1. Generate Gamma PPTX with hard maxSlides=10
- * 2. Extract slide images (public URLs)
- * 3. Extract slide text from PPTX and generate short narrations with OpenAI (15-20 seconds, max 50 words per slide)
+ * 1. Generate Gamma PPTX with hard maxSlides=AVATAR_VIDEO_MAX_SLIDES (9)
+ * 2. Extract slide images (public URLs) - validate count matches AVATAR_VIDEO_MAX_SLIDES
+ * 3. Extract slide text from PPTX and generate short narrations with OpenAI (15-20 seconds, max 40 words per slide)
  *    - If OpenAI client is available: generates short narrations using strict prompt
  *    - Falls back to aiSlideExplanations if OpenAI is not available or extraction fails
  * 4. Combine into SlidePlan[]
@@ -13,7 +13,8 @@
  * 6. Build HeyGen payload using template_id
  * 7. Call HeyGen, return video_id
  * 
- * Video duration: Maximum 3 minutes (10 slides × 15-20 seconds = 2.5-3.3 minutes)
+ * Video duration: Maximum 2:40 minutes (9 slides × ~15-20 seconds = ~2.25-3 minutes)
+ * Hard constraints enforced: MAX_SLIDES=9, MAX_TOTAL_SECONDS=160
  */
 
 import { randomUUID } from 'crypto';
@@ -24,6 +25,7 @@ import { VoiceIdResolver } from './VoiceIdResolver.js';
 import { HeyGenTemplatePayloadBuilder } from './HeyGenTemplatePayloadBuilder.js';
 import { SlidePlan } from '../domain/slides/SlidePlan.js';
 import { PptxExtractorPro } from './PptxExtractorPro.js';
+import { AVATAR_VIDEO_MAX_SLIDES } from '../config/heygen.js';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { writeFileSync, unlinkSync } from 'fs';
@@ -143,11 +145,11 @@ export class GammaHeyGenAvatarOrchestrator {
     });
 
     try {
-      // Step 1: Generate Gamma PPTX with hard maxSlides=10
+      // Step 1: Generate Gamma PPTX with hard maxSlides from single source of truth
       logger.info('[GammaHeyGenAvatarOrchestrator] Step 1: Generating Gamma PPTX', {
         jobId: finalJobId,
         topicId,
-        maxSlides: 10,
+        maxSlides: AVATAR_VIDEO_MAX_SLIDES,
       });
 
       let gammaResult;
@@ -155,7 +157,7 @@ export class GammaHeyGenAvatarOrchestrator {
         gammaResult = await this.gammaClient.generatePresentation(inputText, {
           topicName: `Topic ${topicId}`,
           language: languageCode,
-          maxSlides: 10, // Hard limit
+          maxSlides: AVATAR_VIDEO_MAX_SLIDES, // Hard limit from single source of truth
         });
         jobState.steps.gammaGeneration = {
           status: 'completed',
@@ -205,7 +207,7 @@ export class GammaHeyGenAvatarOrchestrator {
         slideImages = await this.slideImageExtractor.extractSlideImages(
           pptxBuffer,
           finalJobId,
-          10 // max 10 slides
+          AVATAR_VIDEO_MAX_SLIDES // Hard limit from single source of truth
         );
 
         jobState.steps.imageExtraction = {
@@ -225,9 +227,27 @@ export class GammaHeyGenAvatarOrchestrator {
         throw stepError;
       }
 
+      // CRITICAL VALIDATION: Fail fast if Gamma violated slide count contract
+      // Gamma was instructed to generate exactly AVATAR_VIDEO_MAX_SLIDES slides.
+      // If the extracted slide count doesn't match, Gamma violated the contract.
+      if (slideImages.length !== AVATAR_VIDEO_MAX_SLIDES) {
+        const errorMsg = `Gamma slide count violation: expected exactly ${AVATAR_VIDEO_MAX_SLIDES} slides, got ${slideImages.length}. Gamma may have added extra slides (title-only, conclusion, etc.) despite explicit instructions.`;
+        const stepError = new OrchestratorStepError('gamma_slide_count_violation', errorMsg);
+        stepError.jobId = finalJobId;
+        jobState.steps.gammaGeneration = {
+          status: 'failed',
+          failedAt: new Date().toISOString(),
+          error: errorMsg,
+          expectedSlides: AVATAR_VIDEO_MAX_SLIDES,
+          actualSlides: slideImages.length,
+        };
+        throw stepError;
+      }
+
       logger.info('[GammaHeyGenAvatarOrchestrator] Step 2 completed', {
         jobId: finalJobId,
         slideCount: slideImages.length,
+        validated: slideImages.length === AVATAR_VIDEO_MAX_SLIDES,
       });
 
       // Step 3: Extract slide text from PPTX and generate short narrations with OpenAI
@@ -250,7 +270,7 @@ export class GammaHeyGenAvatarOrchestrator {
 
             // Generate short narrations for each slide
             const narrations = [];
-            for (const slide of slides.slice(0, 10)) { // Max 10 slides
+            for (const slide of slides.slice(0, AVATAR_VIDEO_MAX_SLIDES)) { // Hard limit from single source of truth
               try {
                 const narration = await this.generateShortNarration(slide, languageCode);
                 narrations.push({
@@ -330,7 +350,7 @@ export class GammaHeyGenAvatarOrchestrator {
       try {
         // Match images with speeches by index
         const slides = [];
-        const maxSlides = Math.min(slideImages.length, slideSpeeches.length, 10);
+        const maxSlides = Math.min(slideImages.length, slideSpeeches.length, AVATAR_VIDEO_MAX_SLIDES);
 
         for (let i = 0; i < maxSlides; i++) {
           const image = slideImages.find(img => img.index === i + 1);
@@ -448,10 +468,27 @@ export class GammaHeyGenAvatarOrchestrator {
         variableCount: Object.keys(heygenPayload.variables || {}).length,
       });
 
+      // FINAL HEYGEN GUARD (non-negotiable): Assert slide count consistency before HeyGen call
+      // This is the last line of defense against index mismatches that cause silent HeyGen failures.
+      if (slideImages.length !== slideSpeeches.length) {
+        const errorMsg = `Slide count mismatch before HeyGen call: ${slideImages.length} images but ${slideSpeeches.length} speeches. This will cause HeyGen API to fail silently.`;
+        const stepError = new OrchestratorStepError('pre_heygen_validation', errorMsg);
+        stepError.jobId = finalJobId;
+        throw stepError;
+      }
+      
+      if (slideImages.length !== AVATAR_VIDEO_MAX_SLIDES) {
+        const errorMsg = `Slide count mismatch before HeyGen call: expected exactly ${AVATAR_VIDEO_MAX_SLIDES} slides, got ${slideImages.length}. This violates the hard constraint.`;
+        const stepError = new OrchestratorStepError('pre_heygen_validation', errorMsg);
+        stepError.jobId = finalJobId;
+        throw stepError;
+      }
+
       // Step 7: Call HeyGen, return video_id
       logger.info('[GammaHeyGenAvatarOrchestrator] Step 7: Calling HeyGen template API', {
         jobId: finalJobId,
         templateId: this.templateId,
+        validatedSlideCount: slideImages.length,
       });
 
       let heygenResult;

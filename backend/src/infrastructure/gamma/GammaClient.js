@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { logger } from '../logging/Logger.js';
+import { AVATAR_VIDEO_MAX_SLIDES } from '../../config/heygen.js';
 
 /**
  * RTL (Right-to-Left) languages supported by Gamma
@@ -198,11 +199,11 @@ export class GammaClient {
       throw new Error('Input text is required for presentation generation');
     }
 
-    const { topicName = 'presentation', language = 'en', audience = 'beginner developers', maxSlides = 10 } = options;
+    const { topicName = 'presentation', language = 'en', audience = 'beginner developers', maxSlides = AVATAR_VIDEO_MAX_SLIDES } = options;
     
-    // Enforce hard limit of 10 slides and minimum of 1 slide
+    // Enforce hard limit from single source of truth (AVATAR_VIDEO_MAX_SLIDES = 9)
     // Gamma cannot generate a presentation without slides, so minimum is 1
-    const HARD_LIMIT = 10;
+    const HARD_LIMIT = AVATAR_VIDEO_MAX_SLIDES; // Use single source of truth
     const MIN_SLIDES = 1;
     const sanitizedMaxSlides = Math.max(MIN_SLIDES, maxSlides);
     const effectiveMaxSlides = Math.min(sanitizedMaxSlides, HARD_LIMIT);
@@ -244,18 +245,74 @@ export class GammaClient {
       // CRITICAL: Inject language rules BEFORE the actual content to ensure Gamma follows them
       const languageRules = buildLanguageRules(language);
       
-      // Step 2: Build slide limit instruction
-      const slideLimitInstruction = `IMPORTANT — SLIDE LIMIT:
+      // Step 2: Build slide limit instruction (EXPLICIT constraint for avatar video generation)
+      // CRITICAL: This must be explicit to prevent Gamma from adding extra slides (title-only, conclusion, etc.)
+      const slideLimitInstruction = `IMPORTANT — SLIDE LIMIT (MANDATORY):
+
+Generate exactly ${effectiveMaxSlides} content slides. No more, no less.
+
+CRITICAL RULES:
+- Do NOT add a title-only slide.
+- Do NOT add a cover slide.
+- Do NOT add a conclusion slide.
+- Do NOT add an appendix or outro slide.
+- Each slide MUST contain visual content AND text.
+- All ${effectiveMaxSlides} slides must be content slides with substantial information.
 
 The presentation MUST contain exactly ${effectiveMaxSlides} slides, no more, no less.
-Do NOT create more than ${effectiveMaxSlides} slides.
 Each slide should be focused and concise.`;
+
+      // GAMMA SLIDE GENERATION – STRICT TECHNICAL CONSTRAINTS
+      // This is a Gamma-specific contract for downstream PPTX processing (slide-to-image extraction + HeyGen avatar video)
+      // These rules apply ONLY to Gamma slide generation, NOT to OpenAI narration or HeyGen prompts
+      // NOTE: This is non-destructive - all existing Gamma prompt parameters remain unchanged
+      const gammaTechnicalContract = `GAMMA SLIDE GENERATION – STRICT TECHNICAL CONSTRAINTS
+
+Gamma output is converted into a PPTX file and then processed by:
+1. PPTX slide-to-image extraction
+2. Avatar video generation (HeyGen)
+
+These downstream systems require a deterministic 1-to-1 mapping:
+Slide N → image_N → speech_N
+
+Therefore, Gamma MUST follow these rules exactly:
+
+1. Generate EXACTLY ${effectiveMaxSlides} slides.
+   - Not "up to"
+   - Not "approximately"
+   - EXACTLY ${effectiveMaxSlides} content slides.
+
+2. Do NOT generate:
+   - Title slides
+   - Cover slides
+   - Summary slides
+   - Conclusion slides
+   - Outro or appendix slides
+
+3. Slide 1 MUST contain real educational content.
+   It is NOT a title or introduction-only slide.
+
+4. Slide ${effectiveMaxSlides} MUST contain applied or practical educational content.
+   It is NOT a summary or conclusion slide.
+
+5. Every slide MUST:
+   - Contain visible textual educational content
+   - Include bullet points or short explanations
+   - Be suitable for spoken narration
+
+6. No slide may be decorative-only or textless.
+
+7. Do NOT add implicit or conceptual slides.
+   Any deviation from EXACTLY ${effectiveMaxSlides} slides will cause system failure.`;
       
-      // Step 3: Combine language rules, slide limit, and input text
-      // Language rules and slide limit must come FIRST to ensure Gamma processes them correctly
+      // Step 3: Combine language rules, slide limit, technical contract, and input text
+      // Language rules, slide limit, and technical contract must come FIRST to ensure Gamma processes them correctly
+      // NOTE: Technical contract is Gamma-specific and does NOT apply to OpenAI or HeyGen prompts
       const enhancedInputText = `${languageRules}
 
 ${slideLimitInstruction}
+
+${gammaTechnicalContract}
 
 ---
 

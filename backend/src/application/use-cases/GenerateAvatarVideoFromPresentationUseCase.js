@@ -5,17 +5,18 @@ import { VoiceIdResolver } from '../../services/VoiceIdResolver.js';
 import { HeyGenTemplatePayloadBuilder } from '../../services/HeyGenTemplatePayloadBuilder.js';
 import { SlidePlan } from '../../domain/slides/SlidePlan.js';
 import { PptxExtractorPro } from '../../services/PptxExtractorPro.js';
+import { AVATAR_VIDEO_MAX_SLIDES, AVATAR_VIDEO_MAX_TOTAL_SECONDS, AVATAR_VIDEO_AVERAGE_WPM } from '../../config/heygen.js';
 import { randomUUID } from 'crypto';
 import axios from 'axios';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { writeFileSync, unlinkSync } from 'fs';
 
-// HARD RUNTIME CONSTRAINTS for avatar video generation
+// HARD RUNTIME CONSTRAINTS for avatar video generation (using single source of truth from config)
 // These are enforced in code, not relying on prompts or AI compliance
-const MAX_SLIDES = 9; // Maximum number of slides allowed
-const MAX_TOTAL_SECONDS = 160; // Maximum total narration duration: 2 minutes 40 seconds (GLOBAL for entire video)
-const AVERAGE_WPM = 150; // Average words per minute for duration estimation
+const MAX_SLIDES = AVATAR_VIDEO_MAX_SLIDES; // Single source of truth: 9 slides maximum
+const MAX_TOTAL_SECONDS = AVATAR_VIDEO_MAX_TOTAL_SECONDS; // Single source of truth: 160 seconds (2:40 minutes)
+const AVERAGE_WPM = AVATAR_VIDEO_AVERAGE_WPM; // Single source of truth: 150 words per minute
 
 /**
  * Generate Avatar Video from Presentation Use Case
@@ -464,11 +465,35 @@ export class GenerateAvatarVideoFromPresentationUseCase {
       // Calculate total words and estimated duration for final validation logging
       const finalWordCount = slideSpeeches.reduce((sum, speech) => sum + wordCount(speech.speakerText), 0);
       const finalEstimatedSeconds = (finalWordCount / AVERAGE_WPM) * 60;
+      // FINAL HEYGEN GUARD (non-negotiable): Assert slide count consistency before HeyGen call
+      // This is the last line of defense against index mismatches that cause silent HeyGen failures.
+      // CRITICAL: These assertions MUST pass or HeyGen will fail silently with malformed payload.
+      if (slideImages.length !== slideSpeeches.length) {
+        const errorMsg = `Slide count mismatch before HeyGen call: ${slideImages.length} images but ${slideSpeeches.length} speeches. This will cause HeyGen API to fail silently.`;
+        logger.error('[GenerateAvatarVideoFromPresentation] Pre-HeyGen validation failed', {
+          jobId,
+          imageCount: slideImages.length,
+          speechCount: slideSpeeches.length,
+        });
+        throw new Error(errorMsg);
+      }
+      
+      if (slideImages.length !== MAX_SLIDES) {
+        const errorMsg = `Slide count mismatch before HeyGen call: expected exactly ${MAX_SLIDES} slides, got ${slideImages.length}. This violates the hard constraint.`;
+        logger.error('[GenerateAvatarVideoFromPresentation] Pre-HeyGen validation failed', {
+          jobId,
+          actualCount: slideImages.length,
+          expectedCount: MAX_SLIDES,
+        });
+        throw new Error(errorMsg);
+      }
+
       logger.info('[AvatarVideoConstraints]', {
         slidesCount: slideSpeeches.length,
         totalWords: finalWordCount,
         estimatedSeconds: Math.round(finalEstimatedSeconds),
         maxAllowedSeconds: MAX_TOTAL_SECONDS,
+        validated: slideImages.length === slideSpeeches.length && slideImages.length === MAX_SLIDES,
       });
 
       // Step 8: Call HeyGen template API
