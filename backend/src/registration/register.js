@@ -330,7 +330,7 @@ export async function uploadMigration() {
 
     // Migration file definition (embedded in code)
     const migrationFile = {
-      version: '1.0.0',
+      version: '1.0.1', // Increment version to re-upload migration
       description: 'Content Studio microservice for managing educational content, courses, lessons, and learning materials. Provides AI-powered content generation, video-to-lesson transformation, template management, and multi-format content creation (text, code, presentations, audio, mind maps, avatar videos).',
       capabilities: [
         'content management',
