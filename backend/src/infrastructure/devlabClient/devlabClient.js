@@ -375,6 +375,34 @@ export class DevlabClient {
       let parsedRawBody = null;
       try {
         parsedRawBody = JSON.parse(rawBodyString);
+        logger.info('[DevlabClient] ========== PARSED RAW BODY INSPECTION ==========', {
+          parsedKeys: parsedRawBody ? Object.keys(parsedRawBody) : [],
+          parsedFull: parsedRawBody ? JSON.stringify(parsedRawBody, null, 2) : null,
+          
+          // Check all possible locations
+          hasResponse: !!parsedRawBody?.response,
+          responseKeys: parsedRawBody?.response ? Object.keys(parsedRawBody.response) : [],
+          responseAnswer: parsedRawBody?.response?.answer,
+          responseFull: parsedRawBody?.response ? JSON.stringify(parsedRawBody.response, null, 2) : null,
+          
+          hasData: !!parsedRawBody?.data,
+          dataKeys: parsedRawBody?.data ? Object.keys(parsedRawBody.data) : [],
+          dataAnswer: parsedRawBody?.data?.answer,
+          dataFull: parsedRawBody?.data ? JSON.stringify(parsedRawBody.data, null, 2) : null,
+          
+          hasMetadata: !!parsedRawBody?.metadata,
+          metadataKeys: parsedRawBody?.metadata ? Object.keys(parsedRawBody.metadata) : [],
+          metadataFull: parsedRawBody?.metadata ? JSON.stringify(parsedRawBody.metadata, null, 2) : null,
+          metadataAnswer: parsedRawBody?.metadata?.answer,
+          metadataResponse: parsedRawBody?.metadata?.response,
+          metadataData: parsedRawBody?.metadata?.data,
+          
+          hasPayload: !!parsedRawBody?.payload,
+          payloadType: typeof parsedRawBody?.payload,
+          payloadValue: typeof parsedRawBody?.payload === 'string' ? parsedRawBody.payload.substring(0, 200) : parsedRawBody?.payload,
+        });
+        logger.info('[DevlabClient] ========== END PARSED RAW BODY INSPECTION ==========');
+        
         logger.info('[DevlabClient] Parsed rawBodyString', {
           parsedKeys: parsedRawBody ? Object.keys(parsedRawBody) : [],
           hasResponse: !!parsedRawBody?.response,
@@ -501,6 +529,52 @@ export class DevlabClient {
         throw new Error('Invalid response structure from Coordinator');
       }
 
+      // ============================================
+      // 🔍 DEEP INSPECTION OF ALL POSSIBLE FIELDS
+      // ============================================
+      logger.info('[DevlabClient] ========== DEEP FIELD INSPECTION ==========', {
+        // Top level fields
+        topLevelKeys: responseData ? Object.keys(responseData) : [],
+        
+        // data.* fields
+        hasData: !!responseData.data,
+        dataKeys: responseData.data ? Object.keys(responseData.data) : [],
+        dataAnswer: responseData.data?.answer,
+        dataAnswerType: typeof responseData.data?.answer,
+        dataAnswerValue: responseData.data?.answer,
+        dataPayload: responseData.data?.payload,
+        dataPayloadType: typeof responseData.data?.payload,
+        dataAllFields: responseData.data ? JSON.stringify(responseData.data, null, 2) : null,
+        
+        // metadata.* fields (DEEP CHECK)
+        hasMetadata: !!responseData.metadata,
+        metadataKeys: responseData.metadata ? Object.keys(responseData.metadata) : [],
+        metadataFull: responseData.metadata ? JSON.stringify(responseData.metadata, null, 2) : null,
+        metadataRoutedTo: responseData.metadata?.routed_to,
+        metadataAnswer: responseData.metadata?.answer,
+        metadataResponse: responseData.metadata?.response,
+        metadataData: responseData.metadata?.data,
+        metadataPayload: responseData.metadata?.payload,
+        
+        // response.* fields
+        hasResponse: !!responseData.response,
+        responseKeys: responseData.response ? Object.keys(responseData.response) : [],
+        responseAnswer: responseData.response?.answer,
+        responseFull: responseData.response ? JSON.stringify(responseData.response, null, 2) : null,
+        
+        // payload fields
+        hasPayload: !!responseData.payload,
+        payloadType: typeof responseData.payload,
+        payloadValue: typeof responseData.payload === 'string' ? responseData.payload.substring(0, 200) : responseData.payload,
+        
+        // success field
+        success: responseData.success,
+        
+        // FULL response (all fields)
+        fullResponseComplete: JSON.stringify(responseData, null, 2),
+      });
+      logger.info('[DevlabClient] ========== END DEEP FIELD INSPECTION ==========');
+      
       // Log full response structure for debugging
       logger.info('[DevlabClient] Full Coordinator response structure', {
         responseDataKeys: responseData ? Object.keys(responseData) : [],
