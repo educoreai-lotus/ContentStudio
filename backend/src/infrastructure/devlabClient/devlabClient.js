@@ -530,9 +530,32 @@ export class DevlabClient {
       }
 
       // ============================================
-      // 🔍 DEEP INSPECTION OF ALL POSSIBLE FIELDS
+      // 🔍 DEEP INSPECTION OF ALL POSSIBLE FIELDS (RECURSIVE)
       // ============================================
-      logger.info('[DevlabClient] ========== DEEP FIELD INSPECTION ==========', {
+      // Helper function to recursively find all string values that might contain the answer
+      const findAllStringFields = (obj, path = '', depth = 0) => {
+        if (depth > 5) return []; // Prevent infinite recursion
+        const results = [];
+        if (obj === null || obj === undefined) return results;
+        
+        if (typeof obj === 'string' && obj.length > 10 && obj !== 'content-studio') {
+          results.push({ path, value: obj.substring(0, 200), length: obj.length });
+        } else if (Array.isArray(obj)) {
+          obj.forEach((item, index) => {
+            results.push(...findAllStringFields(item, `${path}[${index}]`, depth + 1));
+          });
+        } else if (typeof obj === 'object') {
+          Object.keys(obj).forEach(key => {
+            const newPath = path ? `${path}.${key}` : key;
+            results.push(...findAllStringFields(obj[key], newPath, depth + 1));
+          });
+        }
+        return results;
+      };
+      
+      const allStringFields = findAllStringFields(responseData);
+      
+      logger.info('[DevlabClient] ========== DEEP FIELD INSPECTION (RECURSIVE) ==========', {
         // Top level fields
         topLevelKeys: responseData ? Object.keys(responseData) : [],
         
@@ -546,7 +569,7 @@ export class DevlabClient {
         dataPayloadType: typeof responseData.data?.payload,
         dataAllFields: responseData.data ? JSON.stringify(responseData.data, null, 2) : null,
         
-        // metadata.* fields (DEEP CHECK)
+        // metadata.* fields (DEEP CHECK - ALL NESTED FIELDS)
         hasMetadata: !!responseData.metadata,
         metadataKeys: responseData.metadata ? Object.keys(responseData.metadata) : [],
         metadataFull: responseData.metadata ? JSON.stringify(responseData.metadata, null, 2) : null,
@@ -555,6 +578,11 @@ export class DevlabClient {
         metadataResponse: responseData.metadata?.response,
         metadataData: responseData.metadata?.data,
         metadataPayload: responseData.metadata?.payload,
+        // Check ALL metadata fields recursively
+        metadataAllFields: responseData.metadata ? Object.keys(responseData.metadata).reduce((acc, key) => {
+          acc[key] = responseData.metadata[key];
+          return acc;
+        }, {}) : null,
         
         // response.* fields
         hasResponse: !!responseData.response,
@@ -569,6 +597,10 @@ export class DevlabClient {
         
         // success field
         success: responseData.success,
+        
+        // RECURSIVE: All string fields found (potential answers)
+        allStringFieldsFound: allStringFields,
+        stringFieldsCount: allStringFields.length,
         
         // FULL response (all fields)
         fullResponseComplete: JSON.stringify(responseData, null, 2),

@@ -219,40 +219,45 @@ export class CourseBuilderClient {
         return;
       }
 
-      // Build the course object in the required format
-      const courseObject = {
-        microservice_name: 'content_studio',
-        payload: {
-          action: 'send this trainer course to publish',
-          course_id: courseData.course_id || '',
-          course_name: courseData.course_name || '',
-          course_description: courseData.course_description || '',
-          course_language: courseData.course_language || 'en',
-          trainer_id: courseData.trainer_id || '',
-          trainer_name: courseData.trainer_name || '',
-          topics: Array.isArray(courseData.topics) ? courseData.topics.map(topic => ({
-            topic_id: topic.topic_id || '',
-            topic_name: topic.topic_name || '',
-            topic_description: topic.topic_description || '',
-            topic_language: topic.topic_language || 'en',
-            template_id: topic.template_id || '',
-            format_order: Array.isArray(topic.format_order) ? topic.format_order : [],
-            contents: Array.isArray(topic.contents) ? topic.contents.map(content => ({
-              content_id: content.content_id || '',
-              content_type: content.content_type || '',
-              content_data: content.content_data || {},
-            })) : [],
-            devlab_exercises: topic.devlab_exercises || '',
+      // Build payload in the required format (flat structure, no nesting)
+      const payloadData = {
+        action: 'send this trainer course to publish',
+        course_id: courseData.course_id || '',
+        course_name: courseData.course_name || '',
+        course_description: courseData.course_description || '',
+        course_language: courseData.course_language || 'en',
+        trainer_id: courseData.trainer_id || '',
+        trainer_name: courseData.trainer_name || '',
+        topics: Array.isArray(courseData.topics) ? courseData.topics.map(topic => ({
+          topic_id: topic.topic_id || '',
+          topic_name: topic.topic_name || '',
+          topic_description: topic.topic_description || '',
+          topic_language: topic.topic_language || 'en',
+          template_id: topic.template_id || '',
+          format_order: Array.isArray(topic.format_order) ? topic.format_order : [],
+          contents: Array.isArray(topic.contents) ? topic.contents.map(content => ({
+            content_id: content.content_id || '',
+            content_type: content.content_type || '',
+            content_data: content.content_data || {},
           })) : [],
-        },
+          devlab_exercises: topic.devlab_exercises || '',
+        })) : [],
       };
 
       // Build envelope for Coordinator (standard structure)
       const envelope = {
         requester_service: 'content-studio',
-        payload: courseObject,
+        payload: payloadData,
         response: {},
       };
+
+      // Log full request envelope (what we send to Coordinator)
+      logger.info('[CourseBuilderClient] Full request envelope to Coordinator (sendCourseToCourseBuilder)', {
+        envelope: JSON.stringify(envelope, null, 2),
+        envelopeKeys: Object.keys(envelope),
+        payloadKeys: Object.keys(payloadData),
+        fullPayload: JSON.stringify(payloadData, null, 2),
+      });
 
       logger.info('[CourseBuilderClient] Sending course to Course Builder via Coordinator', {
         courseId: courseData.course_id,

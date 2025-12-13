@@ -1,0 +1,97 @@
+==========================================
+POSTMAN - Course Builder - ערכים להעתקה
+==========================================
+
+URL:
+POST https://coordinator-production-e0a0.up.railway.app/api/fill-content-metrics/
+
+==========================================
+HEADERS:
+==========================================
+Content-Type: application/json
+X-Service-Name: content-studio
+X-Signature: [צריך ליצור עם הסקריפט - ראה למטה]
+X-Request-Timeout: 180000
+
+==========================================
+REQUEST BODY (JSON):
+==========================================
+{
+  "requester_service": "content-studio",
+  "payload": {
+    "action": "send this trainer course to publish",
+    "course_id": "course-123",
+    "course_name": "Introduction to JavaScript",
+    "course_description": "Learn the fundamentals of JavaScript programming",
+    "course_language": "en",
+    "trainer_id": "trainer-456",
+    "trainer_name": "John Doe",
+    "topics": [
+      {
+        "topic_id": "topic-789",
+        "topic_name": "Variables and Data Types",
+        "topic_description": "Understanding variables and different data types in JavaScript",
+        "topic_language": "en",
+        "template_id": "template-001",
+        "format_order": ["presentation", "video", "exercises"],
+        "contents": [
+          {
+            "content_id": "content-001",
+            "content_type": "presentation",
+            "content_data": {
+              "file_url": "https://example.com/presentation.pptx",
+              "slides_count": 10
+            }
+          },
+          {
+            "content_id": "content-002",
+            "content_type": "video",
+            "content_data": {
+              "video_url": "https://example.com/video.mp4",
+              "duration": 300
+            }
+          }
+        ],
+        "devlab_exercises": "<html><body><h1>Exercise 1</h1><p>Write a function...</p></body></html>"
+      }
+    ]
+  },
+  "response": {}
+}
+
+==========================================
+איך ליצור חתימה:
+==========================================
+
+שיטה 1 - עם קובץ JSON (מומלץ ל-PowerShell):
+1. פתח PowerShell בתיקיית backend
+2. הפעל:
+   $env:CS_COORDINATOR_PRIVATE_KEY = "-----BEGIN PRIVATE KEY-----
+   YOUR_KEY_HERE
+   -----END PRIVATE KEY-----"
+   node scripts/generate-signature.js scripts/test-envelope-course-builder.json
+
+3. העתק את הערך של X-Signature מהפלט
+
+שיטה 2 - עם JSON ישירות (ב-Git Bash / Linux):
+   export CS_COORDINATOR_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nYOUR_KEY\n-----END PRIVATE KEY-----"
+   node scripts/generate-signature.js '{"requester_service":"content-studio","payload":{"action":"send this trainer course to publish","course_id":"course-123","course_name":"Introduction to JavaScript","course_description":"Learn the fundamentals of JavaScript programming","course_language":"en","trainer_id":"trainer-456","trainer_name":"John Doe","topics":[]},"response":{}}'
+
+==========================================
+דוגמה מינימלית (ללא topics):
+==========================================
+{
+  "requester_service": "content-studio",
+  "payload": {
+    "action": "send this trainer course to publish",
+    "course_id": "test-course-1",
+    "course_name": "Test Course",
+    "course_description": "Test description",
+    "course_language": "en",
+    "trainer_id": "test-trainer-1",
+    "trainer_name": "Test Trainer",
+    "topics": []
+  },
+  "response": {}
+}
+
