@@ -338,6 +338,21 @@ export class DevlabClient {
         timeout: 180000, // 3 minutes timeout for AI generation (passed to Coordinator via X-Request-Timeout header)
       });
       
+      // ============================================
+      // 🔍 FULL RESPONSE BODY INSPECTION (IMMEDIATE)
+      // ============================================
+      logger.info('[DevlabClient] ========== FULL RESPONSE BODY FROM COORDINATOR ==========', {
+        rawBodyString: coordinatorResponse.rawBodyString || 'NO_RAW_BODY',
+        rawBodyStringLength: coordinatorResponse.rawBodyString?.length || 0,
+        rawBodyStringFull: coordinatorResponse.rawBodyString ? JSON.stringify(coordinatorResponse.rawBodyString) : null,
+        responseDataType: typeof coordinatorResponse.data,
+        responseDataKeys: coordinatorResponse.data ? Object.keys(coordinatorResponse.data) : [],
+        responseDataFull: coordinatorResponse.data ? JSON.stringify(coordinatorResponse.data, null, 2) : null,
+        responseFull: JSON.stringify(coordinatorResponse, null, 2),
+        headers: coordinatorResponse.headers || {},
+      });
+      logger.info('[DevlabClient] ========== END FULL RESPONSE BODY ==========');
+      
       logger.info('[DevlabClient] Received response from Coordinator', {
         hasData: !!coordinatorResponse.data,
         hasRawBody: !!coordinatorResponse.rawBodyString,

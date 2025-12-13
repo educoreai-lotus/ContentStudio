@@ -1,0 +1,110 @@
+═══════════════════════════════════════════════════════════════
+POSTMAN REQUEST - Devlab via Coordinator
+═══════════════════════════════════════════════════════════════
+
+┌─────────────────────────────────────────────────────────────┐
+│ METHOD & URL                                                 │
+└─────────────────────────────────────────────────────────────┘
+
+POST https://coordinator-production-e0a0.up.railway.app/api/fill-content-metrics/
+
+
+┌─────────────────────────────────────────────────────────────┐
+│ HEADERS                                                      │
+└─────────────────────────────────────────────────────────────┘
+
+Content-Type: application/json
+X-Service-Name: content-studio
+X-Signature: [GENERATE USING SCRIPT BELOW]
+X-Request-Timeout: 180000
+
+
+┌─────────────────────────────────────────────────────────────┐
+│ REQUEST BODY (raw JSON)                                      │
+└─────────────────────────────────────────────────────────────┘
+
+{
+  "requester_service": "content-studio",
+  "payload": {
+    "action": "generate-questions",
+    "topic_id": "1",
+    "topic_name": "react components",
+    "question_type": "theoretical",
+    "skills": [
+      "react Components"
+    ],
+    "humanLanguage": "english",
+    "amount": 4,
+    "theoretical_question_type": "multiple_choice"
+  },
+  "response": {
+    "answer": ""
+  }
+}
+
+
+┌─────────────────────────────────────────────────────────────┐
+│ HOW TO GENERATE SIGNATURE                                    │
+└─────────────────────────────────────────────────────────────┘
+
+1. Copy the request body above (the entire JSON object)
+
+2. Run this command (replace YOUR_PRIVATE_KEY with your actual key):
+
+   export CS_COORDINATOR_PRIVATE_KEY="YOUR_PRIVATE_KEY"
+   node scripts/generate-signature.js '{"requester_service":"content-studio","payload":{"action":"generate-questions","topic_id":"1","topic_name":"react components","question_type":"theoretical","skills":["react Components"],"humanLanguage":"english","amount":4,"theoretical_question_type":"multiple_choice"},"response":{"answer":""}}'
+
+3. Copy the X-Signature value from the output
+
+4. Paste it in Postman's X-Signature header
+
+
+┌─────────────────────────────────────────────────────────────┐
+│ ALTERNATIVE: Code Questions Example                         │
+└─────────────────────────────────────────────────────────────┘
+
+REQUEST BODY:
+{
+  "requester_service": "content-studio",
+  "payload": {
+    "action": "generate-questions",
+    "topic_id": "1",
+    "topic_name": "javascript functions",
+    "question_type": "code",
+    "skills": [
+      "JavaScript"
+    ],
+    "humanLanguage": "english",
+    "amount": 4,
+    "programming_language": "javascript"
+  },
+  "response": {
+    "answer": ""
+  }
+}
+
+SIGNATURE COMMAND:
+node scripts/generate-signature.js '{"requester_service":"content-studio","payload":{"action":"generate-questions","topic_id":"1","topic_name":"javascript functions","question_type":"code","skills":["JavaScript"],"humanLanguage":"english","amount":4,"programming_language":"javascript"},"response":{"answer":""}}'
+
+
+┌─────────────────────────────────────────────────────────────┐
+│ EXPECTED RESPONSE                                            │
+└─────────────────────────────────────────────────────────────┘
+
+{
+  "success": true,
+  "data": {
+    "answer": {
+      // Questions array or nested structure
+    }
+  },
+  "metadata": {
+    "routed_to": "assessment-service",
+    "confidence": 0.95,
+    "requester": "content-studio",
+    "processing_time_ms": 10041
+  }
+}
+
+═══════════════════════════════════════════════════════════════
+

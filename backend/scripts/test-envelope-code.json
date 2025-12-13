@@ -1,0 +1,17 @@
+{
+  "requester_service": "content-studio",
+  "payload": {
+    "action": "generate-questions",
+    "topic_id": "1",
+    "topic_name": "javascript functions",
+    "question_type": "code",
+    "skills": ["JavaScript"],
+    "humanLanguage": "english",
+    "amount": 4,
+    "programming_language": "javascript"
+  },
+  "response": {
+    "answer": ""
+  }
+}
+

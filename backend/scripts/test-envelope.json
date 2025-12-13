@@ -1,0 +1,19 @@
+{
+  "requester_service": "content-studio",
+  "payload": {
+    "action": "generate-questions",
+    "topic_id": "1",
+    "topic_name": "react components",
+    "question_type": "theoretical",
+    "skills": [
+      "react Components"
+    ],
+    "humanLanguage": "english",
+    "amount": 4,
+    "theoretical_question_type": "multiple_choice"
+  },
+  "response": {
+    "answer": ""
+  }
+}
+

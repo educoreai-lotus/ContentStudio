@@ -1,0 +1,75 @@
+==========================================
+POSTMAN - ערכים להעתקה
+==========================================
+
+URL:
+POST https://coordinator-production-e0a0.up.railway.app/api/fill-content-metrics/
+
+==========================================
+HEADERS:
+==========================================
+Content-Type: application/json
+X-Service-Name: content-studio
+X-Signature: [צריך ליצור עם הסקריפט - ראה למטה]
+X-Request-Timeout: 180000
+
+==========================================
+REQUEST BODY (JSON):
+==========================================
+{
+  "requester_service": "content-studio",
+  "payload": {
+    "action": "generate-questions",
+    "topic_id": "1",
+    "topic_name": "react components",
+    "question_type": "theoretical",
+    "skills": [
+      "react Components"
+    ],
+    "humanLanguage": "english",
+    "amount": 4,
+    "theoretical_question_type": "multiple_choice"
+  },
+  "response": {
+    "answer": ""
+  }
+}
+
+==========================================
+איך ליצור חתימה:
+==========================================
+
+שיטה 1 - עם קובץ JSON (מומלץ ל-PowerShell):
+1. פתח PowerShell בתיקיית backend
+2. הפעל:
+   $env:CS_COORDINATOR_PRIVATE_KEY = "-----BEGIN PRIVATE KEY-----
+   YOUR_KEY_HERE
+   -----END PRIVATE KEY-----"
+   node scripts/generate-signature.js scripts/test-envelope.json
+
+3. העתק את הערך של X-Signature מהפלט
+
+שיטה 2 - עם JSON ישירות (ב-Git Bash / Linux):
+   export CS_COORDINATOR_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nYOUR_KEY\n-----END PRIVATE KEY-----"
+   node scripts/generate-signature.js '{"requester_service":"content-studio","payload":{"action":"generate-questions","topic_id":"1","topic_name":"react components","question_type":"theoretical","skills":["react Components"],"humanLanguage":"english","amount":4,"theoretical_question_type":"multiple_choice"},"response":{"answer":""}}'
+
+==========================================
+דוגמה לשאלת קוד (Code Question):
+==========================================
+{
+  "requester_service": "content-studio",
+  "payload": {
+    "action": "generate-questions",
+    "topic_id": "1",
+    "topic_name": "javascript functions",
+    "question_type": "code",
+    "skills": ["JavaScript"],
+    "humanLanguage": "english",
+    "amount": 4,
+    "programming_language": "javascript"
+  },
+  "response": {
+    "answer": ""
+  }
+}
+
