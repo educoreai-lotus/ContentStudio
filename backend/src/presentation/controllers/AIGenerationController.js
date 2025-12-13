@@ -417,9 +417,20 @@ export class AIGenerationController {
       }
 
       // Create use case instance with all required services (same as CreateContentUseCase)
+      // Get storageClient from aiGenerationService (required for slide image extraction)
+      const storageClient = this.generateContentUseCase.aiGenerationService.storageClient;
+      
+      if (!storageClient || !storageClient.isConfigured()) {
+        return res.status(503).json({
+          success: false,
+          error: 'Storage client not configured',
+        });
+      }
+
       const useCase = new GenerateAvatarVideoFromPresentationUseCase({
         heygenClient,
         openaiClient,
+        storageClient, // Required for slide image extraction
         contentRepository,
         qualityCheckService, // For language and quality validation
         topicRepository,     // For getting topic language

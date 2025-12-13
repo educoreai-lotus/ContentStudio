@@ -639,6 +639,7 @@ ${basePrompt}`;
           const useCase = new GenerateAvatarVideoFromPresentationUseCase({
             heygenClient: this.aiGenerationService.heygenClient,
             openaiClient: this.aiGenerationService.openaiClient,
+            storageClient: this.aiGenerationService.storageClient, // Required for slide image extraction
             contentRepository: this.contentRepository,
             qualityCheckService: this.qualityCheckService, // For language and quality validation
             topicRepository,     // For getting topic language

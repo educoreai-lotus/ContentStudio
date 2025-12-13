@@ -1,59 +1,103 @@
 import { logger } from '../../infrastructure/logging/Logger.js';
-import { FileTextExtractor } from '../../services/FileTextExtractor.js';
-import { OpenAIClient } from '../../infrastructure/external-apis/openai/OpenAIClient.js';
-import { GenerateAvatarVideoFromPresentationPipeline } from './GenerateAvatarVideoFromPresentationPipeline.js';
+import { SlideImageExtractor } from '../../services/SlideImageExtractor.js';
+import { SlideSpeechBuilder } from '../../services/SlideSpeechBuilder.js';
+import { VoiceIdResolver } from '../../services/VoiceIdResolver.js';
+import { HeyGenTemplatePayloadBuilder } from '../../services/HeyGenTemplatePayloadBuilder.js';
+import { SlidePlan } from '../../domain/slides/SlidePlan.js';
+import { PptxExtractorPro } from '../../services/PptxExtractorPro.js';
+import { randomUUID } from 'crypto';
+import axios from 'axios';
+import { tmpdir } from 'os';
+import { join } from 'path';
+import { writeFileSync, unlinkSync } from 'fs';
+
+// HARD RUNTIME CONSTRAINTS for avatar video generation
+// These are enforced in code, not relying on prompts or AI compliance
+const MAX_SLIDES = 9; // Maximum number of slides allowed
+const MAX_TOTAL_SECONDS = 160; // Maximum total narration duration: 2 minutes 40 seconds (GLOBAL for entire video)
+const AVERAGE_WPM = 150; // Average words per minute for duration estimation
 
 /**
  * Generate Avatar Video from Presentation Use Case
  * 
- * New workflow:
- * 1. Extract text from presentation (PPTX/PDF) using FileTextExtractor
- * 2. Validate language using CreateContentUseCase.extractTextForLanguageValidation
- * 3. Validate quality/relevance using QualityCheckService
- * 4. Generate explanation using OpenAI GPT-4o
- * 5. Create avatar video with presentation as background
- * 6. Support up to 15 minutes (900 seconds)
- * 7. Allow custom avatar selection
+ * REFACTORED WORKFLOW (aligned with GammaHeyGenAvatarOrchestrator):
+ * 1. Fetch presentation content from repository
+ * 2. Download PPTX file
+ * 3. Extract slide images per slide (using SlideImageExtractor)
+ * 4. Extract slide text and generate short narrations per slide (15-20 sec, max 40 words)
+ * 5. Create SlidePlan from images and speeches
+ * 6. Resolve voice_id via VoiceIdResolver
+ * 7. Build HeyGen template payload (image_1..image_N, speech_1..speech_N)
+ * 8. Call HeyGen template API (generateTemplateVideo)
+ * 
+ * Video duration: Maximum 3 minutes (10 slides × 15-20 seconds = 2.5-3.3 minutes)
  */
 export class GenerateAvatarVideoFromPresentationUseCase {
   constructor({
     heygenClient,
     openaiClient,
+    storageClient,
     contentRepository,
     qualityCheckService,
     topicRepository,
     courseRepository,
     language = 'en',
+    templateId = '2c01158bec1149c49d35effb4bd79791', // Same template as orchestrator
+    slideImageExtractor = null,
+    slideSpeechBuilder = null,
+    voiceIdResolver = null,
+    templatePayloadBuilder = null,
   }) {
+    if (!heygenClient) {
+      throw new Error('heygenClient is required');
+    }
+    if (!storageClient) {
+      throw new Error('storageClient is required');
+    }
+    if (!openaiClient) {
+      throw new Error('openaiClient is required');
+    }
+
     this.heygenClient = heygenClient;
     this.openaiClient = openaiClient;
+    this.storageClient = storageClient;
     this.contentRepository = contentRepository;
     this.qualityCheckService = qualityCheckService;
     this.topicRepository = topicRepository;
     this.courseRepository = courseRepository;
     this.language = language;
+    this.templateId = templateId;
+
+    // Initialize services (same pattern as GammaHeyGenAvatarOrchestrator)
+    this.slideImageExtractor = slideImageExtractor || new SlideImageExtractor(storageClient);
+    this.slideSpeechBuilder = slideSpeechBuilder || new SlideSpeechBuilder(10);
+    this.voiceIdResolver = voiceIdResolver || new VoiceIdResolver();
+    this.templatePayloadBuilder = templatePayloadBuilder || new HeyGenTemplatePayloadBuilder();
   }
 
   /**
    * Execute the workflow
    * @param {Object} params - Request parameters
    * @param {number} params.presentation_content_id - Content ID of the presentation
-   * @param {string} params.custom_prompt - Optional custom prompt from trainer
-   * @param {string} params.avatar_id - Optional custom avatar ID
+   * @param {string} params.custom_prompt - Optional custom prompt from trainer (NOT USED in new workflow)
+   * @param {string} params.avatar_id - Optional custom avatar ID (NOT USED in template workflow)
    * @param {string} params.language - Language code (default: 'en')
    * @returns {Promise<Object>} Video generation result
    */
   async execute(params) {
     const {
       presentation_content_id,
-      custom_prompt = null,
-      avatar_id = null,
+      custom_prompt = null, // Not used in new workflow, kept for API compatibility
+      avatar_id = null, // Not used in template workflow, kept for API compatibility
       language = this.language || 'en',
     } = params;
+
+    const jobId = randomUUID();
 
     try {
       // Step 1: Get presentation content
       logger.info('[GenerateAvatarVideoFromPresentation] Step 1: Fetching presentation content', {
+        jobId,
         presentation_content_id,
       });
 
@@ -67,174 +111,413 @@ export class GenerateAvatarVideoFromPresentationUseCase {
         throw new Error(`Content is not a presentation (type: ${presentationContent.content_type_id})`);
       }
 
-      // Step 2: Extract text from presentation using QualityCheckService (same as CreateContentUseCase)
-      logger.info('[GenerateAvatarVideoFromPresentation] Step 2: Extracting text from presentation');
-
-      // Get presentation file URL first (needed for HeyGen background)
+      // Get presentation file URL
       const presentationFileUrl = presentationContent.content_data?.fileUrl || 
                                   presentationContent.content_data?.presentationUrl ||
                                   presentationContent.content_data?.url;
 
-      let presentationText = '';
-      
-      // Use QualityCheckService.extractTextFromContent (same method used in CreateContentUseCase)
-      // This handles all the same extraction logic: slides, fileUrl, fallbacks, etc.
-      if (this.qualityCheckService) {
-        try {
-          presentationText = await this.qualityCheckService.extractTextFromContent(presentationContent);
-          logger.info('[GenerateAvatarVideoFromPresentation] Text extracted via QualityCheckService', {
-            textLength: presentationText?.length || 0,
-            preview: presentationText?.substring(0, 200) || '',
-          });
-        } catch (extractError) {
-          logger.warn('[GenerateAvatarVideoFromPresentation] QualityCheckService extraction failed, trying fallback', {
-            error: extractError.message,
-          });
-        }
-      }
-      
-      // Fallback: Use FileTextExtractor directly if QualityCheckService failed or not available
-      if (!presentationText || presentationText.trim().length === 0) {
-        if (presentationFileUrl) {
-          try {
-            presentationText = await FileTextExtractor.extractTextFromUrl(
-              presentationFileUrl,
-              presentationContent.content_data,
-              this.openaiClient
-            );
-          } catch (extractError) {
-            logger.error('[GenerateAvatarVideoFromPresentation] Failed to extract text from presentation', {
-              error: extractError.message,
-            });
-            throw new Error(`Failed to extract text from presentation: ${extractError.message}`);
-          }
-        } else {
-          // Last fallback: try to extract from content_data.slides
-          if (presentationContent.content_data?.slides && Array.isArray(presentationContent.content_data.slides)) {
-            presentationText = presentationContent.content_data.slides
-              .map(slide => slide.text || slide.title || slide.content || slide.body || '')
-              .filter(Boolean)
-              .join('\n\n');
-          }
-        }
+      if (!presentationFileUrl) {
+        throw new Error('Presentation file URL not found in content data');
       }
 
-      if (!presentationText || presentationText.trim().length === 0) {
-        throw new Error('No text could be extracted from the presentation');
-      }
-
-      logger.info('[GenerateAvatarVideoFromPresentation] Text extracted successfully', {
-        textLength: presentationText.length,
-        preview: presentationText.substring(0, 200),
+      logger.info('[GenerateAvatarVideoFromPresentation] Step 2: Downloading PPTX file', {
+        jobId,
+        presentationFileUrl,
       });
 
-      // NOTE: Quality check is NOT performed here because:
-      // 1. If presentation was created manually - it was already checked in CreateContentUseCase
-      // 2. If presentation was created by AI - quality check is not needed (AI generates quality content)
-      // 3. The presentation already exists in the database, so validation should have been done at creation time
-
-      // Step 3: Generate explanation using OpenAI GPT-4o
-      logger.info('[GenerateAvatarVideoFromPresentation] Step 3: Generating explanation with OpenAI');
-
-      let explanationText = '';
-      
-      if (custom_prompt && custom_prompt.trim().length > 0) {
-        // Use custom prompt if provided
-        explanationText = await this.generateExplanationWithCustomPrompt(
-          presentationText,
-          custom_prompt,
-          language
-        );
-      } else {
-        // Auto-generate explanation
-        explanationText = await this.generateAutoExplanation(
-          presentationText,
-          language
-        );
-      }
-
-      if (!explanationText || explanationText.trim().length === 0) {
-        throw new Error('Failed to generate explanation from presentation');
-      }
-
-      // Step 3.5: Truncate explanation to fit 3-minute video limit (max ~2250 characters)
-      // HeyGen limits videos to 3 minutes maximum
-      // ~150 words per minute = ~450 words for 3 minutes
-      // ~5 characters per word = ~2250 characters maximum
-      const MAX_EXPLANATION_LENGTH = 2250;
-      let finalExplanationText = explanationText.trim();
-      
-      if (finalExplanationText.length > MAX_EXPLANATION_LENGTH) {
-        logger.warn('[GenerateAvatarVideoFromPresentation] Explanation exceeds 3-minute limit, truncating', {
-          originalLength: finalExplanationText.length,
-          maxLength: MAX_EXPLANATION_LENGTH,
+      // Step 2: Download PPTX file
+      let pptxBuffer;
+      try {
+        const pptxResponse = await axios.get(presentationFileUrl, { responseType: 'arraybuffer' });
+        pptxBuffer = Buffer.from(pptxResponse.data);
+        logger.info('[GenerateAvatarVideoFromPresentation] PPTX downloaded successfully', {
+          jobId,
+          bufferSize: pptxBuffer.length,
         });
-        
-        // Truncate at word boundary to avoid cutting words
-        const truncated = finalExplanationText.substring(0, MAX_EXPLANATION_LENGTH);
-        const lastSpaceIndex = truncated.lastIndexOf(' ');
-        finalExplanationText = lastSpaceIndex > 0 
-          ? truncated.substring(0, lastSpaceIndex) + '...'
-          : truncated + '...';
+      } catch (error) {
+        logger.error('[GenerateAvatarVideoFromPresentation] Failed to download PPTX', {
+          jobId,
+          error: error.message,
+        });
+        throw new Error(`Failed to download presentation file: ${error.message}`);
       }
 
-      logger.info('[GenerateAvatarVideoFromPresentation] Explanation prepared for HeyGen', {
-        originalLength: explanationText.length,
-        finalLength: finalExplanationText.length,
-        truncated: explanationText.length > MAX_EXPLANATION_LENGTH,
-        preview: finalExplanationText.substring(0, 200),
+      // Step 3: Extract slide images per slide
+      // NOTE: Slide images are TEMPORARY assets used only for HeyGen video generation.
+      // They are uploaded to storage for HeyGen API access but are NOT persisted as course content.
+      // Images are not retained after the HeyGen video generation call completes.
+      logger.info('[GenerateAvatarVideoFromPresentation] Step 3: Extracting slide images', {
+        jobId,
       });
 
-      // Step 4: Create avatar video with presentation as background
-      // Option 1: Use new detailed pipeline (per-slide narration)
-      // Option 2: Use existing simple workflow (single explanation)
-      // For now, use existing workflow but can be enhanced to use pipeline
+      let slideImages;
+      try {
+        slideImages = await this.slideImageExtractor.extractSlideImages(
+          pptxBuffer,
+          jobId,
+          MAX_SLIDES // Hard limit: maximum 9 slides
+        );
+        logger.info('[GenerateAvatarVideoFromPresentation] Slide images extracted successfully', {
+          jobId,
+          slideCount: slideImages.length,
+        });
+      } catch (error) {
+        logger.error('[GenerateAvatarVideoFromPresentation] Failed to extract slide images', {
+          jobId,
+          error: error.message,
+        });
+        throw new Error(`Failed to extract slide images: ${error.message}`);
+      }
+
+      // HARD CONSTRAINT: Global slide count limit
+      // Enforce maximum 9 slides (not 10) as a hard runtime constraint.
+      // This applies to the ENTIRE presentation, not per-section.
+      if (slideImages.length > MAX_SLIDES) {
+        const errorMsg = `Presentation exceeds maximum allowed slides (${MAX_SLIDES}). Found: ${slideImages.length} slides.`;
+        logger.error('[GenerateAvatarVideoFromPresentation] Global slide count limit exceeded', {
+          jobId,
+          slideCount: slideImages.length,
+          maxAllowed: MAX_SLIDES,
+        });
+        throw new Error(errorMsg);
+      }
+
+      // Step 4: Extract slides from PPTX and generate short narrations per slide
+      logger.info('[GenerateAvatarVideoFromPresentation] Step 4: Extracting slides and generating short narrations', {
+        jobId,
+        language,
+      });
+
+      let slideSpeeches;
+      try {
+        // Extract slides from PPTX
+        const tempPptxPath = join(tmpdir(), `pptx-${jobId}.pptx`);
+        try {
+          writeFileSync(tempPptxPath, pptxBuffer);
+          const slides = await PptxExtractorPro.extractSlides(tempPptxPath);
+          unlinkSync(tempPptxPath); // Clean up temp file
+
+          // Generate short narrations for each slide (max 40 words, 15-20 seconds)
+          const narrations = [];
+          for (const slide of slides.slice(0, MAX_SLIDES)) { // Hard limit: maximum 9 slides
+            try {
+              const narration = await this.generateShortNarration(slide, language);
+              narrations.push({
+                index: slide.index,
+                speakerText: narration,
+              });
+            } catch (error) {
+              logger.warn('[GenerateAvatarVideoFromPresentation] Failed to generate narration for slide', {
+                jobId,
+                slideIndex: slide.index,
+                error: error.message,
+              });
+              // Fallback to slide text (truncated to 40 words)
+              const fallbackText = (slide.text || slide.body || slide.title || '').split(/\s+/).slice(0, 40).join(' ');
+              narrations.push({
+                index: slide.index,
+                speakerText: fallbackText || 'No content available',
+              });
+            }
+          }
+
+          slideSpeeches = narrations;
+          logger.info('[GenerateAvatarVideoFromPresentation] Short narrations generated successfully', {
+            jobId,
+            narrationCount: slideSpeeches.length,
+          });
+        } catch (extractionError) {
+          logger.error('[GenerateAvatarVideoFromPresentation] Failed to extract slides from PPTX', {
+            jobId,
+            error: extractionError.message,
+          });
+          throw new Error(`Failed to extract slides from PPTX: ${extractionError.message}`);
+        }
+      } catch (error) {
+        logger.error('[GenerateAvatarVideoFromPresentation] Failed to generate slide speeches', {
+          jobId,
+          error: error.message,
+        });
+        throw new Error(`Failed to generate slide speeches: ${error.message}`);
+      }
+
+      // CRITICAL VALIDATION: Slide count synchronization guard
+      // Ensure image and speech arrays have matching counts before creating SlidePlan.
+      // Mismatch indicates extraction failure and would cause payload errors.
+      if (slideImages.length !== slideSpeeches.length) {
+        const errorMsg = `Slide count mismatch: ${slideImages.length} images but ${slideSpeeches.length} speeches. Cannot create valid SlidePlan.`;
+        logger.error('[GenerateAvatarVideoFromPresentation] Slide count synchronization failed', {
+          jobId,
+          imageCount: slideImages.length,
+          speechCount: slideSpeeches.length,
+        });
+        throw new Error(errorMsg);
+      }
+
+      // PER-SLIDE SAFETY LIMIT (safety guard, not the duration rule)
+      // Each slide speech must be <= 40 words as a safety limit to prevent individual slides from being too long.
+      // NOTE: This is NOT the global duration constraint - that is enforced separately below.
+      // This per-slide limit helps ensure reasonable pacing but the GLOBAL duration limit is what matters.
+      const wordCount = (text) => text.trim().split(/\s+/).filter(w => w.length > 0).length;
+      for (const speech of slideSpeeches) {
+        const words = wordCount(speech.speakerText);
+        if (words > 40) {
+          const errorMsg = `Speech for slide ${speech.index} exceeds 40-word per-slide safety limit: ${words} words. Maximum allowed per slide: 40 words.`;
+          logger.error('[GenerateAvatarVideoFromPresentation] Per-slide word count safety limit exceeded', {
+            jobId,
+            slideIndex: speech.index,
+            wordCount: words,
+            maxAllowed: 40,
+            speechPreview: speech.speakerText.substring(0, 100),
+          });
+          throw new Error(errorMsg);
+        }
+      }
+      logger.info('[GenerateAvatarVideoFromPresentation] Per-slide safety guard passed: all speeches <= 40 words', {
+        jobId,
+        slideCount: slideSpeeches.length,
+      });
+
+      // HARD CONSTRAINT: Global duration limit (GLOBAL for entire video, NOT per slide)
+      // The 2:40 minutes (160 seconds) limit applies to the ENTIRE VIDEO duration.
+      // All slide narrations combined must fit within this total duration.
+      // This is calculated from the sum of all words across all slides.
+      const totalWords = slideSpeeches.reduce((sum, speech) => sum + wordCount(speech.speakerText), 0);
+      const estimatedSeconds = (totalWords / AVERAGE_WPM) * 60;
       
-      logger.info('[GenerateAvatarVideoFromPresentation] Step 4: Creating avatar video with HeyGen');
-
-      const videoResult = await this.heygenClient.generateVideo({
-        title: presentationContent.content_data?.title || 'EduCore Presentation',
-        prompt: finalExplanationText, // Use truncated explanation
-        language: language,
-        duration: 180, // 3 minutes max (HeyGen limit)
-        presentation_file_url: presentationFileUrl,
-        avatar_id: avatar_id, // Custom avatar if provided
-        use_presentation_background: true,
+      if (estimatedSeconds > MAX_TOTAL_SECONDS) {
+        const errorMsg = `Total narration exceeds maximum allowed duration (2:40). Estimated: ${Math.round(estimatedSeconds)}s (${totalWords} words). Maximum: ${MAX_TOTAL_SECONDS}s.`;
+        logger.error('[GenerateAvatarVideoFromPresentation] Global duration limit exceeded', {
+          jobId,
+          totalWords,
+          estimatedSeconds: Math.round(estimatedSeconds),
+          maxAllowedSeconds: MAX_TOTAL_SECONDS,
+          slideCount: slideSpeeches.length,
+        });
+        throw new Error(errorMsg);
+      }
+      
+      logger.info('[GenerateAvatarVideoFromPresentation] Global duration guard passed', {
+        jobId,
+        totalWords,
+        estimatedSeconds: Math.round(estimatedSeconds),
+        maxAllowedSeconds: MAX_TOTAL_SECONDS,
+        slideCount: slideSpeeches.length,
       });
 
-      if (videoResult.status === 'failed' || videoResult.status === 'skipped') {
-        return {
-          success: false,
-          status: videoResult.status,
-          error: videoResult.error || videoResult.reason,
-          videoId: videoResult.videoId || null,
-          videoUrl: null,
-        };
+      // Step 5: Create SlidePlan from images and speeches
+      logger.info('[GenerateAvatarVideoFromPresentation] Step 5: Creating SlidePlan', {
+        jobId,
+        imageCount: slideImages.length,
+        speechCount: slideSpeeches.length,
+      });
+
+      let slidePlan;
+      try {
+        // Match images with speeches by index
+        const slides = [];
+        const maxSlides = Math.min(slideImages.length, slideSpeeches.length, MAX_SLIDES);
+
+        for (let i = 0; i < maxSlides; i++) {
+          const image = slideImages.find(img => img.index === i + 1);
+          const speech = slideSpeeches.find(sp => sp.index === i + 1);
+
+          if (!image || !speech) {
+            logger.warn('[GenerateAvatarVideoFromPresentation] Mismatch between images and speeches', {
+              jobId,
+              slideIndex: i + 1,
+              hasImage: !!image,
+              hasSpeech: !!speech,
+            });
+            continue; // Skip this slide
+          }
+
+          slides.push({
+            index: i + 1,
+            imageUrl: image.imageUrl,
+            speakerText: speech.speakerText,
+          });
+        }
+
+        if (slides.length === 0) {
+          throw new Error('No valid slides could be created from images and speeches');
+        }
+
+        slidePlan = new SlidePlan(slides);
+        logger.info('[GenerateAvatarVideoFromPresentation] SlidePlan created successfully', {
+          jobId,
+          slideCount: slidePlan.slideCount,
+        });
+      } catch (error) {
+        logger.error('[GenerateAvatarVideoFromPresentation] Failed to create SlidePlan', {
+          jobId,
+          error: error.message,
+        });
+        throw new Error(`Failed to create SlidePlan: ${error.message}`);
       }
 
-      logger.info('[GenerateAvatarVideoFromPresentation] Avatar video created successfully', {
-        videoId: videoResult.videoId,
-        videoUrl: videoResult.videoUrl,
+      // Step 6: Resolve voice_id via VoiceIdResolver
+      logger.info('[GenerateAvatarVideoFromPresentation] Step 6: Resolving voice ID', {
+        jobId,
+        language,
       });
 
+      let voiceId;
+      try {
+        voiceId = this.voiceIdResolver.resolve(language);
+        logger.info('[GenerateAvatarVideoFromPresentation] Voice ID resolved', {
+          jobId,
+          voiceId,
+          language,
+        });
+      } catch (error) {
+        logger.error('[GenerateAvatarVideoFromPresentation] Failed to resolve voice ID', {
+          jobId,
+          error: error.message,
+        });
+        throw new Error(`Failed to resolve voice ID: ${error.message}`);
+      }
+
+      // Step 7: Build HeyGen template payload
+      logger.info('[GenerateAvatarVideoFromPresentation] Step 7: Building HeyGen template payload', {
+        jobId,
+        templateId: this.templateId,
+        slideCount: slidePlan.slideCount,
+      });
+
+      let heygenPayload;
+      try {
+        const slides = slidePlan.getAllSlides();
+        heygenPayload = this.templatePayloadBuilder.buildPayload({
+          templateId: this.templateId,
+          slides,
+          title: presentationContent.content_data?.title || 'EduCore Presentation',
+          caption: true,
+          voiceId,
+        });
+        logger.info('[GenerateAvatarVideoFromPresentation] HeyGen payload built successfully', {
+          jobId,
+          variableCount: Object.keys(heygenPayload.variables || {}).length,
+        });
+      } catch (error) {
+        logger.error('[GenerateAvatarVideoFromPresentation] Failed to build HeyGen payload', {
+          jobId,
+          error: error.message,
+        });
+        throw new Error(`Failed to build HeyGen payload: ${error.message}`);
+      }
+
+      // CRITICAL VALIDATION: Payload variable validation
+      // HeyGen template requires continuous variable pairs: image_1, speech_1, image_2, speech_2, etc.
+      // Missing or non-continuous indices cause silent API failures.
+      // This guard ensures payload structure matches HeyGen template expectations.
+      const variables = heygenPayload.variables || {};
+      const variableKeys = Object.keys(variables);
+      const expectedSlideCount = slidePlan.slideCount;
+      
+      // Validate all required variable pairs exist
+      for (let i = 1; i <= expectedSlideCount; i++) {
+        const imageKey = `image_${i}`;
+        const speechKey = `speech_${i}`;
+        
+        if (!variables[imageKey]) {
+          const errorMsg = `Invalid HeyGen payload: missing ${imageKey}. Expected continuous variables from image_1 to image_${expectedSlideCount}.`;
+          logger.error('[GenerateAvatarVideoFromPresentation] Payload variable validation failed', {
+            jobId,
+            missingKey: imageKey,
+            expectedSlideCount,
+            availableKeys: variableKeys,
+          });
+          throw new Error(errorMsg);
+        }
+        
+        if (!variables[speechKey]) {
+          const errorMsg = `Invalid HeyGen payload: missing ${speechKey}. Expected continuous variables from speech_1 to speech_${expectedSlideCount}.`;
+          logger.error('[GenerateAvatarVideoFromPresentation] Payload variable validation failed', {
+            jobId,
+            missingKey: speechKey,
+            expectedSlideCount,
+            availableKeys: variableKeys,
+          });
+          throw new Error(errorMsg);
+        }
+      }
+      
+      logger.info('[GenerateAvatarVideoFromPresentation] Payload variable validation passed', {
+        jobId,
+        expectedPairs: expectedSlideCount,
+        validatedPairs: expectedSlideCount,
+      });
+
+      // CRITICAL LOGGING: Payload inspection (ONCE, before HeyGen call)
+      // Log template ID and variable keys for debugging payload structure issues.
+      // This helps diagnose silent failures from malformed payloads.
+      // NOTE: Do NOT log variable values (may contain signed URLs or sensitive content).
+      logger.info('[HeyGenTemplatePayload]', {
+        templateId: this.templateId,
+        keys: variableKeys.sort(), // Sort for easier comparison
+        keyCount: variableKeys.length,
+        expectedPairCount: expectedSlideCount * 2, // image_N + speech_N per slide
+      });
+
+      // Logging: Avatar video constraints summary (before HeyGen call)
+      // Calculate total words and estimated duration for final validation logging
+      const finalWordCount = slideSpeeches.reduce((sum, speech) => sum + wordCount(speech.speakerText), 0);
+      const finalEstimatedSeconds = (finalWordCount / AVERAGE_WPM) * 60;
+      logger.info('[AvatarVideoConstraints]', {
+        slidesCount: slideSpeeches.length,
+        totalWords: finalWordCount,
+        estimatedSeconds: Math.round(finalEstimatedSeconds),
+        maxAllowedSeconds: MAX_TOTAL_SECONDS,
+      });
+
+      // Step 8: Call HeyGen template API
+      logger.info('[GenerateAvatarVideoFromPresentation] Step 8: Calling HeyGen template API', {
+        jobId,
+        templateId: this.templateId,
+      });
+
+      let heygenResult;
+      try {
+        heygenResult = await this.heygenClient.generateTemplateVideo(
+          this.templateId,
+          heygenPayload
+        );
+        logger.info('[GenerateAvatarVideoFromPresentation] HeyGen video generation initiated', {
+          jobId,
+          videoId: heygenResult.video_id,
+        });
+      } catch (error) {
+        logger.error('[GenerateAvatarVideoFromPresentation] Failed to generate HeyGen video', {
+          jobId,
+          error: error.message,
+        });
+        throw new Error(`Failed to generate HeyGen video: ${error.message}`);
+      }
+
+      // Return result (maintaining API compatibility)
       return {
         success: true,
         status: 'completed',
-        videoId: videoResult.videoId,
-        videoUrl: videoResult.videoUrl,
-        duration_seconds: videoResult.duration_seconds || 180, // 3 minutes max
-        explanation: finalExplanationText, // Truncated explanation
+        videoId: heygenResult.video_id,
+        videoUrl: null, // Template API doesn't return URL immediately
+        duration_seconds: 180, // Estimated: 10 slides × 18 seconds average
+        explanation: null, // No longer using single explanation
         metadata: {
           presentation_content_id,
           presentation_file_url: presentationFileUrl,
           avatar_id: avatar_id || 'default',
           language,
+          templateId: this.templateId,
+          slideCount: slidePlan.slideCount,
           generated_at: new Date().toISOString(),
+          jobId,
         },
       };
 
     } catch (error) {
       logger.error('[GenerateAvatarVideoFromPresentation] Error generating avatar video', {
+        jobId,
         error: error.message,
         stack: error.stack,
         presentation_content_id,
@@ -251,81 +534,93 @@ export class GenerateAvatarVideoFromPresentationUseCase {
   }
 
   /**
-   * Generate explanation with custom prompt
-   * Note: Explanation will be truncated to ~2250 characters (3 minutes max) before sending to HeyGen
-   * @param {string} presentationText - Extracted text from presentation
-   * @param {string} customPrompt - Trainer's custom prompt
-   * @param {string} language - Language code
-   * @returns {Promise<string>} Generated explanation
+   * Generate a short narration (15-20 seconds, max 40 words) for a single slide using OpenAI
+   * Same implementation as GammaHeyGenAvatarOrchestrator.generateShortNarration
+   * @param {Object} slide - Slide object with {index, title, body, text}
+   * @param {string} languageCode - Language code (e.g., "he", "en", "ar")
+   * @returns {Promise<string>} Short narration text (max 40 words)
    */
-  async generateExplanationWithCustomPrompt(presentationText, customPrompt, language) {
-    const prompt = `You are an expert teacher explaining a presentation to students.
-
-Presentation content:
-${presentationText}
-
-Trainer's instruction:
-${customPrompt}
-
-Please generate a clear, engaging explanation of the presentation slides following the trainer's instruction. 
-Write as if you are speaking directly to students, explaining each slide in a natural, conversational way.
-Keep the explanation in ${language} language.
-
-Generate the explanation:`;
-
-    try {
-      // generateText expects (prompt: string, options: object)
-      const response = await this.openaiClient.generateText(prompt, {
-        model: 'gpt-4o',
-        temperature: 0.7,
-        max_tokens: 4000,
-      });
-
-      // generateText returns a string directly, not an object
-      return response || '';
-    } catch (error) {
-      logger.error('[GenerateAvatarVideoFromPresentation] OpenAI generation failed', {
-        error: error.message,
-      });
-      throw new Error(`Failed to generate explanation: ${error.message}`);
+  async generateShortNarration(slide, languageCode) {
+    if (!this.openaiClient) {
+      throw new Error('OpenAI client not available');
     }
-  }
 
-  /**
-   * Auto-generate explanation without custom prompt
-   * Note: Explanation will be truncated to ~2250 characters (3 minutes max) before sending to HeyGen
-   * @param {string} presentationText - Extracted text from presentation
-   * @param {string} language - Language code
-   * @returns {Promise<string>} Generated explanation
-   */
-  async generateAutoExplanation(presentationText, language) {
-    const prompt = `You are an expert teacher explaining a presentation to students.
+    // Get language name for prompt (same mapping as orchestrator)
+    const languageMap = {
+      'he': 'Hebrew',
+      'en': 'English',
+      'ar': 'Arabic',
+      'es': 'Spanish',
+      'fr': 'French',
+      'de': 'German',
+      'it': 'Italian',
+      'pt': 'Portuguese',
+      'ru': 'Russian',
+      'zh': 'Chinese',
+      'ja': 'Japanese',
+      'ko': 'Korean',
+    };
+    const languageName = languageMap[languageCode] || languageCode;
 
-Presentation content:
-${presentationText}
+    // Build prompt with strict constraints (same as orchestrator, but max 40 words instead of 50)
+    const prompt = `You are an expert teacher explaining a single presentation slide to students.
 
-Please generate a clear, engaging explanation of the presentation slides. 
-Write as if you are speaking directly to students, explaining each slide in simple language as if teaching beginners.
-Keep the explanation in ${language} language.
+Slide information:
 
-Generate the explanation:`;
+Title: ${slide.title || 'Untitled'}
+
+Content: ${slide.body || slide.text || 'No content'}
+
+IMPORTANT CONSTRAINTS:
+
+- This narration MUST be suitable for ~15–20 seconds of speech.
+
+- Do NOT exceed 40 words.
+
+- Be clear, simple, and focused on the main idea only.
+
+Instructions:
+
+- Explain the slide as if speaking to students.
+
+- No long introductions.
+
+- No repetition.
+
+- No extra examples unless strictly necessary.
+
+Output:
+
+- A short spoken narration.
+
+- Language: ${languageName}
+
+Generate the narration now.`;
 
     try {
-      // generateText expects (prompt: string, options: object)
-      const response = await this.openaiClient.generateText(prompt, {
+      const narration = await this.openaiClient.generateText(prompt, {
         model: 'gpt-4o',
         temperature: 0.7,
-        max_tokens: 4000,
+        max_tokens: 80, // Limit tokens to ensure short output (40 words ≈ 80 tokens)
       });
 
-      // generateText returns a string directly, not an object
-      return response || '';
+      // Ensure narration doesn't exceed 40 words
+      const words = narration.trim().split(/\s+/);
+      if (words.length > 40) {
+        logger.warn('[GenerateAvatarVideoFromPresentation] Narration exceeded 40 words, truncating', {
+          originalLength: words.length,
+          slideIndex: slide.index,
+        });
+        return words.slice(0, 40).join(' ');
+      }
+
+      return narration.trim();
     } catch (error) {
-      logger.error('[GenerateAvatarVideoFromPresentation] OpenAI generation failed', {
+      logger.error('[GenerateAvatarVideoFromPresentation] Failed to generate narration with OpenAI', {
+        slideIndex: slide.index,
         error: error.message,
       });
-      throw new Error(`Failed to generate explanation: ${error.message}`);
+      throw error;
     }
   }
 }
-
