@@ -128,111 +128,81 @@ export class CreateExercisesUseCase {
       await client.query('BEGIN');
       logger.info('[CreateExercisesUseCase] Transaction BEGIN successful', { topic_id });
 
-      // Save HTML code to devlab_exercises in topics table (using client for transaction)
-      logger.info('[CreateExercisesUseCase] Updating topics.devlab_exercises', {
+      // Prepare exercises data structure for devlab_exercises JSONB field
+      // Structure: { html: "...", questions: [...], metadata: {...} }
+      const exercisesData = {
+        html: htmlCode,
+        questions: questions.map((questionData, index) => {
+          // Extract question fields
+          const questionText = questionData.title || questionData.description || questionData.question_text || '';
+          const questionDifficulty = questionData.difficulty || null;
+          const questionLanguage = questionData.language || language || topic.language || 'en';
+          const testCases = questionData.testCases || questionData.test_cases || null;
+          const expectsReturn = questionData.expectsReturn || questionData.expects_return || null;
+          const hintText = questionData.hint || questionData.hints?.[0] || null;
+
+          return {
+            order_index: index + 1,
+            question_text: questionText,
+            question_type: question_type || 'code',
+            programming_language: programming_language || '',
+            language: questionLanguage,
+            difficulty: questionDifficulty,
+            hint: hintText,
+            solution: questionData.solution || null,
+            test_cases: testCases,
+            expects_return: expectsReturn,
+            title: questionData.title || questionText,
+            description: questionData.description || questionText,
+          };
+        }),
+        metadata: {
+          ...metadata,
+          generated_at: metadata.generated_at || new Date().toISOString(),
+          topic_id: topic_id.toString(),
+          topic_name: topic.topic_name || '',
+          question_type: question_type || 'code',
+          programming_language: programming_language || '',
+          language: language || topic.language || 'en',
+          amount: questions.length,
+        },
+      };
+
+      // Save all exercises data to devlab_exercises in topics table (using client for transaction)
+      logger.info('[CreateExercisesUseCase] Updating topics.devlab_exercises with full exercises data', {
         topic_id,
-        htmlCodeLength: htmlCode.length,
+        htmlLength: htmlCode.length,
+        questionsCount: questions.length,
       });
       const updateSql = `
         UPDATE topics
         SET devlab_exercises = $1::jsonb
         WHERE topic_id = $2
       `;
-      const updateResult = await client.query(updateSql, [JSON.stringify(htmlCode), topic_id]);
+      const updateResult = await client.query(updateSql, [JSON.stringify(exercisesData), topic_id]);
       logger.info('[CreateExercisesUseCase] Updated topics.devlab_exercises', {
         topic_id,
         rowsAffected: updateResult.rowCount,
       });
 
-      // Create Exercise entities from questions
-      const exerciseEntities = questions.map((questionData, index) => {
-        // Extract question fields
-        const questionText = questionData.title || questionData.description || questionData.question_text || '';
-        const questionDescription = questionData.description || questionData.title || '';
-        const questionDifficulty = questionData.difficulty || null;
-        const questionLanguage = questionData.language || language || topic.language || 'en';
-        const testCases = questionData.testCases || questionData.test_cases || null;
-        const expectsReturn = questionData.expectsReturn || questionData.expects_return || null;
-        const hintText = questionData.hint || null;
+      // Prepare response data (mapped from questions for frontend)
+      createdExercises = exercisesData.questions.map((q, index) => ({
+        exercise_id: `exercise_${topic_id}_${index + 1}`, // Generate ID for frontend
+        question_text: q.question_text,
+        difficulty: q.difficulty,
+        language: q.language,
+        test_cases: q.test_cases,
+        order_index: q.order_index,
+        hint: q.hint,
+      }));
 
-        return {
-          topic_id,
-          question_text: questionText,
-          question_type: question_type || 'code',
-          programming_language: programming_language || '',
-          language: questionLanguage,
-          skills: topic.skills || [],
-          hint: hintText,
-          solution: questionData.solution || null,
-          test_cases: testCases,
-          difficulty: questionDifficulty,
-          points: 10,
-          order_index: index,
-          generation_mode: 'ai',
-          validation_status: 'approved',
-          validation_message: null,
-          devlab_response: {
-            html: htmlCode,
-            question: questionData,
-            metadata: metadata,
-            generated_at: metadata.generated_at || new Date().toISOString(),
-          },
-          created_by,
-          status: 'active',
-        };
-      });
-
-      // Save all exercises to database (using client for transaction)
-      const insertQuery = `
-        INSERT INTO exercises (
-          topic_id, question_text, question_type, programming_language, language,
-          skills, hint, solution, test_cases, difficulty, points, order_index,
-          generation_mode, validation_status, validation_message, devlab_response,
-          created_by, status
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
-        RETURNING *
-      `;
-
-      for (const exercise of exerciseEntities) {
-        const values = [
-          exercise.topic_id,
-          exercise.question_text,
-          exercise.question_type,
-          exercise.programming_language || null,
-          exercise.language || 'en',
-          exercise.skills || [],
-          exercise.hint || null,
-          exercise.solution || null,
-          exercise.test_cases ? JSON.stringify(exercise.test_cases) : null,
-          exercise.difficulty || null,
-          exercise.points || 10,
-          exercise.order_index || 0,
-          exercise.generation_mode,
-          exercise.validation_status || 'pending',
-          exercise.validation_message || null,
-          exercise.devlab_response ? JSON.stringify(exercise.devlab_response) : null,
-          exercise.created_by,
-          exercise.status || 'active',
-        ];
-
-        const result = await client.query(insertQuery, values);
-        const row = result.rows[0];
-        const createdExercise = this.exerciseRepository.mapRowToExercise(row);
-        createdExercises.push(createdExercise);
-        logger.info('[CreateExercisesUseCase] Inserted exercise', {
-          topic_id,
-          exercise_id: createdExercise.exercise_id,
-          order_index: exercise.order_index,
-        });
-
-        // Collect hints with question_id
-        if (createdExercise.hint) {
-          hints.push({
-            question_id: createdExercise.exercise_id,
-            hint: createdExercise.hint,
-          });
-        }
-      }
+      // Collect hints
+      hints = exercisesData.questions
+        .filter(q => q.hint)
+        .map((q, index) => ({
+          question_id: `exercise_${topic_id}_${index + 1}`,
+          hint: q.hint,
+        }));
 
       await client.query('COMMIT');
 
