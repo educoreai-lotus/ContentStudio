@@ -883,26 +883,50 @@ export class DevlabClient {
         throw new Error('Invalid response from Coordinator: received service name instead of exercise code. This indicates a Coordinator routing or processing error.');
       }
 
-      // answer is a stringified JSON containing: { data: { html: "...", questions: [...], metadata: {...} } }
-      // Parse it and return structured data
+      // answer can be either:
+      // 1. A stringified JSON: '{"data":{"html":"...","questions":[...]}}'
+      // 2. An object directly: { data: { html: "...", questions: [...] } }
+      // Handle both cases
       let parsedAnswer;
-      try {
-        parsedAnswer = JSON.parse(answer);
-        logger.info('[DevlabClient] Parsed answer as JSON', {
+      
+      // Check if answer is already an object
+      if (typeof answer === 'object' && answer !== null) {
+        logger.info('[DevlabClient] Answer is already an object (not stringified JSON)', {
           topicId: payloadData.topic_id,
-          hasData: !!parsedAnswer.data,
-          dataKeys: parsedAnswer.data ? Object.keys(parsedAnswer.data) : [],
-          hasHtml: !!parsedAnswer.data?.html,
-          hasQuestions: Array.isArray(parsedAnswer.data?.questions),
-          questionsCount: parsedAnswer.data?.questions?.length || 0,
+          answerKeys: Object.keys(answer),
+          hasData: !!answer.data,
+          dataKeys: answer.data ? Object.keys(answer.data) : [],
         });
-      } catch (parseError) {
-        logger.error('[DevlabClient] Failed to parse answer as JSON', {
+        parsedAnswer = answer;
+      } else if (typeof answer === 'string') {
+        // Try to parse as JSON
+        try {
+          parsedAnswer = JSON.parse(answer);
+          logger.info('[DevlabClient] Parsed answer as JSON', {
+            topicId: payloadData.topic_id,
+            hasData: !!parsedAnswer.data,
+            dataKeys: parsedAnswer.data ? Object.keys(parsedAnswer.data) : [],
+            hasHtml: !!parsedAnswer.data?.html,
+            hasQuestions: Array.isArray(parsedAnswer.data?.questions),
+            questionsCount: parsedAnswer.data?.questions?.length || 0,
+          });
+        } catch (parseError) {
+          logger.error('[DevlabClient] Failed to parse answer as JSON', {
+            topicId: payloadData.topic_id,
+            error: parseError.message,
+            answerType: typeof answer,
+            answerLength: answer.length,
+            answerPreview: answer.substring(0, 200),
+          });
+          throw new Error(`Failed to parse Devlab response: ${parseError.message}`);
+        }
+      } else {
+        logger.error('[DevlabClient] Answer is neither object nor string', {
           topicId: payloadData.topic_id,
-          error: parseError.message,
-          answerPreview: answer.substring(0, 200),
+          answerType: typeof answer,
+          answerValue: answer,
         });
-        throw new Error(`Failed to parse Devlab response: ${parseError.message}`);
+        throw new Error(`Invalid answer type: expected object or string, got ${typeof answer}`);
       }
 
       // Validate parsed structure

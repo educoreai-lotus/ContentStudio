@@ -50,16 +50,33 @@ export default function ExerciseCreationModal({ isOpen, onClose, topicId, topicN
         theoretical_question_type: aiConfig.question_type === 'theoretical' ? aiConfig.theoretical_question_type : undefined,
       });
 
+      // Debug logging
+      console.log('[ExerciseCreationModal] Response from backend:', {
+        success: response?.success,
+        hasData: !!response?.data,
+        dataKeys: response?.data ? Object.keys(response?.data) : [],
+        questionsCount: response?.data?.questions?.length || 0,
+        hintsCount: response?.data?.hints?.length || 0,
+        message: response?.message,
+        fullResponse: response,
+      });
+
       // New response format: { success: true, message: "...", data: { questions: [...], hints: [...] } }
       if (response.success === true && response.data) {
+        console.log('[ExerciseCreationModal] Setting generated exercises:', {
+          questions: response.data.questions,
+          hints: response.data.hints,
+        });
         setGeneratedExercises(response.data.questions || []);
         setGeneratedHints(response.data.hints || []);
         setSuccessMessage(response.message || 'Questions generated successfully');
       } else if (response.success === false) {
         // Failure response - minimal, no error details
+        console.error('[ExerciseCreationModal] Backend returned success: false');
         setError('Failed to generate exercises. Please try again.');
       } else {
         // Fallback for unexpected format
+        console.error('[ExerciseCreationModal] Unexpected response format:', response);
         setError('Failed to generate exercises');
       }
     } catch (error) {

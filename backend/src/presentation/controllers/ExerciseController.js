@@ -88,11 +88,31 @@ export class ExerciseController {
         created_by: trainerId,
       });
 
+      logger.info('[ExerciseController] Use case result', {
+        topic_id,
+        success: result?.success,
+        hasData: !!result?.data,
+        dataKeys: result?.data ? Object.keys(result?.data) : [],
+        questionsCount: result?.data?.questions?.length || 0,
+        hintsCount: result?.data?.hints?.length || 0,
+        message: result?.message,
+      });
+
       // Handle new response format: { success: true/false, ... }
       if (result && result.success === true) {
+        logger.info('[ExerciseController] Returning success response', {
+          topic_id,
+          status: 201,
+          questionsCount: result.data?.questions?.length || 0,
+        });
         return res.status(201).json(result);
       } else {
         // Failure response - minimal, no error details (200 status per requirements)
+        logger.warn('[ExerciseController] Returning failure response', {
+          topic_id,
+          status: 200,
+          resultSuccess: result?.success,
+        });
         return res.status(200).json({ success: false });
       }
     } catch (error) {

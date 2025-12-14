@@ -113,6 +113,12 @@ export class CreateExercisesUseCase {
     }
 
     // Save to database atomically (transaction)
+    logger.info('[CreateExercisesUseCase] Starting database transaction', {
+      topic_id,
+      htmlLength: htmlCode.length,
+      questionsCount: questions.length,
+    });
+    
     const { db } = await import('../../infrastructure/database/DatabaseConnection.js');
     const client = await db.getClient();
     let createdExercises = [];
@@ -120,14 +126,23 @@ export class CreateExercisesUseCase {
 
     try {
       await client.query('BEGIN');
+      logger.info('[CreateExercisesUseCase] Transaction BEGIN successful', { topic_id });
 
       // Save HTML code to devlab_exercises in topics table (using client for transaction)
+      logger.info('[CreateExercisesUseCase] Updating topics.devlab_exercises', {
+        topic_id,
+        htmlCodeLength: htmlCode.length,
+      });
       const updateSql = `
         UPDATE topics
         SET devlab_exercises = $1::jsonb
         WHERE topic_id = $2
       `;
-      await client.query(updateSql, [JSON.stringify(htmlCode), topic_id]);
+      const updateResult = await client.query(updateSql, [JSON.stringify(htmlCode), topic_id]);
+      logger.info('[CreateExercisesUseCase] Updated topics.devlab_exercises', {
+        topic_id,
+        rowsAffected: updateResult.rowCount,
+      });
 
       // Create Exercise entities from questions
       const exerciseEntities = questions.map((questionData, index) => {
@@ -204,6 +219,11 @@ export class CreateExercisesUseCase {
         const row = result.rows[0];
         const createdExercise = this.exerciseRepository.mapRowToExercise(row);
         createdExercises.push(createdExercise);
+        logger.info('[CreateExercisesUseCase] Inserted exercise', {
+          topic_id,
+          exercise_id: createdExercise.exercise_id,
+          order_index: exercise.order_index,
+        });
 
         // Collect hints with question_id
         if (createdExercise.hint) {
