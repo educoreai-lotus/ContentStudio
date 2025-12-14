@@ -651,51 +651,111 @@ export class DevlabClient {
                             responseData.metadata?.response?.answer ||
                             parsedRawBody?.metadata?.response?.answer;
       
-      if (responseAnswer && typeof responseAnswer === 'string') {
-        logger.info('[DevlabClient] Found response.answer (envelope format from devlab-service)', {
-          answerLength: responseAnswer.length,
-          answerPreview: responseAnswer.substring(0, 100),
-          source: responseData.response?.answer ? 'responseData.response' : 'parsedRawBody.response',
-        });
-        // This is the answer from devlab-service - it's JSON stringified
-        let rawAnswer = responseAnswer;
-        
-        // Try to parse as JSON first (devlab-service returns JSON stringified response)
-        try {
-          const parsedAnswer = JSON.parse(rawAnswer);
-          logger.info('[DevlabClient] Parsed response.answer as JSON', {
-            parsedKeys: Object.keys(parsedAnswer),
-            hasData: !!parsedAnswer.data,
-            dataKeys: parsedAnswer.data ? Object.keys(parsedAnswer.data) : [],
-            hasHtml: !!parsedAnswer.data?.html,
-            htmlLength: parsedAnswer.data?.html?.length || 0,
+      // Handle response.answer - can be string (code questions) or object (theoretical questions)
+      if (responseAnswer) {
+        // Check if it's an object (theoretical questions format)
+        if (typeof responseAnswer === 'object' && responseAnswer !== null) {
+          logger.info('[DevlabClient] Found response.answer as object (theoretical questions format)', {
+            answerKeys: Object.keys(responseAnswer),
+            hasQuestions: Array.isArray(responseAnswer.questions),
+            questionsCount: responseAnswer.questions?.length || 0,
+            hasHtmlSnippet: !!responseAnswer.html_snippet,
+            hasJavascriptSnippet: !!responseAnswer.javascript_snippet,
+            source: responseData.response?.answer ? 'responseData.response' : 'parsedRawBody.response',
           });
           
-          // Return the raw answer string (stringified JSON) - will be parsed in CreateExercisesUseCase
-          // The answer contains the full structured response: { data: { html, questions, metadata } }
-          answer = rawAnswer;
-          logger.info('[DevlabClient] Returning raw response.answer (stringified JSON) for parsing in CreateExercisesUseCase', {
-            answerLength: answer.length,
-            answerPreview: answer.substring(0, 100),
-            hasData: !!parsedAnswer.data,
-            dataKeys: parsedAnswer.data ? Object.keys(parsedAnswer.data) : [],
+          // For theoretical questions, the structure is:
+          // { questions: [...], html_snippet: "...", javascript_snippet: "...", ajax_request_example: "..." }
+          // We need to convert it to our standard format: { data: { html, questions, metadata } }
+          // Store the object as stringified JSON for later parsing
+          answer = JSON.stringify({
+            data: {
+              html: responseAnswer.html_snippet || '',
+              questions: responseAnswer.questions || [],
+              metadata: {
+                question_type: questionType,
+                javascript_snippet: responseAnswer.javascript_snippet || '',
+                ajax_request_example: responseAnswer.ajax_request_example || '',
+              },
+            },
           });
-      } catch (parseError) {
-          // If parsing fails, treat it as plain HTML string
-          answer = rawAnswer;
-          logger.info('[DevlabClient] response.answer is not JSON, using as plain HTML string', {
+          
+          logger.info('[DevlabClient] Converted theoretical questions object to standard format', {
             answerLength: answer.length,
-            answerPreview: answer.substring(0, 100),
+            questionsCount: responseAnswer.questions?.length || 0,
           });
+        } else if (typeof responseAnswer === 'string') {
+          logger.info('[DevlabClient] Found response.answer as string (code questions format)', {
+            answerLength: responseAnswer.length,
+            answerPreview: responseAnswer.substring(0, 100),
+            source: responseData.response?.answer ? 'responseData.response' : 'parsedRawBody.response',
+          });
+          // This is the answer from devlab-service - it's JSON stringified
+          let rawAnswer = responseAnswer;
+          
+          // Try to parse as JSON first (devlab-service returns JSON stringified response)
+          try {
+            const parsedAnswer = JSON.parse(rawAnswer);
+            logger.info('[DevlabClient] Parsed response.answer as JSON', {
+              parsedKeys: Object.keys(parsedAnswer),
+              hasData: !!parsedAnswer.data,
+              dataKeys: parsedAnswer.data ? Object.keys(parsedAnswer.data) : [],
+              hasHtml: !!parsedAnswer.data?.html,
+              htmlLength: parsedAnswer.data?.html?.length || 0,
+            });
+            
+            // Return the raw answer string (stringified JSON) - will be parsed in CreateExercisesUseCase
+            // The answer contains the full structured response: { data: { html, questions, metadata } }
+            answer = rawAnswer;
+            logger.info('[DevlabClient] Returning raw response.answer (stringified JSON) for parsing in CreateExercisesUseCase', {
+              answerLength: answer.length,
+              answerPreview: answer.substring(0, 100),
+              hasData: !!parsedAnswer.data,
+              dataKeys: parsedAnswer.data ? Object.keys(parsedAnswer.data) : [],
+            });
+          } catch (parseError) {
+            // If parsing fails, treat it as plain HTML string
+            answer = rawAnswer;
+            logger.info('[DevlabClient] response.answer is not JSON, using as plain HTML string', {
+              answerLength: answer.length,
+              answerPreview: answer.substring(0, 100),
+            });
+          }
         }
       }
       // Check if we have direct answer in data.answer (new format)
       else if (responseData.data?.answer) {
-        // Handle case where data.answer is an object (error response from service)
+        // Handle case where data.answer is an object (could be theoretical questions or error response)
         if (typeof responseData.data.answer === 'object' && responseData.data.answer !== null) {
+          // Check if it's theoretical questions format: { questions: [...], html_snippet: "...", ... }
+          if (Array.isArray(responseData.data.answer.questions) && responseData.data.answer.html_snippet) {
+            logger.info('[DevlabClient] Found data.answer as theoretical questions object', {
+              questionsCount: responseData.data.answer.questions.length,
+              hasHtmlSnippet: !!responseData.data.answer.html_snippet,
+              hasJavascriptSnippet: !!responseData.data.answer.javascript_snippet,
+            });
+            
+            // Convert theoretical questions format to standard format
+            answer = JSON.stringify({
+              data: {
+                html: responseData.data.answer.html_snippet || '',
+                questions: responseData.data.answer.questions || [],
+                metadata: {
+                  question_type: questionType,
+                  javascript_snippet: responseData.data.answer.javascript_snippet || '',
+                  ajax_request_example: responseData.data.answer.ajax_request_example || '',
+                },
+              },
+            });
+            
+            logger.info('[DevlabClient] Converted data.answer theoretical questions to standard format', {
+              answerLength: answer.length,
+              questionsCount: responseData.data.answer.questions?.length || 0,
+            });
+          }
           // Check for nested error structure: { answer: { answer: { error: "..." } } }
-          const nestedAnswer = responseData.data.answer.answer;
-          if (nestedAnswer && typeof nestedAnswer === 'object' && nestedAnswer.error) {
+          else if (responseData.data.answer.answer && typeof responseData.data.answer.answer === 'object' && responseData.data.answer.answer.error) {
+            const nestedAnswer = responseData.data.answer.answer;
             const errorMessage = nestedAnswer.error;
             logger.error('[DevlabClient] Service returned error in nested answer structure', {
               error: errorMessage,

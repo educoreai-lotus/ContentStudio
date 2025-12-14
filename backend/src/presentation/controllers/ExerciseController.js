@@ -23,6 +23,8 @@ export class ExerciseController {
   /**
    * Get all exercises for a topic
    * GET /api/exercises/topic/:topicId
+   * Returns exercises from topics.devlab_exercises JSONB field (new format)
+   * Falls back to exercises table if devlab_exercises is empty
    */
   async getExercisesByTopic(req, res, next) {
     try {
@@ -39,12 +41,72 @@ export class ExerciseController {
         topic_id: topicIdNum,
       });
 
+      // First, try to get exercises from topics.devlab_exercises (new format)
+      const topic = await this.topicRepository.findById(topicIdNum);
+      
+      if (topic && topic.devlab_exercises) {
+        try {
+          // devlab_exercises is stored as JSONB: { html: "...", questions: [...], metadata: {...} }
+          const devlabData = typeof topic.devlab_exercises === 'string' 
+            ? JSON.parse(topic.devlab_exercises) 
+            : topic.devlab_exercises;
+          
+          if (devlabData && devlabData.questions && Array.isArray(devlabData.questions) && devlabData.questions.length > 0) {
+            logger.info('[ExerciseController] Found exercises in topics.devlab_exercises', {
+              topic_id: topicIdNum,
+              questionsCount: devlabData.questions.length,
+            });
+            
+            // Map questions to frontend format
+            const exercises = devlabData.questions.map((q, index) => ({
+              exercise_id: `exercise_${topicIdNum}_${index + 1}`,
+              question_text: q.question_text || q.stem || q.title || q.description || '',
+              difficulty: q.difficulty || null,
+              language: q.language || topic.language || 'en',
+              test_cases: q.test_cases || null,
+              order_index: q.order_index || (index + 1),
+              hint: q.hint || null,
+              // Include theoretical question specific fields
+              ...(q.question_type === 'theoretical' && {
+                options: q.options || null,
+                explanation: q.explanation || null,
+                type: q.type || 'mcq',
+              }),
+            }));
+            
+            // Collect hints
+            const hints = exercises
+              .filter(ex => ex.hint)
+              .map((ex, index) => ({
+                question_id: ex.exercise_id,
+                hint: ex.hint,
+              }));
+            
+            return res.status(200).json({
+              success: true,
+              exercises: exercises,
+              hints: hints,
+              count: exercises.length,
+              source: 'devlab_exercises',
+            });
+          }
+        } catch (parseError) {
+          logger.warn('[ExerciseController] Failed to parse devlab_exercises, falling back to exercises table', {
+            topic_id: topicIdNum,
+            error: parseError.message,
+          });
+        }
+      }
+      
+      // Fallback: get from exercises table (old format)
       const exercises = await this.exerciseRepository.findByTopicId(topicIdNum);
 
       return res.status(200).json({
         success: true,
         exercises: exercises.map(ex => ex.toJSON()),
+        hints: [],
         count: exercises.length,
+        source: 'exercises_table',
       });
     } catch (error) {
       logger.error('[ExerciseController] Error fetching exercises', {

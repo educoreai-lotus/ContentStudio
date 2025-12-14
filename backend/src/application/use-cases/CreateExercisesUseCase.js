@@ -133,13 +133,33 @@ export class CreateExercisesUseCase {
       const exercisesData = {
         html: htmlCode,
         questions: questions.map((questionData, index) => {
-          // Extract question fields
-          const questionText = questionData.title || questionData.description || questionData.question_text || '';
-          const questionDifficulty = questionData.difficulty || null;
-          const questionLanguage = questionData.language || language || topic.language || 'en';
-          const testCases = questionData.testCases || questionData.test_cases || null;
-          const expectsReturn = questionData.expectsReturn || questionData.expects_return || null;
-          const hintText = questionData.hint || questionData.hints?.[0] || null;
+          // Handle different question types: code vs theoretical
+          let questionText = '';
+          let questionDifficulty = null;
+          let questionLanguage = language || topic.language || 'en';
+          let testCases = null;
+          let expectsReturn = null;
+          let hintText = null;
+          let options = null;
+          let explanation = null;
+          
+          if (question_type === 'theoretical') {
+            // Theoretical questions format: { stem, options, explanation, hints, type, difficulty, ... }
+            questionText = questionData.stem || questionData.question_text || questionData.title || questionData.description || '';
+            questionDifficulty = questionData.difficulty || null;
+            questionLanguage = questionData.language || language || topic.language || 'en';
+            hintText = Array.isArray(questionData.hints) ? questionData.hints[0] : (questionData.hint || null);
+            options = Array.isArray(questionData.options) ? questionData.options : null;
+            explanation = questionData.explanation || null;
+          } else {
+            // Code questions format: { title, description, question_text, hint, solution, test_cases, ... }
+            questionText = questionData.title || questionData.description || questionData.question_text || '';
+            questionDifficulty = questionData.difficulty || null;
+            questionLanguage = questionData.language || language || topic.language || 'en';
+            testCases = questionData.testCases || questionData.test_cases || null;
+            expectsReturn = questionData.expectsReturn || questionData.expects_return || null;
+            hintText = questionData.hint || (Array.isArray(questionData.hints) ? questionData.hints[0] : null);
+          }
 
           return {
             order_index: index + 1,
@@ -149,11 +169,21 @@ export class CreateExercisesUseCase {
             language: questionLanguage,
             difficulty: questionDifficulty,
             hint: hintText,
-            solution: questionData.solution || null,
+            solution: questionData.solution || explanation || null,
             test_cases: testCases,
             expects_return: expectsReturn,
-            title: questionData.title || questionText,
-            description: questionData.description || questionText,
+            options: options, // For theoretical multiple choice questions
+            explanation: explanation, // For theoretical questions
+            title: questionData.title || questionData.stem || questionText,
+            description: questionData.description || questionData.stem || questionText,
+            // Preserve theoretical question specific fields
+            ...(question_type === 'theoretical' && {
+              type: questionData.type || 'mcq',
+              skill_id: questionData.skill_id || null,
+              html_snippet: questionData.html_snippet || null,
+              javascript_snippet: questionData.javascript_snippet || null,
+              ajax_request_example: questionData.ajax_request_example || null,
+            }),
           };
         }),
         metadata: {
@@ -194,6 +224,12 @@ export class CreateExercisesUseCase {
         test_cases: q.test_cases,
         order_index: q.order_index,
         hint: q.hint,
+        // Include theoretical question specific fields
+        ...(question_type === 'theoretical' && {
+          options: q.options,
+          explanation: q.explanation,
+          type: q.type,
+        }),
       }));
 
       // Collect hints
@@ -224,6 +260,12 @@ export class CreateExercisesUseCase {
             language: ex.language,
             test_cases: ex.test_cases,
             order_index: ex.order_index,
+            // Include theoretical question specific fields
+            ...(question_type === 'theoretical' && {
+              options: ex.options,
+              explanation: ex.explanation,
+              type: ex.type,
+            }),
           })),
           hints: hints,
         },

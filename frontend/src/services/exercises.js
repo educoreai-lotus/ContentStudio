@@ -71,11 +71,22 @@ export const exercisesService = {
   /**
    * Get all exercises for a topic
    * @param {number} topicId - Topic ID
-   * @returns {Promise<Array>} Exercises array
+   * @returns {Promise<Object>} Response with exercises and hints:
+   *   {
+   *     success: true,
+   *     exercises: Array,
+   *     hints: Array,
+   *     count: number,
+   *     source: 'devlab_exercises' | 'exercises_table'
+   *   }
    */
   async getByTopicId(topicId) {
     const response = await apiClient.get(`/api/exercises/topic/${topicId}`);
-    return response.data.exercises || [];
+    // Handle both old format (array) and new format (object with exercises and hints)
+    if (Array.isArray(response.data)) {
+      return response.data; // Old format - return array directly
+    }
+    return response.data; // New format - return object with exercises, hints, etc.
   },
 };
 

@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { exercisesService } from '../../services/exercises.js';
 import { useApp } from '../../context/AppContext.jsx';
 
 /**
  * Exercise Creation Modal
  * Handles both AI and Manual exercise generation
+ * If exercises already exist, displays them instead of the creation form
  */
 export default function ExerciseCreationModal({ isOpen, onClose, topicId, topicName, topicSkills, topicLanguage }) {
   const { theme, setError } = useApp();
@@ -14,6 +15,8 @@ export default function ExerciseCreationModal({ isOpen, onClose, topicId, topicN
   const [generatedHints, setGeneratedHints] = useState([]); // Hints from AI generation
   const [successMessage, setSuccessMessage] = useState(null); // Success message from backend
   const [manualExercises, setManualExercises] = useState([]);
+  const [hasExistingExercises, setHasExistingExercises] = useState(false); // Flag to check if exercises already exist
+  const [loadingExisting, setLoadingExisting] = useState(false); // Loading state for checking existing exercises
   // For manual code exercises: always 4 exercises together
   const [manualExercisesArray, setManualExercisesArray] = useState([
     { question_text: '' },
@@ -30,6 +33,53 @@ export default function ExerciseCreationModal({ isOpen, onClose, topicId, topicN
     amount: 4,
     theoretical_question_type: 'multiple_choice', // 'multiple_choice' or 'open_ended'
   });
+
+  // Check if exercises already exist when modal opens
+  useEffect(() => {
+    if (isOpen && topicId) {
+      checkExistingExercises();
+    } else {
+      // Reset when modal closes
+      setHasExistingExercises(false);
+      setGeneratedExercises([]);
+      setGeneratedHints([]);
+    }
+  }, [isOpen, topicId]);
+
+  const checkExistingExercises = async () => {
+    try {
+      setLoadingExisting(true);
+      const response = await exercisesService.getByTopicId(topicId);
+      
+      // Check if we got exercises from the response
+      // Response format: { success: true, exercises: [...], hints: [...], count: number }
+      if (response && Array.isArray(response) && response.length > 0) {
+        // Old format: array directly
+        setGeneratedExercises(response);
+        setHasExistingExercises(true);
+        setSuccessMessage('Existing exercises loaded');
+      } else if (response && response.exercises && Array.isArray(response.exercises) && response.exercises.length > 0) {
+        // New format: { exercises: [...], hints: [...] }
+        setGeneratedExercises(response.exercises);
+        if (response.hints && Array.isArray(response.hints)) {
+          setGeneratedHints(response.hints);
+        }
+        setHasExistingExercises(true);
+        setSuccessMessage('Existing exercises loaded');
+      } else {
+        // No existing exercises
+        setHasExistingExercises(false);
+        setGeneratedExercises([]);
+        setGeneratedHints([]);
+      }
+    } catch (error) {
+      console.error('[ExerciseCreationModal] Error checking existing exercises:', error);
+      // If error, assume no exercises exist and show creation form
+      setHasExistingExercises(false);
+    } finally {
+      setLoadingExisting(false);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -126,8 +176,38 @@ export default function ExerciseCreationModal({ isOpen, onClose, topicId, topicN
         })),
       });
 
-      if (response.success && response.exercises && Array.isArray(response.exercises)) {
-        setManualExercises(response.exercises);
+      // Debug logging
+      console.log('[ExerciseCreationModal] Manual exercises response from backend:', {
+        success: response?.success,
+        hasData: !!response?.data,
+        dataKeys: response?.data ? Object.keys(response?.data) : [],
+        questionsCount: response?.data?.questions?.length || 0,
+        hasExercises: !!response?.exercises,
+        exercisesCount: response?.exercises?.length || 0,
+        message: response?.message,
+        fullResponse: response,
+      });
+
+      // New response format: { success: true, message: "...", data: { questions: [...], count: 4 } }
+      // Old format (backward compatibility): { success: true, exercises: [...] }
+      if (response.success === true) {
+        // Check new format first
+        if (response.data && response.data.questions && Array.isArray(response.data.questions)) {
+          console.log('[ExerciseCreationModal] Using new format - data.questions');
+          setManualExercises(response.data.questions);
+          setSuccessMessage(response.message || 'Exercises created and validated successfully');
+        }
+        // Fallback to old format
+        else if (response.exercises && Array.isArray(response.exercises)) {
+          console.log('[ExerciseCreationModal] Using old format - exercises');
+          setManualExercises(response.exercises);
+          setSuccessMessage('Exercises created and validated successfully');
+        } else {
+          console.error('[ExerciseCreationModal] Unexpected success response format:', response);
+          setError('Exercises created but response format is unexpected');
+          return;
+        }
+        
         // Reset form
         setManualExercisesArray([
           { question_text: '' },
@@ -163,6 +243,8 @@ export default function ExerciseCreationModal({ isOpen, onClose, topicId, topicN
   const handleClose = () => {
     setMode('ai');
     setGeneratedExercises([]);
+    setGeneratedHints([]);
+    setSuccessMessage(null);
     setManualExercises([]);
     setManualExercisesArray([
       { question_text: '' },
@@ -190,6 +272,112 @@ export default function ExerciseCreationModal({ isOpen, onClose, topicId, topicN
 
         {/* Content */}
         <div className="p-6">
+          {/* Loading existing exercises */}
+          {loadingExisting && (
+            <div className="text-center py-8">
+              <i className="fas fa-spinner fa-spin text-2xl text-gray-500 dark:text-gray-400"></i>
+              <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">Loading existing exercises...</p>
+            </div>
+          )}
+
+          {/* Show existing exercises if they exist */}
+          {!loadingExisting && hasExistingExercises && generatedExercises.length > 0 && (
+            <div className="space-y-6">
+              <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
+                <p className="text-sm text-green-800 dark:text-green-200">
+                  <i className="fas fa-check-circle mr-2"></i>
+                  <strong>Exercises already exist for this topic.</strong> Viewing {generatedExercises.length} existing {generatedExercises.length === 1 ? 'exercise' : 'exercises'}.
+                </p>
+              </div>
+
+              {/* Display existing exercises */}
+              <div>
+                <h3 className="text-lg font-semibold mb-4">Existing Exercises ({generatedExercises.length})</h3>
+                <div className="space-y-4">
+                  {generatedExercises.map((exercise, index) => (
+                    <div
+                      key={exercise.exercise_id || index}
+                      className="border border-gray-200 dark:border-[#334155] rounded-lg p-4 bg-gray-50 dark:bg-[#0f172a]"
+                    >
+                      <div className="flex justify-between items-start mb-2">
+                        <span className="font-semibold">Exercise {exercise.order_index || (index + 1)}</span>
+                        <div className="flex gap-2">
+                          <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200 px-2 py-1 rounded">
+                            Existing
+                          </span>
+                          {exercise.type === 'mcq' && (
+                            <span className="text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-200 px-2 py-1 rounded">
+                              Multiple Choice
+                            </span>
+                          )}
+                          {exercise.difficulty && (
+                            <span className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 px-2 py-1 rounded capitalize">
+                              {exercise.difficulty}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <p className="text-sm mb-2 font-medium">{exercise.question_text}</p>
+                      
+                      {/* Show options for theoretical multiple choice questions */}
+                      {exercise.options && Array.isArray(exercise.options) && exercise.options.length > 0 && (
+                        <div className="mb-3">
+                          <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Options:</p>
+                          <ul className="list-disc list-inside space-y-1">
+                            {exercise.options.map((option, optIndex) => (
+                              <li key={optIndex} className="text-xs text-gray-600 dark:text-gray-400">
+                                {option}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      
+                      {/* Show explanation for theoretical questions */}
+                      {exercise.explanation && (
+                        <div className="mb-2 p-2 bg-blue-50 dark:bg-blue-900/20 rounded">
+                          <p className="text-xs font-semibold text-blue-800 dark:text-blue-200 mb-1">Explanation:</p>
+                          <p className="text-xs text-blue-700 dark:text-blue-300">{exercise.explanation}</p>
+                        </div>
+                      )}
+                      
+                      {/* Show hint for code questions */}
+                      {exercise.hint && !exercise.explanation && (
+                        <p className="text-xs text-gray-600 dark:text-gray-400">
+                          <strong>Hint:</strong> {exercise.hint}
+                        </p>
+                      )}
+                      
+                      {/* Show hint from hints array if available */}
+                      {!exercise.hint && !exercise.explanation && generatedHints.length > 0 && (
+                        (() => {
+                          const hintForExercise = generatedHints.find(h => h.question_id === exercise.exercise_id);
+                          return hintForExercise ? (
+                            <p className="text-xs text-gray-600 dark:text-gray-400">
+                              <strong>Hint:</strong> {hintForExercise.hint}
+                            </p>
+                          ) : null;
+                        })()
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Close button */}
+              <button
+                onClick={handleClose}
+                className="w-full py-3 px-4 bg-gray-600 hover:bg-gray-700 text-white rounded-lg font-semibold"
+              >
+                <i className="fas fa-times mr-2"></i>
+                Close
+              </button>
+            </div>
+          )}
+
+          {/* Show creation form if no existing exercises */}
+          {!loadingExisting && !hasExistingExercises && (
+            <>
           {/* Mode Selection */}
           <div className="mb-6">
             <div className="flex gap-4 mb-4">
@@ -334,12 +522,48 @@ export default function ExerciseCreationModal({ isOpen, onClose, topicId, topicN
                       >
                         <div className="flex justify-between items-start mb-2">
                           <span className="font-semibold">Exercise {index + 1}</span>
-                          <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200 px-2 py-1 rounded">
-                            AI Generated
-                          </span>
+                          <div className="flex gap-2">
+                            <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200 px-2 py-1 rounded">
+                              AI Generated
+                            </span>
+                            {exercise.type === 'mcq' && (
+                              <span className="text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-200 px-2 py-1 rounded">
+                                Multiple Choice
+                              </span>
+                            )}
+                            {exercise.difficulty && (
+                              <span className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 px-2 py-1 rounded capitalize">
+                                {exercise.difficulty}
+                              </span>
+                            )}
+                          </div>
                         </div>
-                        <p className="text-sm mb-2">{exercise.question_text}</p>
-                        {exercise.hint && (
+                        <p className="text-sm mb-2 font-medium">{exercise.question_text}</p>
+                        
+                        {/* Show options for theoretical multiple choice questions */}
+                        {exercise.options && Array.isArray(exercise.options) && exercise.options.length > 0 && (
+                          <div className="mb-3">
+                            <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Options:</p>
+                            <ul className="list-disc list-inside space-y-1">
+                              {exercise.options.map((option, optIndex) => (
+                                <li key={optIndex} className="text-xs text-gray-600 dark:text-gray-400">
+                                  {option}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        
+                        {/* Show explanation for theoretical questions */}
+                        {exercise.explanation && (
+                          <div className="mb-2 p-2 bg-blue-50 dark:bg-blue-900/20 rounded">
+                            <p className="text-xs font-semibold text-blue-800 dark:text-blue-200 mb-1">Explanation:</p>
+                            <p className="text-xs text-blue-700 dark:text-blue-300">{exercise.explanation}</p>
+                          </div>
+                        )}
+                        
+                        {/* Show hint for code questions */}
+                        {exercise.hint && !exercise.explanation && (
                           <p className="text-xs text-gray-600 dark:text-gray-400">
                             <strong>Hint:</strong> {exercise.hint}
                           </p>
@@ -424,6 +648,16 @@ export default function ExerciseCreationModal({ isOpen, onClose, topicId, topicN
                 )}
               </button>
 
+              {/* Success Message */}
+              {successMessage && mode === 'manual' && (
+                <div className="mt-4 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+                  <p className="text-sm text-green-800 dark:text-green-200">
+                    <i className="fas fa-check-circle mr-2"></i>
+                    {successMessage}
+                  </p>
+                </div>
+              )}
+
               {/* Created Exercises List */}
               {manualExercises.length > 0 && (
                 <div className="mt-6">
@@ -459,6 +693,8 @@ export default function ExerciseCreationModal({ isOpen, onClose, topicId, topicN
                 </div>
               )}
             </div>
+          )}
+            </>
           )}
         </div>
       </div>
