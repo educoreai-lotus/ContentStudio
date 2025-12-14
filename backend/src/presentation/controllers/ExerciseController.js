@@ -216,10 +216,18 @@ export class ExerciseController {
         created_by: trainerId,
       });
 
+      logger.info('[ExerciseController] Manual exercises created successfully', {
+        topic_id,
+        exercisesCount: createdExercises.length,
+      });
+
       return res.status(201).json({
         success: true,
-        exercises: createdExercises.map(ex => ex.toJSON()),
-        count: createdExercises.length,
+        message: 'Exercises created and validated successfully',
+        data: {
+          questions: createdExercises,
+          count: createdExercises.length,
+        },
       });
     } catch (error) {
       logger.error('[ExerciseController] Error creating manual exercises', {
@@ -227,8 +235,11 @@ export class ExerciseController {
         stack: error.stack,
       });
 
-      // Check if it's a validation error
-      if (error.message.includes('validation failed') || error.message.includes('rejected') || error.message.includes('Manual exercises are only allowed')) {
+      // Check if it's a validation error (needs_revision or validation failed)
+      if (error.message.includes('validation failed') || 
+          error.message.includes('rejected') || 
+          error.message.includes('needs_revision') ||
+          error.message.includes('Manual exercises are only allowed')) {
         return res.status(400).json({
           success: false,
           error: error.message,
@@ -236,7 +247,11 @@ export class ExerciseController {
         });
       }
 
-      next(error);
+      // Other errors - return generic failure
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to create exercises',
+      });
     }
   }
 

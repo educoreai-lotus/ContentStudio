@@ -396,82 +396,90 @@ export class CreateExercisesUseCase {
     // If answer contains code (not error), save it to devlab_exercises in topics table
     const htmlCode = answer;
     
-    // Save the answer code to devlab_exercises field in topics table
-    try {
-      await this.topicRepository.updateDevlabExercises(topic_id, htmlCode);
-      logger.info('[CreateExercisesUseCase] Saved answer code to devlab_exercises in topics table', {
-        topic_id,
-        answerLength: htmlCode.length,
-      });
-    } catch (updateError) {
-      logger.warn('[CreateExercisesUseCase] Failed to update devlab_exercises in topics table', {
-        topic_id,
-        error: updateError.message,
-      });
-      // Continue even if update fails - exercises will still be created
-    }
-
-    // Get validated exercises from response (if provided) or use original exercises
-    let validatedExercises = validationResult.exercises;
-    if (!Array.isArray(validatedExercises) || validatedExercises.length !== 4) {
-      // If exercises array not provided, use original exercises and add html_code
-      validatedExercises = exercises.map((ex, index) => ({
-        question_text: ex.question_text || '',
-        hint: ex.hint || null,
-        solution: ex.solution || null,
-        html_code: htmlCode, // Use the same HTML code for all exercises
-      }));
-    } else {
-      // If exercises array provided, add html_code to each
-      validatedExercises = validatedExercises.map((ex, index) => ({
-        ...ex,
-        html_code: ex.html_code || htmlCode, // Use exercise-specific code or fallback to answer
-      }));
-    }
-
-    // Get the next order_index for this topic
-    const existingExercises = await this.exerciseRepository.findByTopicId(topic_id);
-    const startOrderIndex = existingExercises.length;
-
-    // Create Exercise entities from validated response
-    const exerciseEntities = validatedExercises.map((exerciseData, index) => {
-      return new Exercise({
-        topic_id,
-        question_text: exerciseData.question_text || exercises[index].question_text || '',
+    // Prepare exercises data structure for devlab_exercises JSONB field
+    // Structure: { html: "...", questions: [...], metadata: {...} }
+    const exercisesData = {
+      html: htmlCode,
+      questions: exercises.map((ex, index) => {
+        const questionText = typeof ex === 'string' ? ex : (ex.question_text || '');
+        return {
+          order_index: index + 1,
+          question_text: questionText,
+          question_type: 'code',
+          programming_language: programming_language || '',
+          language: language || topic.language || 'en',
+          hint: typeof ex === 'object' ? (ex.hint || null) : null,
+          solution: typeof ex === 'object' ? (ex.solution || null) : null,
+          title: questionText,
+          description: questionText,
+        };
+      }),
+      metadata: {
+        generated_at: new Date().toISOString(),
+        topic_id: topic_id.toString(),
+        topic_name: topic_name || topic.topic_name || '',
         question_type: 'code',
-        programming_language: programming_language,
+        programming_language: programming_language || '',
         language: language || topic.language || 'en',
-        skills: skills || topic.skills || [],
-        hint: exerciseData.hint || exercises[index].hint || null,
-        solution: exerciseData.solution || exercises[index].solution || null,
-        html_code: exerciseData.html_code || htmlCode, // HTML/CSS/JS code for display
-        test_cases: exerciseData.test_cases || null,
-        difficulty: exerciseData.difficulty || null,
-        points: exerciseData.points || 10,
-        order_index: startOrderIndex + index,
+        amount: exercises.length,
         generation_mode: 'manual',
         validation_status: 'approved',
-        validation_message: null,
-        devlab_response: {
-          ...exerciseData,
-          verified: validationResult.verified,
-          answer: htmlCode, // Store the answer code
-        },
-        created_by,
-        status: 'active',
-      });
-    });
+        skills: skills || topic.skills || [],
+      },
+    };
 
-    // Save all 4 exercises to database
-    const createdExercises = await this.exerciseRepository.createBatch(exerciseEntities);
-
-    logger.info('[CreateExercisesUseCase] Successfully created 4 manual code exercises', {
+    // Save all exercises data to devlab_exercises in topics table (transaction)
+    logger.info('[CreateExercisesUseCase] Saving manual exercises to topics.devlab_exercises', {
       topic_id,
-      exercisesCount: createdExercises.length,
-      verified: validationResult.verified,
+      htmlLength: htmlCode.length,
+      questionsCount: exercises.length,
     });
+    
+    const { db } = await import('../../infrastructure/database/DatabaseConnection.js');
+    const client = await db.getClient();
+    
+    try {
+      await client.query('BEGIN');
+      logger.info('[CreateExercisesUseCase] Transaction BEGIN successful (manual exercises)', { topic_id });
+      
+      const updateSql = `
+        UPDATE topics
+        SET devlab_exercises = $1::jsonb
+        WHERE topic_id = $2
+      `;
+      const updateResult = await client.query(updateSql, [JSON.stringify(exercisesData), topic_id]);
+      logger.info('[CreateExercisesUseCase] Updated topics.devlab_exercises (manual exercises)', {
+        topic_id,
+        rowsAffected: updateResult.rowCount,
+      });
+      
+      await client.query('COMMIT');
+      
+      logger.info('[CreateExercisesUseCase] Successfully saved manual exercises to topics.devlab_exercises', {
+        topic_id,
+        exercisesCount: exercises.length,
+      });
 
-    return createdExercises;
+      // Return success response with clean data (for frontend)
+      return exercisesData.questions.map((q, index) => ({
+        exercise_id: `exercise_${topic_id}_${index + 1}`, // Generate ID for frontend
+        question_text: q.question_text,
+        difficulty: null,
+        language: q.language,
+        test_cases: null,
+        order_index: q.order_index,
+        hint: q.hint,
+      }));
+    } catch (dbError) {
+      await client.query('ROLLBACK');
+      logger.error('[CreateExercisesUseCase] Database save failed (manual exercises)', {
+        topic_id,
+        error: dbError.message,
+      });
+      throw new Error(`Failed to save exercises: ${dbError.message}`);
+    } finally {
+      client.release();
+    }
   }
 
   /**

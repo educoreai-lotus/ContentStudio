@@ -1155,6 +1155,34 @@ export class DevlabClient {
       const rawBodyString = coordinatorResponse.rawBodyString || JSON.stringify(responseData);
       const responseHeaders = coordinatorResponse.headers || {};
 
+      // Log full Coordinator response for manual exercises
+      logger.info('[DevlabClient] ========== FULL COORDINATOR RESPONSE (validateManualExercise) ==========', {
+        topicId: payloadData.topic_id,
+        responseDataType: typeof responseData,
+        responseDataKeys: responseData ? Object.keys(responseData) : [],
+        hasPayload: !!responseData.payload,
+        payloadType: typeof responseData.payload,
+        payloadPreview: typeof responseData.payload === 'string' 
+          ? responseData.payload.substring(0, 500) 
+          : (typeof responseData.payload === 'object' 
+            ? JSON.stringify(responseData.payload).substring(0, 500) 
+            : 'N/A'),
+        hasResponse: !!responseData.response,
+        responseKeys: responseData.response ? Object.keys(responseData.response) : [],
+        hasAnswer: !!responseData.response?.answer,
+        answerType: typeof responseData.response?.answer,
+        answerLength: responseData.response?.answer?.length || 0,
+        answerPreview: typeof responseData.response?.answer === 'string' 
+          ? responseData.response.answer.substring(0, 500) 
+          : (typeof responseData.response?.answer === 'object' 
+            ? JSON.stringify(responseData.response.answer).substring(0, 500) 
+            : 'N/A'),
+        rawBodyLength: rawBodyString?.length || 0,
+        rawBodyPreview: rawBodyString?.substring(0, 1000) || '',
+        fullResponseData: JSON.stringify(responseData, null, 2).substring(0, 2000),
+      });
+      logger.info('[DevlabClient] ========== END FULL COORDINATOR RESPONSE ==========');
+
       // Verify Coordinator signature
       const signature = responseHeaders['x-service-signature'] || responseHeaders['X-Service-Signature'];
       const signer = responseHeaders['x-service-name'] || responseHeaders['X-Service-Name'];
@@ -1290,20 +1318,69 @@ export class DevlabClient {
       }
 
       // answer can be:
-      // 1. A JSON stringified object with { success: true, data: { status: "needs_revision", message: "..." } }
+      // 1. A JSON stringified object with { success: true, data: { status: "needs_revision", message: "..." } } - validation failed
       // 2. A plain HTML/CSS/JS code string (if validation passed)
-      const answer = typeof responseStructure.response.answer === 'string' 
-        ? responseStructure.response.answer 
-        : '';
+      // 3. An object directly (if Coordinator already parsed it)
+      let answer = '';
+      let rawAnswer = responseStructure.response.answer;
+      
+      // Handle both object and string formats
+      if (typeof rawAnswer === 'object' && rawAnswer !== null) {
+        // If it's already an object, stringify it to check if it's a validation rejection
+        answer = JSON.stringify(rawAnswer);
+        logger.info('[DevlabClient] response.answer is already an object (validateManualExercise)', {
+          topicId: payloadData.topic_id,
+          answerKeys: Object.keys(rawAnswer),
+          hasSuccess: !!rawAnswer.success,
+          hasData: !!rawAnswer.data,
+          answerObject: JSON.stringify(rawAnswer, null, 2).substring(0, 1000),
+        });
+      } else if (typeof rawAnswer === 'string') {
+        // If it's a string, use it directly
+        answer = rawAnswer;
+        logger.info('[DevlabClient] response.answer is a string (validateManualExercise)', {
+          topicId: payloadData.topic_id,
+          answerLength: answer.length,
+          answerPreview: answer.substring(0, 200),
+          answerFirstChars: answer.substring(0, 50),
+          answerLastChars: answer.length > 50 ? answer.substring(answer.length - 50) : '',
+          looksLikeJSON: answer.trim().startsWith('{') || answer.trim().startsWith('['),
+          looksLikeHTML: answer.includes('<') && answer.includes('>'),
+        });
+      } else {
+        logger.error('[DevlabClient] response.answer is neither object nor string (validateManualExercise)', {
+          topicId: payloadData.topic_id,
+          answerType: typeof rawAnswer,
+          answerValue: rawAnswer,
+        });
+        throw new Error('Invalid answer format from Coordinator');
+      }
 
       // Try to parse answer as JSON to check if it's a validation rejection
       let parsedAnswer;
       let isNeedsRevision = false;
       let revisionMessage = '';
 
+      logger.info('[DevlabClient] Attempting to parse answer (validateManualExercise)', {
+        topicId: payloadData.topic_id,
+        answerLength: answer.length,
+        answerStartsWith: answer.substring(0, 50),
+        answerEndsWith: answer.length > 50 ? answer.substring(answer.length - 50) : '',
+      });
+
       try {
         parsedAnswer = JSON.parse(answer);
+        logger.info('[DevlabClient] Successfully parsed answer as JSON (validateManualExercise)', {
+          topicId: payloadData.topic_id,
+          parsedKeys: Object.keys(parsedAnswer),
+          hasSuccess: !!parsedAnswer.success,
+          hasData: !!parsedAnswer.data,
+          dataKeys: parsedAnswer.data ? Object.keys(parsedAnswer.data) : [],
+          fullParsedAnswer: JSON.stringify(parsedAnswer, null, 2).substring(0, 1000),
+        });
+        
         // Check if it's a validation rejection response
+        // Format: { success: true, data: { status: "needs_revision", message: "..." } }
         if (parsedAnswer && 
             parsedAnswer.success === true && 
             parsedAnswer.data && 
@@ -1311,17 +1388,36 @@ export class DevlabClient {
             typeof parsedAnswer.data.message === 'string') {
           isNeedsRevision = true;
           revisionMessage = parsedAnswer.data.message;
+          logger.warn('[DevlabClient] Detected validation rejection (needs_revision)', {
+            topicId: payloadData.topic_id,
+            revisionMessage: revisionMessage,
+            fullMessage: revisionMessage,
+          });
+        } else {
+          logger.info('[DevlabClient] Parsed answer is not a validation rejection (validateManualExercise)', {
+            topicId: payloadData.topic_id,
+            parsedAnswerStructure: JSON.stringify(parsedAnswer, null, 2).substring(0, 500),
+          });
         }
       } catch (parseError) {
-        // Not JSON, treat as plain code string
+        // Not JSON, treat as plain code string (validation passed)
         parsedAnswer = null;
+        logger.info('[DevlabClient] Answer is not JSON - treating as code (validation passed)', {
+          topicId: payloadData.topic_id,
+          answerLength: answer.length,
+          parseError: parseError.message,
+          answerPreview: answer.substring(0, 200),
+        });
       }
 
       // If validation failed (needs_revision), throw error with message
       if (isNeedsRevision) {
-        logger.warn('[DevlabClient] Manual exercises validation failed - needs revision', {
+        logger.warn('[DevlabClient] Manual exercises validation FAILED - needs revision', {
           topicId: payloadData.topic_id,
-          revisionMessage,
+          revisionMessage: revisionMessage,
+          fullMessage: revisionMessage,
+          answerLength: answer.length,
+          answerPreview: answer.substring(0, 500),
         });
         throw new Error(revisionMessage);
       }
@@ -1329,8 +1425,10 @@ export class DevlabClient {
       // If answer is empty or doesn't look like code, treat as error
       if (answer.length === 0) {
         const errorMessage = 'Exercise validation failed - empty response';
-        logger.warn('[DevlabClient] Manual exercises validation failed - empty answer', {
+        logger.warn('[DevlabClient] Manual exercises validation FAILED - empty answer', {
           topicId: payloadData.topic_id,
+          responseStructureKeys: Object.keys(responseStructure),
+          responseKeys: responseStructure.response ? Object.keys(responseStructure.response) : [],
         });
         throw new Error(errorMessage);
       }
@@ -1344,12 +1442,27 @@ export class DevlabClient {
                            answer.includes('css') ||
                            answer.includes('html');
 
+      logger.info('[DevlabClient] Checking if answer looks like code (validateManualExercise)', {
+        topicId: payloadData.topic_id,
+        answerLength: answer.length,
+        looksLikeCode,
+        hasHTML: answer.includes('<'),
+        hasFunction: answer.includes('function'),
+        hasConst: answer.includes('const'),
+        hasLet: answer.includes('let'),
+        hasBrace: answer.includes('{'),
+        hasCSS: answer.includes('css'),
+        hasHTMLKeyword: answer.includes('html'),
+      });
+
       if (!looksLikeCode) {
         // If it doesn't look like code, it might be an error message
         const errorMessage = answer || 'Exercise validation failed';
-        logger.warn('[DevlabClient] Manual exercises validation failed - answer does not look like code', {
+        logger.warn('[DevlabClient] Manual exercises validation FAILED - answer does not look like code', {
           topicId: payloadData.topic_id,
-          errorMessage: errorMessage.substring(0, 200),
+          errorMessage: errorMessage.substring(0, 500),
+          answerLength: answer.length,
+          answerPreview: answer.substring(0, 200),
         });
         throw new Error(errorMessage);
       }
@@ -1361,11 +1474,13 @@ export class DevlabClient {
         exercises: exercises, // Keep original exercises array for reference
       };
 
-      logger.info('[DevlabClient] Successfully received validation result from Coordinator', {
+      logger.info('[DevlabClient] ✅ Manual exercises validation PASSED - successfully received code from Coordinator', {
         topicId: payloadData.topic_id,
         answerLength: answer.length,
         hasAnswer: answer.length > 0,
         exercisesCount: exercises.length,
+        answerPreview: answer.substring(0, 300),
+        answerEnd: answer.length > 300 ? answer.substring(answer.length - 100) : '',
       });
 
       return finalResponse;
