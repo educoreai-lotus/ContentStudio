@@ -930,18 +930,57 @@ export class DevlabClient {
       }
 
       // Validate parsed structure
-      if (!parsedAnswer.data) {
+      // Handle both formats:
+      // 1. { success: true, data: { html, questions, metadata } } - from devlab-service
+      // 2. { data: { html, questions, metadata } } - direct format
+      let dataField = parsedAnswer.data;
+      
+      // If parsedAnswer has success field, it's from devlab-service format
+      if (parsedAnswer.success && parsedAnswer.data) {
+        dataField = parsedAnswer.data;
+        logger.info('[DevlabClient] Detected devlab-service format (with success field)', {
+          topicId: payloadData.topic_id,
+          hasData: !!dataField,
+          dataKeys: dataField ? Object.keys(dataField) : [],
+        });
+      } else if (parsedAnswer.data) {
+        dataField = parsedAnswer.data;
+        logger.info('[DevlabClient] Detected direct format (data field)', {
+          topicId: payloadData.topic_id,
+          hasData: !!dataField,
+          dataKeys: dataField ? Object.keys(dataField) : [],
+        });
+      } else {
         logger.error('[DevlabClient] Parsed answer missing data field', {
           topicId: payloadData.topic_id,
           parsedKeys: Object.keys(parsedAnswer),
+          parsedAnswerPreview: JSON.stringify(parsedAnswer).substring(0, 500),
         });
         throw new Error('Invalid Devlab response: missing data field');
       }
 
+      if (!dataField) {
+        logger.error('[DevlabClient] Data field is null or undefined', {
+          topicId: payloadData.topic_id,
+          parsedKeys: Object.keys(parsedAnswer),
+        });
+        throw new Error('Invalid Devlab response: data field is null or undefined');
+      }
+
       // Extract structured data
-      const htmlCode = parsedAnswer.data.html;
-      const questions = parsedAnswer.data.questions || [];
-      const metadata = parsedAnswer.data.metadata || {};
+      const htmlCode = dataField.html;
+      const questions = dataField.questions || [];
+      const metadata = dataField.metadata || {};
+      
+      logger.info('[DevlabClient] Extracted data from parsed answer', {
+        topicId: payloadData.topic_id,
+        hasHtml: !!htmlCode,
+        htmlLength: htmlCode?.length || 0,
+        hasQuestions: Array.isArray(questions),
+        questionsCount: questions?.length || 0,
+        hasMetadata: !!metadata,
+        metadataKeys: metadata ? Object.keys(metadata) : [],
+      });
 
       // Validate required fields
       if (!htmlCode || typeof htmlCode !== 'string' || htmlCode.length === 0) {
