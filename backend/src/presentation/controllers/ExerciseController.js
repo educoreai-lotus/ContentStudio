@@ -11,12 +11,12 @@ export class ExerciseController {
   constructor() {
     // Initialize repositories
     this.exerciseRepository = new PostgreSQLExerciseRepository();
-    const topicRepository = new PostgreSQLTopicRepository();
+    this.topicRepository = new PostgreSQLTopicRepository();
 
     // Initialize use case
     this.createExercisesUseCase = new CreateExercisesUseCase({
       exerciseRepository: this.exerciseRepository,
-      topicRepository,
+      topicRepository: this.topicRepository,
     });
   }
 
