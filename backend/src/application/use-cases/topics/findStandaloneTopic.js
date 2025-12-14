@@ -1,12 +1,6 @@
-import { readFileSync } from 'fs';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
-import { OpenAIClient } from '../../../infrastructure/external-apis/openai/OpenAIClient.js';
+import { loadDatabaseSchema, generateSQLQueryUsingSharedPrompt } from '../../../infrastructure/ai/SharedAIQueryBuilder.js';
 import { db } from '../../../infrastructure/database/DatabaseConnection.js';
 import { logger } from '../../../infrastructure/logging/Logger.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 
 /**
  * Finds a standalone archived topic by skill and preferred language.
@@ -28,9 +22,8 @@ export async function findStandaloneTopic(skillName, preferredLanguage) {
     return null;
   }
 
-  // Read migration file
-  const migrationPath = join(__dirname, '../../../../database/doc_migration_content_studio.sql');
-  const migrationContent = readFileSync(migrationPath, 'utf-8');
+  // Load database schema using shared function
+  const migrationContent = loadDatabaseSchema();
 
   // Build request body
   const requestBody = {
@@ -61,51 +54,22 @@ Return ONLY these columns (exact names):
 - format_order      (from templates)
 - devlab_exercises  (from topics)`;
 
-  // Initialize OpenAI client
-  const openaiApiKey = process.env.OPENAI_API_KEY;
-  if (!openaiApiKey) {
-    logger.error('[UseCase] OpenAI API key not configured');
-    return null;
-  }
-
-  const openaiClient = new OpenAIClient({ apiKey: openaiApiKey });
-
+  // Use the SHARED AI Query Builder prompt
+  // Services pass ONLY: schema, request body, business rules, task
   try {
-    const prompt = `You are an AI Query Builder for PostgreSQL. Generate ONLY a SELECT query (no explanations, no markdown).
-
-SCHEMA:
-${migrationContent}
-
-REQUEST:
-${JSON.stringify(requestBody, null, 2)}
-
-BUSINESS RULES:
-${businessRules}
-
-TASK:
-Return only the SQL SELECT query. Do NOT return any explanations.`;
-
-    const sql = await Promise.race([
-      openaiClient.generateText(prompt, {
-        model: 'gpt-3.5-turbo',
-        temperature: 0.1,
-        max_tokens: 500,
-        systemPrompt: 'You are a PostgreSQL query generator. Return only valid SQL queries, no explanations.',
-      }),
-      new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('OpenAI request timeout')), 9000)
-      ),
-    ]);
-
-    // Clean SQL (remove markdown code blocks if present)
-    const cleanSql = sql.replace(/```sql\n?/g, '').replace(/```\n?/g, '').trim();
-    const sanitizedSql = cleanSql.replace(/;$/, '');
-
-    // Validate SQL is a SELECT query
-    if (!sanitizedSql.toLowerCase().startsWith('select')) {
-      logger.warn('[UseCase] AI returned non-SELECT SQL. Skipping.');
-      return null;
-    }
+    const sanitizedSql = await generateSQLQueryUsingSharedPrompt({
+      schema: migrationContent,
+      requestBody: requestBody, // Pass original request body as-is
+      businessRules: businessRules,
+      task: `Generate a PostgreSQL SELECT query to find a standalone archived topic where:
+- topics.status = 'archived'
+- topics.language = preferred_language
+- topics.skills contains the requested skill (use @> operator)
+- topics.course_id IS NULL
+- topics.template_id IS NOT NULL
+- Must JOIN with templates table to get format_order
+- Return only ONE topic (ORDER BY created_at DESC LIMIT 1)`,
+    });
 
     // Check for placeholders (AI should return literal values, not placeholders)
     if (sanitizedSql.includes('$')) {

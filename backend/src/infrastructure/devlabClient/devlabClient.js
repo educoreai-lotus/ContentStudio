@@ -674,7 +674,7 @@ export class DevlabClient {
               parsedKeys: Object.keys(parsedAnswer),
             });
           }
-        } catch (parseError) {
+      } catch (parseError) {
           // If parsing fails, treat it as plain HTML string
           answer = rawAnswer;
           logger.info('[DevlabClient] response.answer is not JSON, using as plain HTML string', {

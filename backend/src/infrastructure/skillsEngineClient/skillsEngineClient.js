@@ -48,11 +48,22 @@ export class SkillsEngineClient {
 
     try {
       // Build envelope for Coordinator (standard structure)
+      // Note: skills array should be in response, not payload
       const envelope = {
         requester_service: 'content-studio',
         payload: payload,
-        response: {},
+        response: {
+          skills: [],
+        },
       };
+
+      // Log full request envelope (what we send to Coordinator)
+      logger.info('[SkillsEngineClient] Full request envelope to Coordinator (sendRequest)', {
+        envelope: JSON.stringify(envelope, null, 2),
+        envelopeKeys: Object.keys(envelope),
+        payloadKeys: Object.keys(payload),
+        fullPayload: JSON.stringify(payload, null, 2),
+      });
 
       logger.info('[SkillsEngineClient] Sending request to Skills Engine via Coordinator', {
         payloadKeys: Object.keys(payload),
@@ -244,13 +255,12 @@ export class SkillsEngineClient {
       topic,
     });
 
-    // Build payload object with empty fields
+    // Build payload object (skills will be in response, not payload)
     const payload = {
       trainer_id: trainerId,
       trainer_name: '',
       action: 'fetch this topic array of skills',
       topic: topic,
-      skills: [],
     };
 
     // Send request to Skills Engine (will return rollback mock data if it fails)

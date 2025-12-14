@@ -4,10 +4,9 @@ import { fillCourseBuilder } from '../../application/services/fillers/fillCourse
 import { fillCourseBuilderByCompany } from '../../application/services/fillers/fillCourseBuilderByCompany.js';
 import { fillDevLab } from '../../application/services/fillers/fillDevLab.js';
 import { fillSkillsEngine } from '../../application/services/fillers/fillSkillsEngine.js';
-import { fillAnalytics } from '../../application/services/fillers/fillAnalytics.js';
 import { fillManagement } from '../../application/services/fillers/fillManagement.js';
+import { fillAnalyticsUsingSharedPrompt } from '../../application/services/fillers/fillAnalyticsShared.js';
 import { parseCourseRequest } from '../../application/use-cases/course-builder/parseCourseRequest.js';
-import { getPreferredLanguage } from '../../application/use-cases/course-builder/getPreferredLanguage.js';
 import { searchSuitableCourse } from '../../application/use-cases/course-builder/searchSuitableCourse.js';
 import { fetchArchivedCourseContent } from '../../application/use-cases/course-builder/fetchArchivedCourseContent.js';
 import { mapSkillCoverage } from '../../application/use-cases/course-builder/mapSkillCoverage.js';
@@ -136,7 +135,10 @@ export class ContentMetricsController {
             break;
 
           case 'analytics':
-            filledData = await fillAnalytics(parsedPayload);
+          case 'learninganalytics':
+          case 'learning_analytics':
+          case 'LearningAnalytics':
+            filledData = await fillAnalyticsUsingSharedPrompt(parsedPayload);
             break;
 
           case 'management':
@@ -144,7 +146,7 @@ export class ContentMetricsController {
             break;
 
           case 'managementreporting':
-            // ManagementReporting uses the same structure as Analytics/Management
+            // ManagementReporting uses the same structure as LearningAnalytics/Management
             filledData = await fillManagement(parsedPayload);
             break;
 
@@ -284,34 +286,16 @@ export class ContentMetricsController {
         return res.status(200).send(stringifiedData);
       }
 
-      // Step 2: Get preferred language from Course Builder request (or fallback to Directory)
-      logger.info('[ContentMetricsController] Step 2: Getting preferred language');
-      let preferredLanguage;
+      // Step 2: Use preferred language from Course Builder request
+      // NOTE: preferred_language is now REQUIRED and always provided by Course Builder
+      // The fallback to Directory has been removed - Course Builder always sends preferred_language
+      logger.info('[ContentMetricsController] Step 2: Using preferred language from Course Builder request');
       
-      // Check if preferred_language is provided in the request from Course Builder
-      if (parsedRequest.preferred_language && typeof parsedRequest.preferred_language === 'string') {
-        const language = parsedRequest.preferred_language.trim().toLowerCase();
-        // Validate it's a valid language code (2-5 characters, alphanumeric or dash)
-        if (language.length >= 2 && language.length <= 5 && /^[a-z-]+$/i.test(language)) {
-          preferredLanguage = { preferred_language: language };
-          logger.info('[ContentMetricsController] Preferred language from Course Builder request', {
-            preferred_language: preferredLanguage.preferred_language,
-          });
-        } else {
-          logger.warn('[ContentMetricsController] Invalid preferred_language from Course Builder, falling back to Directory', {
-            provided: parsedRequest.preferred_language,
-          });
-          preferredLanguage = await getPreferredLanguage(parsedRequest);
-        }
-      } else {
-        // Fallback: Request preferred language from Directory if not provided by Course Builder
-        logger.info('[ContentMetricsController] Preferred language not in Course Builder request, requesting from Directory');
-        preferredLanguage = await getPreferredLanguage(parsedRequest);
-      }
+      // preferred_language is already validated in parseCourseRequest
+      const preferredLanguage = { preferred_language: parsedRequest.preferred_language };
       
-      logger.info('[ContentMetricsController] Preferred language retrieved', {
+      logger.info('[ContentMetricsController] Preferred language from Course Builder', {
         preferred_language: preferredLanguage.preferred_language,
-        source: parsedRequest.preferred_language ? 'course_builder' : 'directory',
       });
 
       // Step 2.5: If trainer_id is provided, search for existing topics by trainer

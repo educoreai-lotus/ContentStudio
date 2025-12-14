@@ -1,12 +1,6 @@
-import { readFileSync } from 'fs';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
-import { OpenAIClient } from '../../../infrastructure/external-apis/openai/OpenAIClient.js';
+import { loadDatabaseSchema, generateSQLQueryUsingSharedPrompt } from '../../../infrastructure/ai/SharedAIQueryBuilder.js';
 import { db } from '../../../infrastructure/database/DatabaseConnection.js';
 import { logger } from '../../../infrastructure/logging/Logger.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 
 /**
  * Step 4 - Fetches all archived course content with topics and contents.
@@ -34,9 +28,8 @@ export async function fetchArchivedCourseContent(courseRow) {
     return null;
   }
 
-  // Read migration file
-  const migrationPath = join(__dirname, '../../../../database/doc_migration_content_studio.sql');
-  const migrationContent = readFileSync(migrationPath, 'utf-8');
+  // Load database schema using shared function
+  const migrationContent = loadDatabaseSchema();
 
   // Build request body
   const requestBody = {
@@ -69,56 +62,19 @@ OUTPUT REQUIREMENTS:
 - Contents must be sorted according to template.format_order array
 - Return devlab_exercises from topics table if exists`;
 
-  // Initialize OpenAI client
-  const openaiApiKey = process.env.OPENAI_API_KEY;
-  if (!openaiApiKey) {
-    logger.error('[UseCase] OpenAI API key not configured');
-    return null;
-  }
-
-  const openaiClient = new OpenAIClient({ apiKey: openaiApiKey });
-
+  // Use the SHARED AI Query Builder prompt
+  // Services pass ONLY: schema, request body, business rules, task
   try {
-    const prompt = `You are an AI Query Builder for PostgreSQL. Generate ONLY a SELECT SQL query (no explanations, no markdown).
-
-SCHEMA:
-${migrationContent}
-
-REQUEST:
-${JSON.stringify(requestBody, null, 2)}
-
-BUSINESS RULES:
-${businessRules}
-
-TASK: Generate a PostgreSQL SELECT query that:
+    const sanitizedSql = await generateSQLQueryUsingSharedPrompt({
+      schema: migrationContent,
+      requestBody: requestBody, // Pass original request body as-is
+      businessRules: businessRules,
+      task: `Generate a PostgreSQL SELECT query that:
 1. Joins trainer_courses, topics, templates, content, and content_types
 2. Filters for archived course and archived topics matching the course_id and language
 3. Returns all necessary columns to build the response structure
-4. Orders contents by template.format_order array (map content_types.type_name to format_order positions)
-
-Return ONLY the SQL query, nothing else.`;
-
-    const sql = await Promise.race([
-      openaiClient.generateText(prompt, {
-        model: 'gpt-3.5-turbo',
-        temperature: 0.1,
-        max_tokens: 1000,
-        systemPrompt: 'You are a PostgreSQL query generator. Return only valid SQL queries, no explanations.',
-      }),
-      new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('OpenAI request timeout')), 9000)
-      ),
-    ]);
-
-    // Clean SQL (remove markdown code blocks if present)
-    const cleanSql = sql.replace(/```sql\n?/g, '').replace(/```\n?/g, '').trim();
-    const sanitizedSql = cleanSql.replace(/;$/, '');
-
-    // Validate SQL is a SELECT query
-    if (!sanitizedSql.toLowerCase().startsWith('select')) {
-      logger.warn('[UseCase] AI returned non-SELECT SQL. Skipping.');
-      return null;
-    }
+4. Orders contents by template.format_order array (map content_types.type_name to format_order positions)`,
+    });
 
     // Execute SQL safely
     await db.ready;
