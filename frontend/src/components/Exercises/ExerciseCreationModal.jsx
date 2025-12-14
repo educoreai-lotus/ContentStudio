@@ -51,40 +51,66 @@ export default function ExerciseCreationModal({ isOpen, onClose, topicId, topicN
       setLoadingExisting(true);
       const response = await exercisesService.getByTopicId(topicId);
       
+      // Debug logging
+      console.log('[ExerciseCreationModal] checkExistingExercises response:', {
+        response,
+        isArray: Array.isArray(response),
+        hasSuccess: response?.success,
+        hasExercises: !!response?.exercises,
+        exercisesIsArray: Array.isArray(response?.exercises),
+        exercisesLength: response?.exercises?.length || 0,
+        responseKeys: response ? Object.keys(response) : [],
+      });
+      
       // Check if we got exercises from the response
       // Response format: { success: true, exercises: [...], hints: [...], count: number }
       // Or old format: array directly
-      if (response && Array.isArray(response) && response.length > 0) {
+      
+      let exercisesToSet = [];
+      let hintsToSet = [];
+      
+      if (Array.isArray(response) && response.length > 0) {
         // Old format: array directly
-        setGeneratedExercises(response);
-        setHasExistingExercises(true);
-        setSuccessMessage('Existing exercises loaded');
-      } else if (response && response.success === true && response.exercises && Array.isArray(response.exercises) && response.exercises.length > 0) {
-        // New format: { success: true, exercises: [...], hints: [...] }
-        setGeneratedExercises(response.exercises);
-        if (response.hints && Array.isArray(response.hints)) {
-          setGeneratedHints(response.hints);
+        exercisesToSet = response;
+        console.log('[ExerciseCreationModal] Using old format (array)', { count: exercisesToSet.length });
+      } else if (response && typeof response === 'object') {
+        // New format: object with exercises property
+        if (response.exercises && Array.isArray(response.exercises) && response.exercises.length > 0) {
+          exercisesToSet = response.exercises;
+          if (response.hints && Array.isArray(response.hints)) {
+            hintsToSet = response.hints;
+          }
+          console.log('[ExerciseCreationModal] Using new format (object)', {
+            exercisesCount: exercisesToSet.length,
+            hintsCount: hintsToSet.length,
+            success: response.success,
+          });
         }
+      }
+      
+      if (exercisesToSet.length > 0) {
+        setGeneratedExercises(exercisesToSet);
+        setGeneratedHints(hintsToSet);
         setHasExistingExercises(true);
-        setSuccessMessage('Existing exercises loaded');
-      } else if (response && response.exercises && Array.isArray(response.exercises) && response.exercises.length > 0) {
-        // Fallback: check for exercises without success field
-        setGeneratedExercises(response.exercises);
-        if (response.hints && Array.isArray(response.hints)) {
-          setGeneratedHints(response.hints);
-        }
-        setHasExistingExercises(true);
-        setSuccessMessage('Existing exercises loaded');
+        setSuccessMessage(`Loaded ${exercisesToSet.length} existing ${exercisesToSet.length === 1 ? 'exercise' : 'exercises'}`);
+        console.log('[ExerciseCreationModal] Set existing exercises:', {
+          exercisesCount: exercisesToSet.length,
+          hintsCount: hintsToSet.length,
+          hasExistingExercises: true,
+        });
       } else {
         // No existing exercises
         setHasExistingExercises(false);
         setGeneratedExercises([]);
         setGeneratedHints([]);
+        console.log('[ExerciseCreationModal] No existing exercises found');
       }
     } catch (error) {
       console.error('[ExerciseCreationModal] Error checking existing exercises:', error);
       // If error, assume no exercises exist and show creation form
       setHasExistingExercises(false);
+      setGeneratedExercises([]);
+      setGeneratedHints([]);
     } finally {
       setLoadingExisting(false);
     }

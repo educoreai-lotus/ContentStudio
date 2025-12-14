@@ -44,12 +44,28 @@ export class ExerciseController {
       // First, try to get exercises from topics.devlab_exercises (new format)
       const topic = await this.topicRepository.findById(topicIdNum);
       
+      logger.info('[ExerciseController] Topic found', {
+        topic_id: topicIdNum,
+        hasTopic: !!topic,
+        hasDevlabExercises: !!topic?.devlab_exercises,
+        devlabExercisesType: topic?.devlab_exercises ? typeof topic.devlab_exercises : 'none',
+      });
+      
       if (topic && topic.devlab_exercises) {
         try {
           // devlab_exercises is stored as JSONB: { html: "...", questions: [...], metadata: {...} }
           const devlabData = typeof topic.devlab_exercises === 'string' 
             ? JSON.parse(topic.devlab_exercises) 
             : topic.devlab_exercises;
+          
+          logger.info('[ExerciseController] Parsed devlab_exercises', {
+            topic_id: topicIdNum,
+            hasDevlabData: !!devlabData,
+            hasQuestions: !!devlabData?.questions,
+            questionsIsArray: Array.isArray(devlabData?.questions),
+            questionsLength: devlabData?.questions?.length || 0,
+            devlabDataKeys: devlabData ? Object.keys(devlabData) : [],
+          });
           
           if (devlabData && devlabData.questions && Array.isArray(devlabData.questions) && devlabData.questions.length > 0) {
             logger.info('[ExerciseController] Found exercises in topics.devlab_exercises', {
