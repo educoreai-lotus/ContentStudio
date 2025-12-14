@@ -78,7 +78,7 @@ export class ExerciseController {
         theoretical_question_type,
       });
 
-      const exercises = await this.createExercisesUseCase.generateAIExercises({
+      const result = await this.createExercisesUseCase.generateAIExercises({
         topic_id,
         question_type,
         programming_language,
@@ -88,17 +88,20 @@ export class ExerciseController {
         created_by: trainerId,
       });
 
-      return res.status(201).json({
-        success: true,
-        exercises: exercises.map(ex => ex.toJSON()),
-        count: exercises.length,
-      });
+      // Handle new response format: { success: true/false, ... }
+      if (result && result.success === true) {
+        return res.status(201).json(result);
+      } else {
+        // Failure response - minimal, no error details (200 status per requirements)
+        return res.status(200).json({ success: false });
+      }
     } catch (error) {
       logger.error('[ExerciseController] Error generating AI exercises', {
         error: error.message,
         stack: error.stack,
       });
-      next(error);
+      // Return minimal failure response (200 status per requirements)
+      return res.status(200).json({ success: false });
     }
   }
 

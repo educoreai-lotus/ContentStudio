@@ -625,13 +625,22 @@ export class DevlabClient {
       // Coordinator may return the response in different formats:
       // 1. { response: { answer: "..." } } - envelope format from devlab-service (PRIORITY)
       // 2. { success: true, data: { answer: "..." } } - new format
-      // 3. { data: { payload: "..." } } - payload format
-      // 4. { payload: "..." } - old format
-      // Priority: 1. response.answer (envelope format), 2. data.answer (new format), 3. data.payload (JSON stringified), 4. payload (old format)
+      // 3. { success: true, data: { html: "..." } } - direct HTML format
+      // 4. { data: { payload: "..." } } - payload format
+      // 5. { payload: "..." } - old format
+      // Priority: 1. response.answer (envelope format), 2. data.html (direct), 3. data.answer (new format), 4. data.payload (JSON stringified), 5. payload (old format)
       let answer = null;
       let responseStructure = null;
       
-      // First, check if we have response.answer (envelope format from devlab-service)
+      // First, check if we have data.html directly (direct HTML format from Coordinator)
+      if (responseData.data?.html && typeof responseData.data.html === 'string') {
+        answer = responseData.data.html;
+        logger.info('[DevlabClient] Found data.html directly (direct HTML format)', {
+          htmlLength: answer.length,
+          htmlPreview: answer.substring(0, 100),
+        });
+      }
+      // Second, check if we have response.answer (envelope format from devlab-service)
       // This is the format devlab-service returns: { requester_service, payload, response: { answer: "..." } }
       // Also check parsedRawBody in case Coordinator wraps it differently
       // Also check metadata.response.answer in case Coordinator puts it there
@@ -660,20 +669,15 @@ export class DevlabClient {
             htmlLength: parsedAnswer.data?.html?.length || 0,
           });
           
-          // Extract HTML from parsed answer (devlab-service format: { success, data: { html, questions, metadata } })
-          if (parsedAnswer.data?.html && typeof parsedAnswer.data.html === 'string') {
-            answer = parsedAnswer.data.html;
-            logger.info('[DevlabClient] Extracted HTML from response.answer', {
-              htmlLength: answer.length,
-              htmlPreview: answer.substring(0, 100),
-            });
-          } else {
-            // Fallback: use the raw answer if no HTML field found
-            answer = rawAnswer;
-            logger.warn('[DevlabClient] No HTML field in parsed response.answer, using raw answer', {
-              parsedKeys: Object.keys(parsedAnswer),
-            });
-          }
+          // Return the raw answer string (stringified JSON) - will be parsed in CreateExercisesUseCase
+          // The answer contains the full structured response: { data: { html, questions, metadata } }
+          answer = rawAnswer;
+          logger.info('[DevlabClient] Returning raw response.answer (stringified JSON) for parsing in CreateExercisesUseCase', {
+            answerLength: answer.length,
+            answerPreview: answer.substring(0, 100),
+            hasData: !!parsedAnswer.data,
+            dataKeys: parsedAnswer.data ? Object.keys(parsedAnswer.data) : [],
+          });
       } catch (parseError) {
           // If parsing fails, treat it as plain HTML string
           answer = rawAnswer;
@@ -751,20 +755,15 @@ export class DevlabClient {
                 htmlLength: parsedAnswer.data?.html?.length || 0,
               });
             
-            // Extract HTML from parsed answer (devlab-service format: { success, data: { html, questions, metadata } })
-            if (parsedAnswer.data?.html && typeof parsedAnswer.data.html === 'string') {
-              answer = parsedAnswer.data.html;
-              logger.info('[DevlabClient] Extracted HTML from parsed answer', {
-                htmlLength: answer.length,
-                htmlPreview: answer.substring(0, 100),
-              });
-            } else {
-              // Fallback: use the raw answer if no HTML field found
-              answer = rawAnswer;
-              logger.warn('[DevlabClient] No HTML field in parsed answer, using raw answer', {
-                parsedKeys: Object.keys(parsedAnswer),
-              });
-            }
+            // Return the raw answer string (stringified JSON) - will be parsed in CreateExercisesUseCase
+            // The answer contains the full structured response: { data: { html, questions, metadata } }
+            answer = rawAnswer;
+            logger.info('[DevlabClient] Returning raw data.answer (stringified JSON) for parsing in CreateExercisesUseCase', {
+              answerLength: answer.length,
+              answerPreview: answer.substring(0, 100),
+              hasData: !!parsedAnswer.data,
+              dataKeys: parsedAnswer.data ? Object.keys(parsedAnswer.data) : [],
+            });
           } catch (parseError) {
             // If parsing fails, treat it as plain HTML string
             answer = rawAnswer;
@@ -884,35 +883,76 @@ export class DevlabClient {
         throw new Error('Invalid response from Coordinator: received service name instead of exercise code. This indicates a Coordinator routing or processing error.');
       }
 
-      // Check if answer is an error message or code
-      // Error messages typically don't contain HTML/CSS/JS code patterns
-      const isError = answer.length === 0 || 
-        answer.toLowerCase().includes('error') ||
-        answer.toLowerCase().includes('failed') ||
-        answer.toLowerCase().includes('invalid') ||
-        answer.toLowerCase().includes('not match') ||
-        answer.toLowerCase().includes('does not match') ||
-        (!answer.includes('<') && !answer.includes('function') && !answer.includes('const') && !answer.includes('let'));
-
-      if (isError) {
-        const errorMessage = answer || 'Exercise validation failed';
-        logger.warn('[DevlabClient] AI exercises generation failed', {
+      // answer is a stringified JSON containing: { data: { html: "...", questions: [...], metadata: {...} } }
+      // Parse it and return structured data
+      let parsedAnswer;
+      try {
+        parsedAnswer = JSON.parse(answer);
+        logger.info('[DevlabClient] Parsed answer as JSON', {
           topicId: payloadData.topic_id,
-          errorMessage,
+          hasData: !!parsedAnswer.data,
+          dataKeys: parsedAnswer.data ? Object.keys(parsedAnswer.data) : [],
+          hasHtml: !!parsedAnswer.data?.html,
+          hasQuestions: Array.isArray(parsedAnswer.data?.questions),
+          questionsCount: parsedAnswer.data?.questions?.length || 0,
         });
-        throw new Error(errorMessage);
+      } catch (parseError) {
+        logger.error('[DevlabClient] Failed to parse answer as JSON', {
+          topicId: payloadData.topic_id,
+          error: parseError.message,
+          answerPreview: answer.substring(0, 200),
+        });
+        throw new Error(`Failed to parse Devlab response: ${parseError.message}`);
       }
 
-      // If answer contains code (not error), return it
+      // Validate parsed structure
+      if (!parsedAnswer.data) {
+        logger.error('[DevlabClient] Parsed answer missing data field', {
+          topicId: payloadData.topic_id,
+          parsedKeys: Object.keys(parsedAnswer),
+        });
+        throw new Error('Invalid Devlab response: missing data field');
+      }
+
+      // Extract structured data
+      const htmlCode = parsedAnswer.data.html;
+      const questions = parsedAnswer.data.questions || [];
+      const metadata = parsedAnswer.data.metadata || {};
+
+      // Validate required fields
+      if (!htmlCode || typeof htmlCode !== 'string' || htmlCode.length === 0) {
+        logger.error('[DevlabClient] Missing or invalid html in parsed answer', {
+          topicId: payloadData.topic_id,
+          hasHtml: !!htmlCode,
+          htmlType: typeof htmlCode,
+        });
+        throw new Error('Invalid Devlab response: missing or empty html field');
+      }
+
+      if (!Array.isArray(questions) || questions.length === 0) {
+        logger.error('[DevlabClient] Missing or empty questions array in parsed answer', {
+          topicId: payloadData.topic_id,
+          hasQuestions: !!questions,
+          questionsType: typeof questions,
+          questionsLength: questions?.length || 0,
+        });
+        throw new Error('Invalid Devlab response: missing or empty questions array');
+      }
+
+      // Return structured data (ready for CreateExercisesUseCase)
       const finalResponse = {
-        answer: answer, // The code (HTML/CSS/JS) - will be saved to DB in devlab_exercises
+        html: htmlCode,
+        questions: questions,
+        metadata: metadata,
+        rawAnswer: answer, // Keep original for debugging
       };
 
-      logger.info('[DevlabClient] Successfully received AI exercises from Coordinator', {
+      logger.info('[DevlabClient] Successfully parsed and returned AI exercises from Coordinator', {
         topicId: payloadData.topic_id,
         questionType: questionType,
-        answerLength: answer.length,
-        hasAnswer: answer.length > 0,
+        htmlLength: htmlCode.length,
+        questionsCount: questions.length,
+        hasMetadata: Object.keys(metadata).length > 0,
       });
 
       return finalResponse;

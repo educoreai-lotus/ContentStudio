@@ -11,6 +11,8 @@ export default function ExerciseCreationModal({ isOpen, onClose, topicId, topicN
   const [mode, setMode] = useState('ai'); // 'ai' or 'manual'
   const [loading, setLoading] = useState(false);
   const [generatedExercises, setGeneratedExercises] = useState([]);
+  const [generatedHints, setGeneratedHints] = useState([]); // Hints from AI generation
+  const [successMessage, setSuccessMessage] = useState(null); // Success message from backend
   const [manualExercises, setManualExercises] = useState([]);
   // For manual code exercises: always 4 exercises together
   const [manualExercisesArray, setManualExercisesArray] = useState([
@@ -35,6 +37,9 @@ export default function ExerciseCreationModal({ isOpen, onClose, topicId, topicN
     try {
       setLoading(true);
       setError(null);
+      setSuccessMessage(null);
+      setGeneratedExercises([]);
+      setGeneratedHints([]);
 
       const response = await exercisesService.generateAI({
         topic_id: parseInt(topicId),
@@ -45,17 +50,29 @@ export default function ExerciseCreationModal({ isOpen, onClose, topicId, topicN
         theoretical_question_type: aiConfig.question_type === 'theoretical' ? aiConfig.theoretical_question_type : undefined,
       });
 
-      if (response.success && response.exercises) {
-        setGeneratedExercises(response.exercises);
+      // New response format: { success: true, message: "...", data: { questions: [...], hints: [...] } }
+      if (response.success === true && response.data) {
+        setGeneratedExercises(response.data.questions || []);
+        setGeneratedHints(response.data.hints || []);
+        setSuccessMessage(response.message || 'Questions generated successfully');
+      } else if (response.success === false) {
+        // Failure response - minimal, no error details
+        setError('Failed to generate exercises. Please try again.');
       } else {
+        // Fallback for unexpected format
         setError('Failed to generate exercises');
       }
     } catch (error) {
       console.error('Error generating AI exercises:', error);
-      // Error format from backend: { success: false, error: { message: "..." } }
+      // Error format from backend: { success: false }
       // Or from apiClient interceptor: { error: { message: "..." } }
-      const errorMessage = error?.error?.message || error?.message || 'Failed to generate exercises';
-      setError(errorMessage);
+      if (error?.response?.data?.success === false) {
+        // Backend returned { success: false } - minimal error
+        setError('Failed to generate exercises. Please try again.');
+      } else {
+        const errorMessage = error?.error?.message || error?.message || 'Failed to generate exercises';
+        setError(errorMessage);
+      }
     } finally {
       setLoading(false);
     }

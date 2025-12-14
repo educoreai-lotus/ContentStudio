@@ -63,121 +63,191 @@ export class CreateExercisesUseCase {
       theoretical_question_type: theoretical_question_type, // Only for theoretical questions
     };
 
-    // Call Dabla to generate exercises
+    // Call Devlab to generate exercises
     let dablaResponse;
     try {
       dablaResponse = await generateAIExercises(exerciseRequest);
     } catch (error) {
-      logger.error('[CreateExercisesUseCase] Failed to generate AI exercises from Dabla', {
+      logger.error('[CreateExercisesUseCase] Failed to generate AI exercises from Devlab', {
         topic_id,
         error: error.message,
       });
-      throw new Error(`Failed to generate AI exercises: ${error.message}`);
+      // Return failure response - no error details
+      return { success: false };
     }
 
-    // Validate response structure
-    // Coordinator returns: { answer: "string" }
-    // answer is ALWAYS a plain string (code HTML/CSS/JS or error message) - NEVER JSON
-    // NO verified field in response! Only answer.
-    if (!dablaResponse || !dablaResponse.answer) {
-      throw new Error('Invalid response from Coordinator: missing answer');
-    }
-
-    const answer = dablaResponse.answer;
-
-    // Check if answer is an error message or code
-    // Error messages typically don't contain HTML/CSS/JS code patterns
-    const isError = answer.length === 0 || 
-      answer.toLowerCase().includes('error') ||
-      answer.toLowerCase().includes('failed') ||
-      answer.toLowerCase().includes('invalid') ||
-      answer.toLowerCase().includes('not match') ||
-      answer.toLowerCase().includes('does not match') ||
-      (!answer.includes('<') && !answer.includes('function') && !answer.includes('const') && !answer.includes('let'));
-
-    if (isError) {
-      const errorMessage = answer || 'Exercise generation failed';
-      logger.warn('[CreateExercisesUseCase] Coordinator returned error message', {
+    // Validate response structure (DevlabClient now returns structured data directly)
+    if (!dablaResponse || !dablaResponse.html || !dablaResponse.questions) {
+      logger.error('[CreateExercisesUseCase] Invalid response from DevlabClient: missing html or questions', {
         topic_id,
-        errorMessage,
+        hasHtml: !!dablaResponse?.html,
+        hasQuestions: Array.isArray(dablaResponse?.questions),
+        questionsCount: dablaResponse?.questions?.length || 0,
       });
-      throw new Error(errorMessage);
+      return { success: false };
     }
 
-    // If answer contains code (not error), save it to devlab_exercises in topics table
-    // Save the answer code to devlab_exercises field in topics table
+    // Extract structured data (already parsed by DevlabClient)
+    const htmlCode = dablaResponse.html;
+    const questions = dablaResponse.questions;
+    const metadata = dablaResponse.metadata || {};
+
+    // Validate required fields
+    if (!htmlCode || typeof htmlCode !== 'string' || htmlCode.length === 0) {
+      logger.error('[CreateExercisesUseCase] Missing or invalid html field', {
+        topic_id,
+        hasHtml: !!htmlCode,
+        htmlType: typeof htmlCode,
+      });
+      return { success: false };
+    }
+
+    if (!Array.isArray(questions) || questions.length === 0) {
+      logger.error('[CreateExercisesUseCase] Missing or empty questions array', {
+        topic_id,
+        hasQuestions: !!questions,
+        questionsType: typeof questions,
+        questionsLength: questions?.length || 0,
+      });
+      return { success: false };
+    }
+
+    // Save to database atomically (transaction)
+    const { db } = await import('../../infrastructure/database/DatabaseConnection.js');
+    const client = await db.getClient();
+    let createdExercises = [];
+    let hints = [];
+
     try {
-      await this.topicRepository.updateDevlabExercises(topic_id, answer);
-      logger.info('[CreateExercisesUseCase] Saved answer code to devlab_exercises in topics table', {
-        topic_id,
-        answerLength: answer.length,
+      await client.query('BEGIN');
+
+      // Save HTML code to devlab_exercises in topics table (using client for transaction)
+      const updateSql = `
+        UPDATE topics
+        SET devlab_exercises = $1::jsonb
+        WHERE topic_id = $2
+      `;
+      await client.query(updateSql, [JSON.stringify(htmlCode), topic_id]);
+
+      // Create Exercise entities from questions
+      const exerciseEntities = questions.map((questionData, index) => {
+        // Extract question fields
+        const questionText = questionData.title || questionData.description || questionData.question_text || '';
+        const questionDescription = questionData.description || questionData.title || '';
+        const questionDifficulty = questionData.difficulty || null;
+        const questionLanguage = questionData.language || language || topic.language || 'en';
+        const testCases = questionData.testCases || questionData.test_cases || null;
+        const expectsReturn = questionData.expectsReturn || questionData.expects_return || null;
+        const hintText = questionData.hint || null;
+
+        return {
+          topic_id,
+          question_text: questionText,
+          question_type: question_type || 'code',
+          programming_language: programming_language || '',
+          language: questionLanguage,
+          skills: topic.skills || [],
+          hint: hintText,
+          solution: questionData.solution || null,
+          test_cases: testCases,
+          difficulty: questionDifficulty,
+          points: 10,
+          order_index: index,
+          generation_mode: 'ai',
+          validation_status: 'approved',
+          validation_message: null,
+          devlab_response: {
+            html: htmlCode,
+            question: questionData,
+            metadata: metadata,
+            generated_at: metadata.generated_at || new Date().toISOString(),
+          },
+          created_by,
+          status: 'active',
+        };
       });
-    } catch (updateError) {
-      logger.warn('[CreateExercisesUseCase] Failed to update devlab_exercises in topics table', {
+
+      // Save all exercises to database (using client for transaction)
+      const insertQuery = `
+        INSERT INTO exercises (
+          topic_id, question_text, question_type, programming_language, language,
+          skills, hint, solution, test_cases, difficulty, points, order_index,
+          generation_mode, validation_status, validation_message, devlab_response,
+          created_by, status
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+        RETURNING *
+      `;
+
+      for (const exercise of exerciseEntities) {
+        const values = [
+          exercise.topic_id,
+          exercise.question_text,
+          exercise.question_type,
+          exercise.programming_language || null,
+          exercise.language || 'en',
+          exercise.skills || [],
+          exercise.hint || null,
+          exercise.solution || null,
+          exercise.test_cases ? JSON.stringify(exercise.test_cases) : null,
+          exercise.difficulty || null,
+          exercise.points || 10,
+          exercise.order_index || 0,
+          exercise.generation_mode,
+          exercise.validation_status || 'pending',
+          exercise.validation_message || null,
+          exercise.devlab_response ? JSON.stringify(exercise.devlab_response) : null,
+          exercise.created_by,
+          exercise.status || 'active',
+        ];
+
+        const result = await client.query(insertQuery, values);
+        const row = result.rows[0];
+        const createdExercise = this.exerciseRepository.mapRowToExercise(row);
+        createdExercises.push(createdExercise);
+
+        // Collect hints with question_id
+        if (createdExercise.hint) {
+          hints.push({
+            question_id: createdExercise.exercise_id,
+            hint: createdExercise.hint,
+          });
+        }
+      }
+
+      await client.query('COMMIT');
+
+      logger.info('[CreateExercisesUseCase] Successfully created AI exercises', {
         topic_id,
-        error: updateError.message,
+        exercisesCount: createdExercises.length,
+        hintsCount: hints.length,
       });
-      // Continue even if update fails - exercises will still be created
+
+      // Return success response with clean data
+      return {
+        success: true,
+        message: 'Questions generated successfully',
+        data: {
+          questions: createdExercises.map(ex => ({
+            exercise_id: ex.exercise_id,
+            question_text: ex.question_text,
+            difficulty: ex.difficulty,
+            language: ex.language,
+            test_cases: ex.test_cases,
+            order_index: ex.order_index,
+          })),
+          hints: hints,
+        },
+      };
+    } catch (dbError) {
+      await client.query('ROLLBACK');
+      logger.error('[CreateExercisesUseCase] Database save failed', {
+        topic_id,
+        error: dbError.message,
+      });
+      return { success: false };
+    } finally {
+      client.release();
     }
-
-    // Check if exercises array is provided, or if we need to create from answer
-    let exercisesArray = dablaResponse.exercises;
-    
-    // If no exercises array, create a single exercise from the answer code
-    if (!Array.isArray(exercisesArray) || exercisesArray.length === 0) {
-      // Create a single exercise from the answer code (HTML/CSS/JS)
-      exercisesArray = [{
-        question_text: `Exercise for ${topic.topic_name}`,
-        solution: answer, // The HTML/CSS/JS code
-        html_code: answer, // The HTML/CSS/JS code for display
-      }];
-    }
-
-    // Log Coordinator response details
-    logger.info('[CreateExercisesUseCase] Coordinator response received', {
-      topic_id,
-      exercisesCount: exercisesArray.length,
-      hasAnswer: !!answer,
-      answerLength: answer.length,
-    });
-
-    // Create Exercise entities from Coordinator response
-    const exercises = exercisesArray.map((exerciseData, index) => {
-      return new Exercise({
-        topic_id,
-        question_text: exerciseData.question_text || exerciseData.question || '',
-        question_type: question_type || 'code',
-        programming_language: programming_language || '',
-        language: language || topic.language || 'en',
-        skills: topic.skills || [],
-        hint: exerciseData.hint || null,
-        solution: exerciseData.solution || exerciseData.html_code || answer || null,
-        html_code: exerciseData.html_code || answer || null, // HTML/CSS/JS code for display
-        test_cases: exerciseData.test_cases || null,
-        difficulty: exerciseData.difficulty || null,
-        points: exerciseData.points || 10,
-        order_index: index,
-        generation_mode: 'ai',
-        validation_status: 'approved', // AI exercises are auto-approved
-        validation_message: null,
-        devlab_response: {
-          ...exerciseData,
-          answer: answer, // Store the answer code
-        }, // Store full response including answer
-        created_by,
-        status: 'active',
-      });
-    });
-
-    // Save all exercises to database
-    const createdExercises = await this.exerciseRepository.createBatch(exercises);
-
-    logger.info('[CreateExercisesUseCase] Successfully created AI exercises', {
-      topic_id,
-      exercisesCount: createdExercises.length,
-    });
-
-    return createdExercises;
   }
 
   /**
