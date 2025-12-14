@@ -280,6 +280,7 @@ export class DevlabClient {
       const payloadData = {
         action: 'generate-questions',
         description: 'Generate devlab AI exercises',
+        targetService: "devlab-service",
         topic_id: exerciseRequest.topic_id || '',
         topic_name: exerciseRequest.topic_name || '',
         question_type: questionType,
