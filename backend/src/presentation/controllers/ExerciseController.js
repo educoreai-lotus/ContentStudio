@@ -66,11 +66,18 @@ export class ExerciseController {
               test_cases: q.test_cases || null,
               order_index: q.order_index || (index + 1),
               hint: q.hint || null,
+              question_type: q.question_type || 'code', // Include question_type
               // Include theoretical question specific fields
               ...(q.question_type === 'theoretical' && {
                 options: q.options || null,
                 explanation: q.explanation || null,
                 type: q.type || 'mcq',
+                solution: q.solution || null, // Include solution for theoretical
+              }),
+              // Include code question specific fields
+              ...(q.question_type === 'code' && {
+                programming_language: q.programming_language || null,
+                solution: q.solution || null,
               }),
             }));
             

@@ -53,13 +53,22 @@ export default function ExerciseCreationModal({ isOpen, onClose, topicId, topicN
       
       // Check if we got exercises from the response
       // Response format: { success: true, exercises: [...], hints: [...], count: number }
+      // Or old format: array directly
       if (response && Array.isArray(response) && response.length > 0) {
         // Old format: array directly
         setGeneratedExercises(response);
         setHasExistingExercises(true);
         setSuccessMessage('Existing exercises loaded');
+      } else if (response && response.success === true && response.exercises && Array.isArray(response.exercises) && response.exercises.length > 0) {
+        // New format: { success: true, exercises: [...], hints: [...] }
+        setGeneratedExercises(response.exercises);
+        if (response.hints && Array.isArray(response.hints)) {
+          setGeneratedHints(response.hints);
+        }
+        setHasExistingExercises(true);
+        setSuccessMessage('Existing exercises loaded');
       } else if (response && response.exercises && Array.isArray(response.exercises) && response.exercises.length > 0) {
-        // New format: { exercises: [...], hints: [...] }
+        // Fallback: check for exercises without success field
         setGeneratedExercises(response.exercises);
         if (response.hints && Array.isArray(response.hints)) {
           setGeneratedHints(response.hints);
@@ -294,73 +303,119 @@ export default function ExerciseCreationModal({ isOpen, onClose, topicId, topicN
               <div>
                 <h3 className="text-lg font-semibold mb-4">Existing Exercises ({generatedExercises.length})</h3>
                 <div className="space-y-4">
-                  {generatedExercises.map((exercise, index) => (
-                    <div
-                      key={exercise.exercise_id || index}
-                      className="border border-gray-200 dark:border-[#334155] rounded-lg p-4 bg-gray-50 dark:bg-[#0f172a]"
-                    >
-                      <div className="flex justify-between items-start mb-2">
-                        <span className="font-semibold">Exercise {exercise.order_index || (index + 1)}</span>
-                        <div className="flex gap-2">
-                          <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200 px-2 py-1 rounded">
-                            Existing
-                          </span>
-                          {exercise.type === 'mcq' && (
-                            <span className="text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-200 px-2 py-1 rounded">
-                              Multiple Choice
+                  {generatedExercises.map((exercise, index) => {
+                    const isTheoretical = exercise.question_type === 'theoretical' || exercise.type === 'mcq';
+                    const isCode = exercise.question_type === 'code' || (!isTheoretical && exercise.hint);
+                    
+                    return (
+                      <div
+                        key={exercise.exercise_id || index}
+                        className="border border-gray-200 dark:border-[#334155] rounded-lg p-4 bg-gray-50 dark:bg-[#0f172a] shadow-sm"
+                      >
+                        <div className="flex justify-between items-start mb-3">
+                          <span className="font-semibold text-base">Exercise {exercise.order_index || (index + 1)}</span>
+                          <div className="flex gap-2 flex-wrap">
+                            <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200 px-2 py-1 rounded font-medium">
+                              Existing
                             </span>
-                          )}
-                          {exercise.difficulty && (
-                            <span className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 px-2 py-1 rounded capitalize">
-                              {exercise.difficulty}
-                            </span>
-                          )}
+                            {isTheoretical && exercise.type === 'mcq' && (
+                              <span className="text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-200 px-2 py-1 rounded font-medium">
+                                Multiple Choice
+                              </span>
+                            )}
+                            {exercise.difficulty && (
+                              <span className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 px-2 py-1 rounded capitalize font-medium">
+                                {exercise.difficulty}
+                              </span>
+                            )}
+                            {isCode && exercise.programming_language && (
+                              <span className="text-xs bg-indigo-100 dark:bg-indigo-900/30 text-indigo-800 dark:text-indigo-200 px-2 py-1 rounded font-medium">
+                                {exercise.programming_language}
+                              </span>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                      <p className="text-sm mb-2 font-medium">{exercise.question_text}</p>
-                      
-                      {/* Show options for theoretical multiple choice questions */}
-                      {exercise.options && Array.isArray(exercise.options) && exercise.options.length > 0 && (
-                        <div className="mb-3">
-                          <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Options:</p>
-                          <ul className="list-disc list-inside space-y-1">
-                            {exercise.options.map((option, optIndex) => (
-                              <li key={optIndex} className="text-xs text-gray-600 dark:text-gray-400">
-                                {option}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                      
-                      {/* Show explanation for theoretical questions */}
-                      {exercise.explanation && (
-                        <div className="mb-2 p-2 bg-blue-50 dark:bg-blue-900/20 rounded">
-                          <p className="text-xs font-semibold text-blue-800 dark:text-blue-200 mb-1">Explanation:</p>
-                          <p className="text-xs text-blue-700 dark:text-blue-300">{exercise.explanation}</p>
-                        </div>
-                      )}
-                      
-                      {/* Show hint for code questions */}
-                      {exercise.hint && !exercise.explanation && (
-                        <p className="text-xs text-gray-600 dark:text-gray-400">
-                          <strong>Hint:</strong> {exercise.hint}
+                        
+                        {/* Question Text */}
+                        <p className="text-sm mb-3 font-medium text-gray-800 dark:text-gray-200 leading-relaxed">
+                          {exercise.question_text}
                         </p>
-                      )}
-                      
-                      {/* Show hint from hints array if available */}
-                      {!exercise.hint && !exercise.explanation && generatedHints.length > 0 && (
-                        (() => {
-                          const hintForExercise = generatedHints.find(h => h.question_id === exercise.exercise_id);
-                          return hintForExercise ? (
-                            <p className="text-xs text-gray-600 dark:text-gray-400">
-                              <strong>Hint:</strong> {hintForExercise.hint}
-                            </p>
-                          ) : null;
-                        })()
-                      )}
-                    </div>
-                  ))}
+                        
+                        {/* Theoretical Questions: Show Options and Explanation */}
+                        {isTheoretical && (
+                          <>
+                            {/* Show options for theoretical multiple choice questions */}
+                            {exercise.options && Array.isArray(exercise.options) && exercise.options.length > 0 && (
+                              <div className="mb-3 p-3 bg-white dark:bg-[#1e293b] rounded-lg border border-gray-200 dark:border-[#334155]">
+                                <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2 uppercase tracking-wide">
+                                  <i className="fas fa-list-ul mr-1"></i>
+                                  Options:
+                                </p>
+                                <ul className="space-y-2">
+                                  {exercise.options.map((option, optIndex) => (
+                                    <li key={optIndex} className="text-sm text-gray-700 dark:text-gray-300 flex items-start">
+                                      <span className="mr-2 font-semibold text-indigo-600 dark:text-indigo-400">
+                                        {String.fromCharCode(65 + optIndex)}.
+                                      </span>
+                                      <span>{option}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                            
+                            {/* Show explanation for theoretical questions */}
+                            {exercise.explanation && (
+                              <div className="mb-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                                <p className="text-xs font-semibold text-blue-800 dark:text-blue-200 mb-1 uppercase tracking-wide">
+                                  <i className="fas fa-lightbulb mr-1"></i>
+                                  Explanation:
+                                </p>
+                                <p className="text-sm text-blue-700 dark:text-blue-300 leading-relaxed">
+                                  {exercise.explanation}
+                                </p>
+                              </div>
+                            )}
+                          </>
+                        )}
+                        
+                        {/* Code Questions: Show Hint */}
+                        {isCode && (
+                          <>
+                            {exercise.hint && (
+                              <div className="mb-2 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
+                                <p className="text-xs font-semibold text-amber-800 dark:text-amber-200 mb-1 uppercase tracking-wide">
+                                  <i className="fas fa-lightbulb mr-1"></i>
+                                  Hint:
+                                </p>
+                                <p className="text-sm text-amber-700 dark:text-amber-300 leading-relaxed">
+                                  {exercise.hint}
+                                </p>
+                              </div>
+                            )}
+                            
+                            {/* Show hint from hints array if available */}
+                            {!exercise.hint && generatedHints.length > 0 && (
+                              (() => {
+                                const hintForExercise = generatedHints.find(h => h.question_id === exercise.exercise_id);
+                                return hintForExercise ? (
+                                  <div className="mb-2 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
+                                    <p className="text-xs font-semibold text-amber-800 dark:text-amber-200 mb-1 uppercase tracking-wide">
+                                      <i className="fas fa-lightbulb mr-1"></i>
+                                      Hint:
+                                    </p>
+                                    <p className="text-sm text-amber-700 dark:text-amber-300 leading-relaxed">
+                                      {hintForExercise.hint}
+                                    </p>
+                                  </div>
+                                ) : null;
+                              })()
+                            )}
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
