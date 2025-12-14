@@ -58,17 +58,6 @@ export function parseCourseRequest(requestData) {
     learner_company: payload.learner_company,
     skills: payload.skills,
     trainer_id: payload.trainer_id || null, // Optional: trainer_id for searching existing content
-    preferred_language: language, // Required: preferred language from Course Builder (always provided now)
-  };
-}
-
-
-  return {
-    learner_id: payload.learner_id,
-    learner_name: payload.learner_name || '',
-    learner_company: payload.learner_company,
-    skills: payload.skills,
-    trainer_id: payload.trainer_id || null, // Optional: trainer_id for searching existing content
     preferred_language: language, // REQUIRED - Course Builder always sends it (no more Directory fallback)
   };
 }
