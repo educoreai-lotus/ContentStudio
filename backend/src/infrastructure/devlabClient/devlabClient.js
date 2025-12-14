@@ -1218,33 +1218,74 @@ export class DevlabClient {
         logger.warn('[DevlabClient] COORDINATOR_PUBLIC_KEY not set, skipping signature verification (validateManualExercise)');
       }
 
-      // Coordinator returns: { serviceName: "ContentStudio", payload: "<stringified JSON>" }
+      // Coordinator can return different formats:
+      // 1. { requester_service, payload, response } - direct envelope format
+      // 2. { payload: "<stringified JSON>" } - old format
+      // 3. { data: { payload: "<stringified JSON>" } } - nested format
       if (!responseData || typeof responseData !== 'object' || responseData === null) {
         throw new Error('Invalid response structure from Coordinator');
       }
 
-      if (!responseData.payload || typeof responseData.payload !== 'string') {
-        throw new Error('Missing or invalid payload in response');
-      }
-
-      // Parse response structure
-      // Coordinator returns: { serviceName: "ContentStudio", payload: "<stringified JSON>" }
-      // Inside payload: { requester_service: "content-studio", payload: {...}, response: { answer: "<stringified JSON>" } }
-      // The answer field contains the actual response data
+      // Check if responseData is already the envelope structure
       let responseStructure;
-      try {
-        responseStructure = JSON.parse(responseData.payload);
-      } catch (parseError) {
-        throw new Error(`Failed to parse response payload: ${parseError.message}`);
-      }
+      if (responseData.requester_service && responseData.response) {
+        // Direct envelope format: { requester_service, payload, response }
+        logger.info('[DevlabClient] Detected direct envelope format in validateManualExercise', {
+          hasResponse: !!responseData.response,
+          responseKeys: responseData.response ? Object.keys(responseData.response) : [],
+        });
+        responseStructure = responseData;
+      } else {
+        // Try to find payload string
+        let payloadString = null;
+        
+        // Check data.payload (nested format)
+        if (responseData.data?.payload && typeof responseData.data.payload === 'string') {
+          payloadString = responseData.data.payload;
+        }
+        // Check payload directly (old format)
+        else if (responseData.payload && typeof responseData.payload === 'string') {
+          payloadString = responseData.payload;
+        }
+        
+        if (!payloadString) {
+          logger.error('[DevlabClient] Missing or invalid payload in response (validateManualExercise)', {
+            responseDataKeys: Object.keys(responseData),
+            hasData: !!responseData.data,
+            dataKeys: responseData.data ? Object.keys(responseData.data) : [],
+            hasPayload: !!responseData.payload,
+            payloadType: typeof responseData.payload,
+            responseDataPreview: JSON.stringify(responseData).substring(0, 500),
+          });
+          throw new Error('Missing or invalid payload in response');
+        }
 
-      // Validate response structure
-      if (typeof responseStructure !== 'object' || responseStructure === null) {
-        throw new Error('Invalid payload structure in response');
+        // Parse response structure
+        // Coordinator returns: { serviceName: "ContentStudio", payload: "<stringified JSON>" }
+        // Inside payload: { requester_service: "content-studio", payload: {...}, response: { answer: "<stringified JSON>" } }
+        try {
+          responseStructure = JSON.parse(payloadString);
+        } catch (parseError) {
+          logger.error('[DevlabClient] Failed to parse response payload (validateManualExercise)', {
+            error: parseError.message,
+            payloadPreview: payloadString.substring(0, 200),
+          });
+          throw new Error(`Failed to parse response payload: ${parseError.message}`);
+        }
+
+        // Validate response structure
+        if (typeof responseStructure !== 'object' || responseStructure === null) {
+          throw new Error('Invalid payload structure in response');
+        }
       }
 
       // Extract response object
       if (!responseStructure.response || typeof responseStructure.response !== 'object') {
+        logger.error('[DevlabClient] Missing or invalid response field in payload (validateManualExercise)', {
+          responseStructureKeys: Object.keys(responseStructure),
+          hasResponse: !!responseStructure.response,
+          responseType: typeof responseStructure.response,
+        });
         throw new Error('Missing or invalid response field in payload');
       }
 
