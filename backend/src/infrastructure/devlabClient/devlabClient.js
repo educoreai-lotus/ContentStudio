@@ -279,6 +279,7 @@ export class DevlabClient {
       // theoretical_question_type determines if questions are multiple choice (closed) or open ended
       const payloadData = {
         action: 'generate-questions',
+        description: 'Generate devlab AI exercises',
         topic_id: exerciseRequest.topic_id || '',
         topic_name: exerciseRequest.topic_name || '',
         question_type: questionType,
