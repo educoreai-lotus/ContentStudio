@@ -603,12 +603,24 @@ export class GenerateAvatarVideoFromPresentationUseCase {
         throw new Error(errorMsg);
       }
       
-      if (slideImages.length !== MAX_SLIDES) {
-        const errorMsg = `Slide count mismatch before HeyGen call: expected exactly ${MAX_SLIDES} slides, got ${slideImages.length}. This violates the hard constraint.`;
+      // Validate that slide count is within allowed range (1 to MAX_SLIDES)
+      // MAX_SLIDES is a maximum limit, not an exact requirement
+      // Presentations can have fewer slides (e.g., 5 slides is valid)
+      if (slideImages.length < 1) {
+        const errorMsg = `Invalid slide count: must have at least 1 slide, got ${slideImages.length}.`;
         logger.error('[GenerateAvatarVideoFromPresentation] Pre-HeyGen validation failed', {
           jobId,
           actualCount: slideImages.length,
-          expectedCount: MAX_SLIDES,
+        });
+        throw new Error(errorMsg);
+      }
+      
+      if (slideImages.length > MAX_SLIDES) {
+        const errorMsg = `Slide count exceeds maximum allowed: got ${slideImages.length} slides, maximum is ${MAX_SLIDES}.`;
+        logger.error('[GenerateAvatarVideoFromPresentation] Pre-HeyGen validation failed', {
+          jobId,
+          actualCount: slideImages.length,
+          maxAllowed: MAX_SLIDES,
         });
         throw new Error(errorMsg);
       }
@@ -618,7 +630,7 @@ export class GenerateAvatarVideoFromPresentationUseCase {
         totalWords: finalWordCount,
         estimatedSeconds: Math.round(finalEstimatedSeconds),
         maxAllowedSeconds: MAX_TOTAL_SECONDS,
-        validated: slideImages.length === slideSpeeches.length && slideImages.length === MAX_SLIDES,
+        validated: slideImages.length === slideSpeeches.length && slideImages.length >= 1 && slideImages.length <= MAX_SLIDES,
       });
 
       // Step 8: Call HeyGen template API
