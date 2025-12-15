@@ -297,6 +297,10 @@ export const AVATAR_VIDEO_MAX_TOTAL_SECONDS = 160; // Maximum total narration du
 export const AVATAR_VIDEO_AVERAGE_WPM = 150; // Average words per minute for duration estimation
 export const AVATAR_GAMMA_NUM_CARDS = 5; // Number of cards parameter for Gamma API requests
 
+// HeyGen template scene duration constraints
+export const MAX_SCENE_SECONDS = 30; // Each HeyGen template scene is configured to 30 seconds duration
+export const MAX_WORDS_PER_SCENE = Math.floor((AVATAR_VIDEO_AVERAGE_WPM / 60) * MAX_SCENE_SECONDS); // 75 words maximum per scene (30 seconds at 150 WPM)
+
 // Export constants for reference
 export { DEFAULT_AVATAR_ID, DEFAULT_VOICE };
 

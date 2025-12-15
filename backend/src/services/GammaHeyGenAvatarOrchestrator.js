@@ -25,7 +25,7 @@ import { VoiceIdResolver } from './VoiceIdResolver.js';
 import { HeyGenTemplatePayloadBuilder } from './HeyGenTemplatePayloadBuilder.js';
 import { SlidePlan } from '../domain/slides/SlidePlan.js';
 import { PptxExtractorPro } from './PptxExtractorPro.js';
-import { AVATAR_VIDEO_MAX_SLIDES } from '../config/heygen.js';
+import { AVATAR_VIDEO_MAX_SLIDES, MAX_WORDS_PER_SCENE } from '../config/heygen.js';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { writeFileSync, unlinkSync } from 'fs';
@@ -344,6 +344,30 @@ export class GammaHeyGenAvatarOrchestrator {
         jobId: finalJobId,
         speechCount: slideSpeeches.length,
       });
+
+      // CRITICAL VALIDATION: Each slide speech must fit within 30 seconds (75 words at 150 WPM)
+      // HeyGen template scenes are configured to 30 seconds duration.
+      // Speech text that exceeds this limit will cause timing issues in the generated video.
+      const wordCount = (text) => text.trim().split(/\s+/).filter(w => w.length > 0).length;
+      for (const speech of slideSpeeches) {
+        const words = wordCount(speech.speakerText);
+        if (words > MAX_WORDS_PER_SCENE) {
+          const errorMsg = `Slide speech exceeds 30s limit (max ${MAX_WORDS_PER_SCENE} words). Slide index: ${speech.index}, words: ${words}`;
+          logger.error('[GammaHeyGenAvatarOrchestrator] Slide speech duration limit exceeded', {
+            jobId: finalJobId,
+            slideIndex: speech.index,
+            wordCount: words,
+            maxAllowedWords: MAX_WORDS_PER_SCENE,
+            speechPreview: speech.speakerText.substring(0, 100),
+          });
+          throw new Error(errorMsg);
+        }
+        logger.info('[SlideDurationGuard]', {
+          slideIndex: speech.index,
+          wordCount: words,
+          maxAllowedWords: MAX_WORDS_PER_SCENE,
+        });
+      }
 
       // Step 4: Combine into SlidePlan[]
       logger.info('[GammaHeyGenAvatarOrchestrator] Step 4: Creating SlidePlan', {

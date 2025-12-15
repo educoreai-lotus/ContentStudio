@@ -5,7 +5,7 @@ import { VoiceIdResolver } from '../../services/VoiceIdResolver.js';
 import { HeyGenTemplatePayloadBuilder } from '../../services/HeyGenTemplatePayloadBuilder.js';
 import { SlidePlan } from '../../domain/slides/SlidePlan.js';
 import { PptxExtractorPro } from '../../services/PptxExtractorPro.js';
-import { AVATAR_VIDEO_MAX_SLIDES, AVATAR_VIDEO_MAX_TOTAL_SECONDS, AVATAR_VIDEO_AVERAGE_WPM } from '../../config/heygen.js';
+import { AVATAR_VIDEO_MAX_SLIDES, AVATAR_VIDEO_MAX_TOTAL_SECONDS, AVATAR_VIDEO_AVERAGE_WPM, MAX_WORDS_PER_SCENE } from '../../config/heygen.js';
 import { randomUUID } from 'crypto';
 import axios from 'axios';
 import { tmpdir } from 'os';
@@ -300,6 +300,29 @@ export class GenerateAvatarVideoFromPresentationUseCase {
         jobId,
         slideCount: slideSpeeches.length,
       });
+
+      // CRITICAL VALIDATION: Each slide speech must fit within 30 seconds (75 words at 150 WPM)
+      // HeyGen template scenes are configured to 30 seconds duration.
+      // Speech text that exceeds this limit will cause timing issues in the generated video.
+      for (const speech of slideSpeeches) {
+        const words = wordCount(speech.speakerText);
+        if (words > MAX_WORDS_PER_SCENE) {
+          const errorMsg = `Slide speech exceeds 30s limit (max ${MAX_WORDS_PER_SCENE} words). Slide index: ${speech.index}, words: ${words}`;
+          logger.error('[GenerateAvatarVideoFromPresentation] Slide speech duration limit exceeded', {
+            jobId,
+            slideIndex: speech.index,
+            wordCount: words,
+            maxAllowedWords: MAX_WORDS_PER_SCENE,
+            speechPreview: speech.speakerText.substring(0, 100),
+          });
+          throw new Error(errorMsg);
+        }
+        logger.info('[SlideDurationGuard]', {
+          slideIndex: speech.index,
+          wordCount: words,
+          maxAllowedWords: MAX_WORDS_PER_SCENE,
+        });
+      }
 
       // HARD CONSTRAINT: Global duration limit (GLOBAL for entire video, NOT per slide)
       // The 2:40 minutes (160 seconds) limit applies to the ENTIRE VIDEO duration.
