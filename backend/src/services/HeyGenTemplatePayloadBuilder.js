@@ -177,35 +177,29 @@ export class HeyGenTemplatePayloadBuilder {
       const slideNum = slide.index;
 
       // Add image variable: image_1, image_2, ..., image_10
-      // HeyGen Template API expects image variables with nested 'image' object containing 'name' and 'url'
-      // Format: { image: { name: "...", url: "..." } }
+      // HeyGen Template API v2 expects variables in format: { name: "...", type: "image", properties: { url: "..." } }
+      // Reference: https://docs.heygen.com/docs/generate-video-from-template-v2
       const imageUrl = slide.imageUrl.trim();
-      // Extract filename from URL for 'name' field (fallback to slide number if extraction fails)
-      let imageName = `slide_${slideNum}`;
-      try {
-        const urlObj = new URL(imageUrl);
-        const pathParts = urlObj.pathname.split('/');
-        const fileName = pathParts[pathParts.length - 1];
-        if (fileName && fileName.includes('.')) {
-          imageName = fileName.split('.')[0]; // Remove extension
-        }
-      } catch (urlError) {
-        // If URL parsing fails, use default name
-        logger.debug('[HeyGenTemplatePayloadBuilder] Failed to extract filename from URL', {
-          url: imageUrl,
-          error: urlError.message,
-        });
-      }
+      const imageKey = `image_${slideNum}`;
       
-      variables[`image_${slideNum}`] = {
-        image: {
-          name: imageName,
+      variables[imageKey] = {
+        name: imageKey,
+        type: 'image',
+        properties: {
           url: imageUrl,
         },
       };
 
       // Add speech variable: speech_1, speech_2, ..., speech_10
-      variables[`speech_${slideNum}`] = slide.speakerText.trim();
+      // HeyGen Template API v2 expects text variables in format: { name: "...", type: "text", properties: { content: "..." } }
+      const speechKey = `speech_${slideNum}`;
+      variables[speechKey] = {
+        name: speechKey,
+        type: 'text',
+        properties: {
+          content: slide.speakerText.trim(),
+        },
+      };
     }
 
     return variables;
