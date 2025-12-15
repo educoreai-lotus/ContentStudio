@@ -265,7 +265,8 @@ export class SlideImageExtractor {
       let pdftoppmAvailable = false;
       try {
         // Check if pdftoppm is available
-        await execAsync('which pdftoppm || where pdftoppm');
+        // Use 'command -v' which works on both Linux and Unix-like systems
+        await execAsync('command -v pdftoppm');
         pdftoppmAvailable = true;
         logger.info('[SlideImageExtractor] pdftoppm is available', { jobId });
       } catch (checkError) {
@@ -525,9 +526,10 @@ export class SlideImageExtractor {
       });
 
       // Check if pdftoppm is available
+      // Use 'command -v' which works on both Linux and Unix-like systems
       let pdftoppmAvailable = false;
       try {
-        await execAsync('which pdftoppm || where pdftoppm');
+        await execAsync('command -v pdftoppm');
         pdftoppmAvailable = true;
         logger.info('[SlideImageExtractor] pdftoppm is available', { jobId });
       } catch (checkError) {
