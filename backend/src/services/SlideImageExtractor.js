@@ -262,29 +262,60 @@ export class SlideImageExtractor {
         tool: 'pdftoppm (poppler-utils)',
       });
       
+      // Check if pdftoppm is available
+      // Try multiple methods: command -v, which, and direct path check
       let pdftoppmAvailable = false;
+      let pdftoppmPath = null;
+      
+      // Try command -v first (POSIX standard)
       try {
-        // Check if pdftoppm is available
-        // Use 'command -v' which works on both Linux and Unix-like systems
-        await execAsync('command -v pdftoppm');
+        const { stdout } = await execAsync('command -v pdftoppm');
+        pdftoppmPath = stdout.trim();
         pdftoppmAvailable = true;
-        logger.info('[SlideImageExtractor] pdftoppm is available', { jobId });
-      } catch (checkError) {
-        logger.error('[SlideImageExtractor] pdftoppm is NOT available', {
-          jobId,
-          error: checkError.message,
-        });
-        throw new Error(
-          'PDF to image conversion tool (pdftoppm) is not installed or not in PATH. ' +
-          'pdftoppm is required for full slide rendering. ' +
-          'Please install poppler-utils: sudo apt-get install poppler-utils (Linux) or brew install poppler (Mac)'
-        );
+        logger.info('[SlideImageExtractor] pdftoppm is available', { jobId, path: pdftoppmPath });
+      } catch (checkError1) {
+        // Try which as fallback
+        try {
+          const { stdout } = await execAsync('which pdftoppm');
+          pdftoppmPath = stdout.trim();
+          pdftoppmAvailable = true;
+          logger.info('[SlideImageExtractor] pdftoppm is available (via which)', { jobId, path: pdftoppmPath });
+        } catch (checkError2) {
+          // Try common installation paths
+          const commonPaths = ['/usr/bin/pdftoppm', '/usr/local/bin/pdftoppm', '/bin/pdftoppm'];
+          for (const path of commonPaths) {
+            try {
+              await execAsync(`test -f ${path} && ${path} -v`);
+              pdftoppmPath = path;
+              pdftoppmAvailable = true;
+              logger.info('[SlideImageExtractor] pdftoppm found at common path', { jobId, path: pdftoppmPath });
+              break;
+            } catch {
+              // Continue to next path
+            }
+          }
+          
+          if (!pdftoppmAvailable) {
+            logger.error('[SlideImageExtractor] pdftoppm is NOT available', {
+              jobId,
+              error: checkError1.message,
+              triedPaths: commonPaths,
+            });
+            throw new Error(
+              'PDF to image conversion tool (pdftoppm) is not installed or not in PATH. ' +
+              'pdftoppm is required for full slide rendering. ' +
+              'Please install poppler-utils: sudo apt-get install poppler-utils (Linux) or brew install poppler (Mac)'
+            );
+          }
+        }
       }
 
+      // Convert PDF to PNG images (one per page/slide)
+      // Use pdftoppmPath if found, otherwise use 'pdftoppm' (assume it's in PATH)
+      const pdftoppmCommand = pdftoppmPath || 'pdftoppm';
       try {
-        // Convert PDF to PNG images (one per page/slide)
         await execAsync(
-          `pdftoppm -png -r 150 "${pdfPath}" "${join(outputDir, 'slide')}"`,
+          `${pdftoppmCommand} -png -r 150 "${pdfPath}" "${join(outputDir, 'slide')}"`,
           { timeout: 120000 } // 2 minute timeout
         );
         logger.info('[SlideImageExtractor] Successfully converted PDF to PNG images', {
@@ -526,35 +557,67 @@ export class SlideImageExtractor {
       });
 
       // Check if pdftoppm is available
-      // Use 'command -v' which works on both Linux and Unix-like systems
+      // Try multiple methods: command -v, which, and direct path check
       let pdftoppmAvailable = false;
+      let pdftoppmPath = null;
+      
+      // Try command -v first (POSIX standard)
       try {
-        await execAsync('command -v pdftoppm');
+        const { stdout } = await execAsync('command -v pdftoppm');
+        pdftoppmPath = stdout.trim();
         pdftoppmAvailable = true;
-        logger.info('[SlideImageExtractor] pdftoppm is available', { jobId });
-      } catch (checkError) {
-        logger.error('[SlideImageExtractor] pdftoppm is NOT available', {
-          jobId,
-          error: checkError.message,
-        });
-        if (requireFullRendering) {
-          throw new Error(
-            'PDF to image conversion tool (pdftoppm) is not installed or not in PATH. ' +
-            'pdftoppm is required for full slide rendering. ' +
-            'Please install poppler-utils: sudo apt-get install poppler-utils (Linux) or brew install poppler (Mac)'
-          );
+        logger.info('[SlideImageExtractor] pdftoppm is available', { jobId, path: pdftoppmPath });
+      } catch (checkError1) {
+        // Try which as fallback
+        try {
+          const { stdout } = await execAsync('which pdftoppm');
+          pdftoppmPath = stdout.trim();
+          pdftoppmAvailable = true;
+          logger.info('[SlideImageExtractor] pdftoppm is available (via which)', { jobId, path: pdftoppmPath });
+        } catch (checkError2) {
+          // Try common installation paths
+          const commonPaths = ['/usr/bin/pdftoppm', '/usr/local/bin/pdftoppm', '/bin/pdftoppm'];
+          for (const path of commonPaths) {
+            try {
+              await execAsync(`test -f ${path} && ${path} -v`);
+              pdftoppmPath = path;
+              pdftoppmAvailable = true;
+              logger.info('[SlideImageExtractor] pdftoppm found at common path', { jobId, path: pdftoppmPath });
+              break;
+            } catch {
+              // Continue to next path
+            }
+          }
+          
+          if (!pdftoppmAvailable) {
+            logger.error('[SlideImageExtractor] pdftoppm is NOT available', {
+              jobId,
+              error: checkError1.message,
+              triedPaths: commonPaths,
+            });
+            if (requireFullRendering) {
+              throw new Error(
+                'PDF to image conversion tool (pdftoppm) is not installed or not in PATH. ' +
+                'pdftoppm is required for full slide rendering. ' +
+                'Please install poppler-utils: sudo apt-get install poppler-utils (Linux) or brew install poppler (Mac)'
+              );
+            }
+            // If not required, we can't proceed without pdftoppm for PDF
+            throw new Error(
+              'PDF to image conversion requires pdftoppm. ' +
+              'Please install poppler-utils: sudo apt-get install poppler-utils (Linux) or brew install poppler (Mac)'
+            );
+          }
         }
-        // If not required, we can't proceed without pdftoppm for PDF
-        throw new Error(
-          'PDF to image conversion requires pdftoppm. ' +
-          'Please install poppler-utils: sudo apt-get install poppler-utils (Linux) or brew install poppler (Mac)'
-        );
       }
 
       // Convert PDF to PNG images (one per page/slide)
+      // Use pdftoppmPath if found, otherwise use 'pdftoppm' (assume it's in PATH)
+      const pdftoppmCommand = pdftoppmPath || 'pdftoppm';
+      logger.info('[SlideImageExtractor] Using pdftoppm command', { jobId, command: pdftoppmCommand, pdfPath });
       try {
         await execAsync(
-          `pdftoppm -png -r 150 "${pdfPath}" "${join(outputDir, 'slide')}"`,
+          `${pdftoppmCommand} -png -r 150 "${pdfPath}" "${join(outputDir, 'slide')}"`,
           { timeout: 120000 } // 2 minute timeout
         );
         logger.info('[SlideImageExtractor] Successfully converted PDF to PNG images', {
