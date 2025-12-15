@@ -181,17 +181,28 @@ export class HeyGenTemplatePayloadBuilder {
       const imageUrl = slide.imageUrl.trim();
       const imageKey = `image_${slideNum}`;
       
-      // Extract image name from URL for the name field
+      // Extract image name from URL for the name field (REQUIRED by HeyGen)
+      // HeyGen requires: value.image.name (mandatory field)
       const urlParts = imageUrl.split('/');
       const fileName = urlParts[urlParts.length - 1] || `slide-${slideNum}`;
-      const imageName = fileName.replace(/\.(png|jpg|jpeg)$/i, '') || `slide-${slideNum}`;
+      let imageName = fileName.replace(/\.(png|jpg|jpeg)$/i, '');
+      
+      // Ensure name is not empty (fallback to slide-{N} if extraction fails)
+      if (!imageName || imageName.trim() === '') {
+        imageName = `slide-${slideNum}`;
+      }
+      
+      // Validate name is not empty (HeyGen requirement)
+      if (!imageName || imageName.trim() === '') {
+        throw new Error(`Invalid image name for slide ${slideNum}: cannot be empty`);
+      }
       
       variables[imageKey] = {
         type: 'image',
         value: {
           image: {
-            url: imageUrl,
-            name: imageName,
+            url: imageUrl, // Required: public URL to the image
+            name: imageName.trim(), // Required: name identifier for the image
           },
         },
       };
