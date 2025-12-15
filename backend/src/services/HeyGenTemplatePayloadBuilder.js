@@ -177,12 +177,13 @@ export class HeyGenTemplatePayloadBuilder {
       const slideNum = slide.index;
 
       // Add image variable: image_1, image_2, ..., image_10
-      // Template expects: { type: "image", value: { image: { url: "...", name: "..." } } }
+      // Template expects: { image: { url: "...", name: "..." } }
+      // NOTE: No 'type' or 'value' wrapper - direct image object structure
       const imageUrl = slide.imageUrl.trim();
       const imageKey = `image_${slideNum}`;
       
       // Extract image name from URL for the name field (REQUIRED by HeyGen)
-      // HeyGen requires: value.image.name (mandatory field)
+      // HeyGen requires: image.name (mandatory field)
       const urlParts = imageUrl.split('/');
       const fileName = urlParts[urlParts.length - 1] || `slide-${slideNum}`;
       let imageName = fileName.replace(/\.(png|jpg|jpeg)$/i, '');
@@ -198,12 +199,9 @@ export class HeyGenTemplatePayloadBuilder {
       }
       
       variables[imageKey] = {
-        type: 'image',
-        value: {
-          image: {
-            url: imageUrl, // Required: public URL to the image
-            name: imageName.trim(), // Required: name identifier for the image
-          },
+        image: {
+          url: imageUrl, // Required: public URL to the image
+          name: imageName.trim(), // Required: name identifier for the image
         },
       };
 
