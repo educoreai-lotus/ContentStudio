@@ -177,13 +177,14 @@ export class HeyGenTemplatePayloadBuilder {
       const slideNum = slide.index;
 
       // Add image variable: image_1, image_2, ..., image_10
-      // Template expects: { type: "image_url", value: "https://..." }
-      // NO character, NO character_id, NO avatar - avatar is already in template
+      // Template expects: { type: "image", value: "https://..." }
+      // Valid types: text, image, video, character, audio, voice
+      // NO character_id, NO avatar - avatar is already in template
       const imageUrl = slide.imageUrl.trim();
       const imageKey = `image_${slideNum}`;
       
       variables[imageKey] = {
-        type: 'image_url',
+        type: 'image',
         value: imageUrl,
       };
 
