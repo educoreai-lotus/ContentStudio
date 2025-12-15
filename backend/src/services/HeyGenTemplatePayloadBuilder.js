@@ -177,7 +177,10 @@ export class HeyGenTemplatePayloadBuilder {
       const slideNum = slide.index;
 
       // Add image variable: image_1, image_2, ..., image_10
-      variables[`image_${slideNum}`] = slide.imageUrl.trim();
+      // HeyGen Template API expects image variables as objects with 'url' field, not plain strings
+      variables[`image_${slideNum}`] = {
+        url: slide.imageUrl.trim(),
+      };
 
       // Add speech variable: speech_1, speech_2, ..., speech_10
       variables[`speech_${slideNum}`] = slide.speakerText.trim();
