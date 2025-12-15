@@ -429,17 +429,19 @@ Lesson Context:
 - Skills Focus: ${wrappedVariables.skillsList}
 
 ⚠️ CRITICAL CONSTRAINTS:
-1. **Maximum Length: 3500 characters** (to fit audio narration limit of 4000 chars)
-2. **NO CODE EXAMPLES** - this is pure explanatory text (code has its own format)
-3. **NO special symbols or formatting** - plain text only for audio conversion
+1. **Maximum Length: 1200 characters** (strict limit for HeyGen avatar video - 1500 char max)
+2. **Keep it SHORT and CONCISE** - focus on key points only
+3. **NO CODE EXAMPLES** - this is pure explanatory text (code has its own format)
+4. **NO special symbols or formatting** - plain text only for audio conversion
+5. **Be brief** - summarize main concepts, not detailed explanations
 
-Output only pure, conversational text in ${wrappedVariables.language}.`;
+Output only pure, conversational text in ${wrappedVariables.language}. Keep it under 1200 characters.`;
 
       const textPromptWithSecurity = `${securityInstruction}\n\n${textPrompt}`;
       text = await aiGenerationService.generateText(textPromptWithSecurity, {
         language: promptVariables.language,
         temperature: 0.7,
-        max_tokens: 2000,
+        max_tokens: 800, // Reduced from 2000 to ensure text stays under 1500 chars for HeyGen
       });
 
       if (text && typeof text === 'string') {
