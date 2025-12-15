@@ -63,9 +63,11 @@ describe('HeyGenTemplatePayloadBuilder', () => {
         caption: false,
       });
 
-      expect(payload.variables).toHaveProperty('image_1', 'https://example.com/slide1.png');
+      expect(payload.variables).toHaveProperty('image_1');
+      expect(payload.variables.image_1).toEqual({ url: 'https://example.com/slide1.png' });
       expect(payload.variables).toHaveProperty('speech_1', 'First slide');
-      expect(payload.variables).toHaveProperty('image_2', 'https://example.com/slide2.png');
+      expect(payload.variables).toHaveProperty('image_2');
+      expect(payload.variables.image_2).toEqual({ url: 'https://example.com/slide2.png' });
       expect(payload.variables).toHaveProperty('speech_2', 'Second slide');
     });
 
@@ -501,7 +503,7 @@ describe('HeyGenTemplatePayloadBuilder', () => {
         caption: false,
       });
 
-      expect(payload.variables.image_1).toBe('https://example.com/slide1.png');
+      expect(payload.variables.image_1).toEqual({ url: 'https://example.com/slide1.png' });
     });
   });
 
@@ -523,7 +525,7 @@ describe('HeyGenTemplatePayloadBuilder', () => {
       });
 
       expect(Object.keys(payload.variables)).toEqual(['image_1', 'speech_1']);
-      expect(payload.variables.image_1).toBe('https://example.com/slide1.png');
+      expect(payload.variables.image_1).toEqual({ url: 'https://example.com/slide1.png' });
       expect(payload.variables.speech_1).toBe('Single slide');
     });
 
@@ -542,7 +544,7 @@ describe('HeyGenTemplatePayloadBuilder', () => {
       });
 
       expect(Object.keys(payload.variables)).toHaveLength(20); // 10 images + 10 speeches
-      expect(payload.variables.image_10).toBe('https://example.com/slide10.png');
+      expect(payload.variables.image_10).toEqual({ url: 'https://example.com/slide10.png' });
       expect(payload.variables.speech_10).toBe('Slide 10 narration');
     });
 

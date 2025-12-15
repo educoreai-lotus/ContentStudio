@@ -58,7 +58,7 @@ describe('HeygenClient - Template v2 Generate Integration', () => {
       const payload = {
         title: 'Test Template',
         variables: {
-          image_1: 'https://example.com/slide1.png',
+          image_1: { url: 'https://example.com/slide1.png' },
           speech_1: 'First slide text',
         },
       };
@@ -114,9 +114,9 @@ describe('HeygenClient - Template v2 Generate Integration', () => {
       const payload = {
         title: 'My Presentation',
         variables: {
-          image_1: 'https://example.com/slide1.png',
+          image_1: { url: 'https://example.com/slide1.png' },
           speech_1: 'First slide narration',
-          image_2: 'https://example.com/slide2.png',
+          image_2: { url: 'https://example.com/slide2.png' },
           speech_2: 'Second slide narration',
         },
         caption_settings: {
@@ -148,9 +148,11 @@ describe('HeygenClient - Template v2 Generate Integration', () => {
 
       expect(sentPayload).toHaveProperty('title', 'My Presentation');
       expect(sentPayload).toHaveProperty('variables');
-      expect(sentPayload.variables).toHaveProperty('image_1', 'https://example.com/slide1.png');
+      expect(sentPayload.variables).toHaveProperty('image_1');
+      expect(sentPayload.variables.image_1).toEqual({ url: 'https://example.com/slide1.png' });
       expect(sentPayload.variables).toHaveProperty('speech_1', 'First slide narration');
-      expect(sentPayload.variables).toHaveProperty('image_2', 'https://example.com/slide2.png');
+      expect(sentPayload.variables).toHaveProperty('image_2');
+      expect(sentPayload.variables.image_2).toEqual({ url: 'https://example.com/slide2.png' });
       expect(sentPayload.variables).toHaveProperty('speech_2', 'Second slide narration');
       expect(sentPayload).toHaveProperty('caption_settings');
       expect(sentPayload.caption_settings).toHaveProperty('enabled', true);
