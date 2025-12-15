@@ -579,13 +579,33 @@ export class SlideImageExtractor {
           const commonPaths = ['/usr/bin/pdftoppm', '/usr/local/bin/pdftoppm', '/bin/pdftoppm'];
           for (const path of commonPaths) {
             try {
-              await execAsync(`test -f ${path} && ${path} -v`);
+              // First check if file exists
+              await execAsync(`test -f ${path}`);
+              // Then try to run it
+              await execAsync(`${path} -v`);
               pdftoppmPath = path;
               pdftoppmAvailable = true;
               logger.info('[SlideImageExtractor] pdftoppm found at common path', { jobId, path: pdftoppmPath });
               break;
-            } catch {
+            } catch (pathError) {
+              logger.debug('[SlideImageExtractor] pdftoppm not found at path', { jobId, path, error: pathError.message });
               // Continue to next path
+            }
+          }
+          
+          // Last resort: try to find pdftoppm using find command
+          if (!pdftoppmAvailable) {
+            try {
+              const { stdout } = await execAsync('find /usr -name pdftoppm 2>/dev/null | head -1');
+              const foundPath = stdout.trim();
+              if (foundPath) {
+                await execAsync(`${foundPath} -v`);
+                pdftoppmPath = foundPath;
+                pdftoppmAvailable = true;
+                logger.info('[SlideImageExtractor] pdftoppm found using find command', { jobId, path: pdftoppmPath });
+              }
+            } catch (findError) {
+              logger.debug('[SlideImageExtractor] find command failed', { jobId, error: findError.message });
             }
           }
           
@@ -594,12 +614,14 @@ export class SlideImageExtractor {
               jobId,
               error: checkError1.message,
               triedPaths: commonPaths,
+              note: 'Railway may need to rebuild the Docker image with poppler-utils. Check build logs to verify installation.',
             });
             if (requireFullRendering) {
               throw new Error(
                 'PDF to image conversion tool (pdftoppm) is not installed or not in PATH. ' +
                 'pdftoppm is required for full slide rendering. ' +
-                'Please install poppler-utils: sudo apt-get install poppler-utils (Linux) or brew install poppler (Mac)'
+                'Please install poppler-utils: sudo apt-get install poppler-utils (Linux) or brew install poppler (Mac). ' +
+                'If using Railway, ensure the Dockerfile includes poppler-utils and the image is rebuilt.'
               );
             }
             // If not required, we can't proceed without pdftoppm for PDF
