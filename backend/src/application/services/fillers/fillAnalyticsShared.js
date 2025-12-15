@@ -50,7 +50,8 @@ RULE 14: trainer_name is not stored in Content Studio DB - use trainer_id as pla
 RULE 15: total_usage_count comes from usage_count field in trainer_courses and topics tables
 RULE 16: Do NOT filter by learner_company or skills - return everything
 RULE 17: Order courses by created_at DESC, topics by created_at DESC, contents by created_at DESC
-RULE 18: NEVER use content_history table - only 'content' table contains the current active content`;
+RULE 18: NEVER use content_history table - only 'content' table contains the current active content
+RULE 19: CRITICAL - Only return data that was created OR updated in the last 24 hours. Filter by: (created_at >= NOW() - INTERVAL '24 hours' OR updated_at >= NOW() - INTERVAL '24 hours'). This applies to courses, topics, and contents`;
 
     const businessRules = parsedPayload.businessRules || defaultBusinessRules;
 
@@ -64,7 +65,8 @@ RULE 18: NEVER use content_history table - only 'content' table contains the cur
         businessRules: businessRules,
         task: `Generate a PostgreSQL SELECT query to fetch ALL courses from trainer_courses table where:
 - status != 'deleted'
-- Include: course_id, course_name, language as course_language, trainer_id, permissions, usage_count as total_usage_count, status, created_at
+- CRITICAL: Only include courses created OR updated in the last 24 hours: (created_at >= NOW() - INTERVAL '24 hours' OR updated_at >= NOW() - INTERVAL '24 hours')
+- Include: course_id, course_name, language as course_language, trainer_id, permissions, usage_count as total_usage_count, status, created_at, updated_at
 - Order by created_at DESC`,
       });
     } catch (error) {
@@ -97,9 +99,14 @@ RULE 18: NEVER use content_history table - only 'content' table contains the cur
     // Using direct SQL for nested queries (can be enhanced with AI Query Builder later)
     const courses = [];
     for (const courseRow of coursesResult.rows) {
-      // Fetch topics for this course
+      // Fetch topics for this course - Only topics created or updated in last 24 hours
       const topicsResult = await db.query(
-        'SELECT topic_id, topic_name, language as topic_language, skills, usage_count as total_usage_count, status, created_at FROM topics WHERE course_id = $1 AND status != $2 ORDER BY created_at DESC',
+        `SELECT topic_id, topic_name, language as topic_language, skills, usage_count as total_usage_count, status, created_at, updated_at 
+         FROM topics 
+         WHERE course_id = $1 
+           AND status != $2 
+           AND (created_at >= NOW() - INTERVAL '24 hours' OR updated_at >= NOW() - INTERVAL '24 hours')
+         ORDER BY created_at DESC`,
         [courseRow.course_id, 'deleted']
       );
       
@@ -121,6 +128,7 @@ RULE 18: NEVER use content_history table - only 'content' table contains the cur
       const topics = [];
       for (const topicRow of topicsResult.rows) {
         // Fetch contents for this topic - CRITICAL: from 'content' table ONLY, NOT 'content_history'
+        // Only contents created or updated in last 24 hours
         const contentsResult = await db.query(
           `SELECT 
             c.content_id,
@@ -132,6 +140,7 @@ RULE 18: NEVER use content_history table - only 'content' table contains the cur
           INNER JOIN content_types ct ON c.content_type_id = ct.type_id
           INNER JOIN generation_methods gm ON c.generation_method_id = gm.method_id
           WHERE c.topic_id = $1
+            AND (c.created_at >= NOW() - INTERVAL '24 hours' OR c.updated_at >= NOW() - INTERVAL '24 hours')
           ORDER BY c.created_at DESC`,
           [topicRow.topic_id]
         );
@@ -170,8 +179,14 @@ RULE 18: NEVER use content_history table - only 'content' table contains the cur
     filled.courses = courses;
 
     // Fetch all standalone topics (topics without course_id) with their contents
+    // Only topics created or updated in last 24 hours
     const standaloneTopicsResult = await db.query(
-      'SELECT topic_id, topic_name, language as topic_language, skills, usage_count as total_usage_count, status, created_at FROM topics WHERE course_id IS NULL AND status != $1 ORDER BY created_at DESC',
+      `SELECT topic_id, topic_name, language as topic_language, skills, usage_count as total_usage_count, status, created_at, updated_at 
+       FROM topics 
+       WHERE course_id IS NULL 
+         AND status != $1 
+         AND (created_at >= NOW() - INTERVAL '24 hours' OR updated_at >= NOW() - INTERVAL '24 hours')
+       ORDER BY created_at DESC`,
       ['deleted']
     );
     
@@ -193,6 +208,7 @@ RULE 18: NEVER use content_history table - only 'content' table contains the cur
     const topicsStandAlone = [];
     for (const topicRow of standaloneTopicsResult.rows) {
       // Fetch contents for this topic - CRITICAL: from 'content' table ONLY, NOT 'content_history'
+      // Only contents created or updated in last 24 hours
       const contentsResult = await db.query(
         `SELECT 
           c.content_id,
@@ -204,6 +220,7 @@ RULE 18: NEVER use content_history table - only 'content' table contains the cur
         INNER JOIN content_types ct ON c.content_type_id = ct.type_id
         INNER JOIN generation_methods gm ON c.generation_method_id = gm.method_id
         WHERE c.topic_id = $1
+          AND (c.created_at >= NOW() - INTERVAL '24 hours' OR c.updated_at >= NOW() - INTERVAL '24 hours')
         ORDER BY c.created_at DESC`,
         [topicRow.topic_id]
       );
