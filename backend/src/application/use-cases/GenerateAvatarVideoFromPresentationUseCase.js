@@ -5,6 +5,7 @@ import { VoiceIdResolver } from '../../services/VoiceIdResolver.js';
 import { HeyGenTemplatePayloadBuilder } from '../../services/HeyGenTemplatePayloadBuilder.js';
 import { SlidePlan } from '../../domain/slides/SlidePlan.js';
 import { PptxExtractorPro } from '../../services/PptxExtractorPro.js';
+import { FileTextExtractor } from '../../services/FileTextExtractor.js';
 import { AVATAR_VIDEO_MAX_SLIDES, AVATAR_VIDEO_MAX_TOTAL_SECONDS, AVATAR_VIDEO_AVERAGE_WPM, MAX_WORDS_PER_SCENE } from '../../config/heygen.js';
 import { randomUUID } from 'crypto';
 import axios from 'axios';
@@ -206,19 +207,61 @@ export class GenerateAvatarVideoFromPresentationUseCase {
       let slideSpeeches;
       try {
         // Extract slides from PPTX or PDF
-        // For PDF, we'll need to extract text differently (using PDF text extraction)
-        // For now, we'll only support PPTX for text extraction
-        if (inputFormat === 'pdf') {
-          // TODO: Add PDF text extraction support
-          // For now, throw error if PDF is used (we need PDF text extraction)
-          throw new Error('PDF text extraction not yet implemented. Please use PPTX format for now.');
-        }
+        let slides = [];
+        const tempFilePath = join(tmpdir(), `${inputFormat}-${jobId}.${inputFormat}`);
         
-        const tempPptxPath = join(tmpdir(), `pptx-${jobId}.pptx`);
         try {
-          writeFileSync(tempPptxPath, fileBuffer);
-          const slides = await PptxExtractorPro.extractSlides(tempPptxPath);
-          unlinkSync(tempPptxPath); // Clean up temp file
+          writeFileSync(tempFilePath, fileBuffer);
+          
+          if (inputFormat === 'pdf') {
+            // Extract text from PDF and split into slides (heuristic approach)
+            logger.info('[GenerateAvatarVideoFromPresentation] Extracting text from PDF', { jobId });
+            const text = await FileTextExtractor.extractTextFromFile(tempFilePath, '.pdf', {
+              openaiClient: this.openaiClient,
+            });
+            
+            if (!text || text.trim().length === 0) {
+              throw new Error('Failed to extract text from PDF. PDF may be image-only or corrupted.');
+            }
+            
+            // Split text into slides by common separators (three or more newlines)
+            // This is a heuristic - PDFs don't have explicit slide boundaries
+            const slideTexts = text.split(/\n\s*\n\s*\n+/).filter(t => t.trim().length > 0);
+            
+            if (slideTexts.length === 0) {
+              // Fallback: split by double newlines
+              const fallbackSlides = text.split(/\n\s*\n+/).filter(t => t.trim().length > 0);
+              if (fallbackSlides.length > 0) {
+                slideTexts.push(...fallbackSlides);
+              } else {
+                // Last resort: treat entire text as one slide
+                slideTexts.push(text);
+              }
+            }
+            
+            // Convert to slide structure compatible with PptxExtractorPro output
+            slides = slideTexts.slice(0, MAX_SLIDES).map((text, index) => {
+              const lines = text.split('\n').filter(l => l.trim().length > 0);
+              const title = lines[0] || `Slide ${index + 1}`;
+              const body = lines.slice(1).join(' ') || text;
+              return {
+                index: index + 1,
+                title,
+                body,
+                text,
+              };
+            });
+            
+            logger.info('[GenerateAvatarVideoFromPresentation] Extracted slides from PDF', {
+              jobId,
+              slideCount: slides.length,
+            });
+          } else {
+            // Extract slides from PPTX
+            slides = await PptxExtractorPro.extractSlides(tempFilePath);
+          }
+          
+          unlinkSync(tempFilePath); // Clean up temp file
 
           // Generate short narrations for each slide (max 40 words, 15-20 seconds)
           const narrations = [];
@@ -250,11 +293,19 @@ export class GenerateAvatarVideoFromPresentationUseCase {
             narrationCount: slideSpeeches.length,
           });
         } catch (extractionError) {
-          logger.error('[GenerateAvatarVideoFromPresentation] Failed to extract slides from PPTX', {
+          // Clean up temp file if it still exists
+          try {
+            unlinkSync(tempFilePath);
+          } catch (cleanupError) {
+            // Ignore cleanup errors
+          }
+          
+          logger.error('[GenerateAvatarVideoFromPresentation] Failed to extract slides', {
             jobId,
+            inputFormat,
             error: extractionError.message,
           });
-          throw new Error(`Failed to extract slides from PPTX: ${extractionError.message}`);
+          throw new Error(`Failed to extract slides from ${inputFormat.toUpperCase()}: ${extractionError.message}`);
         }
       } catch (error) {
         logger.error('[GenerateAvatarVideoFromPresentation] Failed to generate slide speeches', {
