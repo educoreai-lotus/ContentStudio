@@ -214,8 +214,14 @@ export class GenerateAvatarVideoFromPresentationUseCase {
           writeFileSync(tempFilePath, fileBuffer);
           
           if (inputFormat === 'pdf') {
-            // Extract text from PDF and split into slides (heuristic approach)
-            logger.info('[GenerateAvatarVideoFromPresentation] Extracting text from PDF', { jobId });
+            // Extract text from PDF and split into slides
+            // Use the number of extracted images to determine how many slides we have
+            const expectedSlideCount = slideImages.length;
+            logger.info('[GenerateAvatarVideoFromPresentation] Extracting text from PDF', {
+              jobId,
+              expectedSlideCount,
+            });
+            
             const text = await FileTextExtractor.extractTextFromFile(tempFilePath, '.pdf', {
               openaiClient: this.openaiClient,
             });
@@ -224,23 +230,44 @@ export class GenerateAvatarVideoFromPresentationUseCase {
               throw new Error('Failed to extract text from PDF. PDF may be image-only or corrupted.');
             }
             
-            // Split text into slides by common separators (three or more newlines)
-            // This is a heuristic - PDFs don't have explicit slide boundaries
-            const slideTexts = text.split(/\n\s*\n\s*\n+/).filter(t => t.trim().length > 0);
+            // Split text into slides based on expected slide count
+            // First try to split by common separators (three or more newlines)
+            let slideTexts = text.split(/\n\s*\n\s*\n+/).filter(t => t.trim().length > 0);
             
-            if (slideTexts.length === 0) {
-              // Fallback: split by double newlines
+            // If we got fewer slides than expected, try splitting by double newlines
+            if (slideTexts.length < expectedSlideCount) {
               const fallbackSlides = text.split(/\n\s*\n+/).filter(t => t.trim().length > 0);
-              if (fallbackSlides.length > 0) {
-                slideTexts.push(...fallbackSlides);
-              } else {
-                // Last resort: treat entire text as one slide
-                slideTexts.push(text);
+              if (fallbackSlides.length >= expectedSlideCount) {
+                slideTexts = fallbackSlides;
               }
             }
             
+            // If we still don't have enough slides, divide text evenly
+            if (slideTexts.length < expectedSlideCount) {
+              logger.info('[GenerateAvatarVideoFromPresentation] Dividing PDF text evenly across slides', {
+                jobId,
+                currentSlides: slideTexts.length,
+                expectedSlides: expectedSlideCount,
+              });
+              
+              const words = text.trim().split(/\s+/);
+              const wordsPerSlide = Math.ceil(words.length / expectedSlideCount);
+              
+              slideTexts = [];
+              for (let i = 0; i < expectedSlideCount; i++) {
+                const startIdx = i * wordsPerSlide;
+                const endIdx = Math.min(startIdx + wordsPerSlide, words.length);
+                const slideWords = words.slice(startIdx, endIdx);
+                slideTexts.push(slideWords.join(' '));
+              }
+            }
+            
+            // Limit to expected slide count and MAX_SLIDES
+            const maxSlides = Math.min(expectedSlideCount, MAX_SLIDES);
+            slideTexts = slideTexts.slice(0, maxSlides);
+            
             // Convert to slide structure compatible with PptxExtractorPro output
-            slides = slideTexts.slice(0, MAX_SLIDES).map((text, index) => {
+            slides = slideTexts.map((text, index) => {
               const lines = text.split('\n').filter(l => l.trim().length > 0);
               const title = lines[0] || `Slide ${index + 1}`;
               const body = lines.slice(1).join(' ') || text;
@@ -255,6 +282,8 @@ export class GenerateAvatarVideoFromPresentationUseCase {
             logger.info('[GenerateAvatarVideoFromPresentation] Extracted slides from PDF', {
               jobId,
               slideCount: slides.length,
+              expectedSlideCount,
+              match: slides.length === expectedSlideCount,
             });
           } else {
             // Extract slides from PPTX
