@@ -29,7 +29,7 @@ const AVERAGE_WPM = AVATAR_VIDEO_AVERAGE_WPM; // Single source of truth: 150 wor
  * 4. Extract slide text and generate short narrations per slide (15-20 sec, max 40 words)
  * 5. Create SlidePlan from images and speeches
  * 6. Resolve voice_id via VoiceIdResolver
- * 7. Build HeyGen template payload (background_1..background_N, speech_1..speech_N)
+ * 7. Build HeyGen template payload (image_1..image_N, speech_1..speech_N)
  * 8. Call HeyGen template API (generateTemplateVideo)
  * 
  * Video duration: Maximum 3 minutes (10 slides × 15-20 seconds = 2.5-3.3 minutes)
@@ -534,9 +534,7 @@ export class GenerateAvatarVideoFromPresentationUseCase {
       }
 
       // CRITICAL VALIDATION: Payload variable validation
-      // HeyGen template requires continuous variable pairs: background_1, speech_1, background_2, speech_2, etc.
-      // NOTE: Changed from image_N to background_N because the template defines image_N as CHARACTER type,
-      // not IMAGE. We need background_N variables of type IMAGE for slide backgrounds.
+      // HeyGen template requires continuous variable pairs: image_1, speech_1, image_2, speech_2, etc.
       // Missing or non-continuous indices cause silent API failures.
       // This guard ensures payload structure matches HeyGen template expectations.
       const variables = heygenPayload.variables || {};
@@ -545,14 +543,14 @@ export class GenerateAvatarVideoFromPresentationUseCase {
       
       // Validate all required variable pairs exist
       for (let i = 1; i <= expectedSlideCount; i++) {
-        const backgroundKey = `background_${i}`;
+        const imageKey = `image_${i}`;
         const speechKey = `speech_${i}`;
         
-        if (!variables[backgroundKey]) {
-          const errorMsg = `Invalid HeyGen payload: missing ${backgroundKey}. Expected continuous variables from background_1 to background_${expectedSlideCount}.`;
+        if (!variables[imageKey]) {
+          const errorMsg = `Invalid HeyGen payload: missing ${imageKey}. Expected continuous variables from image_1 to image_${expectedSlideCount}.`;
           logger.error('[GenerateAvatarVideoFromPresentation] Payload variable validation failed', {
             jobId,
-            missingKey: backgroundKey,
+            missingKey: imageKey,
             expectedSlideCount,
             availableKeys: variableKeys,
           });

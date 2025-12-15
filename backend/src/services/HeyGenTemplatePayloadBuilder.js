@@ -5,7 +5,7 @@
  * Requirements:
  * - Input: templateId, slides (SlidePlan[]), title, caption (boolean), voiceId (optional)
  * - Output: request payload JSON for HeyGen Template v2 generate
- * - variables: map with keys background_1..background_10, speech_1..speech_10 from slides
+ * - variables: map with keys image_1..image_10, speech_1..speech_10 from slides
  * - Do not include keys for slides that don't exist (if N<10)
  * - Validation: reject slides with missing imageUrl/speakerText
  */
@@ -176,18 +176,23 @@ export class HeyGenTemplatePayloadBuilder {
     for (const slide of sortedSlides) {
       const slideNum = slide.index;
 
-      // Add background variable: background_1, background_2, ..., background_10
-      // Template expects: { type: "image", value: { url: "https://..." } }
-      // NOTE: The current template (2c01158bec1149c49d35effb4bd79791) defines image_1 as CHARACTER,
-      // not IMAGE. We need a new template with background_N variables of type IMAGE.
-      // For now, we use background_N which should work with the correct template structure.
+      // Add image variable: image_1, image_2, ..., image_10
+      // Template expects: { type: "image", value: { image: { url: "...", name: "..." } } }
       const imageUrl = slide.imageUrl.trim();
-      const backgroundKey = `background_${slideNum}`;
+      const imageKey = `image_${slideNum}`;
       
-      variables[backgroundKey] = {
+      // Extract image name from URL for the name field
+      const urlParts = imageUrl.split('/');
+      const fileName = urlParts[urlParts.length - 1] || `slide-${slideNum}`;
+      const imageName = fileName.replace(/\.(png|jpg|jpeg)$/i, '') || `slide-${slideNum}`;
+      
+      variables[imageKey] = {
         type: 'image',
         value: {
-          url: imageUrl,
+          image: {
+            url: imageUrl,
+            name: imageName,
+          },
         },
       };
 
