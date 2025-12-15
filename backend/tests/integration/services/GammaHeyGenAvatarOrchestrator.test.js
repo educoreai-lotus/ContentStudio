@@ -202,7 +202,8 @@ describe('GammaHeyGenAvatarOrchestrator - End-to-End', () => {
       expect(mockSlideImageExtractor.extractSlideImages).toHaveBeenCalledWith(
         expect.any(Buffer),
         result.jobId,
-        10
+        10,
+        true // requireFullRendering: Avatar videos MUST use fully rendered slide images
       );
 
       expect(mockSlideSpeechBuilder.buildSpeakerText).toHaveBeenCalledWith(aiSlideExplanations);
@@ -435,7 +436,8 @@ describe('GammaHeyGenAvatarOrchestrator - End-to-End', () => {
       expect(mockSlideImageExtractor.extractSlideImages).toHaveBeenCalledWith(
         expect.any(Buffer),
         customJobId,
-        10
+        10,
+        true // requireFullRendering: Avatar videos MUST use fully rendered slide images
       );
     });
 

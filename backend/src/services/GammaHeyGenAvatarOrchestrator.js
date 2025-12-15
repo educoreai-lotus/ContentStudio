@@ -154,10 +154,13 @@ export class GammaHeyGenAvatarOrchestrator {
 
       let gammaResult;
       try {
+        // Use PDF export for avatar videos (easier to convert to images without LibreOffice)
+        // PDF can be converted directly to PNG using pdftoppm (poppler-utils)
         gammaResult = await this.gammaClient.generatePresentation(inputText, {
           topicName: `Topic ${topicId}`,
           language: languageCode,
           maxSlides: AVATAR_VIDEO_MAX_SLIDES, // Hard limit from single source of truth
+          exportFormat: 'pdf', // Use PDF for easier image extraction (no LibreOffice needed)
         });
         jobState.steps.gammaGeneration = {
           status: 'completed',
@@ -194,20 +197,23 @@ export class GammaHeyGenAvatarOrchestrator {
       logger.info('[GammaHeyGenAvatarOrchestrator] Step 2: Extracting slide images', {
         jobId: finalJobId,
         pptxUrl,
+        exportFormat: gammaResult.exportFormat || 'pdf', // Gamma exports PDF for avatar videos
       });
 
       let slideImages;
-      let pptxBuffer; // Store buffer for later use in Step 3
+      let pptxBuffer; // Store buffer for later use in Step 3 (can be PDF or PPTX)
       try {
-        // Download PPTX to buffer for extraction
+        // Download file to buffer for extraction (PDF or PPTX)
         const axios = (await import('axios')).default;
-        const pptxResponse = await axios.get(pptxUrl, { responseType: 'arraybuffer' });
-        pptxBuffer = Buffer.from(pptxResponse.data);
+        const fileResponse = await axios.get(pptxUrl, { responseType: 'arraybuffer' });
+        pptxBuffer = Buffer.from(fileResponse.data);
 
         slideImages = await this.slideImageExtractor.extractSlideImages(
           pptxBuffer,
           finalJobId,
-          AVATAR_VIDEO_MAX_SLIDES // Hard limit from single source of truth
+          AVATAR_VIDEO_MAX_SLIDES, // Hard limit from single source of truth
+          true, // requireFullRendering: Avatar videos MUST use fully rendered slide images (background + text + layout)
+          'pdf' // inputFormat: Gamma exports PDF for avatar videos (easier to convert without LibreOffice)
         );
 
         jobState.steps.imageExtraction = {

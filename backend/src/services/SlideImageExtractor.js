@@ -38,13 +38,17 @@ export class SlideImageExtractor {
 
   /**
    * Extract images from PPTX slides and upload to storage
-   * @param {string|Buffer} pptxInput - Path to PPTX file or Buffer
+   * @param {string|Buffer} pptxInput - Path to PPTX file or Buffer (or PDF file/Buffer)
    * @param {string} jobId - Job ID for deterministic naming
    * @param {number} maxSlides - Maximum number of slides to extract (default: 10)
+   * @param {boolean} requireFullRendering - If true, requires full slide rendering (LibreOffice/pdftoppm). 
+   *                                         No fallback to embedded images. Throws error if rendering unavailable.
+   *                                         Used for avatar video generation where slide text must be visible.
+   * @param {string} [inputFormat] - Input format: 'pptx' (default) or 'pdf'. If 'pdf', skips LibreOffice conversion.
    * @returns {Promise<Array<{index: number, imageUrl: string}>>} Array of slide images with URLs
    * @throws {Error} If extraction or upload fails
    */
-  async extractSlideImages(pptxInput, jobId, maxSlides = 10) {
+  async extractSlideImages(pptxInput, jobId, maxSlides = 10, requireFullRendering = false, inputFormat = 'pptx') {
     if (!jobId || typeof jobId !== 'string' || jobId.trim().length === 0) {
       throw new Error('Job ID is required and must be a non-empty string');
     }
@@ -67,6 +71,13 @@ export class SlideImageExtractor {
         throw new Error('pptxInput must be a file path (string) or Buffer');
       }
 
+      // If input is PDF, extract directly from PDF (no LibreOffice needed)
+      if (inputFormat === 'pdf') {
+        // For PDF, we need to determine slide count from PDF pages
+        // We'll extract all pages and limit to maxSlides
+        return await this._extractFromPDF(pptxBuffer, jobId, maxSlides, requireFullRendering);
+      }
+
       // Validate PPTX file (must be a ZIP file)
       try {
         const zip = await JSZip.loadAsync(pptxBuffer);
@@ -83,14 +94,12 @@ export class SlideImageExtractor {
           totalSlides: slideFiles.length,
           extracting: slideCount,
           jobId,
+          requireFullRendering,
+          inputFormat,
         });
 
-        // For now, we'll use a fallback approach:
-        // Since converting PPTX slides to images requires external tools (LibreOffice, etc.),
-        // we'll extract embedded images from slides and use them as placeholders
-        // In production, you would use a proper PPTX-to-image converter
-        
-        return await this._extractSlideImagesFromPptx(pptxBuffer, jobId, slideCount);
+        // Extract slide images with appropriate strategy (PPTX -> PDF -> PNG)
+        return await this._extractSlideImagesFromPptx(pptxBuffer, jobId, slideCount, requireFullRendering);
 
       } catch (zipError) {
         if (zipError.message.includes('No slides found')) {
@@ -137,16 +146,53 @@ export class SlideImageExtractor {
    * @param {Buffer} pptxBuffer - PPTX file buffer
    * @param {string} jobId - Job ID
    * @param {number} slideCount - Number of slides to extract
+   * @param {boolean} requireFullRendering - If true, requires full slide rendering (no fallback)
    * @returns {Promise<Array<{index: number, imageUrl: string}>>}
+   * @throws {Error} If requireFullRendering is true and LibreOffice/pdftoppm is unavailable
    */
-  async _extractSlideImagesFromPptx(pptxBuffer, jobId, slideCount) {
-    // Strategy: Try LibreOffice conversion first, fallback to embedded images
+  async _extractSlideImagesFromPptx(pptxBuffer, jobId, slideCount, requireFullRendering = false) {
+    logger.info('[SlideImageExtractor] Starting slide image extraction', {
+      jobId,
+      slideCount,
+      requireFullRendering,
+      strategy: requireFullRendering ? 'FULL_SLIDE_RENDERING_REQUIRED' : 'FULL_RENDERING_WITH_FALLBACK',
+    });
+
+    // Strategy: Try LibreOffice conversion first
     try {
-      return await this._extractUsingLibreOffice(pptxBuffer, jobId, slideCount);
+      const result = await this._extractUsingLibreOffice(pptxBuffer, jobId, slideCount);
+      logger.info('[SlideImageExtractor] Successfully extracted slides using FULL SLIDE RENDERING (LibreOffice + pdftoppm)', {
+        jobId,
+        slideCount: result.length,
+        strategy: 'FULL_SLIDE_RENDERING',
+        renderingMethod: 'LibreOffice -> PDF -> PNG (pdftoppm)',
+      });
+      return result;
     } catch (libreOfficeError) {
-      logger.warn('[SlideImageExtractor] LibreOffice conversion failed, trying embedded images fallback', {
+      // If full rendering is required (e.g., for avatar videos), throw hard error
+      if (requireFullRendering) {
+        logger.error('[SlideImageExtractor] FULL SLIDE RENDERING REQUIRED but LibreOffice/pdftoppm unavailable', {
+          jobId,
+          error: libreOfficeError.message,
+          strategy: 'FULL_SLIDE_RENDERING_REQUIRED',
+          reason: 'Avatar videos require fully rendered slide images (background + text + layout). Embedded images fallback is not allowed.',
+          requiredTools: ['LibreOffice', 'poppler-utils (pdftoppm)'],
+        });
+        throw new Error(
+          `FULL SLIDE RENDERING REQUIRED: LibreOffice/pdftoppm is not available. ` +
+          `Avatar videos require fully rendered slide images where all text, backgrounds, and layouts are visible. ` +
+          `Embedded images fallback is NOT allowed for avatar video generation. ` +
+          `Please install LibreOffice and poppler-utils. ` +
+          `Original error: ${libreOfficeError.message}`
+        );
+      }
+
+      // Fallback to embedded images only if full rendering is NOT required
+      logger.warn('[SlideImageExtractor] LibreOffice conversion failed, using embedded images fallback', {
         error: libreOfficeError.message,
         jobId,
+        strategy: 'EMBEDDED_IMAGES_FALLBACK',
+        warning: 'This fallback does NOT render slide text/layout. Only embedded images are extracted.',
       });
       return await this._extractEmbeddedImages(pptxBuffer, jobId, slideCount);
     }
@@ -175,18 +221,29 @@ export class SlideImageExtractor {
       writeFileSync(pptxPath, pptxBuffer);
 
       // Check if LibreOffice is available
+      let libreOfficeAvailable = false;
       try {
         await execAsync('which libreoffice || where libreoffice');
+        libreOfficeAvailable = true;
+        logger.info('[SlideImageExtractor] LibreOffice is available', { jobId });
       } catch (checkError) {
+        logger.error('[SlideImageExtractor] LibreOffice is NOT available', {
+          jobId,
+          error: checkError.message,
+        });
         throw new Error(
           'LibreOffice is not installed or not in PATH. ' +
           'Please install LibreOffice to convert PPTX slides to images. ' +
-          'Alternatively, the extractor will try to use embedded images from the PPTX file.'
+          'Installation: sudo apt-get install libreoffice (Linux) or brew install libreoffice (Mac)'
         );
       }
 
       // Convert PPTX to PDF using LibreOffice
-      logger.info('[SlideImageExtractor] Converting PPTX to PDF using LibreOffice', { jobId });
+      logger.info('[SlideImageExtractor] Converting PPTX to PDF using LibreOffice (FULL SLIDE RENDERING)', {
+        jobId,
+        strategy: 'FULL_SLIDE_RENDERING',
+        step: 'PPTX -> PDF',
+      });
       await execAsync(
         `libreoffice --headless --convert-to pdf --outdir "${tempDir}" "${pptxPath}"`,
         { timeout: 60000 } // 60 second timeout
@@ -196,20 +253,52 @@ export class SlideImageExtractor {
         throw new Error('LibreOffice conversion failed: PDF file not created');
       }
 
-      // Convert PDF pages to PNG images (using pdf2pic or similar)
-      // For now, we'll use a simple approach: check if pdf2pic is available
-      // If not, we'll fall back to embedded images
+      // Convert PDF pages to PNG images using pdftoppm (poppler-utils)
+      // CRITICAL: This is required for full slide rendering (text + layout + background)
+      logger.info('[SlideImageExtractor] Converting PDF pages to PNG images using pdftoppm (FULL SLIDE RENDERING)', {
+        jobId,
+        strategy: 'FULL_SLIDE_RENDERING',
+        step: 'PDF -> PNG',
+        tool: 'pdftoppm (poppler-utils)',
+      });
+      
+      let pdftoppmAvailable = false;
       try {
-        // Try using pdf-poppler or similar tool
+        // Check if pdftoppm is available
+        await execAsync('which pdftoppm || where pdftoppm');
+        pdftoppmAvailable = true;
+        logger.info('[SlideImageExtractor] pdftoppm is available', { jobId });
+      } catch (checkError) {
+        logger.error('[SlideImageExtractor] pdftoppm is NOT available', {
+          jobId,
+          error: checkError.message,
+        });
+        throw new Error(
+          'PDF to image conversion tool (pdftoppm) is not installed or not in PATH. ' +
+          'pdftoppm is required for full slide rendering. ' +
+          'Please install poppler-utils: sudo apt-get install poppler-utils (Linux) or brew install poppler (Mac)'
+        );
+      }
+
+      try {
+        // Convert PDF to PNG images (one per page/slide)
         await execAsync(
           `pdftoppm -png -r 150 "${pdfPath}" "${join(outputDir, 'slide')}"`,
           { timeout: 120000 } // 2 minute timeout
         );
+        logger.info('[SlideImageExtractor] Successfully converted PDF to PNG images', {
+          jobId,
+          outputDir,
+        });
       } catch (pdfError) {
-        // If pdftoppm is not available, try alternative
+        logger.error('[SlideImageExtractor] pdftoppm conversion failed', {
+          jobId,
+          error: pdfError.message,
+          pdfPath,
+        });
         throw new Error(
-          'PDF to image conversion tool (pdftoppm) is not available. ' +
-          'Please install poppler-utils or use embedded images fallback.'
+          `PDF to PNG conversion failed using pdftoppm: ${pdfError.message}. ` +
+          `This is required for full slide rendering.`
         );
       }
 
@@ -255,11 +344,13 @@ export class SlideImageExtractor {
           imageUrl: uploadResult.url,
         });
 
-        logger.info('[SlideImageExtractor] Uploaded slide image (LibreOffice)', {
+        logger.info('[SlideImageExtractor] Uploaded slide image (FULL SLIDE RENDERING)', {
           slideIndex,
           fileName,
           imageUrl: uploadResult.url,
           jobId,
+          renderingMethod: 'LibreOffice -> PDF -> PNG (pdftoppm)',
+          strategy: 'FULL_SLIDE_RENDERING',
         });
       }
 
@@ -401,6 +492,159 @@ export class SlideImageExtractor {
     });
 
     return results;
+  }
+
+  /**
+   * Extract slide images directly from PDF (no LibreOffice needed)
+   * @private
+   * @param {Buffer} pdfBuffer - PDF file buffer
+   * @param {string} jobId - Job ID
+   * @param {number} slideCount - Number of slides to extract
+   * @param {boolean} requireFullRendering - If true, requires pdftoppm (no fallback)
+   * @returns {Promise<Array<{index: number, imageUrl: string}>>}
+   * @throws {Error} If requireFullRendering is true and pdftoppm is unavailable
+   */
+  async _extractFromPDF(pdfBuffer, jobId, slideCount, requireFullRendering = false) {
+    const tempDir = join(tmpdir(), `pdf-extract-${jobId}-${Date.now()}`);
+    const pdfPath = join(tempDir, 'presentation.pdf');
+    const outputDir = join(tempDir, 'slides');
+
+    try {
+      // Create temp directory
+      mkdirSync(tempDir, { recursive: true });
+      mkdirSync(outputDir, { recursive: true });
+
+      // Write PDF to temp file
+      writeFileSync(pdfPath, pdfBuffer);
+
+      logger.info('[SlideImageExtractor] Converting PDF pages to PNG images (FULL SLIDE RENDERING)', {
+        jobId,
+        strategy: 'FULL_SLIDE_RENDERING',
+        step: 'PDF -> PNG',
+        tool: 'pdftoppm (poppler-utils)',
+      });
+
+      // Check if pdftoppm is available
+      let pdftoppmAvailable = false;
+      try {
+        await execAsync('which pdftoppm || where pdftoppm');
+        pdftoppmAvailable = true;
+        logger.info('[SlideImageExtractor] pdftoppm is available', { jobId });
+      } catch (checkError) {
+        logger.error('[SlideImageExtractor] pdftoppm is NOT available', {
+          jobId,
+          error: checkError.message,
+        });
+        if (requireFullRendering) {
+          throw new Error(
+            'PDF to image conversion tool (pdftoppm) is not installed or not in PATH. ' +
+            'pdftoppm is required for full slide rendering. ' +
+            'Please install poppler-utils: sudo apt-get install poppler-utils (Linux) or brew install poppler (Mac)'
+          );
+        }
+        // If not required, we can't proceed without pdftoppm for PDF
+        throw new Error(
+          'PDF to image conversion requires pdftoppm. ' +
+          'Please install poppler-utils: sudo apt-get install poppler-utils (Linux) or brew install poppler (Mac)'
+        );
+      }
+
+      // Convert PDF to PNG images (one per page/slide)
+      try {
+        await execAsync(
+          `pdftoppm -png -r 150 "${pdfPath}" "${join(outputDir, 'slide')}"`,
+          { timeout: 120000 } // 2 minute timeout
+        );
+        logger.info('[SlideImageExtractor] Successfully converted PDF to PNG images', {
+          jobId,
+          outputDir,
+        });
+      } catch (pdfError) {
+        logger.error('[SlideImageExtractor] pdftoppm conversion failed', {
+          jobId,
+          error: pdfError.message,
+          pdfPath,
+        });
+        throw new Error(
+          `PDF to PNG conversion failed using pdftoppm: ${pdfError.message}. ` +
+          `This is required for full slide rendering.`
+        );
+      }
+
+      // Read generated PNG files
+      const slideFiles = readdirSync(outputDir)
+        .filter(file => file.startsWith('slide-') && file.endsWith('.png'))
+        .sort((a, b) => {
+          const aNum = parseInt(a.match(/slide-(\d+)\.png/)?.[1] || '0');
+          const bNum = parseInt(b.match(/slide-(\d+)\.png/)?.[1] || '0');
+          return aNum - bNum;
+        })
+        .slice(0, slideCount);
+
+      if (slideFiles.length === 0) {
+        throw new Error('No slide images were generated from PDF');
+      }
+
+      const results = [];
+
+      // Upload each slide image
+      for (let i = 0; i < slideFiles.length; i++) {
+        const slideFile = slideFiles[i];
+        const slideIndex = i + 1;
+        const imagePath = join(outputDir, slideFile);
+        const imageBuffer = readFileSync(imagePath);
+
+        // Generate deterministic filename
+        const fileName = `heygen/slides/${jobId}/slide-${String(slideIndex).padStart(2, '0')}.png`;
+
+        // Upload to storage
+        const uploadResult = await this.storageClient.uploadFile(
+          imageBuffer,
+          fileName,
+          'image/png'
+        );
+
+        if (!uploadResult.url) {
+          throw new Error(`Failed to get public URL for slide ${slideIndex}`);
+        }
+
+        results.push({
+          index: slideIndex,
+          imageUrl: uploadResult.url,
+        });
+
+        logger.info('[SlideImageExtractor] Uploaded slide image (PDF -> PNG)', {
+          slideIndex,
+          fileName,
+          imageUrl: uploadResult.url,
+          jobId,
+          renderingMethod: 'PDF -> PNG (pdftoppm)',
+          strategy: 'FULL_SLIDE_RENDERING',
+        });
+      }
+
+      return results;
+
+    } finally {
+      // Cleanup temp files
+      try {
+        if (existsSync(pdfPath)) unlinkSync(pdfPath);
+        if (existsSync(outputDir)) {
+          readdirSync(outputDir).forEach(file => {
+            try {
+              unlinkSync(join(outputDir, file));
+            } catch (e) {
+              // Ignore cleanup errors
+            }
+          });
+        }
+      } catch (cleanupError) {
+        logger.warn('[SlideImageExtractor] Failed to cleanup temp files', {
+          error: cleanupError.message,
+          jobId,
+        });
+      }
+    }
   }
 
   /**

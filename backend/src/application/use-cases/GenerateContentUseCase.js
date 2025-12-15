@@ -413,6 +413,7 @@ ${basePrompt}`;
 
           const rawContentData = {
             format: presentation.format || 'gamma',
+            exportFormat: presentation.exportFormat || 'pptx', // 'pptx' or 'pdf' - file format from Gamma
             presentationUrl: presentation.presentationUrl, // Supabase Storage URL only
             storagePath: presentation.storagePath, // Required storage path
             metadata: {

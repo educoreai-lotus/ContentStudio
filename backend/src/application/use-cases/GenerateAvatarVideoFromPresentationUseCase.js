@@ -126,17 +126,27 @@ export class GenerateAvatarVideoFromPresentationUseCase {
         presentationFileUrl,
       });
 
-      // Step 2: Download PPTX file
-      let pptxBuffer;
+      // Step 2: Download presentation file (PPTX or PDF)
+      let fileBuffer;
+      let inputFormat = 'pptx'; // Default to PPTX
       try {
-        const pptxResponse = await axios.get(presentationFileUrl, { responseType: 'arraybuffer' });
-        pptxBuffer = Buffer.from(pptxResponse.data);
-        logger.info('[GenerateAvatarVideoFromPresentation] PPTX downloaded successfully', {
+        const fileResponse = await axios.get(presentationFileUrl, { responseType: 'arraybuffer' });
+        fileBuffer = Buffer.from(fileResponse.data);
+        
+        // Detect file format from URL extension or content-type
+        if (presentationFileUrl.toLowerCase().endsWith('.pdf') || 
+            (fileBuffer.length > 4 && fileBuffer[0] === 0x25 && fileBuffer[1] === 0x50 && 
+             fileBuffer[2] === 0x44 && fileBuffer[3] === 0x46)) { // PDF magic bytes: %PDF
+          inputFormat = 'pdf';
+        }
+        
+        logger.info('[GenerateAvatarVideoFromPresentation] File downloaded successfully', {
           jobId,
-          bufferSize: pptxBuffer.length,
+          bufferSize: fileBuffer.length,
+          inputFormat,
         });
       } catch (error) {
-        logger.error('[GenerateAvatarVideoFromPresentation] Failed to download PPTX', {
+        logger.error('[GenerateAvatarVideoFromPresentation] Failed to download presentation file', {
           jobId,
           error: error.message,
         });
@@ -149,14 +159,17 @@ export class GenerateAvatarVideoFromPresentationUseCase {
       // Images are not retained after the HeyGen video generation call completes.
       logger.info('[GenerateAvatarVideoFromPresentation] Step 3: Extracting slide images', {
         jobId,
+        inputFormat,
       });
 
       let slideImages;
       try {
         slideImages = await this.slideImageExtractor.extractSlideImages(
-          pptxBuffer,
+          fileBuffer,
           jobId,
-          MAX_SLIDES // Hard limit: maximum 9 slides
+          MAX_SLIDES, // Hard limit: maximum 9 slides
+          true, // requireFullRendering: Avatar videos MUST use fully rendered slide images (background + text + layout)
+          inputFormat // Pass detected format (pdf or pptx)
         );
         logger.info('[GenerateAvatarVideoFromPresentation] Slide images extracted successfully', {
           jobId,
@@ -183,18 +196,27 @@ export class GenerateAvatarVideoFromPresentationUseCase {
         throw new Error(errorMsg);
       }
 
-      // Step 4: Extract slides from PPTX and generate short narrations per slide
+      // Step 4: Extract slides from PPTX/PDF and generate short narrations per slide
       logger.info('[GenerateAvatarVideoFromPresentation] Step 4: Extracting slides and generating short narrations', {
         jobId,
         language,
+        inputFormat,
       });
 
       let slideSpeeches;
       try {
-        // Extract slides from PPTX
+        // Extract slides from PPTX or PDF
+        // For PDF, we'll need to extract text differently (using PDF text extraction)
+        // For now, we'll only support PPTX for text extraction
+        if (inputFormat === 'pdf') {
+          // TODO: Add PDF text extraction support
+          // For now, throw error if PDF is used (we need PDF text extraction)
+          throw new Error('PDF text extraction not yet implemented. Please use PPTX format for now.');
+        }
+        
         const tempPptxPath = join(tmpdir(), `pptx-${jobId}.pptx`);
         try {
-          writeFileSync(tempPptxPath, pptxBuffer);
+          writeFileSync(tempPptxPath, fileBuffer);
           const slides = await PptxExtractorPro.extractSlides(tempPptxPath);
           unlinkSync(tempPptxPath); // Clean up temp file
 

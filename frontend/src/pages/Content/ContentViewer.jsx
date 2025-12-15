@@ -246,6 +246,14 @@ export const ContentViewer = () => {
                                    content.content_data?.gamma_raw_response?.gammaUrl ||
                                    content.content_data?.gammaUrl;
                   
+                  // Detect file format: check exportFormat field, then URL extension, default to PPTX
+                  const exportFormat = content.content_data?.exportFormat || 
+                                       (presentationUrl?.toLowerCase().endsWith('.pdf') ? 'pdf' : null) ||
+                                       (presentationUrl?.toLowerCase().endsWith('.pptx') ? 'pptx' : null) ||
+                                       'pptx'; // Default to PPTX for backward compatibility
+                  const fileFormatLabel = exportFormat.toUpperCase();
+                  const fileFormatIcon = exportFormat === 'pdf' ? 'fa-file-pdf' : 'fa-file-powerpoint';
+                  
                   return (gammaUrl || presentationUrl) && (
                     <div className="mt-4 space-y-3">
                       <div className="flex flex-col sm:flex-row gap-3 justify-center">
@@ -269,7 +277,7 @@ export const ContentViewer = () => {
                             className="inline-block px-6 py-3 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors"
                           >
                             <i className="fas fa-download mr-2"></i>
-                            Download PPTX
+                            Download {fileFormatLabel}
                           </a>
                         )}
                       </div>
@@ -279,10 +287,10 @@ export const ContentViewer = () => {
                         }`}
                       >
                         {gammaUrl && presentationUrl 
-                          ? 'View online or download PPTX file' 
+                          ? `View online or download ${fileFormatLabel} file` 
                           : gammaUrl 
                           ? 'Opens in Gamma viewer' 
-                          : 'PPTX file from Supabase Storage'}
+                          : `${fileFormatLabel} file from Supabase Storage`}
                       </p>
                     </div>
                   );

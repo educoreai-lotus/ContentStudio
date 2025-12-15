@@ -357,18 +357,26 @@ export const AIContentPreview = () => {
                               View Presentation
                             </a>
                           )}
-                          {presentationUrl && (
-                            <a
-                              href={presentationUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              download
-                              className="inline-block px-6 py-3 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors"
-                            >
-                              <i className="fas fa-download mr-2"></i>
-                              Download PPTX
-                            </a>
-                          )}
+                          {presentationUrl && (() => {
+                            // Detect file format: check exportFormat field, then URL extension, default to PPTX
+                            const exportFormat = content.content_data?.exportFormat || 
+                                                 (presentationUrl?.toLowerCase().endsWith('.pdf') ? 'pdf' : null) ||
+                                                 (presentationUrl?.toLowerCase().endsWith('.pptx') ? 'pptx' : null) ||
+                                                 'pptx'; // Default to PPTX for backward compatibility
+                            const fileFormatLabel = exportFormat.toUpperCase();
+                            return (
+                              <a
+                                href={presentationUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                download
+                                className="inline-block px-6 py-3 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors"
+                              >
+                                <i className="fas fa-download mr-2"></i>
+                                Download {fileFormatLabel}
+                              </a>
+                            );
+                          })()}
                         </div>
                         <p
                           className={`text-xs ${
@@ -376,10 +384,22 @@ export const AIContentPreview = () => {
                           }`}
                         >
                           {gammaUrl && presentationUrl 
-                            ? 'View online or download PPTX file' 
+                            ? (() => {
+                                const exportFormat = content.content_data?.exportFormat || 
+                                                     (presentationUrl?.toLowerCase().endsWith('.pdf') ? 'pdf' : null) ||
+                                                     (presentationUrl?.toLowerCase().endsWith('.pptx') ? 'pptx' : null) ||
+                                                     'pptx';
+                                return `View online or download ${exportFormat.toUpperCase()} file`;
+                              })()
                             : gammaUrl 
                             ? 'Opens in Gamma viewer' 
-                            : 'PPTX file from Supabase Storage'}
+                            : (() => {
+                                const exportFormat = content.content_data?.exportFormat || 
+                                                     (presentationUrl?.toLowerCase().endsWith('.pdf') ? 'pdf' : null) ||
+                                                     (presentationUrl?.toLowerCase().endsWith('.pptx') ? 'pptx' : null) ||
+                                                     'pptx';
+                                return `${exportFormat.toUpperCase()} file from Supabase Storage`;
+                              })()}
                         </p>
                       </div>
                     );

@@ -519,10 +519,19 @@ export default function TopicContentManager() {
     const presentationUrl = parsedData?.presentationUrl || parsedData?.googleSlidesUrl || parsedData?.fileUrl;
     const presentation = parsedData?.presentation;
     const gammaUrl = parsedData?.metadata?.gamma_raw_response?.result?.gammaUrl || parsedData?.metadata?.gamma_raw_response?.gammaUrl || parsedData?.gamma_raw_response?.result?.gammaUrl || parsedData?.gamma_raw_response?.gammaUrl || parsedData?.gammaUrl;
+    
+    // Detect file format: check exportFormat field, then URL extension, default to PPTX
+    const exportFormat = parsedData?.exportFormat || 
+                         (presentationUrl?.toLowerCase().endsWith('.pdf') ? 'pdf' : null) ||
+                         (presentationUrl?.toLowerCase().endsWith('.pptx') ? 'pptx' : null) ||
+                         'pptx'; // Default to PPTX for backward compatibility
+    const fileFormatLabel = exportFormat.toUpperCase();
+    const fileFormatIcon = exportFormat === 'pdf' ? 'fa-file-pdf' : 'fa-file-powerpoint';
+    
     return (
       <div className={`p-6 rounded-lg border-2 border-dashed ${theme === 'day-mode' ? 'bg-purple-50 border-purple-300' : 'bg-purple-900/20 border-purple-500/30'}`}>
         <div className="flex items-center justify-center mb-4">
-          <i className="fas fa-file-powerpoint text-6xl text-purple-600"></i>
+          <i className={`fas ${fileFormatIcon} text-6xl ${exportFormat === 'pdf' ? 'text-red-600' : 'text-purple-600'}`}></i>
         </div>
         <div className="text-center space-y-2">
           <h3 className={`text-lg font-semibold ${theme === 'day-mode' ? 'text-gray-900' : 'text-white'}`}>{presentation?.title || parsedData?.fileName || 'Presentation File'}</h3>
@@ -537,7 +546,7 @@ export default function TopicContentManager() {
                 )}
                 {presentationUrl && (
                   <a href={presentationUrl} target="_blank" rel="noopener noreferrer" download className="inline-block px-6 py-3 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors">
-                    <i className="fas fa-download mr-2"></i>Download PPTX
+                    <i className="fas fa-download mr-2"></i>Download {fileFormatLabel}
                   </a>
                 )}
               </div>

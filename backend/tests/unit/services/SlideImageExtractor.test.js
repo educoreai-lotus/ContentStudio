@@ -315,5 +315,60 @@ describe('SlideImageExtractor', () => {
       extractor._extractUsingLibreOffice = originalExtract;
     });
   });
+
+  describe('requireFullRendering (Avatar Video Mode)', () => {
+    it('should throw hard error if requireFullRendering=true and LibreOffice unavailable', async () => {
+      const zip = new JSZip();
+      zip.file('ppt/slides/slide1.xml', '<?xml version="1.0"?><slide/>');
+      zip.file('ppt/media/image1.png', Buffer.from('fake-image-1'));
+      const pptxBuffer = await zip.generateAsync({ type: 'nodebuffer' });
+
+      // Mock LibreOffice to fail
+      const originalExtract = extractor._extractUsingLibreOffice;
+      extractor._extractUsingLibreOffice = jest.fn().mockRejectedValue(
+        new Error('LibreOffice is not installed or not in PATH')
+      );
+
+      // With requireFullRendering=true, should throw hard error (no fallback)
+      await expect(
+        extractor.extractSlideImages(pptxBuffer, 'test-job', 1, true)
+      ).rejects.toThrow('FULL SLIDE RENDERING REQUIRED');
+
+      // Error message should mention avatar videos and no fallback
+      try {
+        await extractor.extractSlideImages(pptxBuffer, 'test-job', 1, true);
+      } catch (error) {
+        expect(error.message).toContain('FULL SLIDE RENDERING REQUIRED');
+        expect(error.message).toContain('Avatar videos require fully rendered slide images');
+        expect(error.message).toContain('Embedded images fallback is NOT allowed');
+      }
+
+      // Restore original method
+      extractor._extractUsingLibreOffice = originalExtract;
+    });
+
+    it('should allow fallback to embedded images when requireFullRendering=false', async () => {
+      const zip = new JSZip();
+      zip.file('ppt/slides/slide1.xml', '<?xml version="1.0"?><slide/>');
+      zip.file('ppt/media/image1.png', Buffer.from('fake-image-1'));
+      const pptxBuffer = await zip.generateAsync({ type: 'nodebuffer' });
+
+      // Mock LibreOffice to fail
+      const originalExtract = extractor._extractUsingLibreOffice;
+      extractor._extractUsingLibreOffice = jest.fn().mockRejectedValue(
+        new Error('LibreOffice not available')
+      );
+
+      // With requireFullRendering=false (default), should fallback to embedded images
+      const results = await extractor.extractSlideImages(pptxBuffer, 'test-job', 1, false);
+
+      expect(results).toHaveLength(1);
+      expect(results[0].index).toBe(1);
+      expect(results[0].imageUrl).toContain('heygen/slides/test-job/slide-01.png');
+
+      // Restore original method
+      extractor._extractUsingLibreOffice = originalExtract;
+    });
+  });
 });
 

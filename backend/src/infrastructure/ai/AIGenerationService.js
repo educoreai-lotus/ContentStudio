@@ -601,6 +601,7 @@ This presentation should be educational and suitable for ${audience}.`;
       topicName,
       language,
       audience,
+      exportFormat: 'pptx', // Default to PPTX for regular presentations (can be changed to 'pdf' if needed)
     });
 
     // MANDATORY: Only return Supabase Storage URL, never gammaUrl
@@ -617,6 +618,7 @@ This presentation should be educational and suitable for ${audience}.`;
       presentationUrl: gammaResult.presentationUrl, // Must be Supabase Storage URL
       storagePath: gammaResult.storagePath, // Required storage path
       format: 'gamma',
+      exportFormat: gammaResult.exportFormat || 'pptx', // 'pptx' or 'pdf' - file format from Gamma
       // Include file integrity data if available
       sha256Hash: gammaResult.sha256Hash || null,
       digitalSignature: gammaResult.digitalSignature || null,
