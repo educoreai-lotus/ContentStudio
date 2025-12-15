@@ -177,25 +177,26 @@ export class HeyGenTemplatePayloadBuilder {
       const slideNum = slide.index;
 
       // Add image variable: image_1, image_2, ..., image_10
-      // HeyGen Template API v2 expects variables in format: { name: "...", type: "image", properties: { url: "..." } }
-      // Reference: https://docs.heygen.com/docs/generate-video-from-template-v2
+      // This template expects 'character' type for image variables (not 'image')
+      // Format: { name: "...", type: "character", properties: { url: "..." } }
       const imageUrl = slide.imageUrl.trim();
       const imageKey = `image_${slideNum}`;
       
       variables[imageKey] = {
         name: imageKey,
-        type: 'image',
+        type: 'character',
         properties: {
           url: imageUrl,
         },
       };
 
       // Add speech variable: speech_1, speech_2, ..., speech_10
-      // HeyGen Template API v2 expects text variables in format: { name: "...", type: "text", properties: { content: "..." } }
+      // This template expects 'voice' type for speech variables (not 'text')
+      // Format: { name: "...", type: "voice", properties: { content: "..." } }
       const speechKey = `speech_${slideNum}`;
       variables[speechKey] = {
         name: speechKey,
-        type: 'text',
+        type: 'voice',
         properties: {
           content: slide.speakerText.trim(),
         },
