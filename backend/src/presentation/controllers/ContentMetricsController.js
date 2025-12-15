@@ -119,7 +119,7 @@ export class ContentMetricsController {
             filledData = await fillDirectory(parsedPayload);
             break;
 
-          case ':"course-builder-service':
+          case 'course-builder-service':
           case 'course_builder':
             filledData = await fillCourseBuilder(parsedPayload);
             break;
