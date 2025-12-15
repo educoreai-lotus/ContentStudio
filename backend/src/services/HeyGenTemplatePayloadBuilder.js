@@ -177,8 +177,10 @@ export class HeyGenTemplatePayloadBuilder {
       const slideNum = slide.index;
 
       // Add image variable: image_1, image_2, ..., image_10
-      // HeyGen Template API expects image variables as objects with 'url' field, not plain strings
+      // HeyGen Template API expects image variables as objects with 'type' and 'url' fields
+      // The 'type' field is used as a discriminator to identify the variable type
       variables[`image_${slideNum}`] = {
+        type: 'image',
         url: slide.imageUrl.trim(),
       };
 
