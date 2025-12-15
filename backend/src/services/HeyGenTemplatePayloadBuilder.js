@@ -177,30 +177,20 @@ export class HeyGenTemplatePayloadBuilder {
       const slideNum = slide.index;
 
       // Add image variable: image_1, image_2, ..., image_10
-      // This template expects 'character' type for image variables (not 'image')
-      // Format: { name: "...", type: "character", properties: { url: "..." } }
+      // Template expects: { type: "image_url", value: "https://..." }
+      // NO character, NO character_id, NO avatar - avatar is already in template
       const imageUrl = slide.imageUrl.trim();
       const imageKey = `image_${slideNum}`;
       
       variables[imageKey] = {
-        name: imageKey,
-        type: 'character',
-        properties: {
-          url: imageUrl,
-        },
+        type: 'image_url',
+        value: imageUrl,
       };
 
       // Add speech variable: speech_1, speech_2, ..., speech_10
-      // This template expects 'voice' type for speech variables (not 'text')
-      // Format: { name: "...", type: "voice", properties: { content: "..." } }
+      // Template expects: plain string (not object with type/voice)
       const speechKey = `speech_${slideNum}`;
-      variables[speechKey] = {
-        name: speechKey,
-        type: 'voice',
-        properties: {
-          content: slide.speakerText.trim(),
-        },
-      };
+      variables[speechKey] = slide.speakerText.trim();
     }
 
     return variables;
