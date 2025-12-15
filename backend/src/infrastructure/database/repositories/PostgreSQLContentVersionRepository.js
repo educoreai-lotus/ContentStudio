@@ -10,6 +10,7 @@ export class PostgreSQLContentVersionRepository extends IContentVersionRepositor
     super();
     this.db = db;
     this.supportsDeletedAt = undefined;
+    this.supportsVersionNumber = undefined;
   }
 
   async ensureDeletedAtSupport() {
@@ -42,12 +43,43 @@ export class PostgreSQLContentVersionRepository extends IContentVersionRepositor
     return this.supportsDeletedAt;
   }
 
+  async ensureVersionNumberSupport() {
+    if (this.supportsVersionNumber !== undefined) {
+      return this.supportsVersionNumber;
+    }
+
+    if (!this.db.isConnected()) {
+      throw new Error('Database not connected. Using in-memory repository.');
+    }
+
+    const query = `
+      SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'content_history'
+          AND column_name = 'version_number'
+      ) AS has_column
+    `;
+
+    try {
+      const result = await this.db.query(query);
+      this.supportsVersionNumber = Boolean(result.rows?.[0]?.has_column);
+    } catch (error) {
+      console.warn('[PostgreSQLContentVersionRepository] Unable to detect version_number column, assuming absent.', error.message);
+      this.supportsVersionNumber = false;
+    }
+
+    return this.supportsVersionNumber;
+  }
+
   async create(version) {
     if (!this.db.isConnected()) {
       throw new Error('Database not connected. Using in-memory repository.');
     }
 
     const supportsDeletedAt = await this.ensureDeletedAtSupport();
+    const supportsVersionNumber = await this.ensureVersionNumberSupport();
 
     let topicId = version.topic_id || version.topicId;
     let contentTypeId = version.content_type_id || version.contentTypeId;
@@ -84,10 +116,14 @@ export class PostgreSQLContentVersionRepository extends IContentVersionRepositor
       'content_type_id',
       'content_data',
       'generation_method_id',
-      'version_number',
       'created_at',
       'updated_at',
     ];
+
+    // Add version_number only if column exists (for backward compatibility with old schemas)
+    if (supportsVersionNumber) {
+      baseColumns.splice(4, 0, 'version_number'); // Insert after generation_method_id
+    }
 
     const columns = supportsDeletedAt
       ? [...baseColumns, 'deleted_at']
@@ -102,10 +138,15 @@ export class PostgreSQLContentVersionRepository extends IContentVersionRepositor
         ? version.content_data
         : JSON.stringify(version.content_data),
       generationMethodId,
-      version.version_number || null, // For backward compatibility
-      version.created_at || now,
-      version.updated_at || now,
     ];
+
+    // Add version_number value only if column exists
+    if (supportsVersionNumber) {
+      values.push(version.version_number || null); // For backward compatibility
+    }
+
+    values.push(version.created_at || now);
+    values.push(version.updated_at || now);
 
     if (supportsDeletedAt) {
       values.push(null);
