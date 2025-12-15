@@ -4,6 +4,7 @@ FROM node:20-slim
 # Install system dependencies
 # ffmpeg includes ffprobe
 # python3 and pip3 are needed for yt-dlp
+# poppler-utils includes pdftoppm for PDF to image conversion (required for avatar videos)
 RUN apt-get update && \
     apt-get install -y \
     ffmpeg \
@@ -11,6 +12,7 @@ RUN apt-get update && \
     python3-pip \
     curl \
     ca-certificates \
+    poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 
 # Install yt-dlp using pip with --break-system-packages flag
@@ -23,7 +25,8 @@ RUN pip3 install --no-cache-dir --upgrade pip --break-system-packages && \
 # Verify installations
 RUN ffmpeg -version && \
     ffprobe -version && \
-    yt-dlp --version
+    yt-dlp --version && \
+    pdftoppm -v
 
 # Set working directory
 WORKDIR /app
