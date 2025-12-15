@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { logger } from '../logging/Logger.js';
-import { AVATAR_VIDEO_MAX_SLIDES } from '../../config/heygen.js';
+import { AVATAR_VIDEO_MAX_SLIDES, AVATAR_GAMMA_NUM_CARDS } from '../../config/heygen.js';
 
 /**
  * RTL (Right-to-Left) languages supported by Gamma
@@ -327,6 +327,7 @@ ${inputText.trim()}`;
         textMode: 'generate',
         format: 'presentation',
         exportAs: 'pptx', // MANDATORY: Request PPTX export
+        numCards: AVATAR_GAMMA_NUM_CARDS,
         textOptions: {
           language: normalizedLanguage,
           amount: 'detailed',

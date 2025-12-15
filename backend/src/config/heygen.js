@@ -295,6 +295,7 @@ export function clearCaches() {
 export const AVATAR_VIDEO_MAX_SLIDES = 9; // Maximum number of slides allowed for avatar videos
 export const AVATAR_VIDEO_MAX_TOTAL_SECONDS = 160; // Maximum total narration duration: 2 minutes 40 seconds (GLOBAL for entire video)
 export const AVATAR_VIDEO_AVERAGE_WPM = 150; // Average words per minute for duration estimation
+export const AVATAR_GAMMA_NUM_CARDS = 5; // Number of cards parameter for Gamma API requests
 
 // Export constants for reference
 export { DEFAULT_AVATAR_ID, DEFAULT_VOICE };
