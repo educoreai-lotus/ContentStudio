@@ -177,11 +177,31 @@ export class HeyGenTemplatePayloadBuilder {
       const slideNum = slide.index;
 
       // Add image variable: image_1, image_2, ..., image_10
-      // HeyGen Template API expects image variables as objects with 'type' and 'url' fields
-      // The 'type' field is used as a discriminator to identify the variable type
+      // HeyGen Template API expects image variables with nested 'image' object containing 'name' and 'url'
+      // Format: { image: { name: "...", url: "..." } }
+      const imageUrl = slide.imageUrl.trim();
+      // Extract filename from URL for 'name' field (fallback to slide number if extraction fails)
+      let imageName = `slide_${slideNum}`;
+      try {
+        const urlObj = new URL(imageUrl);
+        const pathParts = urlObj.pathname.split('/');
+        const fileName = pathParts[pathParts.length - 1];
+        if (fileName && fileName.includes('.')) {
+          imageName = fileName.split('.')[0]; // Remove extension
+        }
+      } catch (urlError) {
+        // If URL parsing fails, use default name
+        logger.debug('[HeyGenTemplatePayloadBuilder] Failed to extract filename from URL', {
+          url: imageUrl,
+          error: urlError.message,
+        });
+      }
+      
       variables[`image_${slideNum}`] = {
-        type: 'image',
-        url: slide.imageUrl.trim(),
+        image: {
+          name: imageName,
+          url: imageUrl,
+        },
       };
 
       // Add speech variable: speech_1, speech_2, ..., speech_10
