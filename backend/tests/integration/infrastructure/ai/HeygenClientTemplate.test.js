@@ -116,7 +116,7 @@ describe('HeygenClient - Template v2 Generate Integration', () => {
         variables: {
           image_1: { url: 'https://example.com/slide1.png' },
           speech_1: 'First slide narration',
-          image_2: { type: 'image', url: 'https://example.com/slide2.png' },
+          image_2: { image: { name: 'slide2', url: 'https://example.com/slide2.png' } },
           speech_2: 'Second slide narration',
         },
         caption_settings: {
@@ -149,10 +149,10 @@ describe('HeygenClient - Template v2 Generate Integration', () => {
       expect(sentPayload).toHaveProperty('title', 'My Presentation');
       expect(sentPayload).toHaveProperty('variables');
       expect(sentPayload.variables).toHaveProperty('image_1');
-      expect(sentPayload.variables.image_1).toEqual({ type: 'image', url: 'https://example.com/slide1.png' });
+      expect(sentPayload.variables.image_1).toEqual({ image: { name: 'slide1', url: 'https://example.com/slide1.png' } });
       expect(sentPayload.variables).toHaveProperty('speech_1', 'First slide narration');
       expect(sentPayload.variables).toHaveProperty('image_2');
-      expect(sentPayload.variables.image_2).toEqual({ type: 'image', url: 'https://example.com/slide2.png' });
+      expect(sentPayload.variables.image_2).toEqual({ image: { name: 'slide2', url: 'https://example.com/slide2.png' } });
       expect(sentPayload.variables).toHaveProperty('speech_2', 'Second slide narration');
       expect(sentPayload).toHaveProperty('caption_settings');
       expect(sentPayload.caption_settings).toHaveProperty('enabled', true);
@@ -165,7 +165,7 @@ describe('HeygenClient - Template v2 Generate Integration', () => {
       
       // Build variables for 10 slides
       for (let i = 1; i <= 10; i++) {
-        variables[`image_${i}`] = { type: 'image', url: `https://example.com/slide${i}.png` };
+        variables[`image_${i}`] = { image: { name: `slide${i}`, url: `https://example.com/slide${i}.png` } };
         variables[`speech_${i}`] = `Slide ${i} narration`;
       }
 
