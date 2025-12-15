@@ -597,11 +597,12 @@ ${effectivePrompt}
 This presentation should be educational and suitable for ${audience}.`;
 
     // Generate presentation using Gamma API with correct payload structure
+    // Use PDF export by default - easier to convert to images without LibreOffice (especially for avatar videos)
     const gammaResult = await this.gammaClient.generatePresentation(inputText, {
       topicName,
       language,
       audience,
-      exportFormat: 'pptx', // Default to PPTX for regular presentations (can be changed to 'pdf' if needed)
+      exportFormat: 'pdf', // Default to PDF for easier image extraction (no LibreOffice needed)
     });
 
     // MANDATORY: Only return Supabase Storage URL, never gammaUrl
