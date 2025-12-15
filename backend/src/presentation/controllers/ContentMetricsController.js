@@ -2,6 +2,7 @@ import { logger } from '../../infrastructure/logging/Logger.js';
 import { fillDirectory } from '../../application/services/fillers/fillDirectory.js';
 import { fillCourseBuilder } from '../../application/services/fillers/fillCourseBuilder.js';
 import { fillCourseBuilderByCompany } from '../../application/services/fillers/fillCourseBuilderByCompany.js';
+import { fillCourseBuilderService } from '../../application/services/fillers/fillCourseBuilderService.js';
 import { fillDevLab } from '../../application/services/fillers/fillDevLab.js';
 import { fillSkillsEngine } from '../../application/services/fillers/fillSkillsEngine.js';
 import { fillManagement } from '../../application/services/fillers/fillManagement.js';
@@ -120,6 +121,22 @@ export class ContentMetricsController {
             break;
 
           case 'course-builder-service':
+            // New handler for course-builder-service with learning paths
+            return await fillCourseBuilderService(requestBody).then(filledRequest => {
+              const stringifiedResponse = JSON.stringify(filledRequest);
+              res.setHeader('Content-Type', 'application/json');
+              return res.status(200).send(stringifiedResponse);
+            }).catch(error => {
+              logger.error('[ContentMetricsController] Error in fillCourseBuilderService', {
+                error: error.message,
+                stack: error.stack,
+              });
+              requestBody.response.courses = [];
+              const stringifiedResponse = JSON.stringify(requestBody);
+              res.setHeader('Content-Type', 'application/json');
+              return res.status(200).send(stringifiedResponse);
+            });
+
           case 'course_builder':
             filledData = await fillCourseBuilder(parsedPayload);
             break;
