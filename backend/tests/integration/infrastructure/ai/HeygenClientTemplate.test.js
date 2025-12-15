@@ -114,7 +114,7 @@ describe('HeygenClient - Template v2 Generate Integration', () => {
       const payload = {
         title: 'My Presentation',
         variables: {
-          image_1: { url: 'https://example.com/slide1.png' },
+          image_1: { image: { name: 'slide1', url: 'https://example.com/slide1.png' } },
           speech_1: 'First slide narration',
           image_2: { image: { name: 'slide2', url: 'https://example.com/slide2.png' } },
           speech_2: 'Second slide narration',
