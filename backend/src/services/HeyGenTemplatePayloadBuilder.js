@@ -177,15 +177,21 @@ export class HeyGenTemplatePayloadBuilder {
       const slideNum = slide.index;
 
       // Add image variable: image_1, image_2, ..., image_10
-      // Template expects: { type: "image", value: "https://..." }
-      // Valid types: text, image, video, character, audio, voice
+      // Template expects: { image: { name: "...", url: "..." } }
       // NO character_id, NO avatar - avatar is already in template
       const imageUrl = slide.imageUrl.trim();
       const imageKey = `image_${slideNum}`;
       
+      // Extract image name from URL for the name field
+      const urlParts = imageUrl.split('/');
+      const fileName = urlParts[urlParts.length - 1] || `slide_${slideNum}`;
+      const imageName = fileName.replace(/\.(png|jpg|jpeg)$/i, '') || `slide_${slideNum}`;
+      
       variables[imageKey] = {
-        type: 'image',
-        value: imageUrl,
+        image: {
+          name: imageName,
+          url: imageUrl,
+        },
       };
 
       // Add speech variable: speech_1, speech_2, ..., speech_10
