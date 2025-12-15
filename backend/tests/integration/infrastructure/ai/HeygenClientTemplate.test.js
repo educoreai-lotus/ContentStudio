@@ -165,7 +165,7 @@ describe('HeygenClient - Template v2 Generate Integration', () => {
       
       // Build variables for 10 slides
       for (let i = 1; i <= 10; i++) {
-        variables[`image_${i}`] = `https://example.com/slide${i}.png`;
+        variables[`image_${i}`] = { url: `https://example.com/slide${i}.png` };
         variables[`speech_${i}`] = `Slide ${i} narration`;
       }
 
