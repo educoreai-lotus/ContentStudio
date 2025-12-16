@@ -1155,6 +1155,14 @@ export class HeygenClient {
             });
             throw new Error('Missing or invalid image_1 (avatar) variable before sending to HeyGen');
           }
+          if (!avatarVar.name || avatarVar.name !== 'image_1') {
+            logger.error('[HeyGen] CRITICAL: image_1 missing name field or name does not match key', {
+              avatarVar: JSON.stringify(avatarVar, null, 2),
+              hasName: !!avatarVar.name,
+              nameValue: avatarVar.name,
+            });
+            throw new Error('image_1 missing name field or name does not match key before sending to HeyGen');
+          }
           if (!avatarVar.properties?.character_id) {
             logger.error('[HeyGen] CRITICAL: image_1 missing character_id in properties', {
               avatarVar: JSON.stringify(avatarVar, null, 2),
@@ -1171,6 +1179,15 @@ export class HeygenClient {
                 imageVar: JSON.stringify(imageVar, null, 2),
               });
               throw new Error(`Missing or invalid ${imageName} (presentation image) variable before sending to HeyGen`);
+            }
+            if (!imageVar.name || imageVar.name !== imageName) {
+              logger.error('[HeyGen] CRITICAL: Presentation image missing name field or name does not match key', {
+                imageName,
+                imageVar: JSON.stringify(imageVar, null, 2),
+                hasName: !!imageVar.name,
+                nameValue: imageVar.name,
+              });
+              throw new Error(`${imageName} missing name field or name does not match key before sending to HeyGen`);
             }
             if (!imageVar.properties?.url) {
               logger.error('[HeyGen] CRITICAL: Presentation image missing url in properties', {
@@ -1197,6 +1214,15 @@ export class HeygenClient {
                 speechVar: JSON.stringify(speechVar, null, 2),
               });
               throw new Error(`Missing or invalid ${speechKey} (voice) variable before sending to HeyGen`);
+            }
+            if (!speechVar.name || speechVar.name !== speechKey) {
+              logger.error('[HeyGen] CRITICAL: Speech variable missing name field or name does not match key', {
+                speechKey,
+                speechVar: JSON.stringify(speechVar, null, 2),
+                hasName: !!speechVar.name,
+                nameValue: speechVar.name,
+              });
+              throw new Error(`${speechKey} missing name field or name does not match key before sending to HeyGen`);
             }
             if (!speechVar.properties?.voice_id || !speechVar.properties?.input_text) {
               logger.error('[HeyGen] CRITICAL: Speech variable missing voice_id or input_text in properties', {
@@ -1226,6 +1252,14 @@ export class HeygenClient {
             });
             throw new Error('Missing or invalid image_1 (avatar) variable after deep clone');
           }
+          if (!avatarVar.name || avatarVar.name !== 'image_1') {
+            logger.error('[HeyGen] CRITICAL: image_1 missing name field after deep clone', {
+              avatarVar: JSON.stringify(avatarVar, null, 2),
+              hasName: !!avatarVar.name,
+              nameValue: avatarVar.name,
+            });
+            throw new Error('image_1 missing name field after deep clone');
+          }
 
           // Validate presentation images
           for (const imageName of presentationImageNames) {
@@ -1236,6 +1270,15 @@ export class HeygenClient {
                 imageVar: JSON.stringify(imageVar, null, 2),
               });
               throw new Error(`Missing or invalid ${imageName} (presentation image) variable after deep clone`);
+            }
+            if (!imageVar.name || imageVar.name !== imageName) {
+              logger.error('[HeyGen] CRITICAL: Presentation image missing name field after deep clone', {
+                imageName,
+                imageVar: JSON.stringify(imageVar, null, 2),
+                hasName: !!imageVar.name,
+                nameValue: imageVar.name,
+              });
+              throw new Error(`${imageName} missing name field after deep clone`);
             }
           }
           
@@ -1255,6 +1298,15 @@ export class HeygenClient {
                 speechVar: JSON.stringify(speechVar, null, 2),
               });
               throw new Error(`Missing or invalid ${speechKey} (voice) variable after deep clone`);
+            }
+            if (!speechVar.name || speechVar.name !== speechKey) {
+              logger.error('[HeyGen] CRITICAL: Speech variable missing name field after deep clone', {
+                speechKey,
+                speechVar: JSON.stringify(speechVar, null, 2),
+                hasName: !!speechVar.name,
+                nameValue: speechVar.name,
+              });
+              throw new Error(`${speechKey} missing name field after deep clone`);
             }
           }
           

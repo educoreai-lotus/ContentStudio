@@ -64,6 +64,9 @@ export class HeyGenTemplatePayloadBuilder {
     if (!variables.image_1 || variables.image_1.type !== 'character') {
       throw new Error('Missing or invalid image_1 (avatar) variable');
     }
+    if (!variables.image_1.name || variables.image_1.name !== 'image_1') {
+      throw new Error('image_1 missing name field or name does not match key');
+    }
     if (!variables.image_1.properties?.character_id) {
       throw new Error('image_1 missing character_id in properties');
     }
@@ -73,6 +76,9 @@ export class HeyGenTemplatePayloadBuilder {
     for (const imageName of presentationImageNames) {
       if (!variables[imageName] || variables[imageName].type !== 'image') {
         throw new Error(`Missing or invalid ${imageName} (presentation image) variable`);
+      }
+      if (!variables[imageName].name || variables[imageName].name !== imageName) {
+        throw new Error(`${imageName} missing name field or name does not match key`);
       }
       if (!variables[imageName].properties?.url) {
         throw new Error(`${imageName} missing url in properties`);
@@ -88,6 +94,9 @@ export class HeyGenTemplatePayloadBuilder {
       const speechVar = variables[speechKey];
       if (!speechVar || speechVar.type !== 'voice') {
         throw new Error(`Missing or invalid ${speechKey} (voice) variable`);
+      }
+      if (!speechVar.name || speechVar.name !== speechKey) {
+        throw new Error(`${speechKey} missing name field or name does not match key`);
       }
       if (!speechVar.properties?.voice_id || !speechVar.properties?.input_text) {
         throw new Error(`${speechKey} missing voice_id or input_text in properties`);
