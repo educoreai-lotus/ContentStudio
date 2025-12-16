@@ -59,40 +59,50 @@ export class HeyGenTemplatePayloadBuilder {
       payload.voice_id = voiceId;
     }
 
-    // Final validation: log all character variables (image_N) and voice variables (speech_N)
-    const imageVars = Object.keys(variables).filter(k => k.startsWith('image_'));
-    const speechVars = Object.keys(variables).filter(k => k.startsWith('speech_'));
-    
-    for (const imageKey of imageVars) {
-      const imageVar = variables[imageKey];
-      if (!imageVar?.character?.character_id) {
-        logger.error('[HeyGenTemplatePayloadBuilder] Image variable missing character_id', {
-          imageKey,
-          imageVar: JSON.stringify(imageVar, null, 2),
-        });
-        throw new Error(`Image variable ${imageKey} is missing character_id field`);
+    // Final validation: check all required variables
+    // 1. Avatar variable (image_1)
+    if (!variables.image_1 || variables.image_1.type !== 'character') {
+      throw new Error('Missing or invalid image_1 (avatar) variable');
+    }
+    if (!variables.image_1.properties?.character_id) {
+      throw new Error('image_1 missing character_id in properties');
+    }
+
+    // 2. Presentation image variables (imageOne-imageFive)
+    const presentationImageNames = ['imageOne', 'imageTow', 'imageThree', 'imageFour', 'imageFive'];
+    for (const imageName of presentationImageNames) {
+      if (!variables[imageName] || variables[imageName].type !== 'image') {
+        throw new Error(`Missing or invalid ${imageName} (presentation image) variable`);
+      }
+      if (!variables[imageName].properties?.url) {
+        throw new Error(`${imageName} missing url in properties`);
       }
     }
-    
+
+    // 3. Speech variables (speech_1-speech_5)
+    const speechVars = Object.keys(variables).filter(k => k.startsWith('speech_'));
+    if (speechVars.length !== 5) {
+      throw new Error(`Expected exactly 5 speech variables, got ${speechVars.length}`);
+    }
     for (const speechKey of speechVars) {
       const speechVar = variables[speechKey];
-      if (!speechVar?.voice?.voice_id || !speechVar?.voice?.input_text) {
-        logger.error('[HeyGenTemplatePayloadBuilder] Speech variable missing voice_id or input_text', {
-          speechKey,
-          speechVar: JSON.stringify(speechVar, null, 2),
-        });
-        throw new Error(`Speech variable ${speechKey} is missing voice_id or input_text field`);
+      if (!speechVar || speechVar.type !== 'voice') {
+        throw new Error(`Missing or invalid ${speechKey} (voice) variable`);
+      }
+      if (!speechVar.properties?.voice_id || !speechVar.properties?.input_text) {
+        throw new Error(`${speechKey} missing voice_id or input_text in properties`);
       }
     }
-    
+
     logger.info('[HeyGenTemplatePayloadBuilder] Built template payload', {
       templateId,
       slideCount: slides.length,
       variableCount: Object.keys(variables).length,
       hasCaption: caption,
       hasVoiceId: !!voiceId,
-      characterVariablesCount: imageVars.length,
-      voiceVariablesCount: speechVars.length,
+      hasAvatar: !!variables.image_1,
+      presentationImagesCount: presentationImageNames.length,
+      speechVariablesCount: speechVars.length,
     });
 
     return payload;
@@ -196,109 +206,100 @@ export class HeyGenTemplatePayloadBuilder {
    * @private
    * @param {Array<{index: number, speakerText: string, imageUrl: string}>} slides - Slides array
    * @param {string} [voiceId] - Voice ID (if provided, use it; otherwise resolve from language)
-   * @param {string} [language] - Language code (for voice_id and locale resolution)
-   * @returns {Object} Variables map with image_N and speech_N keys
+   * @param {string} [language] - Language code (for voice_id resolution)
+   * @returns {Object} Variables map with image_1 (avatar), imageOne-imageFive (presentation images), and speech_1-speech_5 (voices)
    */
   _buildVariables(slides, voiceId, language = 'en') {
     const variables = {};
 
-    // Resolve voice_id and locale from language if not provided
+    // Resolve voice_id from language if not provided
     let finalVoiceId = voiceId;
-    let locale = null;
     
     if (!finalVoiceId) {
       const voiceConfig = getVoiceConfig(language);
       finalVoiceId = voiceConfig.voice_id;
-      // Map language to locale (e.g., 'en' -> 'en-US', 'he' -> 'he-IL')
-      const localeMap = {
-        'en': 'en-US',
-        'he': 'he-IL',
-        'ar': 'ar-SA',
-        'es': 'es-ES',
-        'fr': 'fr-FR',
-        'de': 'de-DE',
-        'it': 'it-IT',
-        'ko': 'ko-KR',
-        'ja': 'ja-JP',
-        'zh': 'zh-CN',
-        'ru': 'ru-RU',
-      };
-      locale = localeMap[language] || language;
-    } else {
-      // If voiceId is provided, try to infer locale from it or use language
-      const localeMap = {
-        'en': 'en-US',
-        'he': 'he-IL',
-        'ar': 'ar-SA',
-        'es': 'es-ES',
-        'fr': 'fr-FR',
-        'de': 'de-DE',
-        'it': 'it-IT',
-        'ko': 'ko-KR',
-        'ja': 'ja-JP',
-        'zh': 'zh-CN',
-        'ru': 'ru-RU',
-      };
-      locale = localeMap[language] || language;
     }
 
-    // Default character_id (can be overridden per slide if needed)
-    // Using the first character from template: "Annie_Bar_Standing_Front_2_public"
-    const defaultCharacterId = 'Annie_Bar_Standing_Front_2_public';
+    // 1. Add avatar variable (image_1) - only one, fixed
+    // Structure: { name: "image_1", type: "character", properties: { character_id: "...", type: "avatar" } }
+    variables.image_1 = {
+      name: 'image_1',
+      type: 'character',
+      properties: {
+        character_id: 'Annie_Bar_Standing_Front_2_public',
+        type: 'avatar',
+      },
+    };
 
-    // Sort slides by index to ensure correct ordering
+    logger.info('[HeyGenTemplatePayloadBuilder] Building avatar variable (image_1)', {
+      characterId: variables.image_1.properties.character_id,
+    });
+
+    // 2. Map slide index to presentation image variable names
+    // Scene mapping: 1->imageOne, 2->imageTow, 3->imageThree, 4->imageFour, 5->imageFive
+    const imageNameMap = {
+      1: 'imageOne',
+      2: 'imageTow',
+      3: 'imageThree',
+      4: 'imageFour',
+      5: 'imageFive',
+    };
+
+    // 3. Sort slides by index to ensure correct ordering
     const sortedSlides = [...slides].sort((a, b) => a.index - b.index);
+
+    // 4. Validate slide count (must be exactly 5)
+    if (sortedSlides.length !== 5) {
+      throw new Error(`Expected exactly 5 slides, got ${sortedSlides.length}`);
+    }
 
     for (const slide of sortedSlides) {
       const slideNum = slide.index;
 
-      // Add image variable: image_1, image_2, ..., image_10
-      // Template expects: { type: "character", character: { character_id: "...", type: "avatar" } }
-      // Based on template definition: image_N is type "character" not "image"
-      const imageKey = `image_${slideNum}`;
-      
-      // Use character_id based on slide number (alternating between characters as in template)
-      // Template shows: image_1 uses "Annie_Bar_Standing_Front_2_public", others use "Annie_Casual_Standing_Front_2_public"
-      const characterId = slideNum === 1 
-        ? 'Annie_Bar_Standing_Front_2_public' 
-        : 'Annie_Casual_Standing_Front_2_public';
-      
-      const imageVar = {
-        type: 'character', // Template defines image_N as character type
-        character: {
-          character_id: characterId,
-          type: 'avatar',
-          name: `image_${slideNum}`, // Required by HeyGen template
+      // Validate slide index is 1-5
+      if (slideNum < 1 || slideNum > 5) {
+        throw new Error(`Slide index must be between 1 and 5, got ${slideNum}`);
+      }
+
+      // Add presentation image variable: imageOne, imageTow, imageThree, imageFour, imageFive
+      // Structure: { name: "imageOne", type: "image", properties: { url: "...", fit: "none" } }
+      const imageVarName = imageNameMap[slideNum];
+      if (!imageVarName) {
+        throw new Error(`No image variable name mapped for slide index ${slideNum}`);
+      }
+
+      const imageUrl = slide.imageUrl.trim();
+      variables[imageVarName] = {
+        name: imageVarName,
+        type: 'image',
+        properties: {
+          url: imageUrl,
+          fit: 'none',
         },
       };
-      
-      logger.info('[HeyGenTemplatePayloadBuilder] Building image variable (character)', {
-        imageKey,
-        slideNum,
-        characterId,
-        fullStructure: JSON.stringify(imageVar, null, 2),
-      });
-      
-      variables[imageKey] = imageVar;
 
-      // Add speech variable: speech_1, speech_2, ..., speech_10
-      // Template expects: { type: "voice", voice: { voice_id: "...", locale: "...", input_text: "..." } }
-      // Based on template definition: speech_N is type "voice" not "text"
+      logger.info('[HeyGenTemplatePayloadBuilder] Building presentation image variable', {
+        imageVarName,
+        slideNum,
+        imageUrl: imageUrl.substring(0, 100), // Log first 100 chars
+      });
+
+      // Add speech variable: speech_1, speech_2, ..., speech_5
+      // Structure: { name: "speech_1", type: "voice", properties: { voice_id: "...", input_text: "..." } }
       const speechKey = `speech_${slideNum}`;
       variables[speechKey] = {
-        type: 'voice', // Template defines speech_N as voice type
-        voice: {
+        name: speechKey,
+        type: 'voice',
+        properties: {
           voice_id: finalVoiceId,
-          locale: locale,
-          input_text: slide.speakerText.trim(), // The actual speech text
+          input_text: slide.speakerText.trim(), // The actual speech text from OpenAI
         },
       };
-      
+
       logger.info('[HeyGenTemplatePayloadBuilder] Building speech variable (voice)', {
         speechKey,
         slideNum,
         voiceId: finalVoiceId,
-        locale: locale,
         textLength: slide.speakerText.trim().length,
       });
     }
