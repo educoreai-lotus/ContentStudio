@@ -1176,7 +1176,7 @@ export class HeygenClient {
           }
           
           // Validate speech variables (voice type)
-          const speechVars = Object.keys(payload.variables).filter(k => k.startsWith('speech_'));
+          // speechVars already defined above, reuse it
           for (const speechKey of speechVars) {
             const speechVar = payload.variables[speechKey];
             if (!speechVar || !speechVar.voice || !speechVar.voice.voice_id || !speechVar.voice.input_text) {
