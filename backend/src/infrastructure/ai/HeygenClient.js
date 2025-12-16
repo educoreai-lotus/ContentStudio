@@ -1164,6 +1164,17 @@ export class HeygenClient {
               throw new Error(`Image variable ${imageKey} is missing character_id field before sending to HeyGen`);
             }
             
+            // Check for name field (required by template)
+            if (!imageVar.character.name) {
+              logger.error('[HeyGen] CRITICAL: Image variable missing character.name before sending', {
+                imageKey,
+                imageVar: JSON.stringify(imageVar, null, 2),
+                hasCharacter: !!imageVar?.character,
+                hasName: !!imageVar?.character?.name,
+              });
+              throw new Error(`Image variable ${imageKey} is missing character.name field before sending to HeyGen`);
+            }
+            
             // Ensure character_id is a string
             if (typeof imageVar.character.character_id !== 'string') {
               logger.error('[HeyGen] CRITICAL: Image variable character_id is not a string', {
@@ -1172,6 +1183,16 @@ export class HeygenClient {
                 characterIdValue: imageVar.character.character_id,
               });
               throw new Error(`Image variable ${imageKey} character_id must be a string, got ${typeof imageVar.character.character_id}`);
+            }
+            
+            // Ensure name is a string
+            if (typeof imageVar.character.name !== 'string') {
+              logger.error('[HeyGen] CRITICAL: Image variable character.name is not a string', {
+                imageKey,
+                nameType: typeof imageVar.character.name,
+                nameValue: imageVar.character.name,
+              });
+              throw new Error(`Image variable ${imageKey} character.name must be a string, got ${typeof imageVar.character.name}`);
             }
           }
           
@@ -1208,6 +1229,13 @@ export class HeygenClient {
                 imageVar: JSON.stringify(imageVar, null, 2),
               });
               throw new Error(`Image variable ${imageKey} is missing character_id field after deep clone`);
+            }
+            if (!imageVar?.character?.name) {
+              logger.error('[HeyGen] CRITICAL: Image variable missing character.name after deep clone', {
+                imageKey,
+                imageVar: JSON.stringify(imageVar, null, 2),
+              });
+              throw new Error(`Image variable ${imageKey} is missing character.name field after deep clone`);
             }
           }
           

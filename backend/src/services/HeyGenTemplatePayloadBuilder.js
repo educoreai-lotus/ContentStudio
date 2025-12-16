@@ -268,6 +268,7 @@ export class HeyGenTemplatePayloadBuilder {
         character: {
           character_id: characterId,
           type: 'avatar',
+          name: `image_${slideNum}`, // Required by HeyGen template
         },
       };
       
