@@ -161,10 +161,28 @@ async function searchExistingCourse({ trainer_id, company_id, skills_raw_data, l
       return null;
     }
 
-    // Extract skills from skills_raw_data.competency_node
-    const skills = Array.isArray(skills_raw_data?.competency_node)
-      ? skills_raw_data.competency_node.filter(s => s && s.trim() !== '')
-      : [];
+    // Extract skills from skills_raw_data
+    // New structure: skills_raw_data is an object with competency keys, each containing an array of skills
+    // Old structure (backward compatibility): skills_raw_data.competency_node is an array
+    let skills = [];
+    
+    if (skills_raw_data) {
+      if (Array.isArray(skills_raw_data.competency_node)) {
+        // Old structure: competency_node is an array
+        skills = skills_raw_data.competency_node.filter(s => s && s.trim() !== '');
+      } else if (typeof skills_raw_data === 'object') {
+        // New structure: skills_raw_data is an object with competency keys
+        // Extract all skills from all competency keys
+        for (const competencyKey in skills_raw_data) {
+          if (Array.isArray(skills_raw_data[competencyKey])) {
+            const competencySkills = skills_raw_data[competencyKey].filter(s => s && typeof s === 'string' && s.trim() !== '');
+            skills.push(...competencySkills);
+          }
+        }
+        // Remove duplicates
+        skills = [...new Set(skills)];
+      }
+    }
 
     if (skills.length === 0) {
       logger.info('[fillCourseBuilderService] No skills provided, skipping search');
