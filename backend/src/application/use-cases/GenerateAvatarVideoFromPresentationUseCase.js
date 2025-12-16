@@ -520,6 +520,7 @@ export class GenerateAvatarVideoFromPresentationUseCase {
           title: presentationContent.content_data?.title || 'EduCore Presentation',
           caption: true,
           voiceId,
+          language: this.language,
         });
         logger.info('[GenerateAvatarVideoFromPresentation] HeyGen payload built successfully', {
           jobId,

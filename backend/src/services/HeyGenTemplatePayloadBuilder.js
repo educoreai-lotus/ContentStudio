@@ -11,6 +11,7 @@
  */
 
 import { logger } from '../infrastructure/logging/Logger.js';
+import { getVoiceConfig } from '../config/heygen.js';
 
 /**
  * HeyGenTemplatePayloadBuilder Class
@@ -25,10 +26,11 @@ export class HeyGenTemplatePayloadBuilder {
    * @param {string} params.title - Video title
    * @param {boolean} params.caption - Enable captions
    * @param {string} [params.voiceId] - Optional voice ID
+   * @param {string} [params.language] - Language code (for voice_id and locale)
    * @returns {Object} HeyGen Template v2 payload
    * @throws {Error} If validation fails
    */
-  buildPayload({ templateId, slides, title, caption, voiceId }) {
+  buildPayload({ templateId, slides, title, caption, voiceId, language = 'en' }) {
     // Validate inputs
     this._validateInputs({ templateId, slides, title, caption, voiceId });
 
@@ -36,7 +38,7 @@ export class HeyGenTemplatePayloadBuilder {
     this._validateSlides(slides);
 
     // Build variables map
-    const variables = this._buildVariables(slides);
+    const variables = this._buildVariables(slides, voiceId, language);
 
     // Build base payload
     const payload = {
@@ -57,16 +59,29 @@ export class HeyGenTemplatePayloadBuilder {
       payload.voice_id = voiceId;
     }
 
-    // Final validation: log all image variables to ensure name is present
+    // Final validation: log all character variables (image_N) and voice variables (speech_N)
     const imageVars = Object.keys(variables).filter(k => k.startsWith('image_'));
+    const speechVars = Object.keys(variables).filter(k => k.startsWith('speech_'));
+    
     for (const imageKey of imageVars) {
       const imageVar = variables[imageKey];
-      if (!imageVar?.image?.name) {
-        logger.error('[HeyGenTemplatePayloadBuilder] Image variable missing name', {
+      if (!imageVar?.character?.character_id) {
+        logger.error('[HeyGenTemplatePayloadBuilder] Image variable missing character_id', {
           imageKey,
           imageVar: JSON.stringify(imageVar, null, 2),
         });
-        throw new Error(`Image variable ${imageKey} is missing name field`);
+        throw new Error(`Image variable ${imageKey} is missing character_id field`);
+      }
+    }
+    
+    for (const speechKey of speechVars) {
+      const speechVar = variables[speechKey];
+      if (!speechVar?.voice?.voice_id || !speechVar?.voice?.input_text) {
+        logger.error('[HeyGenTemplatePayloadBuilder] Speech variable missing voice_id or input_text', {
+          speechKey,
+          speechVar: JSON.stringify(speechVar, null, 2),
+        });
+        throw new Error(`Speech variable ${speechKey} is missing voice_id or input_text field`);
       }
     }
     
@@ -76,7 +91,8 @@ export class HeyGenTemplatePayloadBuilder {
       variableCount: Object.keys(variables).length,
       hasCaption: caption,
       hasVoiceId: !!voiceId,
-      imageVariablesValidated: imageVars.length,
+      characterVariablesCount: imageVars.length,
+      voiceVariablesCount: speechVars.length,
     });
 
     return payload;
@@ -179,10 +195,56 @@ export class HeyGenTemplatePayloadBuilder {
    * Build variables map from slides
    * @private
    * @param {Array<{index: number, speakerText: string, imageUrl: string}>} slides - Slides array
+   * @param {string} [voiceId] - Voice ID (if provided, use it; otherwise resolve from language)
+   * @param {string} [language] - Language code (for voice_id and locale resolution)
    * @returns {Object} Variables map with image_N and speech_N keys
    */
-  _buildVariables(slides) {
+  _buildVariables(slides, voiceId, language = 'en') {
     const variables = {};
+
+    // Resolve voice_id and locale from language if not provided
+    let finalVoiceId = voiceId;
+    let locale = null;
+    
+    if (!finalVoiceId) {
+      const voiceConfig = getVoiceConfig(language);
+      finalVoiceId = voiceConfig.voice_id;
+      // Map language to locale (e.g., 'en' -> 'en-US', 'he' -> 'he-IL')
+      const localeMap = {
+        'en': 'en-US',
+        'he': 'he-IL',
+        'ar': 'ar-SA',
+        'es': 'es-ES',
+        'fr': 'fr-FR',
+        'de': 'de-DE',
+        'it': 'it-IT',
+        'ko': 'ko-KR',
+        'ja': 'ja-JP',
+        'zh': 'zh-CN',
+        'ru': 'ru-RU',
+      };
+      locale = localeMap[language] || language;
+    } else {
+      // If voiceId is provided, try to infer locale from it or use language
+      const localeMap = {
+        'en': 'en-US',
+        'he': 'he-IL',
+        'ar': 'ar-SA',
+        'es': 'es-ES',
+        'fr': 'fr-FR',
+        'de': 'de-DE',
+        'it': 'it-IT',
+        'ko': 'ko-KR',
+        'ja': 'ja-JP',
+        'zh': 'zh-CN',
+        'ru': 'ru-RU',
+      };
+      locale = localeMap[language] || language;
+    }
+
+    // Default character_id (can be overridden per slide if needed)
+    // Using the first character from template: "Annie_Bar_Standing_Front_2_public"
+    const defaultCharacterId = 'Annie_Bar_Standing_Front_2_public';
 
     // Sort slides by index to ensure correct ordering
     const sortedSlides = [...slides].sort((a, b) => a.index - b.index);
@@ -191,71 +253,53 @@ export class HeyGenTemplatePayloadBuilder {
       const slideNum = slide.index;
 
       // Add image variable: image_1, image_2, ..., image_10
-      // Template expects: { type: "image", value: { image: { url: "...", name: "..." } } }
-      // HeyGen API requires: type, value.image.url, value.image.name (all mandatory)
-      const imageUrl = slide.imageUrl.trim();
+      // Template expects: { type: "character", character: { character_id: "...", type: "avatar" } }
+      // Based on template definition: image_N is type "character" not "image"
       const imageKey = `image_${slideNum}`;
       
-      // Extract image name from URL for the name field (REQUIRED by HeyGen)
-      // HeyGen requires: value.image.name (mandatory field)
-      const urlParts = imageUrl.split('/');
-      const fileName = urlParts[urlParts.length - 1] || `slide-${slideNum}`;
-      let imageName = fileName.replace(/\.(png|jpg|jpeg)$/i, '');
+      // Use character_id based on slide number (alternating between characters as in template)
+      // Template shows: image_1 uses "Annie_Bar_Standing_Front_2_public", others use "Annie_Casual_Standing_Front_2_public"
+      const characterId = slideNum === 1 
+        ? 'Annie_Bar_Standing_Front_2_public' 
+        : 'Annie_Casual_Standing_Front_2_public';
       
-      // Ensure name is not empty (fallback to slide-{N} if extraction fails)
-      if (!imageName || imageName.trim() === '') {
-        imageName = `slide-${slideNum}`;
-      }
-      
-      // Validate name is not empty (HeyGen requirement)
-      const finalImageName = imageName.trim();
-      if (!finalImageName || finalImageName === '') {
-        throw new Error(`Invalid image name for slide ${slideNum}: cannot be empty`);
-      }
-      
-      // Build the image variable structure
-      // HeyGen requires: type: "image" + image.url + image.name (direct structure, no "value" wrapper)
-      // Structure: { type: "image", image: { url: "...", name: "..." } }
       const imageVar = {
-        type: 'image', // Required: type discriminator for HeyGen to identify variable type
-        image: {
-          url: imageUrl, // Required: public URL to the image
-          name: finalImageName, // Required: name identifier for the image (must not be empty)
+        type: 'character', // Template defines image_N as character type
+        character: {
+          character_id: characterId,
+          type: 'avatar',
         },
       };
       
-      // Log the structure for debugging (full structure)
-      logger.info('[HeyGenTemplatePayloadBuilder] Building image variable', {
+      logger.info('[HeyGenTemplatePayloadBuilder] Building image variable (character)', {
         imageKey,
         slideNum,
-        imageName: finalImageName,
-        imageNameLength: finalImageName.length,
-        imageUrl: imageUrl.substring(0, 100), // Log first 100 chars
+        characterId,
         fullStructure: JSON.stringify(imageVar, null, 2),
-        hasName: !!imageVar.image?.name,
-        nameValue: imageVar.image?.name,
       });
-      
-      // Final validation: ensure name is not null/undefined/empty before assigning
-      if (!imageVar.image.name || imageVar.image.name.trim() === '') {
-        throw new Error(`Image name is empty for slide ${slideNum} after all processing. URL: ${imageUrl.substring(0, 100)}`);
-      }
-      
-      // Ensure name is a string (not null/undefined)
-      if (typeof imageVar.image.name !== 'string') {
-        throw new Error(`Image name is not a string for slide ${slideNum}. Type: ${typeof imageVar.image.name}, Value: ${imageVar.image.name}`);
-      }
       
       variables[imageKey] = imageVar;
 
       // Add speech variable: speech_1, speech_2, ..., speech_10
-      // Template expects: { type: "text", text: "..." } (NOT plain string)
-      // HeyGen requires type discriminator for all variables
+      // Template expects: { type: "voice", voice: { voice_id: "...", locale: "...", input_text: "..." } }
+      // Based on template definition: speech_N is type "voice" not "text"
       const speechKey = `speech_${slideNum}`;
       variables[speechKey] = {
-        type: 'text', // Required: type discriminator for HeyGen to identify variable type
-        text: slide.speakerText.trim(), // Required: the actual speech text
+        type: 'voice', // Template defines speech_N as voice type
+        voice: {
+          voice_id: finalVoiceId,
+          locale: locale,
+          input_text: slide.speakerText.trim(), // The actual speech text
+        },
       };
+      
+      logger.info('[HeyGenTemplatePayloadBuilder] Building speech variable (voice)', {
+        speechKey,
+        slideNum,
+        voiceId: finalVoiceId,
+        locale: locale,
+        textLength: slide.speakerText.trim().length,
+      });
     }
 
     return variables;

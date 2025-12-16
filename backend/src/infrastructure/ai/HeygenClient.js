@@ -1122,30 +1122,122 @@ export class HeygenClient {
           endpoint,
         });
 
-        // Log payload structure for debugging (especially image variables)
+        // Log payload structure for debugging (especially character and voice variables)
         if (payload.variables) {
           const imageVars = Object.keys(payload.variables).filter(k => k.startsWith('image_'));
+          const speechVars = Object.keys(payload.variables).filter(k => k.startsWith('speech_'));
           const firstImageVar = imageVars[0] ? payload.variables[imageVars[0]] : null;
+          const firstSpeechVar = speechVars[0] ? payload.variables[speechVars[0]] : null;
           
           logger.info('[HeyGen] Payload variables structure', {
             totalVariables: Object.keys(payload.variables).length,
             imageVariables: imageVars,
+            speechVariables: speechVars,
             firstImageVar: firstImageVar ? JSON.stringify(firstImageVar, null, 2) : 'none',
             firstImageVarType: firstImageVar?.type,
-            firstImageVarImage: firstImageVar?.image ? JSON.stringify(firstImageVar.image, null, 2) : 'none',
-            firstImageVarName: firstImageVar?.image?.name,
-            firstImageVarNameType: typeof firstImageVar?.image?.name,
-            firstImageVarNameLength: firstImageVar?.image?.name?.length,
-            firstImageVarUrl: firstImageVar?.image?.url?.substring(0, 100),
+            firstImageVarCharacter: firstImageVar?.character ? JSON.stringify(firstImageVar.character, null, 2) : 'none',
+            firstImageVarCharacterId: firstImageVar?.character?.character_id,
+            firstSpeechVar: firstSpeechVar ? JSON.stringify(firstSpeechVar, null, 2) : 'none',
+            firstSpeechVarType: firstSpeechVar?.type,
+            firstSpeechVarVoice: firstSpeechVar?.voice ? JSON.stringify(firstSpeechVar.voice, null, 2) : 'none',
+            firstSpeechVarVoiceId: firstSpeechVar?.voice?.voice_id,
+            firstSpeechVarLocale: firstSpeechVar?.voice?.locale,
           });
           
           // Log full payload for debugging
           logger.info('[HeyGen] Full payload being sent', {
             payload: JSON.stringify(payload, null, 2),
           });
+          
+          // CRITICAL: Validate character variables structure before sending
+          // Template defines image_N as character type, not image type
+          for (const imageKey of imageVars) {
+            const imageVar = payload.variables[imageKey];
+            if (!imageVar || !imageVar.character || !imageVar.character.character_id) {
+              logger.error('[HeyGen] CRITICAL: Image variable missing character_id before sending', {
+                imageKey,
+                imageVar: JSON.stringify(imageVar, null, 2),
+                hasCharacter: !!imageVar?.character,
+                hasCharacterId: !!imageVar?.character?.character_id,
+                characterIdValue: imageVar?.character?.character_id,
+              });
+              throw new Error(`Image variable ${imageKey} is missing character_id field before sending to HeyGen`);
+            }
+            
+            // Ensure character_id is a string
+            if (typeof imageVar.character.character_id !== 'string') {
+              logger.error('[HeyGen] CRITICAL: Image variable character_id is not a string', {
+                imageKey,
+                characterIdType: typeof imageVar.character.character_id,
+                characterIdValue: imageVar.character.character_id,
+              });
+              throw new Error(`Image variable ${imageKey} character_id must be a string, got ${typeof imageVar.character.character_id}`);
+            }
+          }
+          
+          // Validate speech variables (voice type)
+          const speechVars = Object.keys(payload.variables).filter(k => k.startsWith('speech_'));
+          for (const speechKey of speechVars) {
+            const speechVar = payload.variables[speechKey];
+            if (!speechVar || !speechVar.voice || !speechVar.voice.voice_id || !speechVar.voice.input_text) {
+              logger.error('[HeyGen] CRITICAL: Speech variable missing voice_id or input_text before sending', {
+                speechKey,
+                speechVar: JSON.stringify(speechVar, null, 2),
+                hasVoice: !!speechVar?.voice,
+                hasVoiceId: !!speechVar?.voice?.voice_id,
+                hasInputText: !!speechVar?.voice?.input_text,
+              });
+              throw new Error(`Speech variable ${speechKey} is missing voice_id or input_text field before sending to HeyGen`);
+            }
+          }
         }
 
-        const response = await this.client.post(endpoint, payload);
+        // Deep clone payload to ensure no mutations during axios serialization
+        const payloadToSend = JSON.parse(JSON.stringify(payload));
+        
+        // Final validation after deep clone
+        if (payloadToSend.variables) {
+          const imageVars = Object.keys(payloadToSend.variables).filter(k => k.startsWith('image_'));
+          const speechVars = Object.keys(payloadToSend.variables).filter(k => k.startsWith('speech_'));
+          
+          for (const imageKey of imageVars) {
+            const imageVar = payloadToSend.variables[imageKey];
+            if (!imageVar?.character?.character_id) {
+              logger.error('[HeyGen] CRITICAL: Image variable missing character_id after deep clone', {
+                imageKey,
+                imageVar: JSON.stringify(imageVar, null, 2),
+              });
+              throw new Error(`Image variable ${imageKey} is missing character_id field after deep clone`);
+            }
+          }
+          
+          for (const speechKey of speechVars) {
+            const speechVar = payloadToSend.variables[speechKey];
+            if (!speechVar?.voice?.voice_id || !speechVar?.voice?.input_text) {
+              logger.error('[HeyGen] CRITICAL: Speech variable missing voice_id or input_text after deep clone', {
+                speechKey,
+                speechVar: JSON.stringify(speechVar, null, 2),
+              });
+              throw new Error(`Speech variable ${speechKey} is missing voice_id or input_text field after deep clone`);
+            }
+          }
+          
+          // Log the exact structure that will be sent (after deep clone)
+          const firstImageVar = imageVars[0] ? payloadToSend.variables[imageVars[0]] : null;
+          const firstSpeechVar = speechVars[0] ? payloadToSend.variables[speechVars[0]] : null;
+          logger.info('[HeyGen] Payload after deep clone - ready to send', {
+            firstImageVar: firstImageVar ? JSON.stringify(firstImageVar, null, 2) : 'none',
+            firstImageVarType: firstImageVar?.type,
+            firstImageVarCharacter: firstImageVar?.character ? JSON.stringify(firstImageVar.character, null, 2) : 'none',
+            firstImageVarCharacterId: firstImageVar?.character?.character_id,
+            firstSpeechVar: firstSpeechVar ? JSON.stringify(firstSpeechVar, null, 2) : 'none',
+            firstSpeechVarType: firstSpeechVar?.type,
+            firstSpeechVarVoice: firstSpeechVar?.voice ? JSON.stringify(firstSpeechVar.voice, null, 2) : 'none',
+            fullPayloadToSend: JSON.stringify(payloadToSend, null, 2),
+          });
+        }
+
+        const response = await this.client.post(endpoint, payloadToSend);
 
         // Extract video_id from response
         const videoId = response.data?.data?.video_id || response.data?.video_id;
