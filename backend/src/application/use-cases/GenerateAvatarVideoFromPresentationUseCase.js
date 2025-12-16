@@ -44,7 +44,7 @@ export class GenerateAvatarVideoFromPresentationUseCase {
     topicRepository,
     courseRepository,
     language = 'en',
-    templateId = '2c01158bec1149c49d35effb4bd79791', // Same template as orchestrator
+    templateId = '803734fa7c744c89a2068b5c39983dc2', // Template v4 for avatar videos
     slideImageExtractor = null,
     slideSpeechBuilder = null,
     voiceIdResolver = null,
