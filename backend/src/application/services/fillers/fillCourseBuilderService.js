@@ -51,8 +51,12 @@ export async function fillCourseBuilderService(requestData) {
       requestData.response = {};
     }
 
+    // Support both response.courses (plural) and response.course (singular)
     if (!Array.isArray(requestData.response.courses)) {
       requestData.response.courses = [];
+    }
+    if (!Array.isArray(requestData.response.course)) {
+      requestData.response.course = [];
     }
 
     // Read from structure: company_id from data.company_id (or payload.company_id)
@@ -66,6 +70,7 @@ export async function fillCourseBuilderService(requestData) {
     if (learners_data.length === 0) {
       logger.warn('[fillCourseBuilderService] No learners_data provided');
       requestData.response.courses = [];
+      requestData.response.course = [];
       return requestData;
     }
 
@@ -145,6 +150,8 @@ export async function fillCourseBuilderService(requestData) {
     }
 
     requestData.response.courses = allCourses;
+    // Also populate response.course for backward compatibility
+    requestData.response.course = allCourses;
 
     return requestData;
   } catch (error) {
@@ -157,6 +164,7 @@ export async function fillCourseBuilderService(requestData) {
       requestData.response = {};
     }
     requestData.response.courses = [];
+    requestData.response.course = [];
     return requestData;
   }
 }
