@@ -1125,10 +1125,23 @@ export class HeygenClient {
         // Log payload structure for debugging (especially image variables)
         if (payload.variables) {
           const imageVars = Object.keys(payload.variables).filter(k => k.startsWith('image_'));
+          const firstImageVar = imageVars[0] ? payload.variables[imageVars[0]] : null;
+          
           logger.info('[HeyGen] Payload variables structure', {
             totalVariables: Object.keys(payload.variables).length,
             imageVariables: imageVars,
-            firstImageVar: imageVars[0] ? JSON.stringify(payload.variables[imageVars[0]], null, 2) : 'none',
+            firstImageVar: firstImageVar ? JSON.stringify(firstImageVar, null, 2) : 'none',
+            firstImageVarType: firstImageVar?.type,
+            firstImageVarValue: firstImageVar?.value ? JSON.stringify(firstImageVar.value, null, 2) : 'none',
+            firstImageVarImage: firstImageVar?.value?.image ? JSON.stringify(firstImageVar.value.image, null, 2) : 'none',
+            firstImageVarName: firstImageVar?.value?.image?.name,
+            firstImageVarNameType: typeof firstImageVar?.value?.image?.name,
+            firstImageVarNameLength: firstImageVar?.value?.image?.name?.length,
+          });
+          
+          // Log full payload for debugging
+          logger.info('[HeyGen] Full payload being sent', {
+            payload: JSON.stringify(payload, null, 2),
           });
         }
 
