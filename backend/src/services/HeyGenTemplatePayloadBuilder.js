@@ -200,13 +200,12 @@ export class HeyGenTemplatePayloadBuilder {
       }
       
       // Build the image variable structure
+      // HeyGen error says: variables.image_1.image.name - this means direct structure without type/value
+      // Try direct structure: { image: { url: "...", name: "..." } }
       const imageVar = {
-        type: 'image', // Required: type discriminator
-        value: {
-          image: {
-            url: imageUrl, // Required: public URL to the image
-            name: finalImageName, // Required: name identifier for the image
-          },
+        image: {
+          url: imageUrl, // Required: public URL to the image
+          name: finalImageName, // Required: name identifier for the image
         },
       };
       
@@ -218,8 +217,8 @@ export class HeyGenTemplatePayloadBuilder {
         imageNameLength: finalImageName.length,
         imageUrl: imageUrl.substring(0, 100), // Log first 100 chars
         fullStructure: JSON.stringify(imageVar, null, 2),
-        hasName: !!imageVar.value.image.name,
-        nameValue: imageVar.value.image.name,
+        hasName: !!imageVar.image?.name,
+        nameValue: imageVar.image?.name,
       });
       
       variables[imageKey] = imageVar;
