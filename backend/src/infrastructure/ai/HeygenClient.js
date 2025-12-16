@@ -1122,6 +1122,16 @@ export class HeygenClient {
           endpoint,
         });
 
+        // Log payload structure for debugging (especially image variables)
+        if (payload.variables) {
+          const imageVars = Object.keys(payload.variables).filter(k => k.startsWith('image_'));
+          logger.info('[HeyGen] Payload variables structure', {
+            totalVariables: Object.keys(payload.variables).length,
+            imageVariables: imageVars,
+            firstImageVar: imageVars[0] ? JSON.stringify(payload.variables[imageVars[0]], null, 2) : 'none',
+          });
+        }
+
         const response = await this.client.post(endpoint, payload);
 
         // Extract video_id from response

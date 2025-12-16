@@ -199,15 +199,8 @@ export class HeyGenTemplatePayloadBuilder {
         throw new Error(`Invalid image name for slide ${slideNum}: cannot be empty`);
       }
       
-      // Log the structure for debugging
-      logger.info('[HeyGenTemplatePayloadBuilder] Building image variable', {
-        imageKey,
-        slideNum,
-        imageName: finalImageName,
-        imageUrl: imageUrl.substring(0, 100), // Log first 100 chars
-      });
-      
-      variables[imageKey] = {
+      // Build the image variable structure
+      const imageVar = {
         type: 'image', // Required: type discriminator
         value: {
           image: {
@@ -216,6 +209,20 @@ export class HeyGenTemplatePayloadBuilder {
           },
         },
       };
+      
+      // Log the structure for debugging (full structure)
+      logger.info('[HeyGenTemplatePayloadBuilder] Building image variable', {
+        imageKey,
+        slideNum,
+        imageName: finalImageName,
+        imageNameLength: finalImageName.length,
+        imageUrl: imageUrl.substring(0, 100), // Log first 100 chars
+        fullStructure: JSON.stringify(imageVar, null, 2),
+        hasName: !!imageVar.value.image.name,
+        nameValue: imageVar.value.image.name,
+      });
+      
+      variables[imageKey] = imageVar;
 
       // Add speech variable: speech_1, speech_2, ..., speech_10
       // Template expects: plain string (not object with type/voice)
