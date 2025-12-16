@@ -5,7 +5,10 @@
  * Requirements:
  * - Input: templateId, slides (SlidePlan[]), title, caption (boolean), voiceId (optional)
  * - Output: request payload JSON for HeyGen Template v2 generate
- * - variables: map with keys image_1..image_10, speech_1..speech_10 from slides
+ * - variables: map with keys:
+ *   - image_1: avatar (character, fixed)
+ *   - imageOne, imageTow, imageThree, imageFour, imageFive: presentation images
+ *   - speech_1..speech_5: voices from slides
  * - Do not include keys for slides that don't exist (if N<10)
  * - Validation: reject slides with missing imageUrl/speakerText
  */
