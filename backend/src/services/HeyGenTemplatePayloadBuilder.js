@@ -194,14 +194,29 @@ export class HeyGenTemplatePayloadBuilder {
       }
       
       // Validate name is not empty (HeyGen requirement)
-      if (!imageName || imageName.trim() === '') {
+      const finalImageName = imageName.trim();
+      if (!finalImageName || finalImageName === '') {
         throw new Error(`Invalid image name for slide ${slideNum}: cannot be empty`);
       }
+      
+      // Log the structure for debugging
+      logger.info('[HeyGenTemplatePayloadBuilder] Building image variable', {
+        imageKey,
+        slideNum,
+        imageName: finalImageName,
+        imageUrl: imageUrl.substring(0, 100), // Log first 100 chars
+        structure: JSON.stringify({
+          image: {
+            url: imageUrl,
+            name: finalImageName,
+          },
+        }),
+      });
       
       variables[imageKey] = {
         image: {
           url: imageUrl, // Required: public URL to the image
-          name: imageName.trim(), // Required: name identifier for the image
+          name: finalImageName, // Required: name identifier for the image
         },
       };
 
