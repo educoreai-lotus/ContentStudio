@@ -222,6 +222,16 @@ export class HeyGenTemplatePayloadBuilder {
         nameValue: imageVar.image?.name,
       });
       
+      // Final validation: ensure name is not null/undefined/empty before assigning
+      if (!imageVar.image.name || imageVar.image.name.trim() === '') {
+        throw new Error(`Image name is empty for slide ${slideNum} after all processing. URL: ${imageUrl.substring(0, 100)}`);
+      }
+      
+      // Ensure name is a string (not null/undefined)
+      if (typeof imageVar.image.name !== 'string') {
+        throw new Error(`Image name is not a string for slide ${slideNum}. Type: ${typeof imageVar.image.name}, Value: ${imageVar.image.name}`);
+      }
+      
       variables[imageKey] = imageVar;
 
       // Add speech variable: speech_1, speech_2, ..., speech_10
