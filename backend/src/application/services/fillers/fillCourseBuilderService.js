@@ -19,20 +19,21 @@ import { PromptSanitizer } from '../../../infrastructure/security/PromptSanitize
  *    - Each step in learning_modules.steps becomes one Topic
  *    - Generate all 6 formats per topic
  * 
- * @param {Object} requestData - Full request object with requester_service, payload, response
+ * @param {Object} requestData - Full request object (new structure: { success, action, data, ... })
  * @returns {Promise<Object>} Same request object with response.courses populated
  */
 export async function fillCourseBuilderService(requestData) {
   try {
-    // Validate request structure
+    // Validate request structure (new format)
     if (!requestData || typeof requestData !== 'object') {
       throw new Error('requestData must be an object');
     }
 
-    if (!requestData.payload || typeof requestData.payload !== 'object') {
-      throw new Error('requestData.payload is required');
+    if (!requestData.data || typeof requestData.data !== 'object') {
+      throw new Error('requestData.data is required');
     }
 
+    // Initialize response structure if not present
     if (!requestData.response || typeof requestData.response !== 'object') {
       requestData.response = {};
     }
@@ -41,53 +42,96 @@ export async function fillCourseBuilderService(requestData) {
       requestData.response.courses = [];
     }
 
-    const { payload } = requestData;
-    const { trainer_id, company_id, skills_raw_data, career_learning_paths, language } = payload;
+    // Read from new structure: company_id from data.company_id
+    const company_id = requestData.data.company_id || null;
 
-    // Step 1: Trainer ID Validation
-    const hasValidTrainerId = trainer_id && 
-                              trainer_id !== null && 
-                              trainer_id !== '' && 
-                              typeof trainer_id === 'string';
+    // Read learners_data array (new structure)
+    const learners_data = Array.isArray(requestData.data.learners_data) 
+      ? requestData.data.learners_data 
+      : [];
 
-    // Step 2: Course Reuse Logic (if trainer_id exists)
-    if (hasValidTrainerId) {
-      const existingCourse = await searchExistingCourse({
+    if (learners_data.length === 0) {
+      logger.warn('[fillCourseBuilderService] No learners_data provided');
+      requestData.response.courses = [];
+      return requestData;
+    }
+
+    // Process each learner (Content Studio operates at single-learner level)
+    const allCourses = [];
+
+    for (const learner of learners_data) {
+      // Read from new structure: language from learner.preferred_language
+      const language = learner.preferred_language || 'en';
+
+      // Read from new structure: career_learning_paths from learner.career_learning_paths
+      const career_learning_paths = Array.isArray(learner.career_learning_paths)
+        ? learner.career_learning_paths
+        : [];
+
+      if (career_learning_paths.length === 0) {
+        logger.warn('[fillCourseBuilderService] No career_learning_paths for learner', {
+          user_id: learner.user_id,
+        });
+        continue;
+      }
+
+      // Extract skills_raw_data from first career_learning_path (if present)
+      // Read from new structure: skills_raw_data from career_learning_path.skills_raw_data
+      const firstPath = career_learning_paths[0];
+      const skills_raw_data = firstPath?.skills_raw_data || null;
+
+      // trainer_id is not in new structure, so it will be null
+      const trainer_id = null;
+
+      // Step 1: Trainer ID Validation
+      const hasValidTrainerId = trainer_id && 
+                                trainer_id !== null && 
+                                trainer_id !== '' && 
+                                typeof trainer_id === 'string';
+
+      // Step 2: Course Reuse Logic (if trainer_id exists)
+      // Note: Since trainer_id is null in new structure, this will skip to AI generation
+      if (hasValidTrainerId) {
+        const existingCourse = await searchExistingCourse({
+          trainer_id,
+          company_id,
+          skills_raw_data,
+          language: language || 'en',
+        });
+
+        if (existingCourse) {
+          // Reuse existing archived course (read-only, no modifications)
+          // CRITICAL: Archived courses are final and immutable
+          // Do NOT activate, duplicate, regenerate, or modify anything
+          allCourses.push(existingCourse);
+          logger.info('[fillCourseBuilderService] Reused existing archived course', {
+            trainer_id,
+            course_id: existingCourse.course_id,
+            status: 'archived',
+            note: 'Course is read-only, no modifications allowed',
+          });
+          continue;
+        }
+      }
+
+      // Step 3: Full AI Generation (fallback)
+      logger.info('[fillCourseBuilderService] Triggering Full AI Generation', {
+        hasTrainerId: hasValidTrainerId,
+        careerPathsCount: career_learning_paths?.length || 0,
+        user_id: learner.user_id,
+      });
+
+      const courses = await generateFullAICourses({
+        career_learning_paths,
         trainer_id,
         company_id,
-        skills_raw_data,
         language: language || 'en',
       });
 
-      if (existingCourse) {
-        // Reuse existing archived course (read-only, no modifications)
-        // CRITICAL: Archived courses are final and immutable
-        // Do NOT activate, duplicate, regenerate, or modify anything
-        requestData.response.courses = [existingCourse];
-        logger.info('[fillCourseBuilderService] Reused existing archived course', {
-          trainer_id,
-          course_id: existingCourse.course_id,
-          status: 'archived',
-          note: 'Course is read-only, no modifications allowed',
-        });
-        return requestData;
-      }
+      allCourses.push(...courses);
     }
 
-    // Step 3: Full AI Generation (fallback)
-    logger.info('[fillCourseBuilderService] Triggering Full AI Generation', {
-      hasTrainerId: hasValidTrainerId,
-      careerPathsCount: career_learning_paths?.length || 0,
-    });
-
-    const courses = await generateFullAICourses({
-      career_learning_paths,
-      trainer_id,
-      company_id,
-      language: language || 'en',
-    });
-
-    requestData.response.courses = courses;
+    requestData.response.courses = allCourses;
 
     return requestData;
   } catch (error) {
