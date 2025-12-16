@@ -200,17 +200,13 @@ export class HeyGenTemplatePayloadBuilder {
       }
       
       // Build the image variable structure
-      // HeyGen requires: type discriminator + value.image.url + value.image.name
-      // Official structure: { type: "image", value: { image: { url: "...", name: "..." } } }
-      // Error "Unable to extract tag using discriminator 'type'" means type is required
-      // Error "variables.image_1.image.name is invalid" means name must be in value.image.name
+      // HeyGen requires: type: "image" + image.url + image.name (direct structure, no "value" wrapper)
+      // Structure: { type: "image", image: { url: "...", name: "..." } }
       const imageVar = {
         type: 'image', // Required: type discriminator for HeyGen to identify variable type
-        value: {
-          image: {
-            url: imageUrl, // Required: public URL to the image
-            name: finalImageName, // Required: name identifier for the image (must not be empty)
-          },
+        image: {
+          url: imageUrl, // Required: public URL to the image
+          name: finalImageName, // Required: name identifier for the image (must not be empty)
         },
       };
       
@@ -222,16 +218,20 @@ export class HeyGenTemplatePayloadBuilder {
         imageNameLength: finalImageName.length,
         imageUrl: imageUrl.substring(0, 100), // Log first 100 chars
         fullStructure: JSON.stringify(imageVar, null, 2),
-        hasName: !!imageVar.value?.image?.name,
-        nameValue: imageVar.value?.image?.name,
+        hasName: !!imageVar.image?.name,
+        nameValue: imageVar.image?.name,
       });
       
       variables[imageKey] = imageVar;
 
       // Add speech variable: speech_1, speech_2, ..., speech_10
-      // Template expects: plain string (not object with type/voice)
+      // Template expects: { type: "text", text: "..." } (NOT plain string)
+      // HeyGen requires type discriminator for all variables
       const speechKey = `speech_${slideNum}`;
-      variables[speechKey] = slide.speakerText.trim();
+      variables[speechKey] = {
+        type: 'text', // Required: type discriminator for HeyGen to identify variable type
+        text: slide.speakerText.trim(), // Required: the actual speech text
+      };
     }
 
     return variables;
