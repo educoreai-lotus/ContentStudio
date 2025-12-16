@@ -123,6 +123,15 @@ export class ContentMetricsController {
           case 'course-builder-service':
             // New handler for course-builder-service with learning paths
             return await fillCourseBuilderService(requestBody).then(filledRequest => {
+              // Log response body before sending to course builder
+              logger.info('[ContentMetricsController] Sending response to course-builder-service', {
+                responseBody: JSON.stringify(filledRequest, null, 2),
+                coursesCount: filledRequest.response?.courses?.length || 0,
+                courseCount: filledRequest.response?.course?.length || 0,
+                hasCourses: !!filledRequest.response?.courses,
+                hasCourse: !!filledRequest.response?.course,
+              });
+              
               const stringifiedResponse = JSON.stringify(filledRequest);
               res.setHeader('Content-Type', 'application/json');
               return res.status(200).send(stringifiedResponse);
@@ -132,6 +141,14 @@ export class ContentMetricsController {
                 stack: error.stack,
               });
               requestBody.response.courses = [];
+              requestBody.response.course = [];
+              
+              // Log error response body before sending
+              logger.info('[ContentMetricsController] Sending error response to course-builder-service', {
+                responseBody: JSON.stringify(requestBody, null, 2),
+                error: error.message,
+              });
+              
               const stringifiedResponse = JSON.stringify(requestBody);
               res.setHeader('Content-Type', 'application/json');
               return res.status(200).send(stringifiedResponse);
