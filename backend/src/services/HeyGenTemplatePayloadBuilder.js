@@ -57,12 +57,26 @@ export class HeyGenTemplatePayloadBuilder {
       payload.voice_id = voiceId;
     }
 
+    // Final validation: log all image variables to ensure name is present
+    const imageVars = Object.keys(variables).filter(k => k.startsWith('image_'));
+    for (const imageKey of imageVars) {
+      const imageVar = variables[imageKey];
+      if (!imageVar?.image?.name) {
+        logger.error('[HeyGenTemplatePayloadBuilder] Image variable missing name', {
+          imageKey,
+          imageVar: JSON.stringify(imageVar, null, 2),
+        });
+        throw new Error(`Image variable ${imageKey} is missing name field`);
+      }
+    }
+    
     logger.info('[HeyGenTemplatePayloadBuilder] Built template payload', {
       templateId,
       slideCount: slides.length,
       variableCount: Object.keys(variables).length,
       hasCaption: caption,
       hasVoiceId: !!voiceId,
+      imageVariablesValidated: imageVars.length,
     });
 
     return payload;
