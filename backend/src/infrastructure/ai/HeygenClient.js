@@ -1132,11 +1132,11 @@ export class HeygenClient {
             imageVariables: imageVars,
             firstImageVar: firstImageVar ? JSON.stringify(firstImageVar, null, 2) : 'none',
             firstImageVarType: firstImageVar?.type,
-            firstImageVarValue: firstImageVar?.value ? JSON.stringify(firstImageVar.value, null, 2) : 'none',
-            firstImageVarImage: firstImageVar?.value?.image ? JSON.stringify(firstImageVar.value.image, null, 2) : 'none',
-            firstImageVarName: firstImageVar?.value?.image?.name,
-            firstImageVarNameType: typeof firstImageVar?.value?.image?.name,
-            firstImageVarNameLength: firstImageVar?.value?.image?.name?.length,
+            firstImageVarImage: firstImageVar?.image ? JSON.stringify(firstImageVar.image, null, 2) : 'none',
+            firstImageVarName: firstImageVar?.image?.name,
+            firstImageVarNameType: typeof firstImageVar?.image?.name,
+            firstImageVarNameLength: firstImageVar?.image?.name?.length,
+            firstImageVarUrl: firstImageVar?.image?.url?.substring(0, 100),
           });
           
           // Log full payload for debugging
