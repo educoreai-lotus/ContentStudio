@@ -24,13 +24,26 @@ import { PromptSanitizer } from '../../../infrastructure/security/PromptSanitize
  */
 export async function fillCourseBuilderService(requestData) {
   try {
-    // Validate request structure (new format)
+    // Validate request structure
     if (!requestData || typeof requestData !== 'object') {
       throw new Error('requestData must be an object');
     }
 
-    if (!requestData.data || typeof requestData.data !== 'object') {
-      throw new Error('requestData.data is required');
+    // Support both new structure (data directly) and old structure (payload.data or payload)
+    // New structure: { success, action, data: { ... } }
+    // Old structure: { requester_service, payload: { ... }, response: { ... } }
+    let dataSource;
+    if (requestData.data && typeof requestData.data === 'object') {
+      // New structure: data is directly in requestData
+      dataSource = requestData.data;
+    } else if (requestData.payload?.data && typeof requestData.payload.data === 'object') {
+      // Old structure with nested data: payload.data
+      dataSource = requestData.payload.data;
+    } else if (requestData.payload && typeof requestData.payload === 'object') {
+      // Old structure: payload itself is the data
+      dataSource = requestData.payload;
+    } else {
+      throw new Error('requestData.data or requestData.payload is required');
     }
 
     // Initialize response structure if not present
@@ -42,12 +55,12 @@ export async function fillCourseBuilderService(requestData) {
       requestData.response.courses = [];
     }
 
-    // Read from new structure: company_id from data.company_id
-    const company_id = requestData.data.company_id || null;
+    // Read from structure: company_id from data.company_id (or payload.company_id)
+    const company_id = dataSource.company_id || null;
 
-    // Read learners_data array (new structure)
-    const learners_data = Array.isArray(requestData.data.learners_data) 
-      ? requestData.data.learners_data 
+    // Read learners_data array
+    const learners_data = Array.isArray(dataSource.learners_data) 
+      ? dataSource.learners_data 
       : [];
 
     if (learners_data.length === 0) {
