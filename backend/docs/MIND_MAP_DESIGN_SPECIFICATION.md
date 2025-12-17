@@ -509,12 +509,213 @@ style={{
 - Updates nodes/edges when data changes via `useEffect`
 - Supports drag-and-drop (React Flow default behavior)
 
-### Layout Calculation
-- Custom layout algorithm for hierarchical positioning
-- Level height: `320px`
-- Node spacing: `420px`
-- Start Y: `180px`
-- Calculates positions based on node hierarchy (BFS traversal)
+## Layout Algorithm & Spacing
+
+### Hierarchical Layout Structure
+
+The mind map uses a **hierarchical tree layout** with nodes organized by levels (depths) from the root node. The layout is calculated using a **Breadth-First Search (BFS)** algorithm to determine node levels, then positions nodes with precise spacing for optimal visual clarity.
+
+### Layout Calculation Process
+
+#### Step 1: Determine Root Node
+- Find nodes with **no incoming edges** (nodes that are not targets of any edge)
+- If multiple root nodes exist, use the first one
+- If no root nodes exist, use the first node in the nodes array
+- Root node is assigned **level 0**
+
+#### Step 2: Assign Levels (BFS Traversal)
+- Start from root node at **level 0**
+- Traverse graph using BFS (Breadth-First Search)
+- Each child node is assigned **level = parent level + 1**
+- All nodes at the same distance from root are on the same level
+
+#### Step 3: Group Nodes by Level
+- Group all nodes by their assigned level
+- Create `nodesByLevel` object: `{ 0: [rootId], 1: [child1, child2, ...], 2: [...], ... }`
+
+#### Step 4: Calculate Positions
+
+**Vertical Spacing (Between Levels):**
+- **Level Height**: `320px` - Vertical distance between consecutive levels
+- **Start Y Position**: `180px` - Initial Y coordinate for level 0 (root level)
+- **Y Calculation**: `y = startY + (level * levelHeight)`
+  - Level 0: `y = 180px`
+  - Level 1: `y = 500px` (180 + 320)
+  - Level 2: `y = 820px` (180 + 640)
+  - Level 3: `y = 1140px` (180 + 960)
+  - And so on...
+
+**Horizontal Spacing (Within Same Level):**
+- **Node Spacing**: `420px` - Horizontal distance between adjacent nodes in the same level
+- **Centering**: Nodes in each level are centered horizontally
+- **X Calculation**:
+  - `totalWidth = (nodeCount - 1) * nodeSpacing`
+  - `startX = -totalWidth / 2` (centers the level)
+  - `x = startX + (index * nodeSpacing)`
+  - Example for 3 nodes: `startX = -420px`, nodes at `-420px, 0px, 420px`
+
+### Spacing Constants (Exact Values)
+
+```javascript
+const levelHeight = 320;    // Vertical spacing between levels (px)
+const nodeSpacing = 420;     // Horizontal spacing between nodes in same level (px)
+const startY = 180;          // Initial Y position for root level (px)
+```
+
+### Position Calculation Example
+
+**Example: 3-level hierarchy with 1 root, 2 children, 3 grandchildren**
+
+```
+Level 0 (Root):
+  - Node A at (x: 0, y: 180)
+
+Level 1 (Children):
+  - Node B at (x: -210, y: 500)  // Centered: -420/2 = -210
+  - Node C at (x: 210, y: 500)   // Centered: 420/2 = 210
+
+Level 2 (Grandchildren):
+  - Node D at (x: -420, y: 820)  // Centered: -840/2 = -420
+  - Node E at (x: 0, y: 820)     // Centered: 0
+  - Node F at (x: 420, y: 820)   // Centered: 840/2 = 420
+```
+
+### Node Position Data Structure
+
+Each node must have a `position` object with exact pixel coordinates:
+
+```javascript
+{
+  id: "nodeId",
+  position: {
+    x: number,  // Horizontal position in pixels (can be negative for centering)
+    y: number,  // Vertical position in pixels (always positive, starts at 180)
+  },
+  // ... other node properties
+}
+```
+
+### Visual Spacing Requirements
+
+**Minimum Spacing for Readability:**
+- **Between nodes horizontally**: `420px` (minimum, ensures no overlap)
+- **Between levels vertically**: `320px` (minimum, ensures clear hierarchy)
+- **Node dimensions**: `120px` min width × `80px` min height
+- **Effective visual gap**: `420px - 120px = 300px` between node edges horizontally
+- **Effective visual gap**: `320px - 80px = 240px` between node edges vertically
+
+**Why These Values:**
+- `420px` horizontal spacing provides comfortable reading distance between nodes
+- `320px` vertical spacing creates clear visual separation between hierarchy levels
+- `180px` start Y provides top padding for root node visibility
+- Centering ensures balanced, symmetrical appearance
+
+### Layout Algorithm Implementation
+
+```javascript
+function calculateLayoutIfNeeded(nodes, edges) {
+  // Step 1: Build adjacency list
+  const children = {};
+  edges.forEach(edge => {
+    if (!children[edge.source]) {
+      children[edge.source] = [];
+    }
+    children[edge.source].push(edge.target);
+  });
+
+  // Step 2: Find root node (no incoming edges)
+  const nodeIds = new Set(nodes.map(n => n.id));
+  const targets = new Set(edges.map(e => e.target));
+  const rootNodes = nodes.filter(n => !targets.has(n.id));
+  const rootId = rootNodes.length > 0 ? rootNodes[0].id : nodes[0]?.id;
+
+  // Step 3: BFS to assign levels
+  const levels = {};
+  const queue = [{ id: rootId, level: 0 }];
+  const visited = new Set();
+
+  while (queue.length > 0) {
+    const { id, level } = queue.shift();
+    if (visited.has(id)) continue;
+    visited.add(id);
+    levels[id] = level;
+
+    if (children[id]) {
+      children[id].forEach(childId => {
+        if (!visited.has(childId)) {
+          queue.push({ id: childId, level: level + 1 });
+        }
+      });
+    }
+  }
+
+  // Step 4: Group nodes by level
+  const nodesByLevel = {};
+  nodes.forEach(node => {
+    const level = levels[node.id] || 0;
+    if (!nodesByLevel[level]) {
+      nodesByLevel[level] = [];
+    }
+    nodesByLevel[level].push(node.id);
+  });
+
+  // Step 5: Calculate positions
+  const positions = {};
+  const levelHeight = 320;  // Vertical spacing between levels
+  const nodeSpacing = 420;  // Horizontal spacing between nodes
+  const startY = 180;        // Initial Y position
+
+  Object.keys(nodesByLevel).forEach(level => {
+    const levelNodes = nodesByLevel[level];
+    const y = startY + parseInt(level) * levelHeight;
+    const totalWidth = (levelNodes.length - 1) * nodeSpacing;
+    const startX = -totalWidth / 2;
+
+    levelNodes.forEach((nodeId, index) => {
+      positions[nodeId] = {
+        x: startX + index * nodeSpacing,
+        y,
+      };
+    });
+  });
+
+  // Step 6: Apply positions to nodes
+  return nodes.map(node => ({
+    ...node,
+    position: positions[node.id] || { x: 0, y: 0 },
+  }));
+}
+```
+
+### Field Names for Styling & Spacing
+
+**Node Style Properties:**
+- `minWidth`: `'120px'` - Minimum node width
+- `minHeight`: `'80px'` - Minimum node height
+- `padding`: `'12px 16px'` - Internal padding (vertical horizontal)
+- `borderRadius`: `'12px'` - Rounded corners
+- `border`: `'2px solid'` - Border width and style
+- `boxShadow`: Shadow effect (varies by selection state)
+- `transform`: `'scale(1)'` or `'scale(1.05)'` - Selection scaling
+- `transition`: `'all 0.2s ease'` - Smooth transitions
+
+**Position Properties:**
+- `position.x`: Horizontal coordinate in pixels (number)
+- `position.y`: Vertical coordinate in pixels (number)
+
+**Layout Constants:**
+- `levelHeight`: `320` - Vertical spacing between levels
+- `nodeSpacing`: `420` - Horizontal spacing between nodes
+- `startY`: `180` - Initial Y position for root level
+
+**Edge Style Properties:**
+- `stroke`: Edge line color (theme-dependent)
+- `strokeWidth`: `2` - Edge line thickness
+- `labelStyle.fill`: Edge label text color
+- `labelStyle.fontSize`: `'11px'` - Edge label font size
+- `labelStyle.fontWeight`: `500` - Edge label font weight
+- `labelBgStyle.fill`: Edge label background color
+- `labelBgStyle.fillOpacity`: `0.9` - Edge label background opacity
 
 ### Alternative Libraries
 If NOT using React Flow:
