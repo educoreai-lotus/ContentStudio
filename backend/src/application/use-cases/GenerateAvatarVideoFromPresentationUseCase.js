@@ -720,8 +720,25 @@ export class GenerateAvatarVideoFromPresentationUseCase {
 
       let pollResult;
       try {
-        // Poll with reasonable timeout: max 60 attempts × 3 seconds = 3 minutes
-        pollResult = await this.heygenClient.pollVideoStatus(heygenResult.video_id, 60, 3000);
+        // Poll with reasonable timeout: max 60 attempts × 5 seconds = 5 minutes total
+        // Recommended limits: 5-10 seconds delay, 5-7 minutes total timeout
+        const pollingMaxAttempts = 60; // 60 attempts
+        const pollingInterval = 5000; // 5 seconds delay between attempts
+        const totalTimeoutMinutes = (pollingMaxAttempts * pollingInterval) / 60000; // 5 minutes
+        
+        logger.info('[GenerateAvatarVideoFromPresentation] Polling configuration', {
+          jobId,
+          videoId: heygenResult.video_id,
+          maxAttempts: pollingMaxAttempts,
+          intervalMs: pollingInterval,
+          totalTimeoutMinutes,
+        });
+        
+        pollResult = await this.heygenClient.pollVideoStatus(
+          heygenResult.video_id,
+          pollingMaxAttempts,
+          pollingInterval
+        );
         
         logger.info('[GenerateAvatarVideoFromPresentation] Video polling completed', {
           jobId,

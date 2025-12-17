@@ -594,13 +594,14 @@ export class HeygenClient {
       }
 
       // Poll for video completion
+      // Polling limits: 84 attempts × 5 seconds = 7 minutes total timeout (within recommended 5-7 minutes)
       let pollResult;
       const duration = payload.duration || 15; // Use from payload or default
       try {
         pollResult = await this.pollVideoStatus(
           videoId,
-          120, // maxAttempts
-          5000, // interval
+          84, // maxAttempts: 84 × 5s = 7 minutes (within recommended 5-7 minutes)
+          5000, // interval: 5 seconds (within recommended 5-10 seconds)
         );
       } catch (pollError) {
         if (pollError.status === 'failed' || (pollError.message && pollError.message.includes('Video generation failed'))) {
@@ -822,9 +823,16 @@ export class HeygenClient {
   /**
    * Poll video generation status
    * @param {string} videoId - Video ID from Heygen
+   * @param {number} [maxAttempts=60] - Maximum polling attempts (default: 60)
+   * @param {number} [interval=5000] - Delay between attempts in milliseconds (default: 5000ms = 5 seconds)
    * @returns {Promise<{status: string, videoUrl: string}>} Video status data
+   * 
+   * Polling limits:
+   * - Default: 60 attempts × 5 seconds = 5 minutes total timeout
+   * - Recommended: 5-10 seconds delay between attempts
+   * - Recommended: 5-7 minutes total timeout
    */
-  async pollVideoStatus(videoId, maxAttempts = 60, interval = 3000) {
+  async pollVideoStatus(videoId, maxAttempts = 60, interval = 5000) {
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       try {
         // ⚠️ CRITICAL: Use /v1/video_status.get (with underscore, NOT hyphen)
@@ -908,13 +916,18 @@ export class HeygenClient {
           };
         }
 
-        // Log progress for long-running polls
+        // Log progress for long-running polls (every 10 attempts = every 50 seconds with 5s interval)
         if (attempt % 10 === 0) {
+          const elapsedSeconds = (attempt + 1) * (interval / 1000);
+          const totalTimeoutSeconds = maxAttempts * (interval / 1000);
           console.log('[HeyGen] Polling video status', {
             videoId,
             attempt: attempt + 1,
             maxAttempts,
             status,
+            elapsedSeconds: Math.round(elapsedSeconds),
+            totalTimeoutSeconds: Math.round(totalTimeoutSeconds),
+            progressPercent: Math.round(((attempt + 1) / maxAttempts) * 100),
           });
         }
 
@@ -1020,9 +1033,14 @@ export class HeygenClient {
     }
 
     // Poll for video completion
+    // Polling limits: 84 attempts × 5 seconds = 7 minutes total timeout (within recommended 5-7 minutes)
     const duration = options.duration || 15;
     try {
-      const pollResult = await this.pollVideoStatus(videoId, 120, 5000);
+      const pollResult = await this.pollVideoStatus(
+        videoId,
+        84, // maxAttempts: 84 × 5s = 7 minutes (within recommended 5-7 minutes)
+        5000 // interval: 5 seconds (within recommended 5-10 seconds)
+      );
       
       if (pollResult.status === 'failed') {
         return {
