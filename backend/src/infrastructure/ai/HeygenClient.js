@@ -1298,7 +1298,6 @@ export class HeygenClient {
           const firstPresentationImage = payloadToSend.variables.imageOne;
           const firstSpeechVar = speechVars[0] ? payloadToSend.variables[speechVars[0]] : null;
           logger.info('[HeyGen] Payload after deep clone - ready to send', {
-            avatarVar: avatarVar ? JSON.stringify(avatarVar, null, 2) : 'none',
             firstPresentationImage: firstPresentationImage ? JSON.stringify(firstPresentationImage, null, 2) : 'none',
             firstSpeechVar: firstSpeechVar ? JSON.stringify(firstSpeechVar, null, 2) : 'none',
             fullPayloadToSend: JSON.stringify(payloadToSend, null, 2),
