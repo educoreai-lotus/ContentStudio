@@ -4,6 +4,8 @@ import { logger } from '../../../infrastructure/logging/Logger.js';
 import { AIGenerationService } from '../../../infrastructure/ai/AIGenerationService.js';
 import { ContentDataCleaner } from '../../utils/ContentDataCleaner.js';
 import { PromptSanitizer } from '../../../infrastructure/security/PromptSanitizer.js';
+import { generateAIExercises } from '../../../infrastructure/devlabClient/devlabClient.js';
+import { getLanguageName } from '../../../utils/languageMapper.js';
 
 /**
  * Fill Course Builder Service request
@@ -410,6 +412,20 @@ async function generateFullAICourses({ career_learning_paths, trainer_id, compan
     }
   }
 
+  // Persist all generated courses, topics, and contents to database
+  // Only in Full AI Generation path (not in reuse path)
+  if (courses.length > 0) {
+    try {
+      await persistGeneratedCoursesToDatabase(courses, trainer_id, company_id, language);
+    } catch (error) {
+      logger.error('[fillCourseBuilderService] Failed to persist courses to database', {
+        error: error.message,
+        stack: error.stack,
+      });
+      // Continue even if persistence fails - return courses without DB IDs
+    }
+  }
+
   return courses;
 }
 
@@ -666,6 +682,68 @@ Generate ${wrappedVariables.language} code that demonstrates the concepts clearl
       logger.warn('[fillCourseBuilderService] Failed to generate avatar_video', { error: error.message });
     }
 
+    // 6. Generate DevLab exercises (default: code type, python language)
+    let devlabExercises = null;
+    try {
+      logger.info('[fillCourseBuilderService] Generating DevLab exercises for topic', {
+        topic_name: promptVariables.lessonTopic,
+        skills_count: promptVariables.skillsListArray.length,
+        question_type: 'code',
+        programming_language: 'python',
+      });
+
+      const exerciseRequest = {
+        topic_id: '', // Will be updated after topic is persisted
+        topic_name: promptVariables.lessonTopic,
+        skills: promptVariables.skillsListArray,
+        question_type: 'code',
+        programming_language: 'python',
+        language: promptVariables.language,
+      };
+
+      const devlabResponse = await generateAIExercises(exerciseRequest);
+      
+      // Extract exercises from DevLab response
+      // Response structure can be:
+      // 1. { html, questions, metadata } - direct format
+      // 2. { data: { html, questions, metadata } } - nested format
+      if (devlabResponse) {
+        // Check direct format first
+        if (Array.isArray(devlabResponse.questions)) {
+          devlabExercises = devlabResponse.questions;
+        } 
+        // Check nested format
+        else if (devlabResponse.data && Array.isArray(devlabResponse.data.questions)) {
+          devlabExercises = devlabResponse.data.questions;
+        }
+        
+        if (devlabExercises && devlabExercises.length > 0) {
+          logger.info('[fillCourseBuilderService] DevLab exercises generated successfully', {
+            topic_name: promptVariables.lessonTopic,
+            exercise_count: devlabExercises.length,
+          });
+        } else {
+          logger.warn('[fillCourseBuilderService] DevLab returned empty or invalid exercises', {
+            topic_name: promptVariables.lessonTopic,
+            response_keys: Object.keys(devlabResponse),
+            hasQuestions: !!devlabResponse.questions,
+            hasData: !!devlabResponse.data,
+            dataHasQuestions: !!devlabResponse.data?.questions,
+          });
+        }
+      } else {
+        logger.warn('[fillCourseBuilderService] DevLab returned null or undefined response', {
+          topic_name: promptVariables.lessonTopic,
+        });
+      }
+    } catch (error) {
+      logger.warn('[fillCourseBuilderService] Failed to generate DevLab exercises', {
+        error: error.message,
+        topic_name: promptVariables.lessonTopic,
+      });
+      // Continue without DevLab exercises - not a critical failure
+    }
+
     return {
       topic_id: null,
       topic_name: promptVariables.lessonTopic,
@@ -674,7 +752,8 @@ Generate ${wrappedVariables.language} code that demonstrates the concepts clearl
       template_id: null,
       format_order: ['text', 'code', 'presentation', 'mind_map', 'avatar_video'],
       contents,
-      devlab_exercises: null,
+      devlab_exercises: devlabExercises,
+      skills: promptVariables.skillsListArray, // Store skills for DevLab and persistence
     };
   } catch (error) {
     logger.error('[fillCourseBuilderService] Failed to generate topic for step', {
@@ -683,5 +762,192 @@ Generate ${wrappedVariables.language} code that demonstrates the concepts clearl
     });
     return null;
   }
+}
+
+/**
+ * Persist generated courses, topics, and contents to database
+ * Only called in Full AI Generation path
+ * @param {Array} courses - Generated courses array
+ * @param {string|null} trainer_id - Trainer ID
+ * @param {string|null} company_id - Company ID
+ * @param {string} language - Language code
+ */
+async function persistGeneratedCoursesToDatabase(courses, trainer_id, company_id, language) {
+  await db.ready;
+  if (!db.isConnected()) {
+    logger.error('[fillCourseBuilderService] Database not connected, skipping persistence');
+    return;
+  }
+
+  logger.info('[fillCourseBuilderService] Persisting generated courses to database', {
+    courses_count: courses.length,
+    trainer_id,
+    company_id,
+    language,
+  });
+
+  // Content type name to ID mapping
+  const CONTENT_TYPE_MAP = {
+    'text': 1,
+    'code': 2,
+    'presentation': 3,
+    'audio': 4,
+    'mind_map': 5,
+    'avatar_video': 6,
+  };
+
+  for (const course of courses) {
+    try {
+      // 1. Insert course into trainer_courses
+      const insertCourseSql = `
+        INSERT INTO trainer_courses (
+          course_name, trainer_id, description, skills, language, status, permissions, usage_count
+        ) VALUES ($1, $2, $3, $4::text[], $5, $6, $7, $8)
+        RETURNING course_id
+      `;
+
+      // Collect all skills from all topics in the course
+      const allCourseSkills = [];
+      for (const topic of course.topics || []) {
+        if (Array.isArray(topic.skills)) {
+          allCourseSkills.push(...topic.skills);
+        }
+      }
+      const uniqueCourseSkills = [...new Set(allCourseSkills)];
+
+      // Set permissions based on company_id
+      const permissions = company_id ? JSON.stringify([company_id]) : null;
+
+      const courseResult = await db.query(insertCourseSql, [
+        course.course_name || 'Untitled Course',
+        trainer_id || 'system-auto',
+        course.course_description || null,
+        uniqueCourseSkills,
+        course.course_language || language || 'en',
+        'archived', // Status: archived for AI-generated courses
+        permissions,
+        0, // usage_count starts at 0
+      ]);
+
+      const courseId = courseResult.rows[0].course_id;
+      course.course_id = courseId;
+
+      logger.info('[fillCourseBuilderService] Course persisted', {
+        course_id: courseId,
+        course_name: course.course_name,
+      });
+
+      // 2. Insert topics for this course
+      for (const topic of course.topics || []) {
+        try {
+          const insertTopicSql = `
+            INSERT INTO topics (
+              topic_name, description, language, skills, trainer_id, course_id,
+              template_id, generation_methods_id, status, devlab_exercises, usage_count
+            ) VALUES ($1, $2, $3, $4::text[], $5, $6, $7, $8, $9, $10, $11)
+            RETURNING topic_id
+          `;
+
+          const topicSkills = Array.isArray(topic.skills) ? topic.skills : [];
+          const devlabExercisesJson = topic.devlab_exercises 
+            ? JSON.stringify(topic.devlab_exercises) 
+            : null;
+
+          const topicResult = await db.query(insertTopicSql, [
+            topic.topic_name || 'Untitled Topic',
+            topic.topic_description || null,
+            topic.topic_language || language || 'en',
+            topicSkills,
+            trainer_id || 'system-auto',
+            courseId,
+            topic.template_id || null,
+            5, // generation_methods_id: 5 = AI-assisted
+            'archived', // Status: archived
+            devlabExercisesJson,
+            0, // usage_count starts at 0
+          ]);
+
+          const topicId = topicResult.rows[0].topic_id;
+          topic.topic_id = topicId;
+
+          logger.info('[fillCourseBuilderService] Topic persisted', {
+            topic_id: topicId,
+            topic_name: topic.topic_name,
+            course_id: courseId,
+          });
+
+          // 3. Insert contents for this topic
+          for (const content of topic.contents || []) {
+            try {
+              const contentTypeId = CONTENT_TYPE_MAP[content.content_type] || null;
+              if (!contentTypeId) {
+                logger.warn('[fillCourseBuilderService] Unknown content type, skipping', {
+                  content_type: content.content_type,
+                  topic_id: topicId,
+                });
+                continue;
+              }
+
+              const insertContentSql = `
+                INSERT INTO content (
+                  topic_id, content_type_id, generation_method_id, content_data
+                ) VALUES ($1, $2, $3, $4)
+                RETURNING content_id
+              `;
+
+              const contentDataJson = typeof content.content_data === 'string'
+                ? content.content_data
+                : JSON.stringify(content.content_data || {});
+
+              await db.query(insertContentSql, [
+                topicId,
+                contentTypeId,
+                5, // generation_method_id: 5 = AI-assisted
+                contentDataJson,
+              ]);
+
+              logger.debug('[fillCourseBuilderService] Content persisted', {
+                topic_id: topicId,
+                content_type: content.content_type,
+              });
+            } catch (contentError) {
+              logger.error('[fillCourseBuilderService] Failed to persist content', {
+                error: contentError.message,
+                topic_id: topicId,
+                content_type: content.content_type,
+              });
+              // Continue with next content - don't fail entire topic
+            }
+          }
+
+          // 4. DevLab exercises are already stored in the topic during generation
+          // They're persisted with the topic INSERT above (in devlab_exercises column)
+          if (topic.devlab_exercises && Array.isArray(topic.devlab_exercises) && topic.devlab_exercises.length > 0) {
+            logger.info('[fillCourseBuilderService] DevLab exercises already stored with topic', {
+              topic_id: topicId,
+              exercise_count: topic.devlab_exercises.length,
+            });
+          }
+        } catch (topicError) {
+          logger.error('[fillCourseBuilderService] Failed to persist topic', {
+            error: topicError.message,
+            course_id: courseId,
+            topic_name: topic.topic_name,
+          });
+          // Continue with next topic - don't fail entire course
+        }
+      }
+    } catch (courseError) {
+      logger.error('[fillCourseBuilderService] Failed to persist course', {
+        error: courseError.message,
+        course_name: course.course_name,
+      });
+      // Continue with next course - don't fail entire operation
+    }
+  }
+
+  logger.info('[fillCourseBuilderService] Finished persisting courses to database', {
+    courses_count: courses.length,
+  });
 }
 
