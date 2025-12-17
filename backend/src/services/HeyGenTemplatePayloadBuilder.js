@@ -44,8 +44,9 @@ export class HeyGenTemplatePayloadBuilder {
     const variables = this._buildVariables(slides, voiceId, language);
 
     // Build base payload
+    // NOTE: template_id is NOT included in payload - it's only in the URL endpoint
+    // HeyGen API: POST /v2/template/{template_id}/generate
     const payload = {
-      template_id: templateId,
       title: title || 'EduCore Presentation',
       variables,
     };
