@@ -197,10 +197,21 @@ export class AIGenerationController {
       if (isResponseAvatarVideo) {
         if (isSkipped || hasSkippedReason) {
           responseStatus = 'skipped';
-        } else if (responseData.content_data?.videoUrl) {
-          responseStatus = 'success';
         } else {
-          responseStatus = 'failed';
+          // Check status from content_data - can be 'completed', 'processing', 'failed', etc.
+          const videoStatus = responseData.content_data?.status;
+          if (videoStatus === 'processing') {
+            responseStatus = 'processing'; // Video is being generated, not failed
+          } else if (videoStatus === 'failed') {
+            responseStatus = 'failed';
+          } else if (responseData.content_data?.videoUrl) {
+            responseStatus = 'success';
+          } else if (responseData.content_data?.videoId) {
+            // Has videoId but no videoUrl yet - likely still processing
+            responseStatus = 'processing';
+          } else {
+            responseStatus = 'failed';
+          }
         }
       } else {
         responseStatus = responseData.content_data?.status || 'success';

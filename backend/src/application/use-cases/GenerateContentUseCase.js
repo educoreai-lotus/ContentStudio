@@ -669,11 +669,14 @@ ${basePrompt}`;
             };
           } else {
             // Success - use new workflow result structure
+            // Note: status can be 'completed', 'processing', or other states
+            // 'processing' means video is being generated (not failed)
+            const resultStatus = result.status || 'completed';
             contentData = {
               videoUrl: result.videoUrl,
               videoId: result.videoId,
               duration_seconds: result.duration_seconds || 900,
-              status: 'completed',
+              status: resultStatus, // Can be 'completed', 'processing', etc.
               explanation: result.explanation, // Store the generated explanation
               metadata: {
                 ...result.metadata,

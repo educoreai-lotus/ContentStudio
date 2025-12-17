@@ -711,14 +711,88 @@ export class GenerateAvatarVideoFromPresentationUseCase {
         throw new Error(`Failed to generate HeyGen video: ${error.message}`);
       }
 
-      // Return result (maintaining API compatibility)
+      // Step 9: Poll for video status until completed
+      // HeyGen returns video_id immediately, but video_url only after processing
+      logger.info('[GenerateAvatarVideoFromPresentation] Step 9: Polling for video status', {
+        jobId,
+        videoId: heygenResult.video_id,
+      });
+
+      let pollResult;
+      try {
+        // Poll with reasonable timeout: max 60 attempts × 3 seconds = 3 minutes
+        pollResult = await this.heygenClient.pollVideoStatus(heygenResult.video_id, 60, 3000);
+        
+        logger.info('[GenerateAvatarVideoFromPresentation] Video polling completed', {
+          jobId,
+          videoId: heygenResult.video_id,
+          status: pollResult.status,
+          hasVideoUrl: !!pollResult.videoUrl,
+        });
+      } catch (pollError) {
+        // Polling failed or timed out - return partial result with videoId
+        logger.warn('[GenerateAvatarVideoFromPresentation] Video polling failed or timed out', {
+          jobId,
+          videoId: heygenResult.video_id,
+          error: pollError.message,
+          fallbackUrl: pollError.videoUrl,
+        });
+
+        // Return partial result - video is still processing
+        return {
+          success: true,
+          status: 'processing', // Video is being generated, not failed
+          videoId: heygenResult.video_id,
+          videoUrl: pollError.videoUrl || `https://app.heygen.com/share/${heygenResult.video_id}`, // Fallback share URL
+          duration_seconds: 180, // Estimated: 5 slides × 36 seconds average
+          explanation: null,
+          metadata: {
+            presentation_content_id,
+            presentation_file_url: presentationFileUrl,
+            avatar_id: avatar_id || 'default',
+            language,
+            templateId: this.templateId,
+            slideCount: slidePlan.slideCount,
+            generated_at: new Date().toISOString(),
+            jobId,
+            polling_status: 'timeout',
+            polling_error: pollError.message,
+          },
+        };
+      }
+
+      // Video is ready
+      if (pollResult.status === 'completed' && pollResult.videoUrl) {
+        return {
+          success: true,
+          status: 'completed',
+          videoId: heygenResult.video_id,
+          videoUrl: pollResult.videoUrl,
+          duration_seconds: 180, // Estimated: 5 slides × 36 seconds average
+          explanation: null,
+          metadata: {
+            presentation_content_id,
+            presentation_file_url: presentationFileUrl,
+            avatar_id: avatar_id || 'default',
+            language,
+            templateId: this.templateId,
+            slideCount: slidePlan.slideCount,
+            generated_at: new Date().toISOString(),
+            jobId,
+            polling_status: 'completed',
+            isFallback: pollResult.isFallback || false,
+          },
+        };
+      }
+
+      // Video status is not completed (shouldn't happen after polling, but handle it)
       return {
         success: true,
-        status: 'completed',
+        status: pollResult.status || 'processing',
         videoId: heygenResult.video_id,
-        videoUrl: null, // Template API doesn't return URL immediately
-        duration_seconds: 180, // Estimated: 10 slides × 18 seconds average
-        explanation: null, // No longer using single explanation
+        videoUrl: pollResult.videoUrl || `https://app.heygen.com/share/${heygenResult.video_id}`,
+        duration_seconds: 180,
+        explanation: null,
         metadata: {
           presentation_content_id,
           presentation_file_url: presentationFileUrl,
@@ -728,6 +802,7 @@ export class GenerateAvatarVideoFromPresentationUseCase {
           slideCount: slidePlan.slideCount,
           generated_at: new Date().toISOString(),
           jobId,
+          polling_status: pollResult.status || 'unknown',
         },
       };
 
