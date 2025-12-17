@@ -37,7 +37,7 @@ export class HeygenClient {
         'X-Api-Key': apiKey,
         'Content-Type': 'application/json',
       },
-      timeout: 180000, // 180 seconds (3 minutes) - HeyGen generateTemplateVideo can take time to process template
+      timeout: 300000, // 300 seconds (5 minutes) - HeyGen generateTemplateVideo can take time to process template
       maxContentLength: Infinity,
       maxBodyLength: Infinity,
     });
