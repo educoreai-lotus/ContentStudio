@@ -3,6 +3,12 @@
 ## Overview
 This document provides a complete design specification for rendering mind maps that must match the exact visual design, colors, and styling used in EduCore Content Studio's Mind Map component. The specification covers both **Day Mode (Light)** and **Night Mode (Dark)** themes.
 
+## Technology Stack
+- **Library**: React Flow v11.11.4
+- **Import**: `import ReactFlow, { Background, Controls, MiniMap, useNodesState, useEdgesState, addEdge } from 'reactflow'`
+- **CSS**: `import 'reactflow/dist/style.css'` (required for React Flow base styles)
+- **Custom Node Type**: `concept` (uses custom `ConceptNode` component)
+
 ---
 
 ## Container & Layout
@@ -332,20 +338,193 @@ This document provides a complete design specification for rendering mind maps t
 
 ## Implementation Notes
 
-### React Flow Compatibility
-If using React Flow library:
-- Use `smoothstep` edge type
-- Custom node type: `concept`
-- Background variant: `dots`
-- Controls and MiniMap components should match styling above
+## React Flow Implementation Details
+
+### Required React Flow Components
+```javascript
+import ReactFlow, {
+  Background,
+  Controls,
+  MiniMap,
+  useNodesState,
+  useEdgesState,
+  addEdge,
+} from 'reactflow';
+import 'reactflow/dist/style.css';
+```
+
+### React Flow Configuration
+
+#### Main ReactFlow Component
+```javascript
+<ReactFlow
+  nodes={nodes}
+  edges={edges}
+  onNodesChange={onNodesChange}
+  onEdgesChange={onEdgesChange}
+  onConnect={onConnect}
+  nodeTypes={{ concept: ConceptNode }}
+  fitView
+  fitViewOptions={{
+    padding: 0.3,
+    maxZoom: 1.2,
+    minZoom: 0.3,
+  }}
+  proOptions={{ hideAttribution: true }}
+  defaultEdgeOptions={{
+    type: 'smoothstep',
+    animated: false,
+  }}
+  style={{
+    backgroundColor: bgColor, // Theme-dependent
+  }}
+>
+  {/* Background, Controls, MiniMap components */}
+</ReactFlow>
+```
+
+#### Background Component
+```javascript
+<Background
+  color={isDark ? '#334155' : '#cbd5e1'}
+  gap={20}
+  size={1}
+  variant="dots"
+/>
+```
+
+#### Controls Component
+```javascript
+<Controls
+  style={{
+    button: {
+      backgroundColor: nodeColor, // Theme-dependent
+      color: isDark ? '#f8fafc' : '#1e293b',
+      border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)'}`,
+    },
+  }}
+/>
+```
+
+#### MiniMap Component
+```javascript
+<MiniMap
+  nodeColor={nodeColor} // Theme-dependent
+  nodeStrokeColor={isDark ? '#0d9488' : '#059669'}
+  maskColor={isDark ? 'rgba(15, 23, 42, 0.6)' : 'rgba(248, 250, 252, 0.6)'}
+  style={{
+    backgroundColor: bgColor, // Theme-dependent
+    border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`,
+  }}
+/>
+```
+
+### Custom Node Component (ConceptNode)
+
+#### Node Structure
+- **Component Type**: Custom React component
+- **Node Type Registration**: `nodeTypes={{ concept: ConceptNode }}`
+- **Props Received**: `{ data, selected, style: nodeStyle }`
+- **React Flow Handle Components**: Uses `Handle` from `reactflow` with `Position.Top` and `Position.Bottom`
+
+#### Node Styling (Inline Styles)
+```javascript
+style={{
+  minWidth: '120px',
+  minHeight: '80px',
+  padding: '12px 16px',
+  borderRadius: '12px',
+  backgroundColor: backgroundColor, // From category or style prop
+  color: textColor, // Theme-dependent
+  border: `2px solid ${borderColor}`, // Theme-dependent
+  boxShadow: selected 
+    ? `0 8px 16px rgba(13, 148, 136, 0.3)`
+    : `0 4px 8px rgba(0, 0, 0, 0.1)`,
+  cursor: 'pointer',
+  transition: 'all 0.2s ease',
+  transform: selected ? 'scale(1.05)' : 'scale(1)',
+}}
+```
+
+#### React Flow Handle Implementation
+```javascript
+// Input Handle (Top)
+<Handle
+  type="target"
+  position={Position.Top}
+  style={{
+    background: '#0d9488',
+    width: '10px',
+    height: '10px',
+    border: '2px solid white',
+  }}
+/>
+
+// Output Handle (Bottom)
+<Handle
+  type="source"
+  position={Position.Bottom}
+  style={{
+    background: '#059669',
+    width: '10px',
+    height: '10px',
+    border: '2px solid white',
+  }}
+/>
+```
+
+### Edge Configuration
+
+#### Edge Type
+- **Type**: `'smoothstep'` (React Flow's built-in smoothstep edge type)
+- **Default Configuration**: Set via `defaultEdgeOptions={{ type: 'smoothstep', animated: false }}`
+
+#### Edge Styling
+```javascript
+{
+  id: String(edgeId),
+  source: String(edge.source),
+  target: String(edge.target),
+  type: 'smoothstep',
+  label: edge.label || '',
+  animated: false,
+  style: {
+    stroke: theme === 'night-mode' ? '#64748b' : '#94a3b8',
+    strokeWidth: 2,
+  },
+  labelStyle: {
+    fill: theme === 'night-mode' ? '#cbd5e1' : '#475569',
+    fontWeight: 500,
+    fontSize: '11px',
+  },
+  labelBgStyle: {
+    fill: theme === 'night-mode' ? '#1e293b' : '#ffffff',
+    fillOpacity: 0.9,
+  },
+}
+```
+
+### Node State Management
+- Uses React Flow hooks: `useNodesState()` and `useEdgesState()`
+- Updates nodes/edges when data changes via `useEffect`
+- Supports drag-and-drop (React Flow default behavior)
+
+### Layout Calculation
+- Custom layout algorithm for hierarchical positioning
+- Level height: `320px`
+- Node spacing: `420px`
+- Start Y: `180px`
+- Calculates positions based on node hierarchy (BFS traversal)
 
 ### Alternative Libraries
-If using a different graph/flow library:
+If NOT using React Flow:
 - Ensure `smoothstep`-style curved connections are supported
 - Implement custom node rendering to match specifications exactly
 - Support custom edge styling with labels
-- Implement background dot pattern
+- Implement background dot pattern matching React Flow's `variant="dots"`
 - Support theme switching
+- Implement drag-and-drop functionality
+- Support zoom and pan controls
 
 ---
 
