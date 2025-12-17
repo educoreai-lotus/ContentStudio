@@ -896,15 +896,24 @@ export class HeygenClient {
           };
         } else if (status === 'failed') {
           const errorData = responseData || {};
-          const errorMessage = errorData.error_message || errorData.error || 'Video generation failed';
-          const errorCode = errorData.error_code || 'UNKNOWN_ERROR';
-          const errorDetail = errorData.error_detail || errorMessage;
+          // Extract error information from various possible fields
+          const errorMessage = errorData.error_message 
+            || errorData.message 
+            || errorData.error 
+            || 'Video generation failed';
+          const errorCode = errorData.error_code 
+            || errorData.code 
+            || 'UNKNOWN_ERROR';
+          const errorDetail = errorData.error_detail 
+            || errorData.detail 
+            || errorMessage;
           
           console.error('[HeyGen] Video generation failed', {
             videoId,
             errorMessage,
             errorCode,
             errorDetail,
+            fullErrorData: JSON.stringify(errorData, null, 2),
           });
           
           return {

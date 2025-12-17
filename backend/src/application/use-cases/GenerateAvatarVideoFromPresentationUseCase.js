@@ -778,6 +778,40 @@ export class GenerateAvatarVideoFromPresentationUseCase {
         };
       }
 
+      // Check if video generation failed
+      if (pollResult.status === 'failed') {
+        logger.error('[GenerateAvatarVideoFromPresentation] Video generation failed', {
+          jobId,
+          videoId: heygenResult.video_id,
+          errorMessage: pollResult.errorMessage,
+          errorCode: pollResult.errorCode,
+          errorDetail: pollResult.errorDetail,
+        });
+
+        return {
+          success: false,
+          status: 'failed',
+          videoId: heygenResult.video_id,
+          videoUrl: null,
+          error: pollResult.errorMessage || 'Video generation failed',
+          errorCode: pollResult.errorCode || 'GENERATION_FAILED',
+          metadata: {
+            presentation_content_id,
+            presentation_file_url: presentationFileUrl,
+            avatar_id: avatar_id || 'default',
+            language,
+            templateId: this.templateId,
+            slideCount: slidePlan.slideCount,
+            generated_at: new Date().toISOString(),
+            jobId,
+            polling_status: 'failed',
+            errorMessage: pollResult.errorMessage,
+            errorCode: pollResult.errorCode,
+            errorDetail: pollResult.errorDetail,
+          },
+        };
+      }
+
       // Video is ready
       if (pollResult.status === 'completed' && pollResult.videoUrl) {
         return {
