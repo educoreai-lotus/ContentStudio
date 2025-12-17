@@ -54,7 +54,7 @@ export class GammaHeyGenAvatarOrchestrator {
    * @param {Object} dependencies.storageClient - SupabaseStorageClient instance
    * @param {Object} dependencies.heygenClient - HeygenClient instance
    * @param {Object} [dependencies.openaiClient] - OpenAIClient instance (required for generating short narrations)
-   * @param {string} [dependencies.templateId] - HeyGen template ID (default: '2c01158bec1149c49d35effb4bd79791')
+   * @param {string} [dependencies.templateId] - HeyGen template ID (default: '01a1ee50978a4517a86a3e0858a32d6a')
    * @param {Object} [dependencies.slideImageExtractor] - SlideImageExtractor instance (optional, will be created)
    * @param {Object} [dependencies.slideSpeechBuilder] - SlideSpeechBuilder instance (optional, will be created)
    * @param {Object} [dependencies.voiceIdResolver] - VoiceIdResolver instance (optional, will be created)
@@ -65,7 +65,7 @@ export class GammaHeyGenAvatarOrchestrator {
     storageClient,
     heygenClient,
     openaiClient = null,
-    templateId = '2c01158bec1149c49d35effb4bd79791',
+    templateId = '01a1ee50978a4517a86a3e0858a32d6a',
     slideImageExtractor = null,
     slideSpeechBuilder = null,
     voiceIdResolver = null,

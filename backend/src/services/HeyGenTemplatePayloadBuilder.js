@@ -6,9 +6,8 @@
  * - Input: templateId, slides (SlidePlan[]), title, caption (boolean), voiceId (optional)
  * - Output: request payload JSON for HeyGen Template v2 generate
  * - variables: map with keys:
- *   - image_1: avatar (character, fixed)
  *   - imageOne, imageTow, imageThree, imageFour, imageFive: presentation images
- *   - speech_1..speech_5: voices from slides
+ *   - speech_1..speech_5: voices (only voice_id, no input_text)
  * - Do not include keys for slides that don't exist (if N<10)
  * - Validation: reject slides with missing imageUrl/speakerText
  */
@@ -64,18 +63,7 @@ export class HeyGenTemplatePayloadBuilder {
     }
 
     // Final validation: check all required variables
-    // 1. Avatar variable (image_1)
-    if (!variables.image_1 || variables.image_1.type !== 'character') {
-      throw new Error('Missing or invalid image_1 (avatar) variable');
-    }
-    if (!variables.image_1.name || variables.image_1.name !== 'image_1') {
-      throw new Error('image_1 missing name field or name does not match key');
-    }
-    if (!variables.image_1.properties?.character_id) {
-      throw new Error('image_1 missing character_id in properties');
-    }
-
-    // 2. Presentation image variables (imageOne-imageFive)
+    // 1. Presentation image variables (imageOne-imageFive)
     const presentationImageNames = ['imageOne', 'imageTow', 'imageThree', 'imageFour', 'imageFive'];
     for (const imageName of presentationImageNames) {
       if (!variables[imageName] || variables[imageName].type !== 'image') {
@@ -89,7 +77,7 @@ export class HeyGenTemplatePayloadBuilder {
       }
     }
 
-    // 3. Speech variables (speech_1-speech_5)
+    // 2. Speech variables (speech_1-speech_5)
     const speechVars = Object.keys(variables).filter(k => k.startsWith('speech_'));
     if (speechVars.length !== 5) {
       throw new Error(`Expected exactly 5 speech variables, got ${speechVars.length}`);
@@ -102,8 +90,8 @@ export class HeyGenTemplatePayloadBuilder {
       if (!speechVar.name || speechVar.name !== speechKey) {
         throw new Error(`${speechKey} missing name field or name does not match key`);
       }
-      if (!speechVar.properties?.voice_id || !speechVar.properties?.input_text) {
-        throw new Error(`${speechKey} missing voice_id or input_text in properties`);
+      if (!speechVar.properties?.voice_id) {
+        throw new Error(`${speechKey} missing voice_id in properties`);
       }
     }
 
@@ -113,7 +101,6 @@ export class HeyGenTemplatePayloadBuilder {
       variableCount: Object.keys(variables).length,
       hasCaption: caption,
       hasVoiceId: !!voiceId,
-      hasAvatar: !!variables.image_1,
       presentationImagesCount: presentationImageNames.length,
       speechVariablesCount: speechVars.length,
     });
@@ -220,7 +207,7 @@ export class HeyGenTemplatePayloadBuilder {
    * @param {Array<{index: number, speakerText: string, imageUrl: string}>} slides - Slides array
    * @param {string} [voiceId] - Voice ID (if provided, use it; otherwise resolve from language)
    * @param {string} [language] - Language code (for voice_id resolution)
-   * @returns {Object} Variables map with image_1 (avatar), imageOne-imageFive (presentation images), and speech_1-speech_5 (voices)
+   * @returns {Object} Variables map with imageOne-imageFive (presentation images), and speech_1-speech_5 (voices)
    */
   _buildVariables(slides, voiceId, language = 'en') {
     const variables = {};
@@ -233,22 +220,7 @@ export class HeyGenTemplatePayloadBuilder {
       finalVoiceId = voiceConfig.voice_id;
     }
 
-    // 1. Add avatar variable (image_1) - only one, fixed
-    // Structure: { name: "image_1", type: "character", properties: { character_id: "...", type: "avatar" } }
-    variables.image_1 = {
-      name: 'image_1',
-      type: 'character',
-      properties: {
-        character_id: 'Annie_Bar_Standing_Front_2_public',
-        type: 'avatar',
-      },
-    };
-
-    logger.info('[HeyGenTemplatePayloadBuilder] Building avatar variable (image_1)', {
-      characterId: variables.image_1.properties.character_id,
-    });
-
-    // 2. Map slide index to presentation image variable names
+    // 1. Map slide index to presentation image variable names
     // Scene mapping: 1->imageOne, 2->imageTow, 3->imageThree, 4->imageFour, 5->imageFive
     const imageNameMap = {
       1: 'imageOne',
@@ -298,14 +270,14 @@ export class HeyGenTemplatePayloadBuilder {
       });
 
       // Add speech variable: speech_1, speech_2, ..., speech_5
-      // Structure: { name: "speech_1", type: "voice", properties: { voice_id: "...", input_text: "..." } }
+      // Structure: { name: "speech_1", type: "voice", properties: { voice_id: "..." } }
+      // Note: New template structure only requires voice_id, not input_text
       const speechKey = `speech_${slideNum}`;
       variables[speechKey] = {
         name: speechKey,
         type: 'voice',
         properties: {
           voice_id: finalVoiceId,
-          input_text: slide.speakerText.trim(), // The actual speech text from OpenAI
         },
       };
 
@@ -313,7 +285,6 @@ export class HeyGenTemplatePayloadBuilder {
         speechKey,
         slideNum,
         voiceId: finalVoiceId,
-        textLength: slide.speakerText.trim().length,
       });
     }
 

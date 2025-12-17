@@ -29,7 +29,7 @@ const AVERAGE_WPM = AVATAR_VIDEO_AVERAGE_WPM; // Single source of truth: 150 wor
  * 4. Extract slide text and generate short narrations per slide (15-20 sec, max 40 words)
  * 5. Create SlidePlan from images and speeches
  * 6. Resolve voice_id via VoiceIdResolver
- * 7. Build HeyGen template payload (image_1..image_N, speech_1..speech_N)
+ * 7. Build HeyGen template payload (imageOne..imageFive, speech_1..speech_5)
  * 8. Call HeyGen template API (generateTemplateVideo)
  * 
  * Video duration: Maximum 3 minutes (10 slides × 15-20 seconds = 2.5-3.3 minutes)
@@ -44,7 +44,7 @@ export class GenerateAvatarVideoFromPresentationUseCase {
     topicRepository,
     courseRepository,
     language = 'en',
-    templateId = '803734fa7c744c89a2068b5c39983dc2', // Template v4 for avatar videos
+    templateId = '01a1ee50978a4517a86a3e0858a32d6a', // Template v4 for avatar videos
     slideImageExtractor = null,
     slideSpeechBuilder = null,
     voiceIdResolver = null,
@@ -534,39 +534,16 @@ export class GenerateAvatarVideoFromPresentationUseCase {
         throw new Error(`Failed to build HeyGen payload: ${error.message}`);
       }
 
-      // CRITICAL VALIDATION: Payload variable validation (Template v4 structure)
-      // Template v4 structure:
-      // - image_1: avatar (character, fixed)
+      // CRITICAL VALIDATION: Payload variable validation (New template structure)
+      // New template structure:
       // - imageOne, imageTow, imageThree, imageFour, imageFive: presentation images
-      // - speech_1 to speech_5: voices
-      // This guard ensures payload structure matches HeyGen Template v4 expectations.
+      // - speech_1 to speech_5: voices (only voice_id, no input_text)
+      // This guard ensures payload structure matches HeyGen template expectations.
       const variables = heygenPayload.variables || {};
       const variableKeys = Object.keys(variables);
       const expectedSlideCount = slidePlan.slideCount;
       
-      // 1. Validate avatar (image_1) - required, must be character type
-      if (!variables.image_1) {
-        const errorMsg = 'Invalid HeyGen payload: missing image_1 (avatar). Template v4 requires image_1 as character type.';
-        logger.error('[GenerateAvatarVideoFromPresentation] Payload variable validation failed', {
-          jobId,
-          missingKey: 'image_1',
-          expectedType: 'character',
-          availableKeys: variableKeys,
-        });
-        throw new Error(errorMsg);
-      }
-      if (variables.image_1.type !== 'character') {
-        const errorMsg = `Invalid HeyGen payload: image_1 must be type 'character', got '${variables.image_1.type}'.`;
-        logger.error('[GenerateAvatarVideoFromPresentation] Payload variable validation failed', {
-          jobId,
-          key: 'image_1',
-          expectedType: 'character',
-          actualType: variables.image_1.type,
-        });
-        throw new Error(errorMsg);
-      }
-
-      // 2. Validate presentation images (imageOne-imageFive) - must be image type
+      // 1. Validate presentation images (imageOne-imageFive) - must be image type
       const presentationImageNames = ['imageOne', 'imageTow', 'imageThree', 'imageFour', 'imageFive'];
       if (expectedSlideCount !== 5) {
         throw new Error(`Template v4 requires exactly 5 slides, got ${expectedSlideCount}`);
@@ -595,12 +572,12 @@ export class GenerateAvatarVideoFromPresentationUseCase {
         }
       }
 
-      // 3. Validate speech variables (speech_1 to speech_5) - must be voice type
+      // 2. Validate speech variables (speech_1 to speech_5) - must be voice type with voice_id only
       for (let i = 1; i <= expectedSlideCount; i++) {
         const speechKey = `speech_${i}`;
         
         if (!variables[speechKey]) {
-          const errorMsg = `Invalid HeyGen payload: missing ${speechKey}. Template v4 requires speech_1 to speech_${expectedSlideCount}.`;
+          const errorMsg = `Invalid HeyGen payload: missing ${speechKey}. Template requires speech_1 to speech_${expectedSlideCount}.`;
           logger.error('[GenerateAvatarVideoFromPresentation] Payload variable validation failed', {
             jobId,
             missingKey: speechKey,
@@ -619,14 +596,22 @@ export class GenerateAvatarVideoFromPresentationUseCase {
           });
           throw new Error(errorMsg);
         }
+        if (!variables[speechKey].properties?.voice_id) {
+          const errorMsg = `Invalid HeyGen payload: ${speechKey} must have voice_id in properties.`;
+          logger.error('[GenerateAvatarVideoFromPresentation] Payload variable validation failed', {
+            jobId,
+            key: speechKey,
+            missingProperty: 'voice_id',
+          });
+          throw new Error(errorMsg);
+        }
       }
       
-      logger.info('[GenerateAvatarVideoFromPresentation] Payload variable validation passed (Template v4)', {
+      logger.info('[GenerateAvatarVideoFromPresentation] Payload variable validation passed', {
         jobId,
-        hasAvatar: !!variables.image_1,
         presentationImagesCount: presentationImageNames.length,
         speechVariablesCount: expectedSlideCount,
-        validatedStructure: 'Template v4',
+        validatedStructure: 'New template structure',
       });
 
       // CRITICAL LOGGING: Payload inspection (ONCE, before HeyGen call)

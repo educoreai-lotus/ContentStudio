@@ -75,7 +75,7 @@ describe('GammaHeyGenAvatarOrchestrator - End-to-End', () => {
       gammaClient: mockGammaClient,
       storageClient: mockStorageClient,
       heygenClient: mockHeygenClient,
-      templateId: '2c01158bec1149c49d35effb4bd79791',
+      templateId: '01a1ee50978a4517a86a3e0858a32d6a',
       slideImageExtractor: mockSlideImageExtractor,
       slideSpeechBuilder: mockSlideSpeechBuilder,
       voiceIdResolver: mockVoiceIdResolver,
@@ -132,7 +132,7 @@ describe('GammaHeyGenAvatarOrchestrator - End-to-End', () => {
 
       // Step 6: Mock payload building
       const mockHeygenPayload = {
-        template_id: '2c01158bec1149c49d35effb4bd79791',
+        template_id: '01a1ee50978a4517a86a3e0858a32d6a',
         title: 'EduCore Presentation - Topic 5',
         variables: {
           image_1: 'https://storage.example.com/heygen/slides/job-123/slide-01.png',
@@ -153,7 +153,7 @@ describe('GammaHeyGenAvatarOrchestrator - End-to-End', () => {
       const mockHeygenResult = {
         success: true,
         video_id: 'video-heygen-123',
-        template_id: '2c01158bec1149c49d35effb4bd79791',
+        template_id: '01a1ee50978a4517a86a3e0858a32d6a',
       };
       mockHeygenClient.generateTemplateVideo.mockResolvedValueOnce(mockHeygenResult);
 
@@ -212,7 +212,7 @@ describe('GammaHeyGenAvatarOrchestrator - End-to-End', () => {
 
       expect(mockTemplatePayloadBuilder.buildPayload).toHaveBeenCalledWith(
         expect.objectContaining({
-          templateId: '2c01158bec1149c49d35effb4bd79791',
+          templateId: '01a1ee50978a4517a86a3e0858a32d6a',
           slides: expect.arrayContaining([
             expect.objectContaining({
               index: 1,
@@ -227,7 +227,7 @@ describe('GammaHeyGenAvatarOrchestrator - End-to-End', () => {
       );
 
       expect(mockHeygenClient.generateTemplateVideo).toHaveBeenCalledWith(
-        '2c01158bec1149c49d35effb4bd79791',
+        '01a1ee50978a4517a86a3e0858a32d6a',
         mockHeygenPayload
       );
     });
@@ -364,7 +364,7 @@ describe('GammaHeyGenAvatarOrchestrator - End-to-End', () => {
       mockVoiceIdResolver.resolve.mockReturnValueOnce('voice-123');
 
       mockTemplatePayloadBuilder.buildPayload.mockReturnValueOnce({
-        template_id: '2c01158bec1149c49d35effb4bd79791',
+        template_id: '01a1ee50978a4517a86a3e0858a32d6a',
         title: 'Test',
         variables: {},
       });
@@ -412,7 +412,7 @@ describe('GammaHeyGenAvatarOrchestrator - End-to-End', () => {
       mockVoiceIdResolver.resolve.mockReturnValueOnce('voice-123');
 
       mockTemplatePayloadBuilder.buildPayload.mockReturnValueOnce({
-        template_id: '2c01158bec1149c49d35effb4bd79791',
+        template_id: '01a1ee50978a4517a86a3e0858a32d6a',
         title: 'Test',
         variables: {},
       });
@@ -461,7 +461,7 @@ describe('GammaHeyGenAvatarOrchestrator - End-to-End', () => {
       mockVoiceIdResolver.resolve.mockReturnValueOnce('voice-123');
 
       mockTemplatePayloadBuilder.buildPayload.mockReturnValueOnce({
-        template_id: '2c01158bec1149c49d35effb4bd79791',
+        template_id: '01a1ee50978a4517a86a3e0858a32d6a',
         title: 'Test',
         variables: {},
       });

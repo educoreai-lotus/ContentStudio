@@ -1,0 +1,84 @@
+{
+  "title": "EduCore Presentation - Test",
+  "variables": {
+    "imageOne": {
+      "name": "imageOne",
+      "type": "image",
+      "properties": {
+        "url": "https://example.com/slide1.png",
+        "fit": "none"
+      }
+    },
+    "imageTow": {
+      "name": "imageTow",
+      "type": "image",
+      "properties": {
+        "url": "https://example.com/slide2.png",
+        "fit": "none"
+      }
+    },
+    "imageThree": {
+      "name": "imageThree",
+      "type": "image",
+      "properties": {
+        "url": "https://example.com/slide3.png",
+        "fit": "none"
+      }
+    },
+    "imageFour": {
+      "name": "imageFour",
+      "type": "image",
+      "properties": {
+        "url": "https://example.com/slide4.png",
+        "fit": "none"
+      }
+    },
+    "imageFive": {
+      "name": "imageFive",
+      "type": "image",
+      "properties": {
+        "url": "https://example.com/slide5.png",
+        "fit": "none"
+      }
+    },
+    "speech_1": {
+      "name": "speech_1",
+      "type": "voice",
+      "properties": {
+        "voice_id": "4ebba0f2f4944d2aa75d21552764c638"
+      }
+    },
+    "speech_2": {
+      "name": "speech_2",
+      "type": "voice",
+      "properties": {
+        "voice_id": "4ebba0f2f4944d2aa75d21552764c638"
+      }
+    },
+    "speech_3": {
+      "name": "speech_3",
+      "type": "voice",
+      "properties": {
+        "voice_id": "4ebba0f2f4944d2aa75d21552764c638"
+      }
+    },
+    "speech_4": {
+      "name": "speech_4",
+      "type": "voice",
+      "properties": {
+        "voice_id": "4ebba0f2f4944d2aa75d21552764c638"
+      }
+    },
+    "speech_5": {
+      "name": "speech_5",
+      "type": "voice",
+      "properties": {
+        "voice_id": "4ebba0f2f4944d2aa75d21552764c638"
+      }
+    }
+  },
+  "caption_settings": {
+    "enabled": true
+  }
+}
+
