@@ -22,17 +22,16 @@ const AVERAGE_WPM = AVATAR_VIDEO_AVERAGE_WPM; // Single source of truth: 150 wor
 /**
  * Generate Avatar Video from Presentation Use Case
  * 
- * REFACTORED WORKFLOW (aligned with GammaHeyGenAvatarOrchestrator):
+ * REFACTORED WORKFLOW - Using /v2/video/generate (not template):
  * 1. Fetch presentation content from repository
  * 2. Download PPTX file
  * 3. Extract slide images per slide (using SlideImageExtractor)
  * 4. Extract slide text and generate short narrations per slide (15-20 sec, max 40 words)
- * 5. Create SlidePlan from images and speeches
- * 6. Resolve voice_id via VoiceIdResolver
- * 7. Build HeyGen template payload (imageOne..imageFive, speech_1..speech_5)
- * 8. Call HeyGen template API (generateTemplateVideo)
+ * 5. Combine all slide speeches into one text
+ * 6. Generate 30-second script using OpenAI
+ * 7. Call HeyGen /v2/video/generate API with Adriana_Business_Side_public avatar
  * 
- * Video duration: Maximum 3 minutes (10 slides × 15-20 seconds = 2.5-3.3 minutes)
+ * Video duration: Exactly 30 seconds
  */
 export class GenerateAvatarVideoFromPresentationUseCase {
   constructor({
@@ -431,198 +430,11 @@ export class GenerateAvatarVideoFromPresentationUseCase {
         slideCount: slideSpeeches.length,
       });
 
-      // Step 5: Create SlidePlan from images and speeches
-      logger.info('[GenerateAvatarVideoFromPresentation] Step 5: Creating SlidePlan', {
+      // Step 5: Skip SlidePlan creation - we'll use /v2/video/generate instead of template
+      logger.info('[GenerateAvatarVideoFromPresentation] Step 5: Skipping SlidePlan (using /v2/video/generate)', {
         jobId,
         imageCount: slideImages.length,
         speechCount: slideSpeeches.length,
-      });
-
-      let slidePlan;
-      try {
-        // Match images with speeches by index
-        const slides = [];
-        const maxSlides = Math.min(slideImages.length, slideSpeeches.length, MAX_SLIDES);
-
-        for (let i = 0; i < maxSlides; i++) {
-          const image = slideImages.find(img => img.index === i + 1);
-          const speech = slideSpeeches.find(sp => sp.index === i + 1);
-
-          if (!image || !speech) {
-            logger.warn('[GenerateAvatarVideoFromPresentation] Mismatch between images and speeches', {
-              jobId,
-              slideIndex: i + 1,
-              hasImage: !!image,
-              hasSpeech: !!speech,
-            });
-            continue; // Skip this slide
-          }
-
-          slides.push({
-            index: i + 1,
-            imageUrl: image.imageUrl,
-            speakerText: speech.speakerText,
-          });
-        }
-
-        if (slides.length === 0) {
-          throw new Error('No valid slides could be created from images and speeches');
-        }
-
-        slidePlan = new SlidePlan(slides);
-        logger.info('[GenerateAvatarVideoFromPresentation] SlidePlan created successfully', {
-          jobId,
-          slideCount: slidePlan.slideCount,
-        });
-      } catch (error) {
-        logger.error('[GenerateAvatarVideoFromPresentation] Failed to create SlidePlan', {
-          jobId,
-          error: error.message,
-        });
-        throw new Error(`Failed to create SlidePlan: ${error.message}`);
-      }
-
-      // Step 6: Resolve voice_id via VoiceIdResolver
-      logger.info('[GenerateAvatarVideoFromPresentation] Step 6: Resolving voice ID', {
-        jobId,
-        language,
-      });
-
-      let voiceId;
-      try {
-        voiceId = this.voiceIdResolver.resolve(language);
-        logger.info('[GenerateAvatarVideoFromPresentation] Voice ID resolved', {
-          jobId,
-          voiceId,
-          language,
-        });
-      } catch (error) {
-        logger.error('[GenerateAvatarVideoFromPresentation] Failed to resolve voice ID', {
-          jobId,
-          error: error.message,
-        });
-        throw new Error(`Failed to resolve voice ID: ${error.message}`);
-      }
-
-      // Step 7: Build HeyGen template payload
-      logger.info('[GenerateAvatarVideoFromPresentation] Step 7: Building HeyGen template payload', {
-        jobId,
-        templateId: this.templateId,
-        slideCount: slidePlan.slideCount,
-      });
-
-      let heygenPayload;
-      try {
-        const slides = slidePlan.getAllSlides();
-        heygenPayload = this.templatePayloadBuilder.buildPayload({
-          templateId: this.templateId,
-          slides,
-          title: presentationContent.content_data?.title || 'EduCore Presentation',
-          caption: true,
-          voiceId,
-          language: this.language,
-        });
-        logger.info('[GenerateAvatarVideoFromPresentation] HeyGen payload built successfully', {
-          jobId,
-          variableCount: Object.keys(heygenPayload.variables || {}).length,
-        });
-      } catch (error) {
-        logger.error('[GenerateAvatarVideoFromPresentation] Failed to build HeyGen payload', {
-          jobId,
-          error: error.message,
-        });
-        throw new Error(`Failed to build HeyGen payload: ${error.message}`);
-      }
-
-      // CRITICAL VALIDATION: Payload variable validation (New template structure)
-      // New template structure:
-      // - imageOne, imageTow, imageThree, imageFour, imageFive: presentation images
-      // - speech_1 to speech_5: voices (only voice_id, no input_text)
-      // This guard ensures payload structure matches HeyGen template expectations.
-      const variables = heygenPayload.variables || {};
-      const variableKeys = Object.keys(variables);
-      const expectedSlideCount = slidePlan.slideCount;
-      
-      // 1. Validate presentation images (imageOne-imageFive) - must be image type
-      const presentationImageNames = ['imageOne', 'imageTow', 'imageThree', 'imageFour', 'imageFive'];
-      if (expectedSlideCount !== 5) {
-        throw new Error(`Template v4 requires exactly 5 slides, got ${expectedSlideCount}`);
-      }
-      
-      for (const imageName of presentationImageNames) {
-        if (!variables[imageName]) {
-          const errorMsg = `Invalid HeyGen payload: missing ${imageName} (presentation image). Template v4 requires all presentation images.`;
-          logger.error('[GenerateAvatarVideoFromPresentation] Payload variable validation failed', {
-            jobId,
-            missingKey: imageName,
-            expectedType: 'image',
-            availableKeys: variableKeys,
-          });
-          throw new Error(errorMsg);
-        }
-        if (variables[imageName].type !== 'image') {
-          const errorMsg = `Invalid HeyGen payload: ${imageName} must be type 'image', got '${variables[imageName].type}'.`;
-          logger.error('[GenerateAvatarVideoFromPresentation] Payload variable validation failed', {
-            jobId,
-            key: imageName,
-            expectedType: 'image',
-            actualType: variables[imageName].type,
-          });
-          throw new Error(errorMsg);
-        }
-      }
-
-      // 2. Validate speech variables (speech_1 to speech_5) - must be voice type with voice_id only
-      for (let i = 1; i <= expectedSlideCount; i++) {
-        const speechKey = `speech_${i}`;
-        
-        if (!variables[speechKey]) {
-          const errorMsg = `Invalid HeyGen payload: missing ${speechKey}. Template requires speech_1 to speech_${expectedSlideCount}.`;
-          logger.error('[GenerateAvatarVideoFromPresentation] Payload variable validation failed', {
-            jobId,
-            missingKey: speechKey,
-            expectedType: 'voice',
-            availableKeys: variableKeys,
-          });
-          throw new Error(errorMsg);
-        }
-        if (variables[speechKey].type !== 'voice') {
-          const errorMsg = `Invalid HeyGen payload: ${speechKey} must be type 'voice', got '${variables[speechKey].type}'.`;
-          logger.error('[GenerateAvatarVideoFromPresentation] Payload variable validation failed', {
-            jobId,
-            key: speechKey,
-            expectedType: 'voice',
-            actualType: variables[speechKey].type,
-          });
-          throw new Error(errorMsg);
-        }
-        if (!variables[speechKey].properties?.voice_id) {
-          const errorMsg = `Invalid HeyGen payload: ${speechKey} must have voice_id in properties.`;
-          logger.error('[GenerateAvatarVideoFromPresentation] Payload variable validation failed', {
-            jobId,
-            key: speechKey,
-            missingProperty: 'voice_id',
-          });
-          throw new Error(errorMsg);
-        }
-      }
-      
-      logger.info('[GenerateAvatarVideoFromPresentation] Payload variable validation passed', {
-        jobId,
-        presentationImagesCount: presentationImageNames.length,
-        speechVariablesCount: expectedSlideCount,
-        validatedStructure: 'New template structure',
-      });
-
-      // CRITICAL LOGGING: Payload inspection (ONCE, before HeyGen call)
-      // Log template ID and variable keys for debugging payload structure issues.
-      // This helps diagnose silent failures from malformed payloads.
-      // NOTE: Do NOT log variable values (may contain signed URLs or sensitive content).
-      logger.info('[HeyGenTemplatePayload]', {
-        templateId: this.templateId,
-        keys: variableKeys.sort(), // Sort for easier comparison
-        keyCount: variableKeys.length,
-        expectedPairCount: expectedSlideCount * 2, // image_N + speech_N per slide
       });
 
       // Logging: Avatar video constraints summary (before HeyGen call)
@@ -672,21 +484,106 @@ export class GenerateAvatarVideoFromPresentationUseCase {
         validated: slideImages.length === slideSpeeches.length && slideImages.length >= 1 && slideImages.length <= MAX_SLIDES,
       });
 
-      // Step 8: Call HeyGen template API
-      logger.info('[GenerateAvatarVideoFromPresentation] Step 8: Calling HeyGen template API', {
+      // Step 8: Generate 30-second script using OpenAI from slide speeches
+      logger.info('[GenerateAvatarVideoFromPresentation] Step 8: Generating 30-second script using OpenAI', {
         jobId,
-        templateId: this.templateId,
+        language,
+        slideCount: slideSpeeches.length,
+      });
+
+      // Combine all slide speeches into one text
+      const allSlideTexts = slideSpeeches.map(speech => speech.speakerText).join(' ');
+
+      // Generate 30-second script using OpenAI
+      let videoScript = '';
+      try {
+        const openaiPrompt = `Create a concise educational narration script for a 30-second video lesson from a presentation.
+The script must be EXACTLY 30 seconds when spoken (approximately 300 characters, no more).
+Combine the key points from all slides into one cohesive 30-second narration.
+
+Slide content:
+${allSlideTexts}
+
+Requirements:
+- Must be exactly 30 seconds when spoken (approximately 300 characters, no more)
+- Educational and clear
+- In ${language} language
+- Professional tone
+- Complete sentences only
+- Combine key points from all slides`;
+
+        videoScript = await this.openaiClient.generateText(openaiPrompt, {
+          model: 'gpt-4o',
+          temperature: 0.7,
+          max_tokens: 150, // Limit to ensure ~300 characters
+          systemPrompt: 'You are an educational content creator. Create concise, clear educational scripts.',
+        });
+
+        // Trim and ensure it's approximately 300 characters (30 seconds)
+        videoScript = videoScript.trim();
+        
+        // If too long, truncate to ~300 characters at word boundary
+        if (videoScript.length > 320) {
+          const truncated = videoScript.substring(0, 300);
+          const lastSpace = truncated.lastIndexOf(' ');
+          videoScript = lastSpace > 0 ? truncated.substring(0, lastSpace) : truncated;
+          logger.warn('[GenerateAvatarVideoFromPresentation] Script was too long, truncated to 30 seconds', {
+            jobId,
+            originalLength: videoScript.length,
+            truncatedLength: videoScript.length,
+          });
+        }
+
+        logger.info('[GenerateAvatarVideoFromPresentation] OpenAI script generated', {
+          jobId,
+          scriptLength: videoScript.length,
+          scriptPreview: videoScript.substring(0, 100),
+        });
+      } catch (openaiError) {
+        logger.error('[GenerateAvatarVideoFromPresentation] Failed to generate script with OpenAI, using combined slide text', {
+          jobId,
+          error: openaiError.message,
+        });
+        // Fallback: use first slide speech or combined text (truncated to 300 chars)
+        videoScript = allSlideTexts.substring(0, 300);
+        const lastSpace = videoScript.lastIndexOf(' ');
+        if (lastSpace > 0) {
+          videoScript = videoScript.substring(0, lastSpace);
+        }
+      }
+
+      // Step 9: Call HeyGen /v2/video/generate API (not template)
+      logger.info('[GenerateAvatarVideoFromPresentation] Step 9: Calling HeyGen /v2/video/generate API', {
+        jobId,
+        avatarId: 'Adriana_Business_Side_public',
+        scriptLength: videoScript.length,
       });
 
       let heygenResult;
       try {
-        heygenResult = await this.heygenClient.generateTemplateVideo(
-          this.templateId,
-          heygenPayload
-        );
+        heygenResult = await this.heygenClient.generateVideo({
+          title: presentationContent.content_data?.title || 'EduCore Presentation',
+          prompt: videoScript, // Use OpenAI-generated 30-second script
+          language: language,
+          duration: 30, // 30 seconds
+          avatar_id: 'Adriana_Business_Side_public', // Use Adriana avatar
+        });
+        
+        // Check if generation failed or was skipped
+        if (heygenResult.status === 'failed' || heygenResult.status === 'skipped') {
+          logger.error('[GenerateAvatarVideoFromPresentation] HeyGen video generation failed or skipped', {
+            jobId,
+            status: heygenResult.status,
+            error: heygenResult.error,
+            reason: heygenResult.reason,
+          });
+          throw new Error(`HeyGen video generation ${heygenResult.status}: ${heygenResult.error || heygenResult.reason || 'Unknown error'}`);
+        }
+        
         logger.info('[GenerateAvatarVideoFromPresentation] HeyGen video generation initiated', {
           jobId,
-          videoId: heygenResult.video_id,
+          videoId: heygenResult.videoId,
+          status: heygenResult.status,
         });
       } catch (error) {
         logger.error('[GenerateAvatarVideoFromPresentation] Failed to generate HeyGen video', {
@@ -696,11 +593,11 @@ export class GenerateAvatarVideoFromPresentationUseCase {
         throw new Error(`Failed to generate HeyGen video: ${error.message}`);
       }
 
-      // Step 9: Poll for video status until completed
-      // HeyGen returns video_id immediately, but video_url only after processing
-      logger.info('[GenerateAvatarVideoFromPresentation] Step 9: Polling for video status', {
+      // Step 10: Poll for video status until completed
+      // HeyGen returns videoId immediately, but videoUrl only after processing
+      logger.info('[GenerateAvatarVideoFromPresentation] Step 10: Polling for video status', {
         jobId,
-        videoId: heygenResult.video_id,
+        videoId: heygenResult.videoId,
       });
 
       let pollResult;
@@ -713,21 +610,21 @@ export class GenerateAvatarVideoFromPresentationUseCase {
         
         logger.info('[GenerateAvatarVideoFromPresentation] Polling configuration', {
           jobId,
-          videoId: heygenResult.video_id,
+          videoId: heygenResult.videoId,
           maxAttempts: pollingMaxAttempts,
           intervalMs: pollingInterval,
           totalTimeoutMinutes,
         });
         
         pollResult = await this.heygenClient.pollVideoStatus(
-          heygenResult.video_id,
+          heygenResult.videoId,
           pollingMaxAttempts,
           pollingInterval
         );
         
         logger.info('[GenerateAvatarVideoFromPresentation] Video polling completed', {
           jobId,
-          videoId: heygenResult.video_id,
+          videoId: heygenResult.videoId,
           status: pollResult.status,
           hasVideoUrl: !!pollResult.videoUrl,
         });
@@ -735,7 +632,7 @@ export class GenerateAvatarVideoFromPresentationUseCase {
         // Polling failed or timed out - return partial result with videoId
         logger.warn('[GenerateAvatarVideoFromPresentation] Video polling failed or timed out', {
           jobId,
-          videoId: heygenResult.video_id,
+          videoId: heygenResult.videoId,
           error: pollError.message,
           fallbackUrl: pollError.videoUrl,
         });
@@ -744,17 +641,16 @@ export class GenerateAvatarVideoFromPresentationUseCase {
         return {
           success: true,
           status: 'processing', // Video is being generated, not failed
-          videoId: heygenResult.video_id,
-          videoUrl: pollError.videoUrl || `https://app.heygen.com/share/${heygenResult.video_id}`, // Fallback share URL
-          duration_seconds: 180, // Estimated: 5 slides × 36 seconds average
+          videoId: heygenResult.videoId,
+          videoUrl: pollError.videoUrl || `https://app.heygen.com/share/${heygenResult.videoId}`, // Fallback share URL
+          duration_seconds: 30, // 30 seconds
           explanation: null,
           metadata: {
             presentation_content_id,
             presentation_file_url: presentationFileUrl,
-            avatar_id: avatar_id || 'default',
+            avatar_id: 'Adriana_Business_Side_public',
             language,
-            templateId: this.templateId,
-            slideCount: slidePlan.slideCount,
+            slideCount: slideSpeeches.length,
             generated_at: new Date().toISOString(),
             jobId,
             polling_status: 'timeout',
@@ -767,7 +663,7 @@ export class GenerateAvatarVideoFromPresentationUseCase {
       if (pollResult.status === 'failed') {
         logger.error('[GenerateAvatarVideoFromPresentation] Video generation failed', {
           jobId,
-          videoId: heygenResult.video_id,
+          videoId: heygenResult.videoId,
           errorMessage: pollResult.errorMessage,
           errorCode: pollResult.errorCode,
           errorDetail: pollResult.errorDetail,
@@ -776,17 +672,16 @@ export class GenerateAvatarVideoFromPresentationUseCase {
         return {
           success: false,
           status: 'failed',
-          videoId: heygenResult.video_id,
+          videoId: heygenResult.videoId,
           videoUrl: null,
           error: pollResult.errorMessage || 'Video generation failed',
           errorCode: pollResult.errorCode || 'GENERATION_FAILED',
           metadata: {
             presentation_content_id,
             presentation_file_url: presentationFileUrl,
-            avatar_id: avatar_id || 'default',
+            avatar_id: 'Adriana_Business_Side_public',
             language,
-            templateId: this.templateId,
-            slideCount: slidePlan.slideCount,
+            slideCount: slideSpeeches.length,
             generated_at: new Date().toISOString(),
             jobId,
             polling_status: 'failed',
@@ -802,17 +697,16 @@ export class GenerateAvatarVideoFromPresentationUseCase {
         return {
           success: true,
           status: 'completed',
-          videoId: heygenResult.video_id,
+          videoId: heygenResult.videoId,
           videoUrl: pollResult.videoUrl,
-          duration_seconds: 180, // Estimated: 5 slides × 36 seconds average
+          duration_seconds: 30, // 30 seconds
           explanation: null,
           metadata: {
             presentation_content_id,
             presentation_file_url: presentationFileUrl,
-            avatar_id: avatar_id || 'default',
+            avatar_id: 'Adriana_Business_Side_public',
             language,
-            templateId: this.templateId,
-            slideCount: slidePlan.slideCount,
+            slideCount: slideSpeeches.length,
             generated_at: new Date().toISOString(),
             jobId,
             polling_status: 'completed',
@@ -825,17 +719,16 @@ export class GenerateAvatarVideoFromPresentationUseCase {
       return {
         success: true,
         status: pollResult.status || 'processing',
-        videoId: heygenResult.video_id,
-        videoUrl: pollResult.videoUrl || `https://app.heygen.com/share/${heygenResult.video_id}`,
-        duration_seconds: 180,
+        videoId: heygenResult.videoId,
+        videoUrl: pollResult.videoUrl || `https://app.heygen.com/share/${heygenResult.videoId}`,
+        duration_seconds: 30, // 30 seconds
         explanation: null,
         metadata: {
           presentation_content_id,
           presentation_file_url: presentationFileUrl,
-          avatar_id: avatar_id || 'default',
+          avatar_id: 'Adriana_Business_Side_public',
           language,
-          templateId: this.templateId,
-          slideCount: slidePlan.slideCount,
+          slideCount: slideSpeeches.length,
           generated_at: new Date().toISOString(),
           jobId,
           polling_status: pollResult.status || 'unknown',
