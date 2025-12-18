@@ -265,11 +265,23 @@ export class CourseBuilderClient {
         topicsCount: courseData.topics?.length || 0,
       });
 
-      // Send request via Coordinator - fire and forget (no response expected)
-      await postToCoordinator(envelope, {
-        endpoint: '/api/fill-content-metrics/',
-        timeout: 180000, // 3 minutes timeout
-      });
+      // Send request directly to Course Builder - fire and forget (no response expected)
+      const courseBuilderUrl = process.env.COURSE_BUILDER_URL;
+      if (!courseBuilderUrl) {
+        throw new Error('COURSE_BUILDER_URL environment variable is not set');
+      }
+
+      const axios = (await import('axios')).default;
+      await axios.post(
+        `${courseBuilderUrl}/api/receive-course`,
+        envelope,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          timeout: 180000, // 3 minutes timeout
+        }
+      );
 
       logger.info('[CourseBuilderClient] Course sent to Course Builder successfully', {
         courseId: courseData.course_id,
