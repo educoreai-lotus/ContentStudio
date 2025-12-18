@@ -245,6 +245,8 @@ export class CourseBuilderClient {
       };
 
       // Build envelope for Coordinator (standard structure)
+      // Note: requester_service is 'content-studio' (who is sending)
+      // Coordinator will route to Course Builder based on the action in payload
       const envelope = {
         requester_service: 'content-studio',
         payload: payloadData,
@@ -265,23 +267,12 @@ export class CourseBuilderClient {
         topicsCount: courseData.topics?.length || 0,
       });
 
-      // Send request directly to Course Builder - fire and forget (no response expected)
-      const courseBuilderUrl = process.env.COURSE_BUILDER_URL;
-      if (!courseBuilderUrl) {
-        throw new Error('COURSE_BUILDER_URL environment variable is not set');
-      }
-
-      const axios = (await import('axios')).default;
-      await axios.post(
-        `${courseBuilderUrl}/api/receive-course`,
-        envelope,
-        {
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          timeout: 180000, // 3 minutes timeout
-        }
-      );
+      // Send request via Coordinator - fire and forget (no response expected)
+      // Coordinator will route to Course Builder based on the action in payload
+      await postToCoordinator(envelope, {
+        endpoint: '/api/fill-content-metrics/',
+        timeout: 180000, // 3 minutes timeout
+      });
 
       logger.info('[CourseBuilderClient] Course sent to Course Builder successfully', {
         courseId: courseData.course_id,
