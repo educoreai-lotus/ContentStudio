@@ -270,7 +270,7 @@ export class CourseBuilderClient {
       // Send request via Coordinator - fire and forget (no response expected)
       // Coordinator will route to Course Builder based on the action in payload
       await postToCoordinator(envelope, {
-        endpoint: '/api/fill-content-metrics/',
+        endpoint: '/api/fill-content-metrics',
         timeout: 180000, // 3 minutes timeout
       });
 
