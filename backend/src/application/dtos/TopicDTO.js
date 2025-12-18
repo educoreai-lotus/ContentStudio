@@ -64,6 +64,7 @@ export class TopicResponseDTO {
     };
     this.total_content_formats = topic.total_content_formats;
     this.usage_count = topic.usage_count;
+    this.devlab_exercises = topic.devlab_exercises || null;
     this.is_standalone = topic.is_standalone;
     this.created_at = topic.created_at;
     this.updated_at = topic.updated_at;
