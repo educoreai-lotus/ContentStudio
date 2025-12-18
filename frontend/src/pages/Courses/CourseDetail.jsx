@@ -224,30 +224,45 @@ export const CourseDetail = () => {
     
     // Check if all topics have DevLab exercises
     const allHaveExercises = topics.every(topic => {
-      // Check if devlab_exercises exists and is not empty
-      if (!topic.devlab_exercises) return false;
-      
-      // If it's a string, try to parse it
-      if (typeof topic.devlab_exercises === 'string') {
-        try {
-          const parsed = JSON.parse(topic.devlab_exercises);
-          // Check if it's an array with at least one exercise, or an object with content
-          return Array.isArray(parsed) ? parsed.length > 0 : Object.keys(parsed).length > 0;
-        } catch {
-          // If parsing fails, check if string is not empty
-          return topic.devlab_exercises.trim().length > 0;
+      // Helper function to check if devlab_exercises has valid content
+      const hasValidExercises = (exercises) => {
+        if (!exercises) return false;
+        
+        // If it's a string, try to parse it
+        if (typeof exercises === 'string') {
+          try {
+            const parsed = JSON.parse(exercises);
+            return hasValidExercises(parsed);
+          } catch {
+            // If parsing fails, check if string is not empty
+            return exercises.trim().length > 0;
+          }
         }
-      }
+        
+        // If it's an array, check if it has items
+        if (Array.isArray(exercises)) {
+          return exercises.length > 0;
+        }
+        
+        // If it's an object, check the structure: { html: "...", questions: [...], metadata: {...} }
+        if (typeof exercises === 'object') {
+          // Check if it has questions array with at least one question
+          if (exercises.questions && Array.isArray(exercises.questions) && exercises.questions.length > 0) {
+            return true;
+          }
+          // Check if it has html content
+          if (exercises.html && typeof exercises.html === 'string' && exercises.html.trim().length > 0) {
+            return true;
+          }
+          // Fallback: check if object has any meaningful keys (not just metadata)
+          const keys = Object.keys(exercises);
+          return keys.length > 0 && keys.some(key => key !== 'metadata');
+        }
+        
+        return false;
+      };
       
-      // If it's already an object/array
-      if (Array.isArray(topic.devlab_exercises)) {
-        return topic.devlab_exercises.length > 0;
-      }
-      if (typeof topic.devlab_exercises === 'object') {
-        return Object.keys(topic.devlab_exercises).length > 0;
-      }
-      
-      return false;
+      return hasValidExercises(topic.devlab_exercises);
     });
     
     return allHaveExercises;
@@ -279,27 +294,45 @@ export const CourseDetail = () => {
         missing.formats.push(topic.topic_name || `Lesson ${topic.topic_id}`);
       }
       
-      const hasExercises = (() => {
-        if (!topic.devlab_exercises) return false;
+      // Helper function to check if devlab_exercises has valid content
+      const hasValidExercises = (exercises) => {
+        if (!exercises) return false;
         
-        if (typeof topic.devlab_exercises === 'string') {
+        // If it's a string, try to parse it
+        if (typeof exercises === 'string') {
           try {
-            const parsed = JSON.parse(topic.devlab_exercises);
-            return Array.isArray(parsed) ? parsed.length > 0 : Object.keys(parsed).length > 0;
+            const parsed = JSON.parse(exercises);
+            return hasValidExercises(parsed);
           } catch {
-            return topic.devlab_exercises.trim().length > 0;
+            // If parsing fails, check if string is not empty
+            return exercises.trim().length > 0;
           }
         }
         
-        if (Array.isArray(topic.devlab_exercises)) {
-          return topic.devlab_exercises.length > 0;
+        // If it's an array, check if it has items
+        if (Array.isArray(exercises)) {
+          return exercises.length > 0;
         }
-        if (typeof topic.devlab_exercises === 'object') {
-          return Object.keys(topic.devlab_exercises).length > 0;
+        
+        // If it's an object, check the structure: { html: "...", questions: [...], metadata: {...} }
+        if (typeof exercises === 'object') {
+          // Check if it has questions array with at least one question
+          if (exercises.questions && Array.isArray(exercises.questions) && exercises.questions.length > 0) {
+            return true;
+          }
+          // Check if it has html content
+          if (exercises.html && typeof exercises.html === 'string' && exercises.html.trim().length > 0) {
+            return true;
+          }
+          // Fallback: check if object has any meaningful keys (not just metadata)
+          const keys = Object.keys(exercises);
+          return keys.length > 0 && keys.some(key => key !== 'metadata');
         }
         
         return false;
-      })();
+      };
+      
+      const hasExercises = hasValidExercises(topic.devlab_exercises);
       
       if (!hasExercises) {
         missing.exercises.push(topic.topic_name || `Lesson ${topic.topic_id}`);
@@ -774,5 +807,6 @@ export const CourseDetail = () => {
 };
 
 export default CourseDetail;
+
 
 
