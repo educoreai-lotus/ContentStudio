@@ -223,15 +223,20 @@ export class PublishCourseUseCase {
       const template = await this.templateRepository.findById(topic.template_id);
       const contents = await this.contentRepository.findAllByTopicId(topic.topic_id);
       
-      // Get exercises
-      let exercises = [];
-      try {
-        exercises = await this.exerciseRepository.findByTopicId(topic.topic_id);
-      } catch (error) {
-        logger.warn('[PublishCourseUseCase] Could not fetch exercises', {
-          topicId: topic.topic_id,
-          error: error.message,
-        });
+      // Get devlab_exercises from topic (stored in topics.devlab_exercises JSONB field)
+      // devlab_exercises can be: null, array, or object with { html, questions, metadata }
+      let devlabExercises = topic.devlab_exercises || null;
+      
+      // Convert to string format if needed
+      let devlabExercisesString = '';
+      if (devlabExercises) {
+        if (typeof devlabExercises === 'string') {
+          // Already a string
+          devlabExercisesString = devlabExercises;
+        } else if (typeof devlabExercises === 'object') {
+          // Convert object/array to JSON string
+          devlabExercisesString = JSON.stringify(devlabExercises);
+        }
       }
 
       // Get content type names mapping
@@ -281,7 +286,7 @@ export class PublishCourseUseCase {
         template_id: String(topic.template_id),
         format_order: template?.format_order || [],
         contents: contentsData,
-        devlab_exercises: exercises.length > 0 ? JSON.stringify(exercises) : '',
+        devlab_exercises: devlabExercisesString,
       });
     }
 
