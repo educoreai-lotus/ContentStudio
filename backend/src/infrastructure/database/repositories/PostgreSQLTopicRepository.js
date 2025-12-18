@@ -146,6 +146,23 @@ export class PostgreSQLTopicRepository extends ITopicRepository {
     return result.rows.map(row => this.mapRowToTopic(row));
   }
 
+  /**
+   * Find topics by course ID
+   * @param {number} courseId - Course ID
+   * @returns {Promise<Topic[]>} Array of topics
+   */
+  async findByCourseId(courseId) {
+    if (!this.db.isConnected()) {
+      throw new Error('Database not connected. Using in-memory repository.');
+    }
+
+    // Return only active topics for the course
+    const query = 'SELECT * FROM topics WHERE course_id = $1 AND status = $2 ORDER BY created_at ASC';
+    const result = await this.db.query(query, [courseId, 'active']);
+
+    return result.rows.map(row => this.mapRowToTopic(row));
+  }
+
   async findByTrainer(trainerId, filters = {}, pagination = {}) {
     if (!this.db.isConnected()) {
       throw new Error('Database not connected. Using in-memory repository.');
