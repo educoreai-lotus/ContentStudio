@@ -222,6 +222,8 @@ export class CourseBuilderClient {
       // Build payload in the required format (flat structure, no nesting)
       const payloadData = {
         action: 'send this trainer course to publish',
+        description: 'Send course to Course Builder for publishing',
+        targetService: 'course-builder-service',
         course_id: courseData.course_id || '',
         course_name: courseData.course_name || '',
         course_description: courseData.course_description || '',
@@ -250,7 +252,9 @@ export class CourseBuilderClient {
       const envelope = {
         requester_service: 'content-studio',
         payload: payloadData,
-        response: {},
+        response: {
+          answer: '',
+        },
       };
 
       // Log full request envelope (what we send to Coordinator)
@@ -265,6 +269,16 @@ export class CourseBuilderClient {
         courseId: courseData.course_id,
         courseName: courseData.course_name,
         topicsCount: courseData.topics?.length || 0,
+      });
+
+      // Log request details before sending (same as devlabClient)
+      logger.info('[CourseBuilderClient] About to send request to Coordinator', {
+        endpoint: '/api/fill-content-metrics',
+        timeout: 180000,
+        envelopePayloadKeys: Object.keys(envelope.payload),
+        hasTargetService: !!envelope.payload.targetService,
+        targetServiceValue: envelope.payload.targetService,
+        actionValue: envelope.payload.action,
       });
 
       // Send request via Coordinator - fire and forget (no response expected)
