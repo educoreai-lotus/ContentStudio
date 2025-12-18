@@ -220,10 +220,9 @@ export class CourseBuilderClient {
       }
 
       // Build payload in the required format (flat structure, no nesting)
+      // Note: Following the exact structure from POSTMAN_COURSE_BUILDER_REQUEST.md
       const payloadData = {
         action: 'send this trainer course to publish',
-        description: 'Send course to Course Builder for publishing',
-        targetService: 'course-builder-service',
         course_id: courseData.course_id || '',
         course_name: courseData.course_name || '',
         course_description: courseData.course_description || '',
@@ -249,12 +248,11 @@ export class CourseBuilderClient {
       // Build envelope for Coordinator (standard structure)
       // Note: requester_service is 'content-studio' (who is sending)
       // Coordinator will route to Course Builder based on the action in payload
+      // For fire-and-forget requests, use empty response object (as per documentation)
       const envelope = {
         requester_service: 'content-studio',
         payload: payloadData,
-        response: {
-          answer: '',
-        },
+        response: {},
       };
 
       // Log full request envelope (what we send to Coordinator)
@@ -276,9 +274,8 @@ export class CourseBuilderClient {
         endpoint: '/api/fill-content-metrics',
         timeout: 180000,
         envelopePayloadKeys: Object.keys(envelope.payload),
-        hasTargetService: !!envelope.payload.targetService,
-        targetServiceValue: envelope.payload.targetService,
         actionValue: envelope.payload.action,
+        envelopeStringified: JSON.stringify(envelope), // Log full envelope for debugging signature
       });
 
       // Send request via Coordinator - fire and forget (no response expected)
