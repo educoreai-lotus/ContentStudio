@@ -319,11 +319,23 @@ export class HeygenClient {
       // Get language from payload (needed for language preservation)
       const language = payload.language || 'en';
       
+      // Get video duration from payload (default: 15 seconds, but can be 30 seconds for new flow)
+      const videoDuration = payload.duration || 15;
+      
       // HeyGen has a limit of 900 seconds (15 minutes) per video for presentation-based videos
       // Approximate: ~10 characters per second of speech = ~9000 characters max
       // To be safe, we'll limit to 8000 characters (approximately 800 seconds)
       // For regular videos (without presentation), limit is 1500 characters (150 seconds)
-      const MAX_PROMPT_LENGTH = payload.presentation_file_url ? 8000 : 1500;
+      // For 30-second videos, limit to 300 characters (30 seconds)
+      let MAX_PROMPT_LENGTH;
+      if (videoDuration === 30) {
+        MAX_PROMPT_LENGTH = 300; // Exactly 30 seconds
+      } else if (payload.presentation_file_url) {
+        MAX_PROMPT_LENGTH = 8000;
+      } else {
+        MAX_PROMPT_LENGTH = 1500;
+      }
+      
       let finalPrompt = prompt.trim();
       let wasTruncated = false;
 
@@ -331,6 +343,7 @@ export class HeygenClient {
         console.warn('[HeyGen] Prompt is too long, truncating to prevent video generation failure', {
           originalLength: finalPrompt.length,
           maxLength: MAX_PROMPT_LENGTH,
+          videoDuration,
         });
         // Truncate at word boundary to avoid cutting words
         const truncated = finalPrompt.substring(0, MAX_PROMPT_LENGTH);
@@ -340,6 +353,7 @@ export class HeygenClient {
         console.log('[HeyGen] Prompt truncated', {
           originalLength: prompt.length,
           truncatedLength: finalPrompt.length,
+          videoDuration,
         });
       }
 
@@ -466,8 +480,8 @@ export class HeygenClient {
       };
       const heygenLanguage = heygenLanguageMap[language] || language;
 
-      // Use custom avatar_id if provided, otherwise use default
-      const avatarId = payload.avatar_id || this.avatarId;
+      // Use custom avatar_id if provided, otherwise use Adriana_Business_Side_public as default
+      const avatarId = payload.avatar_id || 'Adriana_Business_Side_public';
       
       // Check if we should use presentation as background
       const usePresentationBackground = payload.use_presentation_background || !!payload.presentation_file_url;
@@ -487,15 +501,15 @@ export class HeygenClient {
               voice_id: voiceId,
               language_code: heygenLanguage, // Explicitly set language code for HeyGen
             },
-            // Add presentation as background if provided
-            // HeyGen API v2 supports background media in video_inputs
-            // The presentation will appear behind the avatar
-            ...(usePresentationBackground && payload.presentation_file_url ? {
-              background: {
-                type: 'image',
-                url: payload.presentation_file_url,
-              },
-            } : {}),
+            // Add background: gray-white color (not white, close to white and gray)
+            // Use solid color background if no presentation provided
+            background: usePresentationBackground && payload.presentation_file_url ? {
+              type: 'image',
+              url: payload.presentation_file_url,
+            } : {
+              type: 'color',
+              color: '#F5F5F5', // Light gray-white color (close to white and gray)
+            },
           },
         ],
         dimension: {

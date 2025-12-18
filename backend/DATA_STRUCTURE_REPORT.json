@@ -1,0 +1,150 @@
+{
+  "service_name": "content-studio",
+  "description": "Manages educational courses, topics (lessons), content items, and exercises for trainers. Handles AI-generated content, presentations, videos, and DevLab exercises.",
+  "version": "1.0.0",
+  "data_structure": {
+    "course_id": "integer",
+    "course_name": "string",
+    "trainer_id": "string",
+    "description": "text",
+    "skills": "array",
+    "language": "string",
+    "status": "string",
+    "company_logo": "string",
+    "permissions": "text",
+    "usage_count": "integer",
+    "created_at": "datetime",
+    "updated_at": "datetime",
+    "topics": "array",
+    "topic_id": "integer",
+    "topic_name": "string",
+    "template_id": "integer",
+    "devlab_exercises": "object",
+    "contents": "array",
+    "content_id": "integer",
+    "content_type_id": "integer",
+    "content_data": "object",
+    "generation_method_id": "integer",
+    "quality_check_status": "string"
+  },
+  "field_descriptions": {
+    "course_id": "Unique identifier for the course",
+    "course_name": "Display name of the course",
+    "trainer_id": "ID of the trainer who created the course",
+    "description": "Detailed description of the course content",
+    "skills": "Array of skills covered in the course (e.g., ['JavaScript', 'React', 'Node.js'])",
+    "language": "Language code for the course (e.g., 'en', 'he', 'ar')",
+    "status": "Course status: 'active', 'archived', or 'deleted'",
+    "company_logo": "URL to company logo image",
+    "permissions": "JSON string containing organization permissions from Directory service",
+    "usage_count": "Number of times the course has been accessed/used",
+    "created_at": "Timestamp when course was created",
+    "updated_at": "Timestamp when course was last modified",
+    "topics": "Array of topics (lessons) belonging to the course",
+    "topic_id": "Unique identifier for the topic/lesson",
+    "topic_name": "Display name of the topic/lesson",
+    "template_id": "ID of the template used for this topic",
+    "devlab_exercises": "JSONB object containing DevLab exercises with structure: { html: string, questions: array, metadata: object }",
+    "contents": "Array of content items for the topic (text, code, presentation, audio, mind_map, avatar_video)",
+    "content_id": "Unique identifier for the content item",
+    "content_type_id": "ID of the content type (1=text, 2=code, 3=presentation, 4=audio, 5=mind_map, 6=avatar_video)",
+    "content_data": "JSONB object containing content-specific data (varies by type)",
+    "generation_method_id": "ID of the generation method used (1=video_to_lesson, 2=ai_assisted, 3=manual)",
+    "quality_check_status": "Quality check status: 'pending', 'passed', 'failed', or null"
+  },
+  "sample_data": {
+    "course_id": 42,
+    "course_name": "Python Programming & Data Structures",
+    "trainer_id": "trainer-12345",
+    "description": "Comprehensive course covering Python fundamentals and advanced data structures including lists, dictionaries, sets, and algorithms.",
+    "skills": [
+      "Python",
+      "Data Structures",
+      "Algorithms",
+      "Object-Oriented Programming"
+    ],
+    "language": "en",
+    "status": "active",
+    "company_logo": "https://storage.example.com/logos/company-abc.png",
+    "permissions": "{\"allowed_organizations\": [\"org-1\", \"org-2\"]}",
+    "usage_count": 127,
+    "created_at": "2025-01-15T10:00:00.000Z",
+    "updated_at": "2025-01-18T14:30:00.000Z",
+    "topics": [
+      {
+        "topic_id": 101,
+        "topic_name": "Introduction to Python Lists",
+        "description": "Learn the basics of Python lists, indexing, and common operations",
+        "template_id": 5,
+        "skills": [
+          "Python",
+          "Lists",
+          "Data Structures"
+        ],
+        "language": "en",
+        "status": "active",
+        "usage_count": 45,
+        "devlab_exercises": {
+          "html": "<div>Exercise HTML content</div>",
+          "questions": [
+            {
+              "question_id": "q1",
+              "question_text": "What is the output of [1, 2, 3][-1]?",
+              "question_type": "multiple_choice",
+              "options": ["1", "2", "3", "Error"],
+              "correct_answer": "3"
+            }
+          ],
+          "metadata": {
+            "generated_at": "2025-01-15T11:00:00.000Z",
+            "programming_language": "python"
+          }
+        },
+        "created_at": "2025-01-15T10:30:00.000Z",
+        "updated_at": "2025-01-15T11:00:00.000Z",
+        "contents": [
+          {
+            "content_id": 501,
+            "content_type_id": 1,
+            "content_data": {
+              "text": "Python lists are ordered collections of items...",
+              "format": "markdown"
+            },
+            "generation_method_id": 2,
+            "quality_check_status": "passed"
+          },
+          {
+            "content_id": 502,
+            "content_type_id": 2,
+            "content_data": {
+              "code": "my_list = [1, 2, 3]\nprint(my_list[-1])",
+              "language": "python"
+            },
+            "generation_method_id": 2,
+            "quality_check_status": "passed"
+          },
+          {
+            "content_id": 503,
+            "content_type_id": 3,
+            "content_data": {
+              "file_url": "https://storage.example.com/presentations/topic-101.pptx",
+              "slides_count": 15
+            },
+            "generation_method_id": 1,
+            "quality_check_status": "pending"
+          }
+        ]
+      }
+    ]
+  },
+  "notes": [
+    "Courses contain multiple topics (lessons), each topic can have multiple content items of different types",
+    "Content types: 1=text, 2=code, 3=presentation, 4=audio, 5=mind_map, 6=avatar_video",
+    "devlab_exercises is a JSONB field that can contain HTML, questions array, and metadata",
+    "content_data structure varies by content_type_id - text has text/format, code has code/language, presentation has file_url/slides_count",
+    "Status field uses soft delete - records are never physically deleted, status changes to 'deleted'",
+    "skills is stored as PostgreSQL TEXT[] array",
+    "permissions field contains JSON string with organization access control data from Directory service"
+  ]
+}
+

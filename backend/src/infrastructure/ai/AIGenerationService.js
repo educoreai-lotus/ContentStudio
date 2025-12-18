@@ -749,12 +749,77 @@ This presentation should be educational and suitable for ${audience}.`;
     });
 
     try {
+      // Generate 30-second text using OpenAI
+      // Target: ~300 characters for 30 seconds of speech (~10 characters per second)
+      let videoScript = '';
+      
+      if (this.openaiClient) {
+        const openaiPrompt = `Create a concise educational narration script for a 30-second video lesson. 
+The script must be EXACTLY 30 seconds when spoken (approximately 300 characters).
+Topic: ${topic || 'General lesson'}
+Description: ${description || ''}
+Skills: ${skills.length > 0 ? skills.join(', ') : 'General'}
+Original prompt: ${trainerPrompt}
+
+Requirements:
+- Must be exactly 30 seconds when spoken (approximately 300 characters, no more)
+- Educational and clear
+- In ${language} language
+- Professional tone
+- Complete sentences only`;
+
+        logger.info('[AIGenerationService] Generating 30-second script using OpenAI', {
+          topic,
+          language,
+          skillsCount: skills.length,
+        });
+
+        try {
+          videoScript = await this.openaiClient.generateText(openaiPrompt, {
+            model: 'gpt-4o',
+            temperature: 0.7,
+            max_tokens: 150, // Limit to ensure ~300 characters
+            systemPrompt: 'You are an educational content creator. Create concise, clear educational scripts.',
+          });
+
+          // Trim and ensure it's approximately 300 characters (30 seconds)
+          videoScript = videoScript.trim();
+          
+          // If too long, truncate to ~300 characters at word boundary
+          if (videoScript.length > 320) {
+            const truncated = videoScript.substring(0, 300);
+            const lastSpace = truncated.lastIndexOf(' ');
+            videoScript = lastSpace > 0 ? truncated.substring(0, lastSpace) : truncated;
+            logger.warn('[AIGenerationService] Script was too long, truncated to 30 seconds', {
+              originalLength: videoScript.length,
+              truncatedLength: videoScript.length,
+            });
+          }
+
+          logger.info('[AIGenerationService] OpenAI script generated', {
+            scriptLength: videoScript.length,
+            scriptPreview: videoScript.substring(0, 100),
+          });
+        } catch (openaiError) {
+          logger.error('[AIGenerationService] Failed to generate script with OpenAI, using original prompt', {
+            error: openaiError.message,
+          });
+          // Fallback to original prompt if OpenAI fails
+          videoScript = trainerPrompt.trim();
+        }
+      } else {
+        // Fallback if OpenAI not available
+        logger.warn('[AIGenerationService] OpenAI client not available, using original prompt');
+        videoScript = trainerPrompt.trim();
+      }
+
       // HeyGen v2 API requires: title, prompt, language (for voice_id selection)
       const videoResult = await this.heygenClient.generateVideo({
         title: 'EduCore Lesson',
-        prompt: trainerPrompt.trim(), // Trainer's exact text, unmodified
+        prompt: videoScript, // Use OpenAI-generated 30-second script
         language: language, // Required for voice_id selection
-        duration: 15, // Used for response only, not sent to API
+        duration: 30, // 30 seconds
+        avatar_id: 'Adriana_Business_Side_public', // Use Adriana avatar
       });
 
       // Handle skipped status - avatar unavailable, but continue normally

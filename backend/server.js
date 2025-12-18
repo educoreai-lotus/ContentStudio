@@ -209,7 +209,7 @@ async function initializeDatabase() {
 }
 
 // Start server immediately, initialize DB in background
-function startServer() {
+async function startServer() {
   try {
   // Start the Express server immediately (don't wait for DB)
     // Set longer timeout for video transcription requests (20 minutes)
@@ -222,6 +222,24 @@ function startServer() {
       environment: process.env.NODE_ENV || 'development',
       logLevel: process.env.LOG_LEVEL || 'INFO',
     });
+    
+    // Start GRPC server
+    // Skip in test environment to prevent Jest from hanging
+    if (process.env.NODE_ENV !== 'test' && !process.env.JEST_WORKER_ID) {
+      try {
+        const grpcServer = await import('./src/grpc/server.js');
+        await grpcServer.default.start();
+        logger.info('GRPC server started successfully', {
+          grpc_port: process.env.GRPC_PORT || 50051,
+        });
+      } catch (error) {
+        logger.error('Failed to start GRPC server', { 
+          error: error.message,
+          stack: error.stack,
+        });
+        logger.warn('Continuing without GRPC server...');
+      }
+    }
     
     // Register service with Coordinator (non-blocking)
     // Skip registration in test environment to prevent Jest from hanging
@@ -301,6 +319,33 @@ function startServer() {
     process.exit(1);
   }
 }
+
+// Graceful shutdown handler
+async function shutdown() {
+  logger.info('Shutting down Content Studio microservice', {
+    service: process.env.SERVICE_NAME || 'content-studio',
+  });
+
+  try {
+    // Shutdown GRPC server
+    if (process.env.NODE_ENV !== 'test' && !process.env.JEST_WORKER_ID) {
+      try {
+        const grpcServer = await import('./src/grpc/server.js');
+        await grpcServer.default.shutdown();
+      } catch (error) {
+        logger.error('Error shutting down GRPC server', { error: error.message });
+      }
+    }
+  } catch (error) {
+    logger.error('Error during shutdown', { error: error.message });
+  }
+
+  process.exit(0);
+}
+
+// Register shutdown handlers
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
 
 // Start the application
 // Skip server startup in test environment to prevent Jest from hanging
