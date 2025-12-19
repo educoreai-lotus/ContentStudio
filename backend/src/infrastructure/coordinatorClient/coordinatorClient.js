@@ -66,6 +66,16 @@ export async function postToCoordinator(envelope, options = {}) {
       endpoint,
     });
 
+    // CRITICAL: Log what we're actually sending to verify it matches what we signed
+    // Axios will serialize envelopeToSend to JSON, so we need to ensure it matches
+    const envelopeStringForAxios = JSON.stringify(envelopeToSend);
+    logger.info('[CoordinatorClient] Envelope string that axios will send', {
+      envelopeString: envelopeStringForAxios.substring(0, 500) + '...',
+      envelopeStringLength: envelopeStringForAxios.length,
+      matchesSigned: envelopeStringForAxios === envelopeStringForSigning,
+      signedStringLength: envelopeStringForSigning.length,
+    });
+    
     // Send POST request with signature headers
     // Use responseType: 'text' to get raw response body for signature verification
     const response = await axios.post(registrationUrl, envelopeToSend, {
