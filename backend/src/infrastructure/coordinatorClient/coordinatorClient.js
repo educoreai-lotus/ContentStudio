@@ -43,12 +43,32 @@ export async function postToCoordinator(envelope, options = {}) {
 
   try {
     // IMPORTANT:
+    // Deep clone envelope to ensure no mutations during axios serialization
+    // This ensures the signature is created on the exact same object that gets sent
+    const envelopeToSend = JSON.parse(JSON.stringify(envelope));
+    
+    // Log the exact envelope that will be signed and sent
+    const envelopeStringForSigning = JSON.stringify(envelopeToSend);
+    logger.info('[CoordinatorClient] Envelope to sign and send', {
+      envelopeString: envelopeStringForSigning.substring(0, 500) + '...',
+      envelopeStringLength: envelopeStringForSigning.length,
+      envelopeKeys: Object.keys(envelopeToSend),
+      payloadKeys: Object.keys(envelopeToSend.payload || {}),
+      responseKeys: Object.keys(envelopeToSend.response || {}),
+    });
+    
     // Sign EXACTLY the same object we send (the envelope)
-    const signature = generateSignature(SERVICE_NAME, privateKey, envelope);
+    const signature = generateSignature(SERVICE_NAME, privateKey, envelopeToSend);
+    
+    logger.info('[CoordinatorClient] Generated signature for request', {
+      signatureLength: signature.length,
+      signaturePrefix: signature.substring(0, 20) + '...',
+      endpoint,
+    });
 
     // Send POST request with signature headers
     // Use responseType: 'text' to get raw response body for signature verification
-    const response = await axios.post(registrationUrl, envelope, {
+    const response = await axios.post(registrationUrl, envelopeToSend, {
       headers: {
         'Content-Type': 'application/json',
         'X-Service-Name': SERVICE_NAME,
