@@ -243,7 +243,13 @@ export class CourseBuilderClient {
             content_type: content.content_type || '',
             content_data: content.content_data || {},
           })) : [],
-          devlab_exercises: topic.devlab_exercises || '',
+          // Convert devlab_exercises to string if it's an object/array
+          // Empty string if not present (to avoid null/undefined issues)
+          devlab_exercises: topic.devlab_exercises 
+            ? (typeof topic.devlab_exercises === 'string' 
+                ? topic.devlab_exercises 
+                : JSON.stringify(topic.devlab_exercises))
+            : '',
         })) : [],
       };
 
