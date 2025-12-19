@@ -14,11 +14,19 @@
    */
   function getCurrentUser() {
     // Get auth token from localStorage (used by api.js interceptor)
-    const token = localStorage.getItem('auth_token');
+    let token = localStorage.getItem('auth_token');
     
-    // For Content Studio, we can use a default user ID or extract from token
-    // Since Content Studio doesn't have explicit user_id in localStorage,
-    // we'll use a default or extract from token if available
+    // If no token, check for alternative token keys
+    if (!token) {
+      token = localStorage.getItem('token') || 
+              localStorage.getItem('access_token') ||
+              localStorage.getItem('jwt_token');
+    }
+    
+    // Default user ID for Content Studio (same as used in CourseDetail.jsx)
+    const DEFAULT_USER_ID = 'trainer-maya-levi';
+    
+    // Get user_id from localStorage or use default
     let userId = localStorage.getItem('user_id');
     
     // If no user_id in localStorage, try to extract from token or use default
@@ -29,31 +37,32 @@
         if (parts.length === 3) {
           // Looks like JWT
           const payload = JSON.parse(atob(parts[1]));
-          userId = payload.user_id || payload.sub || payload.id || 'content-studio-user';
+          userId = payload.user_id || payload.sub || payload.id || DEFAULT_USER_ID;
         } else {
           // Not JWT, use default
-          userId = 'content-studio-user';
+          userId = DEFAULT_USER_ID;
         }
       } catch (e) {
         // If token is not JWT or decode fails, use default
-        userId = 'content-studio-user';
+        userId = DEFAULT_USER_ID;
       }
     } else if (!userId) {
       // Fallback to default if no token
-      userId = 'content-studio-user';
+      userId = DEFAULT_USER_ID;
     }
     
     // Get tenant_id if available (optional)
     const tenantId = localStorage.getItem('tenant_id') || 'default';
 
-    // Bot requires token - return null if no token
+    // If no token, use a default token for Content Studio
+    // This allows the bot to work even without explicit authentication
     if (!token || token.trim() === '') {
-      return null;
+      token = 'content-studio-default-token';
     }
 
     return { 
       token: token, 
-      userId: userId || 'content-studio-user', 
+      userId: userId || DEFAULT_USER_ID, 
       tenantId 
     };
   }
@@ -107,12 +116,12 @@
       return;
     }
     
-    // Bot requires token - don't initialize without it
-    if (!user || !user.token || user.token.trim() === '') {
+    // User should always be available now (we provide defaults)
+    if (!user) {
       if (initAttempts === 1) {
-        console.log('⏳ RAG Bot: Waiting for user authentication (token required)...');
+        console.log('⏳ RAG Bot: Initializing with default user...');
       }
-      setTimeout(initChatbot, 500); // Retry after 500ms
+      setTimeout(initChatbot, 100); // Retry after 100ms
       return;
     }
     
