@@ -65,6 +65,9 @@ function AppContent() {
             </Routes>
           </div>
         </div>
+        
+        {/* RAG Bot Container - Floating widget for all pages */}
+        <div id="edu-bot-container"></div>
       </Router>
     );
 }
