@@ -86,6 +86,16 @@ export class ContentController {
    */
   async approve(req, res, next) {
     try {
+      console.log('[Content Approve] 🚀 APPROVE ENDPOINT CALLED - Request received:', {
+        body_keys: Object.keys(req.body),
+        topic_id: req.body.topic_id,
+        content_type_id: req.body.content_type_id,
+        generation_method_id: req.body.generation_method_id,
+        was_edited: req.body.was_edited,
+        has_content_data: !!req.body.content_data,
+        has_createContentUseCase: !!this.createContentUseCase,
+      });
+
       const {
         topic_id,
         content_type_id,
@@ -95,10 +105,12 @@ export class ContentController {
           generation_method_id: requestedGenerationMethod,
         } = req.body;
 
-      console.log('[Content Approve] Approving content:', {
+      console.log('[Content Approve] 📝 Parsed request data:', {
         topic_id,
         content_type_id,
         was_edited,
+        requestedGenerationMethod,
+        has_content_data: !!content_data,
       });
 
       // Determine generation method based on whether content was edited
@@ -110,6 +122,12 @@ export class ContentController {
         }
         // Quality check will be triggered automatically in CreateContentUseCase for manual content only
 
+      console.log('[Content Approve] ✅ Final generation_method_id determined:', {
+        generation_method_id,
+        was_provided: !!requestedGenerationMethod,
+        was_edited,
+      });
+
       const contentData = {
         topic_id: parseInt(topic_id),
         content_type_id,
@@ -117,7 +135,13 @@ export class ContentController {
           generation_method_id,
       };
 
+      console.log('[Content Approve] 🔄 Calling createContentUseCase.execute()...');
       const content = await this.createContentUseCase.execute(contentData);
+      console.log('[Content Approve] ✅ createContentUseCase.execute() completed:', {
+        content_id: content?.content_id,
+        generation_method_id: content?.generation_method_id,
+        quality_check_status: content?.quality_check_status,
+      });
       
       console.log('[Content Approve] Content saved successfully:', {
         content_id: content.content_id,

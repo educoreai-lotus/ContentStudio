@@ -18,6 +18,17 @@ export class CreateContentUseCase {
   }
 
   async execute(contentData) {
+    console.log('[CreateContentUseCase] 🚀 EXECUTE CALLED - Starting content creation:', {
+      topic_id: contentData.topic_id,
+      content_type_id: contentData.content_type_id,
+      generation_method_id: contentData.generation_method_id,
+      has_content_data: !!contentData.content_data,
+      has_qualityCheckService: !!this.qualityCheckService,
+      has_topicRepository: !!this.topicRepository,
+      has_aiGenerationService: !!this.aiGenerationService,
+      has_contentHistoryService: !!this.contentHistoryService,
+    });
+
     // Validate input
     if (!contentData.topic_id) {
       throw new Error('topic_id is required');
@@ -41,6 +52,12 @@ export class CreateContentUseCase {
     };
 
     // Determine generation_method_id based on business logic
+    console.log('[CreateContentUseCase] 🔍 Determining generation method:', {
+      topic_id: contentData.topic_id,
+      provided_generation_method_id: enrichedContentData.generation_method_id,
+      content_type_id: enrichedContentData.content_type_id,
+    });
+    
     const determinedGenerationMethod = await this.determineGenerationMethod(
       contentData.topic_id,
       enrichedContentData.generation_method_id,
@@ -48,10 +65,21 @@ export class CreateContentUseCase {
       enrichedContentData.content_data
     );
 
+    console.log('[CreateContentUseCase] ✅ Generation method determined:', {
+      determined_generation_method: determinedGenerationMethod,
+      was_provided: enrichedContentData.generation_method_id,
+    });
+
     // Set generation method based on business logic
     const content = new Content({
       ...enrichedContentData,
       generation_method_id: determinedGenerationMethod,
+    });
+    
+    console.log('[CreateContentUseCase] 📝 Content entity created:', {
+      topic_id: content.topic_id,
+      content_type_id: content.content_type_id,
+      generation_method_id: content.generation_method_id,
     });
 
     const { candidateIdsOrNames, resolverDebugLabel } = await this.getContentTypeIdentifiers(content);
