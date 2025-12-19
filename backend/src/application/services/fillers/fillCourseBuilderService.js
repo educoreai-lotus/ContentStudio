@@ -775,67 +775,8 @@ Generate ${wrappedVariables.language} code that demonstrates the concepts clearl
       logger.warn('[fillCourseBuilderService] Failed to generate avatar_video', { error: error.message });
     }
 
-    // 6. Generate DevLab exercises (default: code type, javascript language)
-    let devlabExercises = null;
-    try {
-      logger.info('[fillCourseBuilderService] Generating DevLab exercises for topic', {
-        topic_name: promptVariables.lessonTopic,
-        skills_count: promptVariables.skillsListArray.length,
-        question_type: 'code',
-        programming_language: 'javascript',
-      });
-
-      const exerciseRequest = {
-        topic_id: null, // Topic doesn't exist yet - will be created after persistence
-        topic_name: promptVariables.lessonTopic,
-        skills: promptVariables.skillsListArray,
-        question_type: 'code',
-        programming_language: 'javascript', // Default programming language
-        language: promptVariables.language,
-      };
-
-      const devlabResponse = await generateAIExercises(exerciseRequest);
-      
-      // Extract exercises from DevLab response
-      // Response structure can be:
-      // 1. { html, questions, metadata } - direct format
-      // 2. { data: { html, questions, metadata } } - nested format
-      if (devlabResponse) {
-        // Check direct format first
-        if (Array.isArray(devlabResponse.questions)) {
-          devlabExercises = devlabResponse.questions;
-        } 
-        // Check nested format
-        else if (devlabResponse.data && Array.isArray(devlabResponse.data.questions)) {
-          devlabExercises = devlabResponse.data.questions;
-        }
-        
-        if (devlabExercises && devlabExercises.length > 0) {
-          logger.info('[fillCourseBuilderService] DevLab exercises generated successfully', {
-            topic_name: promptVariables.lessonTopic,
-            exercise_count: devlabExercises.length,
-          });
-        } else {
-          logger.warn('[fillCourseBuilderService] DevLab returned empty or invalid exercises', {
-            topic_name: promptVariables.lessonTopic,
-            response_keys: Object.keys(devlabResponse),
-            hasQuestions: !!devlabResponse.questions,
-            hasData: !!devlabResponse.data,
-            dataHasQuestions: !!devlabResponse.data?.questions,
-          });
-        }
-      } else {
-        logger.warn('[fillCourseBuilderService] DevLab returned null or undefined response', {
-          topic_name: promptVariables.lessonTopic,
-        });
-      }
-    } catch (error) {
-      logger.warn('[fillCourseBuilderService] Failed to generate DevLab exercises', {
-        error: error.message,
-        topic_name: promptVariables.lessonTopic,
-      });
-      // Continue without DevLab exercises - not a critical failure
-    }
+    // 6. DevLab exercises will be generated AFTER topic is saved to database (to get topic_id)
+    // Return topic without devlab_exercises - they will be added after persistence
 
     return {
       topic_id: null,
@@ -845,7 +786,7 @@ Generate ${wrappedVariables.language} code that demonstrates the concepts clearl
       template_id: null,
       format_order: ['text', 'code', 'presentation', 'mind_map', 'avatar_video'],
       contents,
-      devlab_exercises: devlabExercises,
+      devlab_exercises: null, // Will be generated after topic is saved to DB
       skills: promptVariables.skillsListArray, // Store skills for DevLab and persistence
     };
   } catch (error) {
@@ -1013,14 +954,102 @@ async function persistGeneratedCoursesToDatabase(courses, trainer_id, company_id
             }
           }
 
-          // 4. DevLab exercises are already stored in the topic during generation
-          // They're persisted with the topic INSERT above (in devlab_exercises column)
-          if (topic.devlab_exercises && Array.isArray(topic.devlab_exercises) && topic.devlab_exercises.length > 0) {
-            logger.info('[fillCourseBuilderService] DevLab exercises already stored with topic', {
+          // 4. Generate DevLab exercises NOW that we have topic_id from database
+          let devlabExercises = null;
+          try {
+            logger.info('[fillCourseBuilderService] Generating DevLab exercises for topic (after DB persistence)', {
               topic_id: topicId,
-              exercise_count: topic.devlab_exercises.length,
+              topic_name: topic.topic_name,
+              skills_count: topic.skills?.length || 0,
+              question_type: 'code',
+              programming_language: 'javascript',
             });
+
+            const exerciseRequest = {
+              topic_id: topicId, // Now we have the real topic_id from database
+              topic_name: topic.topic_name,
+              skills: Array.isArray(topic.skills) ? topic.skills : [],
+              question_type: 'code',
+              programming_language: 'javascript', // Default programming language
+              language: topic.topic_language || language || 'en',
+            };
+
+            const devlabResponse = await generateAIExercises(exerciseRequest);
+            
+            // Extract exercises from DevLab response
+            // Response structure can be:
+            // 1. { html, questions, metadata } - direct format
+            // 2. { data: { html, questions, metadata } } - nested format
+            if (devlabResponse) {
+              // Check direct format first
+              if (Array.isArray(devlabResponse.questions)) {
+                devlabExercises = devlabResponse.questions;
+              } 
+              // Check nested format
+              else if (devlabResponse.data && Array.isArray(devlabResponse.data.questions)) {
+                devlabExercises = devlabResponse.data.questions;
+              }
+              
+              if (devlabExercises && devlabExercises.length > 0) {
+                logger.info('[fillCourseBuilderService] DevLab exercises generated successfully', {
+                  topic_id: topicId,
+                  topic_name: topic.topic_name,
+                  exercise_count: devlabExercises.length,
+                });
+
+                // Update topic in database with DevLab exercises
+                const updateTopicSql = `
+                  UPDATE topics
+                  SET devlab_exercises = $1
+                  WHERE topic_id = $2
+                `;
+
+                const devlabExercisesJson = JSON.stringify(devlabExercises);
+                await db.query(updateTopicSql, [devlabExercisesJson, topicId]);
+
+                // Update topic object in memory for response
+                topic.devlab_exercises = devlabExercises;
+
+                logger.info('[fillCourseBuilderService] DevLab exercises saved to database', {
+                  topic_id: topicId,
+                  exercise_count: devlabExercises.length,
+                });
+              } else {
+                logger.warn('[fillCourseBuilderService] DevLab returned empty or invalid exercises', {
+                  topic_id: topicId,
+                  topic_name: topic.topic_name,
+                  response_keys: Object.keys(devlabResponse),
+                  hasQuestions: !!devlabResponse.questions,
+                  hasData: !!devlabResponse.data,
+                  dataHasQuestions: !!devlabResponse.data?.questions,
+                });
+              }
+            } else {
+              logger.warn('[fillCourseBuilderService] DevLab returned null or undefined response', {
+                topic_id: topicId,
+                topic_name: topic.topic_name,
+              });
+            }
+          } catch (devlabError) {
+            logger.warn('[fillCourseBuilderService] Failed to generate DevLab exercises', {
+              error: devlabError.message,
+              topic_id: topicId,
+              topic_name: topic.topic_name,
+            });
+            // Continue without DevLab exercises - not a critical failure
+            // Set to null to ensure response structure is consistent
+            topic.devlab_exercises = null;
           }
+
+          // Log final topic state before returning (for debugging)
+          logger.info('[fillCourseBuilderService] Topic ready for response', {
+            topic_id: topicId,
+            topic_name: topic.topic_name,
+            has_devlab_exercises: !!topic.devlab_exercises,
+            devlab_exercises_count: topic.devlab_exercises?.length || 0,
+            has_contents: Array.isArray(topic.contents) && topic.contents.length > 0,
+            contents_count: topic.contents?.length || 0,
+          });
         } catch (topicError) {
           logger.error('[fillCourseBuilderService] Failed to persist topic', {
             error: topicError.message,
@@ -1030,6 +1059,14 @@ async function persistGeneratedCoursesToDatabase(courses, trainer_id, company_id
           // Continue with next topic - don't fail entire course
         }
       }
+
+      // Log final course state before returning (for debugging)
+      logger.info('[fillCourseBuilderService] Course ready for response', {
+        course_id: course.course_id,
+        course_name: course.course_name,
+        topics_count: course.topics?.length || 0,
+        all_topics_have_devlab: course.topics?.every(t => t.devlab_exercises !== undefined) || false,
+      });
     } catch (courseError) {
       logger.error('[fillCourseBuilderService] Failed to persist course', {
         error: courseError.message,
@@ -1041,6 +1078,26 @@ async function persistGeneratedCoursesToDatabase(courses, trainer_id, company_id
 
   logger.info('[fillCourseBuilderService] Finished persisting courses to database', {
     courses_count: courses.length,
+    all_courses_ready: true,
+  });
+
+  // Final verification: Ensure all topics have devlab_exercises field (even if null)
+  for (const course of courses) {
+    for (const topic of course.topics || []) {
+      // Ensure devlab_exercises field exists (set to null if not generated)
+      if (topic.devlab_exercises === undefined) {
+        topic.devlab_exercises = null;
+        logger.warn('[fillCourseBuilderService] Topic missing devlab_exercises field, setting to null', {
+          topic_id: topic.topic_id,
+          topic_name: topic.topic_name,
+        });
+      }
+    }
+  }
+
+  logger.info('[fillCourseBuilderService] All courses verified and ready for Course Builder response', {
+    courses_count: courses.length,
+    total_topics: courses.reduce((sum, c) => sum + (c.topics?.length || 0), 0),
   });
 }
 
