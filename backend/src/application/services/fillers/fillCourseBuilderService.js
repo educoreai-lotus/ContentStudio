@@ -64,41 +64,41 @@ export async function fillCourseBuilderService(requestData) {
     // Read from structure: company_id from data.company_id (or payload.company_id)
     const company_id = dataSource.company_id || null;
 
-    // Read learners_data array
-    const learners_data = Array.isArray(dataSource.learners_data) 
-      ? dataSource.learners_data 
-      : [];
+    // Check if new structure (single learner) or old structure (learners_data array)
+    const isNewStructure = !dataSource.learners_data && dataSource.learning_path;
+    
+    let allCourses = [];
 
-    if (learners_data.length === 0) {
-      logger.warn('[fillCourseBuilderService] No learners_data provided');
-      requestData.response.courses = [];
-      requestData.response.course = [];
-      return requestData;
-    }
-
-    // Process each learner (Content Studio operates at single-learner level)
-    const allCourses = [];
-
-    for (const learner of learners_data) {
-      // Read from new structure: language from learner.preferred_language
-      const language = learner.preferred_language || 'en';
-
-      // Read from new structure: career_learning_paths from learner.career_learning_paths
-      const career_learning_paths = Array.isArray(learner.career_learning_paths)
-        ? learner.career_learning_paths
-        : [];
-
-      if (career_learning_paths.length === 0) {
-        logger.warn('[fillCourseBuilderService] No career_learning_paths for learner', {
-          user_id: learner.user_id,
-        });
-        continue;
+    if (isNewStructure) {
+      // NEW STRUCTURE: Single learner with fields directly in payload
+      logger.info('[fillCourseBuilderService] Using new structure (single learner in payload)');
+      
+      // Read user fields directly from payload
+      const user_id = dataSource.user_id || null;
+      const language = dataSource.preferred_language || 'en';
+      
+      // Read learning_path directly from payload (single path, not array)
+      const learning_path = dataSource.learning_path || null;
+      
+      if (!learning_path) {
+        logger.warn('[fillCourseBuilderService] No learning_path provided');
+        requestData.response.courses = [];
+        requestData.response.course = [];
+        return requestData;
       }
-
-      // Extract skills_raw_data from first career_learning_path (if present)
-      // Read from new structure: skills_raw_data from career_learning_path.skills_raw_data
-      const firstPath = career_learning_paths[0];
-      const skills_raw_data = firstPath?.skills_raw_data || null;
+      
+      // Convert single learning_path to career_learning_paths array format (for compatibility with generateFullAICourses)
+      const competency_target_name = dataSource.competency_target_name || learning_path.path_title || 'Untitled Course';
+      const career_learning_paths = [{
+        competency_target_name: competency_target_name,
+        learning_path: learning_path,
+      }];
+      
+      // skills_raw_data is now a simple array (not object with competency_node)
+      // Convert to old format for searchExistingCourse compatibility
+      const skills_raw_data = Array.isArray(dataSource.skills_raw_data) 
+        ? { competency_node: dataSource.skills_raw_data }
+        : null;
 
       // trainer_id is not in new structure, so it will be null
       const trainer_id = null;
@@ -121,34 +121,115 @@ export async function fillCourseBuilderService(requestData) {
 
         if (existingCourse) {
           // Reuse existing archived course (read-only, no modifications)
-          // CRITICAL: Archived courses are final and immutable
-          // Do NOT activate, duplicate, regenerate, or modify anything
           allCourses.push(existingCourse);
           logger.info('[fillCourseBuilderService] Reused existing archived course', {
             trainer_id,
             course_id: existingCourse.course_id,
             status: 'archived',
-            note: 'Course is read-only, no modifications allowed',
           });
-          continue;
         }
       }
 
-      // Step 3: Full AI Generation (fallback)
-      logger.info('[fillCourseBuilderService] Triggering Full AI Generation', {
-        hasTrainerId: hasValidTrainerId,
-        careerPathsCount: career_learning_paths?.length || 0,
-        user_id: learner.user_id,
-      });
+      // Step 3: Full AI Generation (if no existing course found)
+      if (allCourses.length === 0) {
+        logger.info('[fillCourseBuilderService] Triggering Full AI Generation', {
+          hasTrainerId: hasValidTrainerId,
+          careerPathsCount: career_learning_paths?.length || 0,
+          user_id: user_id,
+        });
 
-      const courses = await generateFullAICourses({
-        career_learning_paths,
-        trainer_id,
-        company_id,
-        language: language || 'en',
-      });
+        const courses = await generateFullAICourses({
+          career_learning_paths,
+          trainer_id,
+          company_id,
+          language: language || 'en',
+        });
 
-      allCourses.push(...courses);
+        allCourses.push(...courses);
+      }
+    } else {
+      // OLD STRUCTURE: learners_data array (backward compatibility)
+      logger.info('[fillCourseBuilderService] Using old structure (learners_data array)');
+      
+      const learners_data = Array.isArray(dataSource.learners_data) 
+        ? dataSource.learners_data 
+        : [];
+
+      if (learners_data.length === 0) {
+        logger.warn('[fillCourseBuilderService] No learners_data provided');
+        requestData.response.courses = [];
+        requestData.response.course = [];
+        return requestData;
+      }
+
+      // Process each learner (Content Studio operates at single-learner level)
+      for (const learner of learners_data) {
+        // Read from old structure: language from learner.preferred_language
+        const language = learner.preferred_language || 'en';
+
+        // Read from old structure: career_learning_paths from learner.career_learning_paths
+        const career_learning_paths = Array.isArray(learner.career_learning_paths)
+          ? learner.career_learning_paths
+          : [];
+
+        if (career_learning_paths.length === 0) {
+          logger.warn('[fillCourseBuilderService] No career_learning_paths for learner', {
+            user_id: learner.user_id,
+          });
+          continue;
+        }
+
+        // Extract skills_raw_data from first career_learning_path (if present)
+        const firstPath = career_learning_paths[0];
+        const skills_raw_data = firstPath?.skills_raw_data || null;
+
+        // trainer_id is not in old structure, so it will be null
+        const trainer_id = null;
+
+        // Step 1: Trainer ID Validation
+        const hasValidTrainerId = trainer_id && 
+                                  trainer_id !== null && 
+                                  trainer_id !== '' && 
+                                  typeof trainer_id === 'string';
+
+        // Step 2: Course Reuse Logic (if trainer_id exists)
+        // Note: Since trainer_id is null, this will skip to AI generation
+        if (hasValidTrainerId) {
+          const existingCourse = await searchExistingCourse({
+            trainer_id,
+            company_id,
+            skills_raw_data,
+            language: language || 'en',
+          });
+
+          if (existingCourse) {
+            // Reuse existing archived course (read-only, no modifications)
+            allCourses.push(existingCourse);
+            logger.info('[fillCourseBuilderService] Reused existing archived course', {
+              trainer_id,
+              course_id: existingCourse.course_id,
+              status: 'archived',
+            });
+            continue;
+          }
+        }
+
+        // Step 3: Full AI Generation (fallback)
+        logger.info('[fillCourseBuilderService] Triggering Full AI Generation', {
+          hasTrainerId: hasValidTrainerId,
+          careerPathsCount: career_learning_paths?.length || 0,
+          user_id: learner.user_id,
+        });
+
+        const courses = await generateFullAICourses({
+          career_learning_paths,
+          trainer_id,
+          company_id,
+          language: language || 'en',
+        });
+
+        allCourses.push(...courses);
+      }
     }
 
     requestData.response.courses = allCourses;
@@ -185,16 +266,21 @@ async function searchExistingCourse({ trainer_id, company_id, skills_raw_data, l
     }
 
     // Extract skills from skills_raw_data
-    // New structure: skills_raw_data is an object with competency keys, each containing an array of skills
-    // Old structure (backward compatibility): skills_raw_data.competency_node is an array
+    // Support multiple formats:
+    // 1. Simple array: ["skill1", "skill2"] (newest structure)
+    // 2. Object with competency_node: { competency_node: ["skill1", "skill2"] } (old structure)
+    // 3. Object with competency keys: { key1: ["skill1"], key2: ["skill2"] } (intermediate structure)
     let skills = [];
     
     if (skills_raw_data) {
-      if (Array.isArray(skills_raw_data.competency_node)) {
-        // Old structure: competency_node is an array
+      if (Array.isArray(skills_raw_data)) {
+        // NEWEST STRUCTURE: skills_raw_data is a simple array
+        skills = skills_raw_data.filter(s => s && typeof s === 'string' && s.trim() !== '');
+      } else if (Array.isArray(skills_raw_data.competency_node)) {
+        // OLD STRUCTURE: competency_node is an array
         skills = skills_raw_data.competency_node.filter(s => s && s.trim() !== '');
       } else if (typeof skills_raw_data === 'object') {
-        // New structure: skills_raw_data is an object with competency keys
+        // INTERMEDIATE STRUCTURE: skills_raw_data is an object with competency keys
         // Extract all skills from all competency keys
         for (const competencyKey in skills_raw_data) {
           if (Array.isArray(skills_raw_data[competencyKey])) {
