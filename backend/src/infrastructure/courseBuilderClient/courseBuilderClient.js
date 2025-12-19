@@ -220,9 +220,11 @@ export class CourseBuilderClient {
       }
 
       // Build payload in the required format (flat structure, no nesting)
-      // Note: Following the exact structure from POSTMAN_COURSE_BUILDER_REQUEST.md
+      // Note: Following devlabClient pattern - includes targetService and description for Coordinator routing
       const payloadData = {
         action: 'send this trainer course to publish',
+        description: 'Send course to Course Builder for publishing',
+        targetService: 'course-builder-service',
         course_id: courseData.course_id || '',
         course_name: courseData.course_name || '',
         course_description: courseData.course_description || '',
@@ -248,19 +250,25 @@ export class CourseBuilderClient {
       // Build envelope for Coordinator (standard structure)
       // Note: requester_service is 'content-studio' (who is sending)
       // Coordinator will route to Course Builder based on the action in payload
-      // For fire-and-forget requests, use empty response object (as per documentation)
+      // IMPORTANT: Use same structure as devlabClient (response: { answer: '' })
       const envelope = {
         requester_service: 'content-studio',
         payload: payloadData,
-        response: {},
+        response: {
+          answer: '',
+        },
       };
 
       // Log full request envelope (what we send to Coordinator)
+      // Also log the exact JSON string that will be used for signature
+      const envelopeString = JSON.stringify(envelope);
       logger.info('[CourseBuilderClient] Full request envelope to Coordinator (sendCourseToCourseBuilder)', {
         envelope: JSON.stringify(envelope, null, 2),
         envelopeKeys: Object.keys(envelope),
         payloadKeys: Object.keys(payloadData),
         fullPayload: JSON.stringify(payloadData, null, 2),
+        envelopeStringified: envelopeString, // Exact string that will be signed
+        envelopeStringLength: envelopeString.length,
       });
 
       logger.info('[CourseBuilderClient] Sending course to Course Builder via Coordinator', {
