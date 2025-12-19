@@ -47,10 +47,13 @@ export class CourseBuilderClient {
 
     try {
       // Build envelope for Coordinator (standard structure)
+      // IMPORTANT: Use same structure as devlabClient for consistency
       const envelope = {
         requester_service: 'content-studio',
         payload: payload,
-        response: {},
+        response: {
+          answer: '',
+        },
       };
 
       logger.info('[CourseBuilderClient] Sending request to Course Builder via Coordinator', {
@@ -221,6 +224,7 @@ export class CourseBuilderClient {
 
       // Build payload in the required format (flat structure, no nesting)
       // Note: Following devlabClient pattern - includes targetService and description for Coordinator routing
+      // IMPORTANT: Field order and structure must match devlabClient exactly for signature validation
       const payloadData = {
         action: 'send this trainer course to publish',
         description: 'Send course to Course Builder for publishing',
@@ -231,32 +235,37 @@ export class CourseBuilderClient {
         course_language: courseData.course_language || 'en',
         trainer_id: courseData.trainer_id || '',
         trainer_name: courseData.trainer_name || '',
-        topics: Array.isArray(courseData.topics) ? courseData.topics.map(topic => ({
-          topic_id: topic.topic_id || '',
-          topic_name: topic.topic_name || '',
-          topic_description: topic.topic_description || '',
-          topic_language: topic.topic_language || 'en',
-          template_id: topic.template_id || '',
-          format_order: Array.isArray(topic.format_order) ? topic.format_order : [],
-          contents: Array.isArray(topic.contents) ? topic.contents.map(content => ({
-            content_id: content.content_id || '',
-            content_type: content.content_type || '',
-            content_data: content.content_data || {},
-          })) : [],
-          // Convert devlab_exercises to string if it's an object/array
-          // Empty string if not present (to avoid null/undefined issues)
-          devlab_exercises: topic.devlab_exercises 
-            ? (typeof topic.devlab_exercises === 'string' 
-                ? topic.devlab_exercises 
-                : JSON.stringify(topic.devlab_exercises))
-            : '',
-        })) : [],
+        topics: Array.isArray(courseData.topics) ? courseData.topics.map(topic => {
+          // Ensure all fields are present and properly typed to avoid JSON.stringify inconsistencies
+          const topicObj = {
+            topic_id: topic.topic_id || '',
+            topic_name: topic.topic_name || '',
+            topic_description: topic.topic_description || '',
+            topic_language: topic.topic_language || 'en',
+            template_id: topic.template_id || '',
+            format_order: Array.isArray(topic.format_order) ? topic.format_order : [],
+            contents: Array.isArray(topic.contents) ? topic.contents.map(content => ({
+              content_id: content.content_id || '',
+              content_type: content.content_type || '',
+              content_data: content.content_data && typeof content.content_data === 'object' ? content.content_data : {},
+            })) : [],
+            // Convert devlab_exercises to string if it's an object/array
+            // Empty string if not present (to avoid null/undefined issues)
+            devlab_exercises: topic.devlab_exercises 
+              ? (typeof topic.devlab_exercises === 'string' 
+                  ? topic.devlab_exercises 
+                  : JSON.stringify(topic.devlab_exercises))
+              : '',
+          };
+          return topicObj;
+        }) : [],
       };
 
       // Build envelope for Coordinator (standard structure)
       // Note: requester_service is 'content-studio' (who is sending)
       // Coordinator will route to Course Builder based on the action in payload
-      // IMPORTANT: Use same structure as devlabClient (response: { answer: '' }) - this works with Coordinator
+      // IMPORTANT: Use EXACT same structure as devlabClient.generateAIExercises (response: { answer: '' })
+      // Field order: requester_service, payload, response (must match devlabClient)
       const envelope = {
         requester_service: 'content-studio',
         payload: payloadData,
