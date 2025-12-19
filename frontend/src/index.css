@@ -62,13 +62,15 @@
   --shadow-hover: 0 20px 60px rgba(13, 148, 136, 0.3);
 }
 
-/* RAG Bot Container - Ensure visibility */
+/* RAG Bot Container - Ensure visibility but don't block page interactions */
 #edu-bot-container {
   position: fixed !important;
   bottom: 20px !important;
   right: 20px !important;
   z-index: 99999 !important;
-  pointer-events: auto !important;
+  /* CRITICAL: pointer-events: none on container allows clicks to pass through to page */
+  /* Only bot elements inside will have pointer-events: auto */
+  pointer-events: none !important;
   visibility: visible !important;
   opacity: 1 !important;
   display: block !important;
@@ -77,24 +79,19 @@
   overflow: visible !important;
 }
 
-/* Ensure bot container is visible */
-#edu-bot-container {
-  pointer-events: auto !important;
-  visibility: visible !important;
-  opacity: 1 !important;
-  display: block !important;
-}
-
 /* Ensure bot icon button is visible and clickable */
+/* CRITICAL: These elements need pointer-events: auto to be clickable */
 #edu-bot-container button,
 #edu-bot-container [class*="icon"],
 #edu-bot-container [class*="toggle"],
 #edu-bot-container [class*="trigger"],
 #edu-bot-container [class*="Fab"],
-#edu-bot-container [class*="fab"] {
+#edu-bot-container [class*="fab"],
+#edu-bot-container > * {
   position: relative !important;
   z-index: 100000 !important;
   cursor: pointer !important;
+  /* Re-enable pointer events for bot elements only */
   pointer-events: auto !important;
   visibility: visible !important;
   opacity: 1 !important;
@@ -128,16 +125,19 @@
   display: none !important;
 }
 
-/* Keep icon/button visible */
+/* Keep icon/button visible and clickable */
 #edu-bot-container button,
 #edu-bot-container [class*="fab"],
 #edu-bot-container [class*="Fab"],
 #edu-bot-container [class*="icon"],
 #edu-bot-container [class*="trigger"],
 #edu-bot-container [class*="toggle"],
-#edu-bot-container [role="button"] {
+#edu-bot-container [role="button"],
+#edu-bot-container > * {
   display: block !important;
   visibility: visible !important;
   opacity: 1 !important;
+  /* Re-enable pointer events for bot elements */
+  pointer-events: auto !important;
 }
 
