@@ -128,10 +128,24 @@ export class CreateContentUseCase {
             }
           }
 
+          // CRITICAL: Always validate language if topic has a language set
+          // If expectedLanguage is missing, log warning but still try to detect and validate
           if (expectedLanguage) {
+            console.log('[CreateContentUseCase] 🔍 Starting language validation:', {
+              expected_language: expectedLanguage,
+              topic_id: topic.topic_id,
+              content_type_id: content.content_type_id,
+            });
+            
             // Extract text from content for language detection
             // For code content (type 2), only check explanation (code itself should be in English)
             const contentText = await this.extractTextForLanguageValidation(content);
+            
+            console.log('[CreateContentUseCase] 📝 Extracted text for language validation:', {
+              hasText: !!contentText,
+              textLength: contentText?.length || 0,
+              textPreview: contentText?.substring(0, 100) || 'N/A',
+            });
             
             // If extractTextForLanguageValidation returns null (e.g., failed to extract text from file),
             // we cannot validate language - this is an error for presentations
@@ -210,7 +224,20 @@ export class CreateContentUseCase {
             } else if (contentText && contentText.trim().length > 0) {
               // Detect language of content
               // detectContentLanguage may return null if text is too short (placeholder text)
+              console.log('[CreateContentUseCase] 🔍 Calling detectContentLanguage:', {
+                textLength: contentText.trim().length,
+                textPreview: contentText.substring(0, 100),
+                expectedLanguage,
+              });
+              
               const detectedLanguage = await this.detectContentLanguage(contentText);
+              
+              console.log('[CreateContentUseCase] 📊 Language detection result:', {
+                detectedLanguage,
+                expectedLanguage,
+                matches: detectedLanguage === expectedLanguage,
+                textLength: contentText.trim().length,
+              });
               
               // Skip validation if text is too short (placeholder like "Manual Entry")
               if (detectedLanguage === null) {
@@ -260,7 +287,20 @@ export class CreateContentUseCase {
                 });
               }
             }
+          } else {
+            // CRITICAL: If topic has no language set, log warning but allow creation
+            // This should not happen in production, but we allow it for backward compatibility
+            console.warn('[CreateContentUseCase] ⚠️ Language validation skipped - topic has no language set:', {
+              topic_id: topic.topic_id,
+              topic_language: topic.language,
+              course_id: topic.course_id,
+              content_type_id: content.content_type_id,
+            });
           }
+        } else {
+          console.warn('[CreateContentUseCase] ⚠️ Language validation skipped - topic not found:', {
+            topic_id: content.topic_id,
+          });
         }
       } catch (error) {
         // Re-throw if it's our language validation error (mismatch or detection failed)
@@ -453,6 +493,14 @@ export class CreateContentUseCase {
 
     // Validate content quality BEFORE saving to DB for manual content
     // Skip quality check if content already has approved status
+    console.log('[CreateContentUseCase] 🔍 Quality check evaluation (before DB save):', {
+      needsQualityCheck,
+      hasQualityCheckService: !!this.qualityCheckService,
+      quality_check_status: content.quality_check_status,
+      isManualContent,
+      generation_method_id: content.generation_method_id,
+    });
+    
     if (needsQualityCheck && content.quality_check_status !== 'approved') {
       console.log('[CreateContentUseCase] ✅ Validating content quality BEFORE saving to DB');
       pushStatus(statusMessages, 'Starting quality check...');
@@ -464,13 +512,32 @@ export class CreateContentUseCase {
           statusMessages
         );
         pushStatus(statusMessages, 'Quality check completed successfully.');
-        console.log('[CreateContentUseCase] ✅ Quality check passed, proceeding with DB save');
+        console.log('[CreateContentUseCase] ✅ Quality check passed, proceeding with DB save:', {
+          relevance_score: qualityCheckResults?.relevance_score,
+          originality_score: qualityCheckResults?.originality_score,
+          difficulty_alignment_score: qualityCheckResults?.difficulty_alignment_score,
+          consistency_score: qualityCheckResults?.consistency_score,
+          overall_score: qualityCheckResults?.overall_score,
+        });
       } catch (error) {
         pushStatus(statusMessages, `Quality check failed: ${error.message}`);
-        console.error('[CreateContentUseCase] ❌ Quality check failed - content will NOT be saved:', error.message);
+        console.error('[CreateContentUseCase] ❌ Quality check failed - content will NOT be saved:', {
+          error: error.message,
+          errorStack: error.stack,
+        });
         // Re-throw if quality check fails (content should NOT be saved to DB)
         throw error;
       }
+    } else {
+      console.warn('[CreateContentUseCase] ⚠️ Quality check NOT performed:', {
+        reason: !needsQualityCheck 
+          ? 'needsQualityCheck is false (isManualContent: ' + isManualContent + ', hasQualityCheckService: ' + !!this.qualityCheckService + ')'
+          : 'content.quality_check_status is already approved: ' + content.quality_check_status,
+        needsQualityCheck,
+        hasQualityCheckService: !!this.qualityCheckService,
+        quality_check_status: content.quality_check_status,
+        isManualContent,
+      });
     }
 
     // Save content to DB ONLY if quality check passed (or if not required)
