@@ -281,7 +281,10 @@ export class DevlabClient {
         action: 'generate-questions',
         description: 'Generate devlab AI exercises',
         targetService: "devlab-service",
-        topic_id: exerciseRequest.topic_id || '',
+        // Only include topic_id if it's a valid number or string (not null/undefined/empty)
+        ...(exerciseRequest.topic_id && exerciseRequest.topic_id !== null && exerciseRequest.topic_id !== '' 
+          ? { topic_id: String(exerciseRequest.topic_id) } 
+          : {}),
         topic_name: exerciseRequest.topic_name || '',
         question_type: questionType,
         skills: Array.isArray(exerciseRequest.skills) ? exerciseRequest.skills : [],

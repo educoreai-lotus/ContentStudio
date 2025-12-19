@@ -786,7 +786,7 @@ Generate ${wrappedVariables.language} code that demonstrates the concepts clearl
       });
 
       const exerciseRequest = {
-        topic_id: '', // Will be updated after topic is persisted
+        topic_id: null, // Topic doesn't exist yet - will be created after persistence
         topic_name: promptVariables.lessonTopic,
         skills: promptVariables.skillsListArray,
         question_type: 'code',
