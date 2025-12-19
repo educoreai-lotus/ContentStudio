@@ -71,11 +71,53 @@
   pointer-events: auto !important;
   visibility: visible !important;
   opacity: 1 !important;
+  display: block !important;
+  width: auto !important;
+  height: auto !important;
+  overflow: visible !important;
 }
 
-/* Ensure bot widget is visible */
-#edu-bot-container > * {
+/* Ensure bot widget and all children are visible */
+#edu-bot-container,
+#edu-bot-container > *,
+#edu-bot-container > * > *,
+#edu-bot-container [class*="bot"],
+#edu-bot-container [class*="chat"],
+#edu-bot-container [class*="widget"],
+#edu-bot-container [class*="floating"],
+#edu-bot-container button,
+#edu-bot-container [role="button"] {
   pointer-events: auto !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  display: block !important;
+}
+
+/* Ensure bot icon button is visible and clickable */
+#edu-bot-container button,
+#edu-bot-container [class*="icon"],
+#edu-bot-container [class*="toggle"],
+#edu-bot-container [class*="trigger"],
+#edu-bot-container [class*="Fab"],
+#edu-bot-container [class*="fab"] {
+  position: relative !important;
+  z-index: 100000 !important;
+  cursor: pointer !important;
+  pointer-events: auto !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  display: block !important;
+  width: auto !important;
+  height: auto !important;
+  min-width: 50px !important;
+  min-height: 50px !important;
+}
+
+/* Override any hidden or display:none styles */
+#edu-bot-container [style*="display: none"],
+#edu-bot-container [style*="visibility: hidden"],
+#edu-bot-container [style*="opacity: 0"] {
+  display: block !important;
   visibility: visible !important;
   opacity: 1 !important;
 }
