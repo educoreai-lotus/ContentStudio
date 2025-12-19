@@ -80,8 +80,9 @@
     if (initAttempts % 10 === 0) {
       console.log('⏳ RAG Bot: Still waiting...', {
         attempt: initAttempts,
-        hasToken: !!user.token,
-        userId: user.userId,
+        hasUser: !!user,
+        hasToken: !!(user && user.token),
+        userId: user ? user.userId : 'N/A',
         containerExists: !!document.querySelector('#edu-bot-container'),
         scriptLoaded: !!window.initializeEducoreBot
       });
@@ -107,8 +108,10 @@
     }
     
     // Bot requires token - don't initialize without it
-    if (!user.token || user.token.trim() === '') {
-      console.log('⏳ RAG Bot: Waiting for user authentication (token required)...');
+    if (!user || !user.token || user.token.trim() === '') {
+      if (initAttempts === 1) {
+        console.log('⏳ RAG Bot: Waiting for user authentication (token required)...');
+      }
       setTimeout(initChatbot, 500); // Retry after 500ms
       return;
     }
