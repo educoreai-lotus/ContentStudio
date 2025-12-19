@@ -69,11 +69,23 @@ export async function postToCoordinator(envelope, options = {}) {
     // CRITICAL: Log what we're actually sending to verify it matches what we signed
     // Axios will serialize envelopeToSend to JSON, so we need to ensure it matches
     const envelopeStringForAxios = JSON.stringify(envelopeToSend);
+    
+    // Calculate hash of what we're sending for comparison
+    const crypto = await import('crypto');
+    const hashForAxios = crypto.createHash('sha256').update(envelopeStringForAxios).digest('hex');
+    const hashForSigning = crypto.createHash('sha256').update(envelopeStringForSigning).digest('hex');
+    
     logger.info('[CoordinatorClient] Envelope string that axios will send', {
       envelopeString: envelopeStringForAxios.substring(0, 500) + '...',
       envelopeStringLength: envelopeStringForAxios.length,
       matchesSigned: envelopeStringForAxios === envelopeStringForSigning,
       signedStringLength: envelopeStringForSigning.length,
+      hashForAxios: hashForAxios.substring(0, 16) + '...',
+      hashForSigning: hashForSigning.substring(0, 16) + '...',
+      hashesMatch: hashForAxios === hashForSigning,
+      // Log first 1000 chars of both strings for comparison
+      first1000CharsAxios: envelopeStringForAxios.substring(0, 1000),
+      first1000CharsSigning: envelopeStringForSigning.substring(0, 1000),
     });
     
     // Send POST request with signature headers
