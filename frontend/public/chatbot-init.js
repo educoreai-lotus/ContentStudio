@@ -147,10 +147,35 @@
       
       console.log('✅ RAG Bot: Initialized successfully!');
       
+      // Flag to prevent infinite loops in MutationObserver
+      let isCollapsing = false;
+      let collapseAttempts = 0;
+      const MAX_COLLAPSE_ATTEMPTS = 3;
+      let observer = null;
+      
       // Function to collapse the chat widget to icon only
       function collapseChatWidget() {
+        // Prevent infinite loops
+        if (isCollapsing) {
+          return false;
+        }
+        
+        collapseAttempts++;
+        if (collapseAttempts > MAX_COLLAPSE_ATTEMPTS) {
+          console.warn('⚠️ Max collapse attempts reached, stopping to prevent infinite loop');
+          if (observer) {
+            observer.disconnect();
+            observer = null;
+          }
+          return false;
+        }
+        
+        isCollapsing = true;
         const container = document.querySelector('#edu-bot-container');
-        if (!container) return;
+        if (!container) {
+          isCollapsing = false;
+          return false;
+        }
         
         // Find all buttons - from logs, Element 2 is usually the close button
         const allButtons = Array.from(container.querySelectorAll('button'));
@@ -165,7 +190,8 @@
         if (closeButton) {
           console.log('🖱️ Clicking close button to collapse widget...', {
             className: closeButton.className,
-            index: allButtons.indexOf(closeButton)
+            index: allButtons.indexOf(closeButton),
+            attempt: collapseAttempts
           });
           closeButton.click();
           
@@ -189,7 +215,14 @@
               iconButton.style.setProperty('opacity', '1', 'important');
               console.log('✅ Icon button should be visible now');
             }
+            
+            // Re-enable collapsing after a delay
+            setTimeout(() => {
+              isCollapsing = false;
+            }, 1000);
           }, 200);
+          
+          return true;
         } else {
           console.warn('⚠️ Close button not found, trying CSS approach...');
           // Fallback: hide chat panel with CSS
@@ -201,29 +234,42 @@
               toHide.style.setProperty('display', 'none', 'important');
             }
           }
+          
+          // Re-enable collapsing after a delay
+          setTimeout(() => {
+            isCollapsing = false;
+          }, 1000);
+          
+          return false;
         }
       }
       
       // Use MutationObserver to detect when widget opens and close it immediately
+      // BUT with debouncing to prevent infinite loops
       const container = document.querySelector('#edu-bot-container');
       if (container) {
-        const observer = new MutationObserver((mutations) => {
+        let lastMutationTime = 0;
+        const DEBOUNCE_MS = 500; // Wait 500ms between collapse attempts
+        
+        observer = new MutationObserver((mutations) => {
+          // Debounce: only process if enough time has passed since last mutation
+          const now = Date.now();
+          if (now - lastMutationTime < DEBOUNCE_MS) {
+            return; // Skip this mutation
+          }
+          lastMutationTime = now;
+          
           // Check if chat panel appeared
           const chatInput = container.querySelector('input[type="text"], textarea, [class*="input"]');
           const chatPanel = container.querySelector('[class*="panel"], [class*="window"], [class*="dialog"]');
           
-          if (chatInput || chatPanel) {
+          // Only collapse if panel is actually visible (not already hidden)
+          const isPanelVisible = chatPanel && window.getComputedStyle(chatPanel).display !== 'none';
+          const isInputVisible = chatInput && window.getComputedStyle(chatInput.closest('[class*="panel"], [class*="window"]') || chatInput).display !== 'none';
+          
+          if ((chatInput && isInputVisible) || (chatPanel && isPanelVisible)) {
             console.log('🔍 Detected chat widget opened, attempting to close...');
-            const closed = collapseChatWidget();
-            if (!closed) {
-              // Fallback: hide with CSS
-              if (chatPanel) {
-                chatPanel.style.setProperty('display', 'none', 'important');
-              }
-              if (chatInput) {
-                chatInput.closest('[class*="panel"], [class*="window"]')?.style.setProperty('display', 'none', 'important');
-              }
-            }
+            collapseChatWidget();
           }
         });
         
@@ -234,23 +280,37 @@
           attributeFilter: ['style', 'class']
         });
         
-        console.log('👁️ MutationObserver set up to watch for widget opening');
+        console.log('👁️ MutationObserver set up to watch for widget opening (with debouncing)');
       }
       
       // Also try to collapse after delays (in case MutationObserver misses it)
+      // But only if we haven't already collapsed
       setTimeout(() => {
-        console.log('🔄 Attempting to collapse chat widget (first attempt)...');
-        collapseChatWidget();
+        if (!isCollapsing && collapseAttempts < MAX_COLLAPSE_ATTEMPTS) {
+          console.log('🔄 Attempting to collapse chat widget (first attempt)...');
+          collapseChatWidget();
+        }
       }, 2000);
       
       setTimeout(() => {
-        console.log('🔄 Attempting to collapse chat widget (second attempt)...');
-        collapseChatWidget();
+        if (!isCollapsing && collapseAttempts < MAX_COLLAPSE_ATTEMPTS) {
+          console.log('🔄 Attempting to collapse chat widget (second attempt)...');
+          collapseChatWidget();
+        }
       }, 3500);
       
       setTimeout(() => {
-        console.log('🔄 Attempting to collapse chat widget (third attempt)...');
-        collapseChatWidget();
+        if (!isCollapsing && collapseAttempts < MAX_COLLAPSE_ATTEMPTS) {
+          console.log('🔄 Attempting to collapse chat widget (third attempt)...');
+          collapseChatWidget();
+        }
+        
+        // Disconnect observer after final attempt to prevent any further mutations
+        if (observer) {
+          observer.disconnect();
+          observer = null;
+          console.log('👁️ MutationObserver disconnected after final collapse attempt');
+        }
       }, 5000);
     } catch (error) {
       console.error('❌ RAG Bot: Initialization failed:', error);
