@@ -47,11 +47,14 @@ export class CourseBuilderClient {
 
     try {
       // Build envelope for Coordinator (standard structure)
-      // IMPORTANT: Course Builder expects response: {} (not { answer: '' }) - see POSTMAN_COURSE_BUILDER_REQUEST.md
+      // IMPORTANT: Use same structure as devlabClient for consistency (response: { answer: '' })
+      // The Coordinator signature validation requires response: { answer: '' } for all services
       const envelope = {
         requester_service: 'content-studio',
         payload: payload,
-        response: {},
+        response: {
+          answer: '',
+        },
       };
 
       logger.info('[CourseBuilderClient] Sending request to Course Builder via Coordinator', {
@@ -262,13 +265,15 @@ export class CourseBuilderClient {
       // Build envelope for Coordinator (standard structure)
       // Note: requester_service is 'content-studio' (who is sending)
       // Coordinator will route to Course Builder based on the action in payload
-      // IMPORTANT: Course Builder expects response: {} (not { answer: '' }) - see POSTMAN_COURSE_BUILDER_REQUEST.md
-      // This is different from DevLab which uses response: { answer: '' }
-      // Field order: requester_service, payload, response (must match POSTMAN_COURSE_BUILDER_REQUEST.md)
+      // IMPORTANT: Use EXACT same structure as devlabClient (response: { answer: '' }) - this works with Coordinator
+      // The Coordinator signature validation requires response: { answer: '' } for all services
+      // Field order: requester_service, payload, response (must match devlabClient)
       const envelope = {
         requester_service: 'content-studio',
         payload: payloadData,
-        response: {},
+        response: {
+          answer: '',
+        },
       };
 
       // Log full request envelope (what we send to Coordinator)
