@@ -111,7 +111,23 @@ export class CreateContentUseCase {
     // AI-generated content is NOT checked here because:
     // 1. AI already generates quality content
     // 2. If quality check is needed for AI content, it should be done in GenerateContentUseCase before approval
-    const isManualContent = content.generation_method_id === 'manual' || content.generation_method_id === 'manual_edited';
+    
+    // CRITICAL: Check the ORIGINAL generation_method_id from the request, not the determined one
+    // This is because determineGenerationMethod() can change 'manual' to 'Mixed' if there's existing AI content,
+    // but we still need to run quality check for manually created content
+    const originalGenerationMethod = enrichedContentData.generation_method_id || contentData.generation_method_id;
+    const isManualContent = 
+      originalGenerationMethod === 'manual' || 
+      originalGenerationMethod === 'manual_edited' ||
+      content.generation_method_id === 'manual' || 
+      content.generation_method_id === 'manual_edited';
+    
+    console.log('[CreateContentUseCase] 🔍 Manual content detection:', {
+      originalGenerationMethod,
+      determinedGenerationMethod: content.generation_method_id,
+      isManualContent,
+    });
+    
     const needsQualityCheck = isManualContent && this.qualityCheckService;
     
     // CRITICAL: If manual content but qualityCheckService is missing, block creation
