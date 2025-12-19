@@ -42,8 +42,9 @@ export async function postToCoordinator(envelope, options = {}) {
   const timeout = options.timeout || 180000; // 3 minutes default timeout
 
   try {
-    // IMPORTANT: Sign ONLY the payload (Coordinator verifies signature against payload, not the full envelope)
-    const signature = generateSignature(SERVICE_NAME, privateKey, envelope.payload);
+    // IMPORTANT: Sign the FULL envelope (as per POSTMAN_COURSE_BUILDER_REQUEST.md)
+    // Message format: "educoreai-{serviceName}-{sha256(JSON.stringify(envelope))}"
+    const signature = generateSignature(SERVICE_NAME, privateKey, envelope);
 
     // Send POST request with signature headers
     // Use responseType: 'text' to get raw response body for signature verification
