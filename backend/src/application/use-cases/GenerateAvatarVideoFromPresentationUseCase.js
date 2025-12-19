@@ -153,50 +153,9 @@ export class GenerateAvatarVideoFromPresentationUseCase {
         throw new Error(`Failed to download presentation file: ${error.message}`);
       }
 
-      // Step 3: Extract slide images per slide
-      // NOTE: Slide images are TEMPORARY assets used only for HeyGen video generation.
-      // They are uploaded to storage for HeyGen API access but are NOT persisted as course content.
-      // Images are not retained after the HeyGen video generation call completes.
-      logger.info('[GenerateAvatarVideoFromPresentation] Step 3: Extracting slide images', {
-        jobId,
-        inputFormat,
-      });
-
-      let slideImages;
-      try {
-        slideImages = await this.slideImageExtractor.extractSlideImages(
-          fileBuffer,
-          jobId,
-          MAX_SLIDES, // Hard limit: maximum 9 slides
-          true, // requireFullRendering: Avatar videos MUST use fully rendered slide images (background + text + layout)
-          inputFormat // Pass detected format (pdf or pptx)
-        );
-        logger.info('[GenerateAvatarVideoFromPresentation] Slide images extracted successfully', {
-          jobId,
-          slideCount: slideImages.length,
-        });
-      } catch (error) {
-        logger.error('[GenerateAvatarVideoFromPresentation] Failed to extract slide images', {
-          jobId,
-          error: error.message,
-        });
-        throw new Error(`Failed to extract slide images: ${error.message}`);
-      }
-
-      // HARD CONSTRAINT: Global slide count limit
-      // Enforce maximum 9 slides (not 10) as a hard runtime constraint.
-      // This applies to the ENTIRE presentation, not per-section.
-      if (slideImages.length > MAX_SLIDES) {
-        const errorMsg = `Presentation exceeds maximum allowed slides (${MAX_SLIDES}). Found: ${slideImages.length} slides.`;
-        logger.error('[GenerateAvatarVideoFromPresentation] Global slide count limit exceeded', {
-          jobId,
-          slideCount: slideImages.length,
-          maxAllowed: MAX_SLIDES,
-        });
-        throw new Error(errorMsg);
-      }
-
-      // Step 4: Extract slides from PPTX/PDF and generate short narrations per slide
+      // Step 3: Extract slides from PPTX/PDF and generate short narrations per slide
+      // NOTE: We no longer extract slide images for direct video generation (not using template)
+      // We only need the text content to generate a 30-second script
       logger.info('[GenerateAvatarVideoFromPresentation] Step 4: Extracting slides and generating short narrations', {
         jobId,
         language,
@@ -213,12 +172,9 @@ export class GenerateAvatarVideoFromPresentationUseCase {
           writeFileSync(tempFilePath, fileBuffer);
           
           if (inputFormat === 'pdf') {
-            // Extract text from PDF and split into slides
-            // Use the number of extracted images to determine how many slides we have
-            const expectedSlideCount = slideImages.length;
+            // Extract text from PDF
             logger.info('[GenerateAvatarVideoFromPresentation] Extracting text from PDF', {
               jobId,
-              expectedSlideCount,
             });
             
             const text = await FileTextExtractor.extractTextFromFile(tempFilePath, '.pdf', {
@@ -229,41 +185,16 @@ export class GenerateAvatarVideoFromPresentationUseCase {
               throw new Error('Failed to extract text from PDF. PDF may be image-only or corrupted.');
             }
             
-            // Split text into slides based on expected slide count
-            // First try to split by common separators (three or more newlines)
+            // Split text into slides by common separators
             let slideTexts = text.split(/\n\s*\n\s*\n+/).filter(t => t.trim().length > 0);
             
-            // If we got fewer slides than expected, try splitting by double newlines
-            if (slideTexts.length < expectedSlideCount) {
-              const fallbackSlides = text.split(/\n\s*\n+/).filter(t => t.trim().length > 0);
-              if (fallbackSlides.length >= expectedSlideCount) {
-                slideTexts = fallbackSlides;
-              }
+            // If we got fewer slides, try splitting by double newlines
+            if (slideTexts.length < 2) {
+              slideTexts = text.split(/\n\s*\n+/).filter(t => t.trim().length > 0);
             }
             
-            // If we still don't have enough slides, divide text evenly
-            if (slideTexts.length < expectedSlideCount) {
-              logger.info('[GenerateAvatarVideoFromPresentation] Dividing PDF text evenly across slides', {
-                jobId,
-                currentSlides: slideTexts.length,
-                expectedSlides: expectedSlideCount,
-              });
-              
-              const words = text.trim().split(/\s+/);
-              const wordsPerSlide = Math.ceil(words.length / expectedSlideCount);
-              
-              slideTexts = [];
-              for (let i = 0; i < expectedSlideCount; i++) {
-                const startIdx = i * wordsPerSlide;
-                const endIdx = Math.min(startIdx + wordsPerSlide, words.length);
-                const slideWords = words.slice(startIdx, endIdx);
-                slideTexts.push(slideWords.join(' '));
-              }
-            }
-            
-            // Limit to expected slide count and MAX_SLIDES
-            const maxSlides = Math.min(expectedSlideCount, MAX_SLIDES);
-            slideTexts = slideTexts.slice(0, maxSlides);
+            // Limit to MAX_SLIDES
+            slideTexts = slideTexts.slice(0, MAX_SLIDES);
             
             // Convert to slide structure compatible with PptxExtractorPro output
             slides = slideTexts.map((text, index) => {
@@ -281,8 +212,6 @@ export class GenerateAvatarVideoFromPresentationUseCase {
             logger.info('[GenerateAvatarVideoFromPresentation] Extracted slides from PDF', {
               jobId,
               slideCount: slides.length,
-              expectedSlideCount,
-              match: slides.length === expectedSlideCount,
             });
           } else {
             // Extract slides from PPTX
@@ -343,15 +272,17 @@ export class GenerateAvatarVideoFromPresentationUseCase {
         throw new Error(`Failed to generate slide speeches: ${error.message}`);
       }
 
-      // CRITICAL VALIDATION: Slide count synchronization guard
-      // Ensure image and speech arrays have matching counts before creating SlidePlan.
-      // Mismatch indicates extraction failure and would cause payload errors.
-      if (slideImages.length !== slideSpeeches.length) {
-        const errorMsg = `Slide count mismatch: ${slideImages.length} images but ${slideSpeeches.length} speeches. Cannot create valid SlidePlan.`;
-        logger.error('[GenerateAvatarVideoFromPresentation] Slide count synchronization failed', {
+      // Validate slide count
+      if (slideSpeeches.length < 1) {
+        throw new Error('No slides extracted from presentation');
+      }
+      
+      if (slideSpeeches.length > MAX_SLIDES) {
+        const errorMsg = `Presentation exceeds maximum allowed slides (${MAX_SLIDES}). Found: ${slideSpeeches.length} slides.`;
+        logger.error('[GenerateAvatarVideoFromPresentation] Global slide count limit exceeded', {
           jobId,
-          imageCount: slideImages.length,
-          speechCount: slideSpeeches.length,
+          slideCount: slideSpeeches.length,
+          maxAllowed: MAX_SLIDES,
         });
         throw new Error(errorMsg);
       }
@@ -430,10 +361,9 @@ export class GenerateAvatarVideoFromPresentationUseCase {
         slideCount: slideSpeeches.length,
       });
 
-      // Step 5: Skip SlidePlan creation - we'll use /v2/video/generate instead of template
-      logger.info('[GenerateAvatarVideoFromPresentation] Step 5: Skipping SlidePlan (using /v2/video/generate)', {
+      // Step 5: Prepare for direct video generation (no SlidePlan needed)
+      logger.info('[GenerateAvatarVideoFromPresentation] Step 5: Preparing for direct video generation', {
         jobId,
-        imageCount: slideImages.length,
         speechCount: slideSpeeches.length,
       });
 
@@ -441,47 +371,13 @@ export class GenerateAvatarVideoFromPresentationUseCase {
       // Calculate total words and estimated duration for final validation logging
       const finalWordCount = slideSpeeches.reduce((sum, speech) => sum + wordCount(speech.speakerText), 0);
       const finalEstimatedSeconds = (finalWordCount / AVERAGE_WPM) * 60;
-      // FINAL HEYGEN GUARD (non-negotiable): Assert slide count consistency before HeyGen call
-      // This is the last line of defense against index mismatches that cause silent HeyGen failures.
-      // CRITICAL: These assertions MUST pass or HeyGen will fail silently with malformed payload.
-      if (slideImages.length !== slideSpeeches.length) {
-        const errorMsg = `Slide count mismatch before HeyGen call: ${slideImages.length} images but ${slideSpeeches.length} speeches. This will cause HeyGen API to fail silently.`;
-        logger.error('[GenerateAvatarVideoFromPresentation] Pre-HeyGen validation failed', {
-          jobId,
-          imageCount: slideImages.length,
-          speechCount: slideSpeeches.length,
-        });
-        throw new Error(errorMsg);
-      }
-      
-      // Validate that slide count is within allowed range (1 to MAX_SLIDES)
-      // MAX_SLIDES is a maximum limit, not an exact requirement
-      // Presentations can have fewer slides (e.g., 5 slides is valid)
-      if (slideImages.length < 1) {
-        const errorMsg = `Invalid slide count: must have at least 1 slide, got ${slideImages.length}.`;
-        logger.error('[GenerateAvatarVideoFromPresentation] Pre-HeyGen validation failed', {
-          jobId,
-          actualCount: slideImages.length,
-        });
-        throw new Error(errorMsg);
-      }
-      
-      if (slideImages.length > MAX_SLIDES) {
-        const errorMsg = `Slide count exceeds maximum allowed: got ${slideImages.length} slides, maximum is ${MAX_SLIDES}.`;
-        logger.error('[GenerateAvatarVideoFromPresentation] Pre-HeyGen validation failed', {
-          jobId,
-          actualCount: slideImages.length,
-          maxAllowed: MAX_SLIDES,
-        });
-        throw new Error(errorMsg);
-      }
 
       logger.info('[AvatarVideoConstraints]', {
         slidesCount: slideSpeeches.length,
         totalWords: finalWordCount,
         estimatedSeconds: Math.round(finalEstimatedSeconds),
         maxAllowedSeconds: MAX_TOTAL_SECONDS,
-        validated: slideImages.length === slideSpeeches.length && slideImages.length >= 1 && slideImages.length <= MAX_SLIDES,
+        validated: slideSpeeches.length >= 1 && slideSpeeches.length <= MAX_SLIDES,
       });
 
       // Step 8: Generate 30-second script using OpenAI from slide speeches
