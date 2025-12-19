@@ -25,8 +25,15 @@
     if (!userId && token) {
       try {
         // Try to decode JWT token to get user ID (if token is JWT)
-        const payload = JSON.parse(atob(token.split('.')[1]));
-        userId = payload.user_id || payload.sub || payload.id || 'content-studio-user';
+        const parts = token.split('.');
+        if (parts.length === 3) {
+          // Looks like JWT
+          const payload = JSON.parse(atob(parts[1]));
+          userId = payload.user_id || payload.sub || payload.id || 'content-studio-user';
+        } else {
+          // Not JWT, use default
+          userId = 'content-studio-user';
+        }
       } catch (e) {
         // If token is not JWT or decode fails, use default
         userId = 'content-studio-user';
@@ -39,31 +46,50 @@
     // Get tenant_id if available (optional)
     const tenantId = localStorage.getItem('tenant_id') || 'default';
 
-    if (token && userId) {
-      return { 
-        token, 
-        userId, 
-        tenantId 
-      };
-    }
-
-    return null;
+    // For Content Studio, we can initialize even without token
+    // The bot will work with a default user ID
+    // If token exists, use it; otherwise use empty string (bot may handle it)
+    return { 
+      token: token || '', 
+      userId: userId || 'content-studio-user', 
+      tenantId 
+    };
   }
+
+  // Track initialization attempts to prevent infinite loops
+  let initAttempts = 0;
+  const MAX_INIT_ATTEMPTS = 100; // Max 50 seconds (100 * 500ms)
 
   /**
    * Initialize chatbot
    */
   function initChatbot() {
-    const user = getCurrentUser();
+    initAttempts++;
     
-    if (!user || !user.userId || !user.token) {
-      console.log('⏳ RAG Bot: Waiting for user authentication...');
-      setTimeout(initChatbot, 500); // Retry after 500ms
+    // Prevent infinite retry loop
+    if (initAttempts > MAX_INIT_ATTEMPTS) {
+      console.warn('⚠️ RAG Bot: Max initialization attempts reached. Bot may not be available.');
       return;
     }
     
+    const user = getCurrentUser();
+    
+    // Log debug info every 10 attempts
+    if (initAttempts % 10 === 0) {
+      console.log('⏳ RAG Bot: Still waiting...', {
+        attempt: initAttempts,
+        hasToken: !!user.token,
+        userId: user.userId,
+        containerExists: !!document.querySelector('#edu-bot-container'),
+        scriptLoaded: !!window.initializeEducoreBot
+      });
+    }
+    
+    // Check if script is loaded
     if (!window.initializeEducoreBot) {
-      console.log('⏳ RAG Bot: Waiting for script to load...');
+      if (initAttempts === 1) {
+        console.log('⏳ RAG Bot: Waiting for script to load...');
+      }
       setTimeout(initChatbot, 100); // Retry after 100ms
       return;
     }
@@ -71,9 +97,17 @@
     // Check if container exists
     const container = document.querySelector('#edu-bot-container');
     if (!container) {
-      console.log('⏳ RAG Bot: Waiting for container to be created...');
+      if (initAttempts === 1) {
+        console.log('⏳ RAG Bot: Waiting for container to be created...');
+      }
       setTimeout(initChatbot, 100); // Retry after 100ms
       return;
+    }
+    
+    // Initialize even without token (bot may handle it)
+    // But log if no token for debugging
+    if (!user.token) {
+      console.log('ℹ️ RAG Bot: No auth token found, initializing with default user...');
     }
     
     console.log('✅ RAG Bot: Initializing for Content Studio...');
