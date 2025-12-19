@@ -819,7 +819,7 @@ Requirements:
         prompt: videoScript, // Use OpenAI-generated 30-second script
         language: language, // Required for voice_id selection
         duration: 30, // 30 seconds
-        avatar_id: 'Adriana_Business_Side_public', // Use Adriana avatar
+        avatar_id: 'Adriana_Business_Front_public', // Use Adriana avatar
       });
 
       // Handle skipped status - avatar unavailable, but continue normally

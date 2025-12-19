@@ -480,8 +480,8 @@ export class HeygenClient {
       };
       const heygenLanguage = heygenLanguageMap[language] || language;
 
-      // Use custom avatar_id if provided, otherwise use Adriana_Business_Side_public as default
-      const avatarId = payload.avatar_id || 'Adriana_Business_Side_public';
+      // Use custom avatar_id if provided, otherwise use Adriana_Business_Front_public as default
+      const avatarId = payload.avatar_id || 'Adriana_Business_Front_public';
       
       // Check if we should use presentation as background
       const usePresentationBackground = payload.use_presentation_background || !!payload.presentation_file_url;

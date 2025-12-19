@@ -29,7 +29,7 @@ const AVERAGE_WPM = AVATAR_VIDEO_AVERAGE_WPM; // Single source of truth: 150 wor
  * 4. Extract slide text and generate short narrations per slide (15-20 sec, max 40 words)
  * 5. Combine all slide speeches into one text
  * 6. Generate 30-second script using OpenAI
- * 7. Call HeyGen /v2/video/generate API with Adriana_Business_Side_public avatar
+ * 7. Call HeyGen /v2/video/generate API with Adriana_Business_Front_public avatar
  * 
  * Video duration: Exactly 30 seconds
  */
@@ -555,7 +555,7 @@ Requirements:
       // Step 9: Call HeyGen /v2/video/generate API (not template)
       logger.info('[GenerateAvatarVideoFromPresentation] Step 9: Calling HeyGen /v2/video/generate API', {
         jobId,
-        avatarId: 'Adriana_Business_Side_public',
+        avatarId: 'Adriana_Business_Front_public',
         scriptLength: videoScript.length,
       });
 
@@ -566,7 +566,7 @@ Requirements:
           prompt: videoScript, // Use OpenAI-generated 30-second script
           language: language,
           duration: 30, // 30 seconds
-          avatar_id: 'Adriana_Business_Side_public', // Use Adriana avatar
+          avatar_id: 'Adriana_Business_Front_public', // Use Adriana avatar
         });
         
         // Check if generation failed or was skipped
@@ -648,7 +648,7 @@ Requirements:
           metadata: {
             presentation_content_id,
             presentation_file_url: presentationFileUrl,
-            avatar_id: 'Adriana_Business_Side_public',
+            avatar_id: 'Adriana_Business_Front_public',
             language,
             slideCount: slideSpeeches.length,
             generated_at: new Date().toISOString(),
@@ -679,7 +679,7 @@ Requirements:
           metadata: {
             presentation_content_id,
             presentation_file_url: presentationFileUrl,
-            avatar_id: 'Adriana_Business_Side_public',
+            avatar_id: 'Adriana_Business_Front_public',
             language,
             slideCount: slideSpeeches.length,
             generated_at: new Date().toISOString(),
@@ -704,7 +704,7 @@ Requirements:
           metadata: {
             presentation_content_id,
             presentation_file_url: presentationFileUrl,
-            avatar_id: 'Adriana_Business_Side_public',
+            avatar_id: 'Adriana_Business_Front_public',
             language,
             slideCount: slideSpeeches.length,
             generated_at: new Date().toISOString(),
@@ -726,7 +726,7 @@ Requirements:
         metadata: {
           presentation_content_id,
           presentation_file_url: presentationFileUrl,
-          avatar_id: 'Adriana_Business_Side_public',
+          avatar_id: 'Adriana_Business_Front_public',
           language,
           slideCount: slideSpeeches.length,
           generated_at: new Date().toISOString(),
