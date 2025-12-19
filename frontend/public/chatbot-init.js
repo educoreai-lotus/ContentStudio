@@ -204,18 +204,54 @@
         }
       }
       
-      // Try to collapse after widget auto-opens
-      // The widget auto-opens in "embedded CHAT mode", so we need to close it
+      // Use MutationObserver to detect when widget opens and close it immediately
+      const container = document.querySelector('#edu-bot-container');
+      if (container) {
+        const observer = new MutationObserver((mutations) => {
+          // Check if chat panel appeared
+          const chatInput = container.querySelector('input[type="text"], textarea, [class*="input"]');
+          const chatPanel = container.querySelector('[class*="panel"], [class*="window"], [class*="dialog"]');
+          
+          if (chatInput || chatPanel) {
+            console.log('🔍 Detected chat widget opened, attempting to close...');
+            const closed = collapseChatWidget();
+            if (!closed) {
+              // Fallback: hide with CSS
+              if (chatPanel) {
+                chatPanel.style.setProperty('display', 'none', 'important');
+              }
+              if (chatInput) {
+                chatInput.closest('[class*="panel"], [class*="window"]')?.style.setProperty('display', 'none', 'important');
+              }
+            }
+          }
+        });
+        
+        observer.observe(container, {
+          childList: true,
+          subtree: true,
+          attributes: true,
+          attributeFilter: ['style', 'class']
+        });
+        
+        console.log('👁️ MutationObserver set up to watch for widget opening');
+      }
+      
+      // Also try to collapse after delays (in case MutationObserver misses it)
       setTimeout(() => {
         console.log('🔄 Attempting to collapse chat widget (first attempt)...');
         collapseChatWidget();
-      }, 2500);
+      }, 2000);
       
-      // Second attempt after longer delay
       setTimeout(() => {
         console.log('🔄 Attempting to collapse chat widget (second attempt)...');
         collapseChatWidget();
-      }, 4000);
+      }, 3500);
+      
+      setTimeout(() => {
+        console.log('🔄 Attempting to collapse chat widget (third attempt)...');
+        collapseChatWidget();
+      }, 5000);
     } catch (error) {
       console.error('❌ RAG Bot: Initialization failed:', error);
       // Retry after 1 second

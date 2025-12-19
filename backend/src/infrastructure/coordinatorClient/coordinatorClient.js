@@ -43,54 +43,12 @@ export async function postToCoordinator(envelope, options = {}) {
 
   try {
     // IMPORTANT:
-    // Deep clone envelope to ensure no mutations during axios serialization
-    // This ensures the signature is created on the exact same object that gets sent
-    const envelopeToSend = JSON.parse(JSON.stringify(envelope));
-    
-    // Log the exact envelope that will be signed and sent
-    const envelopeStringForSigning = JSON.stringify(envelopeToSend);
-    logger.info('[CoordinatorClient] Envelope to sign and send', {
-      envelopeString: envelopeStringForSigning.substring(0, 500) + '...',
-      envelopeStringLength: envelopeStringForSigning.length,
-      envelopeKeys: Object.keys(envelopeToSend),
-      payloadKeys: Object.keys(envelopeToSend.payload || {}),
-      responseKeys: Object.keys(envelopeToSend.response || {}),
-    });
-    
-    // Sign ONLY the payload (Coordinator verifies signature against payload, not the full envelope)
-    const signature = generateSignature(SERVICE_NAME, privateKey, envelopeToSend.payload);
-    
-    logger.info('[CoordinatorClient] Generated signature for request', {
-      signatureLength: signature.length,
-      signaturePrefix: signature.substring(0, 20) + '...',
-      endpoint,
-    });
+    // Sign EXACTLY the same object we send (the envelope)
+    const signature = generateSignature(SERVICE_NAME, privateKey, envelope);
 
-    // CRITICAL: Log what we're actually sending to verify it matches what we signed
-    // Axios will serialize envelopeToSend to JSON, so we need to ensure it matches
-    const envelopeStringForAxios = JSON.stringify(envelopeToSend);
-    
-    // Calculate hash of what we're sending for comparison
-    const crypto = await import('crypto');
-    const hashForAxios = crypto.createHash('sha256').update(envelopeStringForAxios).digest('hex');
-    const hashForSigning = crypto.createHash('sha256').update(envelopeStringForSigning).digest('hex');
-    
-    logger.info('[CoordinatorClient] Envelope string that axios will send', {
-      envelopeString: envelopeStringForAxios.substring(0, 500) + '...',
-      envelopeStringLength: envelopeStringForAxios.length,
-      matchesSigned: envelopeStringForAxios === envelopeStringForSigning,
-      signedStringLength: envelopeStringForSigning.length,
-      hashForAxios: hashForAxios.substring(0, 16) + '...',
-      hashForSigning: hashForSigning.substring(0, 16) + '...',
-      hashesMatch: hashForAxios === hashForSigning,
-      // Log first 1000 chars of both strings for comparison
-      first1000CharsAxios: envelopeStringForAxios.substring(0, 1000),
-      first1000CharsSigning: envelopeStringForSigning.substring(0, 1000),
-    });
-    
     // Send POST request with signature headers
     // Use responseType: 'text' to get raw response body for signature verification
-    const response = await axios.post(registrationUrl, envelopeToSend, {
+    const response = await axios.post(registrationUrl, envelope, {
       headers: {
         'Content-Type': 'application/json',
         'X-Service-Name': SERVICE_NAME,
