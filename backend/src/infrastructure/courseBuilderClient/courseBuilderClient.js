@@ -220,11 +220,9 @@ export class CourseBuilderClient {
       }
 
       // Build payload in the required format (flat structure, no nesting)
-      // Note: Following devlabClient pattern - includes targetService and description for Coordinator routing
+      // Note: Following POSTMAN_COURSE_BUILDER_REQUEST.md - only action + course data
       const payloadData = {
         action: 'send this trainer course to publish',
-        description: 'Send course to Course Builder for publishing',
-        targetService: 'course-builder-service',
         course_id: courseData.course_id || '',
         course_name: courseData.course_name || '',
         course_description: courseData.course_description || '',
@@ -250,18 +248,28 @@ export class CourseBuilderClient {
       // Build envelope for Coordinator (standard structure)
       // Note: requester_service is 'content-studio' (who is sending)
       // Coordinator will route to Course Builder based on the action in payload
-      // IMPORTANT: Use same structure as devlabClient (response: { answer: '' })
+      // IMPORTANT: Course Builder expects response: {} (empty object, not { answer: '' })
       const envelope = {
         requester_service: 'content-studio',
         payload: payloadData,
-        response: {
-          answer: '',
-        },
+        response: {},
       };
 
       // Log full request envelope (what we send to Coordinator)
       // Also log the exact JSON string that will be used for signature
       const envelopeString = JSON.stringify(envelope);
+      
+      // Write envelope to file for debugging
+      try {
+        const fs = await import('fs');
+        const path = await import('path');
+        const debugPath = path.join(process.cwd(), 'debug-course-builder-envelope.json');
+        fs.writeFileSync(debugPath, JSON.stringify(envelope, null, 2));
+        logger.info('[CourseBuilderClient] Wrote envelope to debug file', { debugPath });
+      } catch (err) {
+        logger.warn('[CourseBuilderClient] Failed to write debug file', { error: err.message });
+      }
+      
       logger.info('[CourseBuilderClient] Full request envelope to Coordinator (sendCourseToCourseBuilder)', {
         envelope: JSON.stringify(envelope, null, 2),
         envelopeKeys: Object.keys(envelope),
