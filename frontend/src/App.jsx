@@ -75,11 +75,7 @@ function AppContent() {
             position: 'fixed', 
             bottom: '20px', 
             right: '20px', 
-            zIndex: 99999,
-            minWidth: '400px',
-            minHeight: '400px',
-            border: '2px solid red', // Temporary for debugging
-            backgroundColor: 'rgba(255, 0, 0, 0.1)' // Temporary for debugging
+            zIndex: 99999
           }}
         ></div>
     </>

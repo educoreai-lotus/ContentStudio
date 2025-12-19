@@ -139,9 +139,13 @@
         
         // Optional: Custom container (defaults to "#edu-bot-container")
         // container: "#edu-bot-container"
+        
+        // Start collapsed (icon only) - user clicks to open chat
+        initialMode: 'icon', // Start as icon, not full chat
+        autoOpen: false, // Don't auto-open the chat widget
       });
       
-      console.log('✅ RAG Bot: Initialized successfully!');
+      console.log('✅ RAG Bot: Initialized successfully! (Starting as icon only)');
     } catch (error) {
       console.error('❌ RAG Bot: Initialization failed:', error);
       // Retry after 1 second
