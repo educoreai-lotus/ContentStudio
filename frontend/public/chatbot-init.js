@@ -138,14 +138,56 @@
         tenantId: user.tenantId,
         
         // Optional: Custom container (defaults to "#edu-bot-container")
-        // container: "#edu-bot-container"
+        container: "#edu-bot-container",
         
         // Start collapsed (icon only) - user clicks to open chat
-        initialMode: 'icon', // Start as icon, not full chat
-        autoOpen: false, // Don't auto-open the chat widget
+        // Note: The bot script should handle icon mode automatically
+        // If these options don't work, the bot may use different parameter names
       });
       
       console.log('✅ RAG Bot: Initialized successfully! (Starting as icon only)');
+      
+      // Wait a bit and check if widget was created and is clickable
+      setTimeout(() => {
+        const container = document.querySelector('#edu-bot-container');
+        if (container) {
+          console.log('📦 RAG Bot Container Debug:', {
+            hasChildren: container.children.length > 0,
+            childrenCount: container.children.length,
+            firstChild: container.firstElementChild ? {
+              tagName: container.firstElementChild.tagName,
+              className: container.firstElementChild.className,
+              id: container.firstElementChild.id,
+              style: container.firstElementChild.getAttribute('style'),
+              computedDisplay: window.getComputedStyle(container.firstElementChild).display,
+              computedVisibility: window.getComputedStyle(container.firstElementChild).visibility,
+              computedOpacity: window.getComputedStyle(container.firstElementChild).opacity,
+              computedZIndex: window.getComputedStyle(container.firstElementChild).zIndex,
+            } : null,
+            allButtons: Array.from(container.querySelectorAll('button')).map(btn => ({
+              className: btn.className,
+              style: btn.getAttribute('style'),
+              display: window.getComputedStyle(btn).display,
+              visibility: window.getComputedStyle(btn).visibility,
+            }))
+          });
+          
+          // Try to find and log clickable elements
+          const clickableElements = container.querySelectorAll('button, [role="button"], [onclick], [class*="click"], [class*="toggle"], [class*="trigger"], [class*="fab"], [class*="Fab"]');
+          console.log('🖱️ Clickable elements found:', clickableElements.length);
+          clickableElements.forEach((el, idx) => {
+            console.log(`  Element ${idx + 1}:`, {
+              tagName: el.tagName,
+              className: el.className,
+              id: el.id,
+              display: window.getComputedStyle(el).display,
+              visibility: window.getComputedStyle(el).visibility,
+              pointerEvents: window.getComputedStyle(el).pointerEvents,
+              zIndex: window.getComputedStyle(el).zIndex,
+            });
+          });
+        }
+      }, 2000);
     } catch (error) {
       console.error('❌ RAG Bot: Initialization failed:', error);
       // Retry after 1 second
