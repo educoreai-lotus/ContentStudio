@@ -145,49 +145,77 @@
         // If these options don't work, the bot may use different parameter names
       });
       
-      console.log('✅ RAG Bot: Initialized successfully! (Starting as icon only)');
+      console.log('✅ RAG Bot: Initialized successfully!');
       
-      // Wait a bit and check if widget was created and is clickable
-      setTimeout(() => {
+      // Function to collapse the chat widget to icon only
+      function collapseChatWidget() {
         const container = document.querySelector('#edu-bot-container');
-        if (container) {
-          console.log('📦 RAG Bot Container Debug:', {
-            hasChildren: container.children.length > 0,
-            childrenCount: container.children.length,
-            firstChild: container.firstElementChild ? {
-              tagName: container.firstElementChild.tagName,
-              className: container.firstElementChild.className,
-              id: container.firstElementChild.id,
-              style: container.firstElementChild.getAttribute('style'),
-              computedDisplay: window.getComputedStyle(container.firstElementChild).display,
-              computedVisibility: window.getComputedStyle(container.firstElementChild).visibility,
-              computedOpacity: window.getComputedStyle(container.firstElementChild).opacity,
-              computedZIndex: window.getComputedStyle(container.firstElementChild).zIndex,
-            } : null,
-            allButtons: Array.from(container.querySelectorAll('button')).map(btn => ({
-              className: btn.className,
-              style: btn.getAttribute('style'),
-              display: window.getComputedStyle(btn).display,
-              visibility: window.getComputedStyle(btn).visibility,
-            }))
+        if (!container) return;
+        
+        // Find all buttons - from logs, Element 2 is usually the close button
+        const allButtons = Array.from(container.querySelectorAll('button'));
+        
+        // Element 2 from logs has class "w-8 h-8" - this is likely the close button
+        const closeButton = allButtons.find(btn => {
+          const classList = btn.className || '';
+          // Look for the small rounded button (Element 2 from logs)
+          return classList.includes('w-8') && classList.includes('h-8') && classList.includes('rounded-full');
+        }) || allButtons[1]; // Fallback to 2nd button
+        
+        if (closeButton) {
+          console.log('🖱️ Clicking close button to collapse widget...', {
+            className: closeButton.className,
+            index: allButtons.indexOf(closeButton)
           });
+          closeButton.click();
           
-          // Try to find and log clickable elements
-          const clickableElements = container.querySelectorAll('button, [role="button"], [onclick], [class*="click"], [class*="toggle"], [class*="trigger"], [class*="fab"], [class*="Fab"]');
-          console.log('🖱️ Clickable elements found:', clickableElements.length);
-          clickableElements.forEach((el, idx) => {
-            console.log(`  Element ${idx + 1}:`, {
-              tagName: el.tagName,
-              className: el.className,
-              id: el.id,
-              display: window.getComputedStyle(el).display,
-              visibility: window.getComputedStyle(el).visibility,
-              pointerEvents: window.getComputedStyle(el).pointerEvents,
-              zIndex: window.getComputedStyle(el).zIndex,
-            });
-          });
+          // Also hide chat panel with CSS after a short delay
+          setTimeout(() => {
+            const chatPanel = container.querySelector('[class*="panel"], [class*="window"], [class*="dialog"], [class*="chat"]:not([class*="icon"]):not([class*="fab"])');
+            const chatInput = container.querySelector('input[type="text"], textarea, [class*="input"]');
+            const messages = container.querySelector('[class*="messages"], [class*="conversation"]');
+            
+            [chatPanel, chatInput?.closest('[class*="panel"]'), messages?.closest('[class*="panel"]')]
+              .filter(Boolean)
+              .forEach(el => {
+                el.style.setProperty('display', 'none', 'important');
+              });
+            
+            // Ensure icon button (Element 1) is visible
+            const iconButton = allButtons[0];
+            if (iconButton) {
+              iconButton.style.setProperty('display', 'block', 'important');
+              iconButton.style.setProperty('visibility', 'visible', 'important');
+              iconButton.style.setProperty('opacity', '1', 'important');
+              console.log('✅ Icon button should be visible now');
+            }
+          }, 200);
+        } else {
+          console.warn('⚠️ Close button not found, trying CSS approach...');
+          // Fallback: hide chat panel with CSS
+          const chatPanel = container.querySelector('[class*="panel"], [class*="window"], [class*="dialog"]');
+          const chatInput = container.querySelector('input[type="text"], textarea');
+          if (chatPanel || chatInput) {
+            const toHide = chatPanel || chatInput.closest('[class*="panel"], [class*="window"]');
+            if (toHide) {
+              toHide.style.setProperty('display', 'none', 'important');
+            }
+          }
         }
-      }, 2000);
+      }
+      
+      // Try to collapse after widget auto-opens
+      // The widget auto-opens in "embedded CHAT mode", so we need to close it
+      setTimeout(() => {
+        console.log('🔄 Attempting to collapse chat widget (first attempt)...');
+        collapseChatWidget();
+      }, 2500);
+      
+      // Second attempt after longer delay
+      setTimeout(() => {
+        console.log('🔄 Attempting to collapse chat widget (second attempt)...');
+        collapseChatWidget();
+      }, 4000);
     } catch (error) {
       console.error('❌ RAG Bot: Initialization failed:', error);
       // Retry after 1 second

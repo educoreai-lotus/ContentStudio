@@ -77,16 +77,8 @@
   overflow: visible !important;
 }
 
-/* Ensure bot widget and all children are visible */
-#edu-bot-container,
-#edu-bot-container > *,
-#edu-bot-container > * > *,
-#edu-bot-container [class*="bot"],
-#edu-bot-container [class*="chat"],
-#edu-bot-container [class*="widget"],
-#edu-bot-container [class*="floating"],
-#edu-bot-container button,
-#edu-bot-container [role="button"] {
+/* Ensure bot container is visible */
+#edu-bot-container {
   pointer-events: auto !important;
   visibility: visible !important;
   opacity: 1 !important;
@@ -117,6 +109,33 @@
 #edu-bot-container [style*="display: none"],
 #edu-bot-container [style*="visibility: hidden"],
 #edu-bot-container [style*="opacity: 0"] {
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+/* Hide chat panel initially - show only icon button */
+#edu-bot-container [class*="chat"]:not([class*="icon"]):not([class*="fab"]):not([class*="button"]),
+#edu-bot-container [class*="panel"],
+#edu-bot-container [class*="window"],
+#edu-bot-container [class*="dialog"],
+#edu-bot-container input[type="text"],
+#edu-bot-container textarea,
+#edu-bot-container [class*="input"],
+#edu-bot-container [class*="message"],
+#edu-bot-container [class*="messages"],
+#edu-bot-container [class*="conversation"] {
+  display: none !important;
+}
+
+/* Keep icon/button visible */
+#edu-bot-container button,
+#edu-bot-container [class*="fab"],
+#edu-bot-container [class*="Fab"],
+#edu-bot-container [class*="icon"],
+#edu-bot-container [class*="trigger"],
+#edu-bot-container [class*="toggle"],
+#edu-bot-container [role="button"] {
   display: block !important;
   visibility: visible !important;
   opacity: 1 !important;
