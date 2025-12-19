@@ -999,27 +999,38 @@ async function persistGeneratedCoursesToDatabase(courses, trainer_id, company_id
             const devlabResponse = await generateAIExercises(exerciseRequest);
             
             // Extract exercises from DevLab response
-            // Response structure can be:
-            // 1. { html, questions, metadata } - direct format
-            // 2. { data: { html, questions, metadata } } - nested format
+            // DevlabClient.generateAIExercises returns: { html, questions, metadata, rawAnswer }
+            // We need to save the full structure: { html, questions, metadata }
             if (devlabResponse) {
-              // Check direct format first
-              if (Array.isArray(devlabResponse.questions)) {
-                devlabExercises = devlabResponse.questions;
+              // Check if response has the expected structure
+              if (devlabResponse.html && Array.isArray(devlabResponse.questions)) {
+                // Direct format: { html, questions, metadata }
+                devlabExercises = {
+                  html: devlabResponse.html,
+                  questions: devlabResponse.questions,
+                  metadata: devlabResponse.metadata || {},
+                };
               } 
-              // Check nested format
-              else if (devlabResponse.data && Array.isArray(devlabResponse.data.questions)) {
-                devlabExercises = devlabResponse.data.questions;
+              // Check nested format (shouldn't happen with new DevlabClient, but keep for safety)
+              else if (devlabResponse.data && devlabResponse.data.html && Array.isArray(devlabResponse.data.questions)) {
+                devlabExercises = {
+                  html: devlabResponse.data.html,
+                  questions: devlabResponse.data.questions,
+                  metadata: devlabResponse.data.metadata || {},
+                };
               }
               
-              if (devlabExercises && devlabExercises.length > 0) {
+              if (devlabExercises && devlabExercises.questions && devlabExercises.questions.length > 0) {
                 logger.info('[fillCourseBuilderService] DevLab exercises generated successfully', {
                   topic_id: topicId,
                   topic_name: topic.topic_name,
-                  exercise_count: devlabExercises.length,
+                  exercise_count: devlabExercises.questions.length,
+                  hasHtml: !!devlabExercises.html,
+                  htmlLength: devlabExercises.html?.length || 0,
+                  hasMetadata: !!devlabExercises.metadata,
                 });
 
-                // Update topic in database with DevLab exercises
+                // Update topic in database with DevLab exercises (full structure: { html, questions, metadata })
                 const updateTopicSql = `
                   UPDATE topics
                   SET devlab_exercises = $1
@@ -1034,15 +1045,18 @@ async function persistGeneratedCoursesToDatabase(courses, trainer_id, company_id
 
                 logger.info('[fillCourseBuilderService] DevLab exercises saved to database', {
                   topic_id: topicId,
-                  exercise_count: devlabExercises.length,
+                  exercise_count: devlabExercises.questions.length,
+                  htmlLength: devlabExercises.html?.length || 0,
                 });
               } else {
                 logger.warn('[fillCourseBuilderService] DevLab returned empty or invalid exercises', {
                   topic_id: topicId,
                   topic_name: topic.topic_name,
                   response_keys: Object.keys(devlabResponse),
+                  hasHtml: !!devlabResponse.html,
                   hasQuestions: !!devlabResponse.questions,
                   hasData: !!devlabResponse.data,
+                  dataHasHtml: !!devlabResponse.data?.html,
                   dataHasQuestions: !!devlabResponse.data?.questions,
                 });
               }
@@ -1068,7 +1082,9 @@ async function persistGeneratedCoursesToDatabase(courses, trainer_id, company_id
             topic_id: topicId,
             topic_name: topic.topic_name,
             has_devlab_exercises: !!topic.devlab_exercises,
-            devlab_exercises_count: topic.devlab_exercises?.length || 0,
+            devlab_exercises_count: topic.devlab_exercises?.questions?.length || 0,
+            has_html: !!topic.devlab_exercises?.html,
+            html_length: topic.devlab_exercises?.html?.length || 0,
             has_contents: Array.isArray(topic.contents) && topic.contents.length > 0,
             contents_count: topic.contents?.length || 0,
           });
