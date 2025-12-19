@@ -64,7 +64,7 @@ export class CourseBuilderClient {
       // Send request via Coordinator
       const coordinatorResponse = await postToCoordinator(envelope, {
         endpoint: '/api/fill-content-metrics',
-        timeout: 180000, // 3 minutes timeout
+        timeout: 1200000, // 20 minutes timeout (matches server timeout for long-running requests)
       });
 
       // Extract response components
@@ -312,7 +312,7 @@ export class CourseBuilderClient {
       
       logger.info('[CourseBuilderClient] About to send request to Coordinator', {
         endpoint: '/api/fill-content-metrics',
-        timeout: 180000,
+        timeout: 1200000,
         envelopePayloadKeys: Object.keys(envelope.payload),
         actionValue: envelope.payload.action,
         hasTargetService: !!envelope.payload.targetService,
@@ -327,7 +327,7 @@ export class CourseBuilderClient {
       // Coordinator will route to Course Builder based on the action in payload
       await postToCoordinator(envelope, {
         endpoint: '/api/fill-content-metrics',
-        timeout: 180000, // 3 minutes timeout
+        timeout: 1200000, // 20 minutes timeout (matches server timeout for long-running requests)
       });
 
       logger.info('[CourseBuilderClient] Course sent to Course Builder successfully', {

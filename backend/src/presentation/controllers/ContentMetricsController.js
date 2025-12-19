@@ -36,6 +36,10 @@ export class ContentMetricsController {
    */
   async fillContentMetrics(req, res, next) {
     try {
+      // Send keep-alive headers to prevent connection timeout (especially for long-running AI generation)
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('Keep-Alive', 'timeout=600, max=1000');
+      
       // ALWAYS treat req.body as a STRING and manually parse it
       let requestBody;
       if (typeof req.body === 'string') {
@@ -124,16 +128,29 @@ export class ContentMetricsController {
             // New handler for course-builder-service with learning paths
             return await fillCourseBuilderService(requestBody).then(filledRequest => {
               // Log response body before sending to course builder
+              const responseSize = JSON.stringify(filledRequest).length;
               logger.info('[ContentMetricsController] Sending response to course-builder-service', {
-                responseBody: JSON.stringify(filledRequest, null, 2),
+                responseSize,
+                responseSizeKB: Math.round(responseSize / 1024),
                 coursesCount: filledRequest.response?.courses?.length || 0,
                 courseCount: filledRequest.response?.course?.length || 0,
                 hasCourses: !!filledRequest.response?.courses,
                 hasCourse: !!filledRequest.response?.course,
+                responsePreview: JSON.stringify(filledRequest).substring(0, 500),
               });
               
               const stringifiedResponse = JSON.stringify(filledRequest);
+              
+              // Ensure headers are set before sending
               res.setHeader('Content-Type', 'application/json');
+              res.setHeader('Content-Length', Buffer.byteLength(stringifiedResponse, 'utf8'));
+              
+              logger.info('[ContentMetricsController] Response headers set, sending response', {
+                contentType: res.getHeader('Content-Type'),
+                contentLength: res.getHeader('Content-Length'),
+                responseSize,
+              });
+              
               return res.status(200).send(stringifiedResponse);
             }).catch(error => {
               logger.error('[ContentMetricsController] Error in fillCourseBuilderService', {

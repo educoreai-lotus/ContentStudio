@@ -80,7 +80,7 @@ export class DevlabClient {
       // Send request via Coordinator
       const coordinatorResponse = await postToCoordinator(envelope, {
         endpoint: '/api/fill-content-metrics',
-        timeout: 180000, // 3 minutes timeout
+        timeout: 1200000, // 20 minutes timeout (matches server timeout for long-running AI generation)
       });
 
       // Extract response components
@@ -331,7 +331,7 @@ export class DevlabClient {
       // Send request via Coordinator
       logger.info('[DevlabClient] About to send request to Coordinator', {
         endpoint,
-        timeout: 180000,
+        timeout: 1200000,
         envelopePayloadKeys: Object.keys(envelope.payload),
         hasTargetService: !!envelope.payload.target_service,
         targetServiceValue: envelope.payload.target_service,
@@ -340,7 +340,7 @@ export class DevlabClient {
       
       const coordinatorResponse = await postToCoordinator(envelope, {
         endpoint,
-        timeout: 180000, // 3 minutes timeout for AI generation (passed to Coordinator via X-Request-Timeout header)
+        timeout: 1200000, // 20 minutes timeout (matches server timeout for long-running AI generation)
       });
       
       // ============================================
@@ -1212,7 +1212,7 @@ export class DevlabClient {
       // Send request via Coordinator
       const coordinatorResponse = await postToCoordinator(envelope, {
         endpoint,
-        timeout: 180000, // 3 minutes timeout
+        timeout: 1200000, // 20 minutes timeout (matches server timeout for long-running AI generation)
       });
 
       // Extract response components

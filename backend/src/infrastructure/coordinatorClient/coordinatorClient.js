@@ -10,7 +10,7 @@ const SERVICE_NAME = process.env.SERVICE_NAME || 'content-studio';
  * @param {Object} envelope - Request envelope (exactly as it was before)
  * @param {Object} options - Optional configuration
  * @param {string} options.endpoint - Custom endpoint (default: /api/fill-content-metrics)
- * @param {number} options.timeout - Request timeout in ms (default: 180000 = 3 minutes)
+ * @param {number} options.timeout - Request timeout in ms (default: 1200000 = 20 minutes)
  * @returns {Promise<Object>} Response data from Coordinator
  * @throws {Error} If request fails
  */
@@ -39,7 +39,9 @@ export async function postToCoordinator(envelope, options = {}) {
 
   const registrationUrl = `${cleanCoordinatorUrl}${endpoint}`;
 
-  const timeout = options.timeout || 180000; // 3 minutes default timeout
+  // Default timeout: 20 minutes (1200000 ms) to match server timeout
+  // This is needed for long-running AI content generation requests
+  const timeout = options.timeout || 1200000; // 20 minutes default timeout
 
   try {
     // IMPORTANT: Sign the FULL envelope (as per POSTMAN_COURSE_BUILDER_REQUEST.md)
