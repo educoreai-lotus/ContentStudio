@@ -75,7 +75,10 @@ function AppContent() {
             position: 'fixed', 
             bottom: '20px', 
             right: '20px', 
-            zIndex: 99999
+            zIndex: 99999,
+            pointerEvents: 'auto',
+            visibility: 'visible',
+            opacity: 1
           }}
         ></div>
     </>

@@ -62,3 +62,21 @@
   --shadow-hover: 0 20px 60px rgba(13, 148, 136, 0.3);
 }
 
+/* RAG Bot Container - Ensure visibility */
+#edu-bot-container {
+  position: fixed !important;
+  bottom: 20px !important;
+  right: 20px !important;
+  z-index: 99999 !important;
+  pointer-events: auto !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+/* Ensure bot widget is visible */
+#edu-bot-container > * {
+  pointer-events: auto !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+

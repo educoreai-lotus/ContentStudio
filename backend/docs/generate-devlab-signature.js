@@ -9,15 +9,37 @@
  *   - COORDINATOR_URL environment variable (optional, for display)
  */
 
-const crypto = require('crypto');
+import { generateSignature } from '../src/utils/signature.js';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+import { readFileSync } from 'fs';
+import dotenv from 'dotenv';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// Load .env file from project root
+dotenv.config({ path: join(__dirname, '..', '..', '.env') });
+
+const SERVICE_NAME = process.env.SERVICE_NAME || 'content-studio';
 
 // Get private key from environment
-const privateKeyPem = process.env.CS_COORDINATOR_PRIVATE_KEY;
+let privateKeyPem = process.env.CS_COORDINATOR_PRIVATE_KEY;
 
 if (!privateKeyPem) {
-  console.error('❌ Error: CS_COORDINATOR_PRIVATE_KEY environment variable is required');
-  console.error('   Set it with: export CS_COORDINATOR_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\\n..."');
-  process.exit(1);
+  // Try to read from private-key.pem in docs or root
+  try {
+    privateKeyPem = readFileSync(join(__dirname, 'private-key.pem'), 'utf8');
+  } catch (e) {
+    try {
+      privateKeyPem = readFileSync(join(__dirname, '..', 'private-key.pem'), 'utf8');
+    } catch (e2) {
+      console.error('❌ Error: CS_COORDINATOR_PRIVATE_KEY environment variable is required');
+      console.error('   Set it with: export CS_COORDINATOR_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\\n..."');
+      console.error('   Or create a private-key.pem file in the docs or root directory');
+      process.exit(1);
+    }
+  }
 }
 
 // Build the envelope (same structure as devlabClient.js)
@@ -46,34 +68,15 @@ const envelope = {
   }
 };
 
-// Step 1: Stringify the envelope
-const envelopeString = JSON.stringify(envelope);
-
-// Step 2: Create SHA256 hash
-const payloadHash = crypto.createHash('sha256')
-  .update(envelopeString)
-  .digest('hex');
-
-// Step 3: Build message
-const message = `educoreai-content-studio-${payloadHash}`;
-
-console.log('📝 Message to sign:');
-console.log(`   ${message.substring(0, 80)}...`);
-console.log(`   (Full length: ${message.length} characters)`);
-console.log(`\n🔑 Payload hash: ${payloadHash.substring(0, 16)}...`);
-
-// Step 4: Sign with ECDSA P-256
+// Generate signature using the same function as the app
 try {
-  const signer = crypto.createSign('SHA256');
-  signer.update(message, 'utf8');
-  signer.end();
-  
-  const signatureBase64 = signer.sign(privateKeyPem, 'base64');
-  const cleanSignature = signatureBase64.replace(/\s+/g, '');
+  // IMPORTANT: The signature is generated on the ENTIRE ENVELOPE, not just the payload
+  // This matches how coordinatorClient.js creates signatures (line 61)
+  const signature = generateSignature(SERVICE_NAME, privateKeyPem, envelope);
   
   console.log('\n✅ Signature generated successfully!');
-  console.log(`   Length: ${cleanSignature.length} characters`);
-  console.log(`   Prefix: ${cleanSignature.substring(0, 30)}...`);
+  console.log(`   Length: ${signature.length} characters`);
+  console.log(`   Prefix: ${signature.substring(0, 30)}...`);
   
   // Display full request details
   const coordinatorUrl = process.env.COORDINATOR_URL || 'https://coordinator-production.railway.app';
@@ -87,8 +90,8 @@ try {
   
   console.log('\n📤 Headers:');
   console.log('   Content-Type: application/json');
-  console.log('   X-Service-Name: content-studio');
-  console.log(`   X-Signature: ${cleanSignature}`);
+  console.log(`   X-Service-Name: ${SERVICE_NAME}`);
+  console.log(`   X-Signature: ${signature}`);
   console.log('   X-Request-Timeout: 180000');
   
   console.log('\n📦 Body (JSON):');
