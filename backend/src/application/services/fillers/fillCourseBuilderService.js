@@ -126,6 +126,12 @@ export async function fillCourseBuilderService(requestData) {
 
       // Step 2: Full AI Generation (if no existing course found)
       if (allCourses.length === 0) {
+        // Define hasValidTrainerId for logging (trainer_id is null in new structure)
+        const hasValidTrainerId = trainer_id && 
+                                  trainer_id !== null && 
+                                  trainer_id !== '' && 
+                                  typeof trainer_id === 'string';
+        
         logger.info('[fillCourseBuilderService] Triggering Full AI Generation', {
           hasTrainerId: hasValidTrainerId,
           careerPathsCount: career_learning_paths?.length || 0,
@@ -305,8 +311,8 @@ RULE 4: trainer_courses.language must equal provided language
 RULE 5: trainer_courses.skills must contain ALL provided skills (skills @> ARRAY[...])
 RULE 6: trainer_courses.permissions must contain company_id (permissions can be 'all' OR array containing company_id OR NULL)
 RULE 7: If multiple matches exist, return the most recent (ORDER BY created_at DESC LIMIT 1)
-RULE 8: Include all topics for the course (status != 'deleted')
-RULE 9: For each topic, include all contents (status IS NULL OR status != 'deleted')
+RULE 8: Include all topics for the course (t.status != 'deleted')
+RULE 9: For each topic, include all contents (content table does NOT have a status column - include all contents)
 RULE 10: Join with content_types table to get type_name as content_type
 RULE 11: Return flat result set with all course, topic, and content fields in each row
 RULE 12: Use LEFT JOIN for topics and contents to include course even if no topics/contents exist
