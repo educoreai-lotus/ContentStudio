@@ -290,12 +290,22 @@ export class CourseBuilderClient {
       });
 
       // Log request details before sending (same as devlabClient)
+      // CRITICAL: Log the exact envelope structure that will be signed
+      const envelopeForSigning = JSON.stringify(envelope);
+      const crypto = await import('crypto');
+      const envelopeHash = crypto.createHash('sha256').update(envelopeForSigning).digest('hex');
+      
       logger.info('[CourseBuilderClient] About to send request to Coordinator', {
         endpoint: '/api/fill-content-metrics',
         timeout: 180000,
         envelopePayloadKeys: Object.keys(envelope.payload),
         actionValue: envelope.payload.action,
-        envelopeStringified: JSON.stringify(envelope), // Log full envelope for debugging signature
+        hasTargetService: !!envelope.payload.targetService,
+        hasDescription: !!envelope.payload.description,
+        responseType: typeof envelope.response,
+        responseKeys: Object.keys(envelope.response || {}),
+        envelopeStringified: envelopeForSigning, // Log full envelope for debugging signature
+        envelopeHash: envelopeHash.substring(0, 16) + '...', // Log hash for comparison
       });
 
       // Send request via Coordinator - fire and forget (no response expected)
