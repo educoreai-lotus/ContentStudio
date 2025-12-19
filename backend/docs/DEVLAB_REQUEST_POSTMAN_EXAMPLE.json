@@ -1,0 +1,25 @@
+{
+  "requester_service": "content-studio",
+  "payload": {
+    "action": "generate-questions",
+    "description": "Generate devlab AI exercises",
+    "targetService": "devlab-service",
+    "topic_id": "123",
+    "topic_name": "Lists (Arrays)",
+    "question_type": "code",
+    "skills": [
+      "Lists",
+      "Indexing",
+      "List Methods",
+      "Iteration",
+      "Mutable Data"
+    ],
+    "humanLanguage": "english",
+    "amount": 4,
+    "programming_language": "python"
+  },
+  "response": {
+    "answer": ""
+  }
+}
+
