@@ -46,11 +46,13 @@
     // Get tenant_id if available (optional)
     const tenantId = localStorage.getItem('tenant_id') || 'default';
 
-    // For Content Studio, we can initialize even without token
-    // The bot will work with a default user ID
-    // If token exists, use it; otherwise use empty string (bot may handle it)
+    // Bot requires token - return null if no token
+    if (!token || token.trim() === '') {
+      return null;
+    }
+
     return { 
-      token: token || '', 
+      token: token, 
       userId: userId || 'content-studio-user', 
       tenantId 
     };
@@ -104,10 +106,11 @@
       return;
     }
     
-    // Initialize even without token (bot may handle it)
-    // But log if no token for debugging
-    if (!user.token) {
-      console.log('ℹ️ RAG Bot: No auth token found, initializing with default user...');
+    // Bot requires token - don't initialize without it
+    if (!user.token || user.token.trim() === '') {
+      console.log('⏳ RAG Bot: Waiting for user authentication (token required)...');
+      setTimeout(initChatbot, 500); // Retry after 500ms
+      return;
     }
     
     console.log('✅ RAG Bot: Initializing for Content Studio...');
@@ -117,7 +120,7 @@
         // CRITICAL: Content Studio microservice name
         microservice: "CONTENT_STUDIO",
         
-        // User authentication
+        // User authentication - token is required
         userId: user.userId,
         token: user.token,
         tenantId: user.tenantId,
