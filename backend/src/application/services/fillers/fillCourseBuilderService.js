@@ -103,34 +103,28 @@ export async function fillCourseBuilderService(requestData) {
       // trainer_id is not in new structure, so it will be null
       const trainer_id = null;
 
-      // Step 1: Trainer ID Validation
-      const hasValidTrainerId = trainer_id && 
-                                trainer_id !== null && 
-                                trainer_id !== '' && 
-                                typeof trainer_id === 'string';
+      // Step 1: Course Reuse Logic
+      // Search for existing course by skills, language, and company_id (trainer_id is optional)
+      // This allows reusing courses even without trainer_id
+      const existingCourse = await searchExistingCourse({
+        trainer_id, // May be null - search will work without it
+        company_id,
+        skills_raw_data,
+        language: language || 'en',
+      });
 
-      // Step 2: Course Reuse Logic (if trainer_id exists)
-      // Note: Since trainer_id is null in new structure, this will skip to AI generation
-      if (hasValidTrainerId) {
-        const existingCourse = await searchExistingCourse({
-          trainer_id,
-          company_id,
-          skills_raw_data,
-          language: language || 'en',
+      if (existingCourse) {
+        // Reuse existing archived course (read-only, no modifications)
+        allCourses.push(existingCourse);
+        logger.info('[fillCourseBuilderService] Reused existing archived course', {
+          trainer_id: existingCourse.trainer_id,
+          course_id: existingCourse.course_id,
+          status: 'archived',
+          matchedBy: trainer_id ? 'trainer_id+skills+language+company' : 'skills+language+company',
         });
-
-        if (existingCourse) {
-          // Reuse existing archived course (read-only, no modifications)
-          allCourses.push(existingCourse);
-          logger.info('[fillCourseBuilderService] Reused existing archived course', {
-            trainer_id,
-            course_id: existingCourse.course_id,
-            status: 'archived',
-          });
-        }
       }
 
-      // Step 3: Full AI Generation (if no existing course found)
+      // Step 2: Full AI Generation (if no existing course found)
       if (allCourses.length === 0) {
         logger.info('[fillCourseBuilderService] Triggering Full AI Generation', {
           hasTrainerId: hasValidTrainerId,
@@ -303,18 +297,20 @@ async function searchExistingCourse({ trainer_id, company_id, skills_raw_data, l
 
     // Business rules for course search
     // CRITICAL: Only archived courses are reusable. Active courses must be ignored.
+    // trainer_id is OPTIONAL - if provided, match by it; if null, search without trainer_id constraint
     const businessRules = `RULE 1: trainer_courses.status MUST be 'archived' (NOT 'active')
-RULE 2: trainer_courses.trainer_id must equal provided trainer_id
-RULE 3: trainer_courses.language must equal provided language
-RULE 4: trainer_courses.skills must contain ALL provided skills (skills @> ARRAY[...])
-RULE 5: trainer_courses.permissions must contain company_id (permissions can be 'all' OR array containing company_id OR NULL)
-RULE 6: If multiple matches exist, return the most recent (ORDER BY created_at DESC LIMIT 1)
-RULE 7: Include all topics for the course (status != 'deleted')
-RULE 8: For each topic, include all contents (status IS NULL OR status != 'deleted')
-RULE 9: Join with content_types table to get type_name as content_type
-RULE 10: Return flat result set with all course, topic, and content fields in each row
-RULE 11: Use LEFT JOIN for topics and contents to include course even if no topics/contents exist
-RULE 12: Do NOT filter by status='active' - ONLY 'archived' courses are valid for reuse`;
+RULE 2: IF trainer_id is provided (not null/empty), trainer_courses.trainer_id must equal provided trainer_id
+RULE 3: IF trainer_id is null/empty, do NOT filter by trainer_id (allow any trainer_id or NULL)
+RULE 4: trainer_courses.language must equal provided language
+RULE 5: trainer_courses.skills must contain ALL provided skills (skills @> ARRAY[...])
+RULE 6: trainer_courses.permissions must contain company_id (permissions can be 'all' OR array containing company_id OR NULL)
+RULE 7: If multiple matches exist, return the most recent (ORDER BY created_at DESC LIMIT 1)
+RULE 8: Include all topics for the course (status != 'deleted')
+RULE 9: For each topic, include all contents (status IS NULL OR status != 'deleted')
+RULE 10: Join with content_types table to get type_name as content_type
+RULE 11: Return flat result set with all course, topic, and content fields in each row
+RULE 12: Use LEFT JOIN for topics and contents to include course even if no topics/contents exist
+RULE 13: Do NOT filter by status='active' - ONLY 'archived' courses are valid for reuse`;
 
     const requestBody = {
       trainer_id,
@@ -323,8 +319,13 @@ RULE 12: Do NOT filter by status='active' - ONLY 'archived' courses are valid fo
       language,
     };
 
+    // Build task description - handle trainer_id being optional
+    const trainerCondition = trainer_id 
+      ? `- trainer_id = '${trainer_id}'`
+      : `- trainer_id is NOT required (search without trainer_id constraint)`;
+    
     const task = `Generate a PostgreSQL SELECT query to find an existing ARCHIVED course where:
-- trainer_id = '${trainer_id}'
+${trainerCondition}
 - language = '${language}'
 - skills contains all of: ${JSON.stringify(skills)}
 - permissions contains '${company_id}' OR permissions = 'all' OR permissions IS NULL
