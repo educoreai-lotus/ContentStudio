@@ -57,8 +57,8 @@ export async function postToCoordinator(envelope, options = {}) {
       responseKeys: Object.keys(envelopeToSend.response || {}),
     });
     
-    // Sign EXACTLY the same object we send (the envelope)
-    const signature = generateSignature(SERVICE_NAME, privateKey, envelopeToSend);
+    // Sign ONLY the payload (Coordinator verifies signature against payload, not the full envelope)
+    const signature = generateSignature(SERVICE_NAME, privateKey, envelopeToSend.payload);
     
     logger.info('[CoordinatorClient] Generated signature for request', {
       signatureLength: signature.length,
