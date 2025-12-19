@@ -127,6 +127,16 @@ export class ContentMetricsController {
           case 'course-builder-service':
             // New handler for course-builder-service with learning paths
             return await fillCourseBuilderService(requestBody).then(filledRequest => {
+              // Check if response was already sent or connection closed
+              if (res.headersSent || res.writableEnded || !res.writable) {
+                logger.warn('[ContentMetricsController] Response already sent or connection closed, skipping send', {
+                  headersSent: res.headersSent,
+                  writableEnded: res.writableEnded,
+                  writable: res.writable,
+                });
+                return;
+              }
+
               // Log response body before sending to course builder
               const responseSize = JSON.stringify(filledRequest).length;
               logger.info('[ContentMetricsController] Sending response to course-builder-service', {
@@ -151,12 +161,31 @@ export class ContentMetricsController {
                 responseSize,
               });
               
-              return res.status(200).send(stringifiedResponse);
+              try {
+                return res.status(200).send(stringifiedResponse);
+              } catch (sendError) {
+                logger.warn('[ContentMetricsController] Failed to send response (connection may have closed)', {
+                  error: sendError.message,
+                  headersSent: res.headersSent,
+                  writableEnded: res.writableEnded,
+                });
+              }
             }).catch(error => {
               logger.error('[ContentMetricsController] Error in fillCourseBuilderService', {
                 error: error.message,
                 stack: error.stack,
               });
+              
+              // Check if response was already sent or connection closed
+              if (res.headersSent || res.writableEnded || !res.writable) {
+                logger.warn('[ContentMetricsController] Response already sent or connection closed, skipping error response', {
+                  headersSent: res.headersSent,
+                  writableEnded: res.writableEnded,
+                  writable: res.writable,
+                });
+                return;
+              }
+
               requestBody.response.courses = [];
               requestBody.response.course = [];
               
@@ -168,7 +197,16 @@ export class ContentMetricsController {
               
               const stringifiedResponse = JSON.stringify(requestBody);
               res.setHeader('Content-Type', 'application/json');
-              return res.status(200).send(stringifiedResponse);
+              
+              try {
+                return res.status(200).send(stringifiedResponse);
+              } catch (sendError) {
+                logger.warn('[ContentMetricsController] Failed to send error response (connection may have closed)', {
+                  error: sendError.message,
+                  headersSent: res.headersSent,
+                  writableEnded: res.writableEnded,
+                });
+              }
             });
 
           case 'course_builder':
