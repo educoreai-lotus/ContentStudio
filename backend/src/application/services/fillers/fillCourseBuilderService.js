@@ -308,15 +308,16 @@ async function searchExistingCourse({ trainer_id, company_id, skills_raw_data, l
 RULE 2: IF trainer_id is provided (not null/empty), trainer_courses.trainer_id must equal provided trainer_id
 RULE 3: IF trainer_id is null/empty, do NOT filter by trainer_id (allow any trainer_id or NULL)
 RULE 4: trainer_courses.language must equal provided language
-RULE 5: trainer_courses.skills must contain ALL provided skills (skills @> ARRAY[...])
-RULE 6: trainer_courses.permissions must contain company_id (permissions can be 'all' OR array containing company_id OR NULL)
+RULE 5: trainer_courses.skills is a TEXT[] (text array) column - use array contains operator: skills @> ARRAY['skill1', 'skill2']::text[] to check if skills array contains ALL provided skills
+RULE 6: trainer_courses.permissions is a TEXT column (NOT array) - check if permissions = 'all' OR permissions LIKE '%company_id%' OR permissions IS NULL
 RULE 7: If multiple matches exist, return the most recent (ORDER BY created_at DESC LIMIT 1)
 RULE 8: Include all topics for the course (t.status != 'deleted')
 RULE 9: For each topic, include all contents (content table does NOT have a status column - include all contents)
 RULE 10: Join with content_types table to get type_name as content_type
 RULE 11: Return flat result set with all course, topic, and content fields in each row
 RULE 12: Use LEFT JOIN for topics and contents to include course even if no topics/contents exist
-RULE 13: Do NOT filter by status='active' - ONLY 'archived' courses are valid for reuse`;
+RULE 13: Do NOT filter by status='active' - ONLY 'archived' courses are valid for reuse
+CRITICAL: trainer_courses.skills is TEXT[] (array), NOT text - use @> operator with ARRAY[]::text[]`;
 
     const requestBody = {
       trainer_id,
@@ -339,15 +340,36 @@ ${trainerCondition}
 Include all topics and contents for the course.`;
 
     // Generate SQL query using shared prompt
-    const sqlQuery = await generateSQLQueryUsingSharedPrompt({
-      schema: migrationContent,
-      requestBody,
-      businessRules,
-      task,
-    });
+    let sqlQuery;
+    try {
+      sqlQuery = await generateSQLQueryUsingSharedPrompt({
+        schema: migrationContent,
+        requestBody,
+        businessRules,
+        task,
+      });
+    } catch (queryGenError) {
+      logger.error('[fillCourseBuilderService] Failed to generate SQL query', {
+        error: queryGenError.message,
+        stack: queryGenError.stack,
+      });
+      return null; // Return null to trigger AI generation
+    }
 
-    // Execute query
-    const result = await db.query(sqlQuery);
+    // Execute query with error handling
+    let result;
+    try {
+      result = await db.query(sqlQuery);
+    } catch (queryError) {
+      logger.error('[fillCourseBuilderService] SQL query execution failed', {
+        error: queryError.message,
+        code: queryError.code,
+        sqlQuery: sqlQuery.substring(0, 500), // Log first 500 chars of query
+        stack: queryError.stack,
+      });
+      // Return null to trigger AI generation instead of failing silently
+      return null;
+    }
 
     if (result.rows && result.rows.length > 0) {
       // Map result to course structure
