@@ -769,14 +769,14 @@ Generate ${wrappedVariables.language} code that demonstrates the concepts clearl
       logger.warn('[fillCourseBuilderService] Failed to generate avatar_video', { error: error.message });
     }
 
-    // 6. Generate DevLab exercises (default: code type, python language)
+    // 6. Generate DevLab exercises (default: code type, javascript language)
     let devlabExercises = null;
     try {
       logger.info('[fillCourseBuilderService] Generating DevLab exercises for topic', {
         topic_name: promptVariables.lessonTopic,
         skills_count: promptVariables.skillsListArray.length,
         question_type: 'code',
-        programming_language: 'python',
+        programming_language: 'javascript',
       });
 
       const exerciseRequest = {
@@ -784,7 +784,7 @@ Generate ${wrappedVariables.language} code that demonstrates the concepts clearl
         topic_name: promptVariables.lessonTopic,
         skills: promptVariables.skillsListArray,
         question_type: 'code',
-        programming_language: 'python',
+        programming_language: 'javascript', // Default programming language
         language: promptVariables.language,
       };
 
