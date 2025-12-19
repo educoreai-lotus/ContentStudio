@@ -69,7 +69,19 @@ function AppContent() {
         </Router>
         
         {/* RAG Bot Container - Floating widget for all pages (outside Router for proper positioning) */}
-        <div id="edu-bot-container" style={{ position: 'fixed', zIndex: 9999 }}></div>
+        <div 
+          id="edu-bot-container" 
+          style={{ 
+            position: 'fixed', 
+            bottom: '20px', 
+            right: '20px', 
+            zIndex: 99999,
+            minWidth: '400px',
+            minHeight: '400px',
+            border: '2px solid red', // Temporary for debugging
+            backgroundColor: 'rgba(255, 0, 0, 0.1)' // Temporary for debugging
+          }}
+        ></div>
     </>
   );
 }
