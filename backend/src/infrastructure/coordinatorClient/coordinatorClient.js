@@ -42,9 +42,8 @@ export async function postToCoordinator(envelope, options = {}) {
   const timeout = options.timeout || 180000; // 3 minutes default timeout
 
   try {
-    // IMPORTANT:
-    // Sign EXACTLY the same object we send (the envelope)
-    const signature = generateSignature(SERVICE_NAME, privateKey, envelope);
+    // IMPORTANT: Sign ONLY the payload (Coordinator verifies signature against payload, not the full envelope)
+    const signature = generateSignature(SERVICE_NAME, privateKey, envelope.payload);
 
     // Send POST request with signature headers
     // Use responseType: 'text' to get raw response body for signature verification
