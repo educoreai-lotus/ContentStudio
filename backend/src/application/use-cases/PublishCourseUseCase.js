@@ -32,6 +32,8 @@ export class PublishCourseUseCase {
   async validateCourse(courseId) {
     const errors = [];
 
+    logger.info('[PublishCourseUseCase] Starting course validation', { courseId });
+
     // Get course
     const course = await this.courseRepository.findById(courseId);
     if (!course) {
@@ -40,6 +42,11 @@ export class PublishCourseUseCase {
 
     // Get all topics for this course
     const topics = await this.topicRepository.findByCourseId(courseId);
+
+    logger.info('[PublishCourseUseCase] Found topics for course', { 
+      courseId, 
+      topicsCount: topics?.length || 0 
+    });
 
     if (!topics || topics.length === 0) {
       errors.push({
@@ -51,6 +58,13 @@ export class PublishCourseUseCase {
 
     // Validate each topic
     for (const topic of topics) {
+      logger.info('[PublishCourseUseCase] Validating topic', { 
+        topicId: topic.topic_id, 
+        topicName: topic.topic_name,
+        hasTemplateId: !!topic.template_id,
+        hasDevlabExercises: !!topic.devlab_exercises,
+        devlabExercisesType: typeof topic.devlab_exercises,
+      });
       // 1. Check if template is selected
       if (!topic.template_id) {
         errors.push({
@@ -158,50 +172,105 @@ export class PublishCourseUseCase {
       // 5. Check DevLab exercises (stored in topics.devlab_exercises JSONB field)
       // devlab_exercises can be: null, array, or object with { html, questions, metadata }
       const hasValidExercises = (exercises) => {
-        if (!exercises) return false;
+        if (!exercises) {
+          logger.warn('[PublishCourseUseCase] No exercises found', { topicId: topic.topic_id });
+          return false;
+        }
         
         // If it's a string, try to parse it
         if (typeof exercises === 'string') {
           try {
             const parsed = JSON.parse(exercises);
+            logger.info('[PublishCourseUseCase] Parsed exercises string', { 
+              topicId: topic.topic_id,
+              parsedType: typeof parsed,
+              isArray: Array.isArray(parsed),
+            });
             return hasValidExercises(parsed);
-          } catch {
+          } catch (parseError) {
             // If parsing fails, check if string is not empty
-            return exercises.trim().length > 0;
+            const isValid = exercises.trim().length > 0;
+            logger.warn('[PublishCourseUseCase] Failed to parse exercises string', { 
+              topicId: topic.topic_id,
+              error: parseError.message,
+              isValid,
+            });
+            return isValid;
           }
         }
         
         // If it's an array, check if it has items
         if (Array.isArray(exercises)) {
-          return exercises.length > 0;
+          const isValid = exercises.length > 0;
+          logger.info('[PublishCourseUseCase] Exercises is array', { 
+            topicId: topic.topic_id,
+            length: exercises.length,
+            isValid,
+          });
+          return isValid;
         }
         
         // If it's an object, check the structure: { html: "...", questions: [...], metadata: {...} }
         if (typeof exercises === 'object') {
           // Check if it has questions array with at least one question
           if (exercises.questions && Array.isArray(exercises.questions) && exercises.questions.length > 0) {
+            logger.info('[PublishCourseUseCase] Exercises has valid questions array', { 
+              topicId: topic.topic_id,
+              questionsCount: exercises.questions.length,
+            });
             return true;
           }
           // Check if it has html content
           if (exercises.html && typeof exercises.html === 'string' && exercises.html.trim().length > 0) {
+            logger.info('[PublishCourseUseCase] Exercises has valid html content', { 
+              topicId: topic.topic_id,
+              htmlLength: exercises.html.length,
+            });
             return true;
           }
           // Fallback: check if object has any meaningful keys (not just metadata)
           const keys = Object.keys(exercises);
-          return keys.length > 0 && keys.some(key => key !== 'metadata');
+          const isValid = keys.length > 0 && keys.some(key => key !== 'metadata');
+          logger.warn('[PublishCourseUseCase] Exercises object validation', { 
+            topicId: topic.topic_id,
+            keys,
+            isValid,
+            hasQuestions: !!exercises.questions,
+            hasHtml: !!exercises.html,
+          });
+          return isValid;
         }
         
+        logger.warn('[PublishCourseUseCase] Exercises type not recognized', { 
+          topicId: topic.topic_id,
+          type: typeof exercises,
+        });
         return false;
       };
       
       const exercises = topic.devlab_exercises;
-      if (!hasValidExercises(exercises)) {
+      const exercisesValid = hasValidExercises(exercises);
+      logger.info('[PublishCourseUseCase] Exercises validation result', { 
+        topicId: topic.topic_id,
+        topicName: topic.topic_name,
+        exercisesValid,
+        exercisesType: typeof exercises,
+      });
+      
+      if (!exercisesValid) {
         errors.push({
           topic: topic.topic_name || `Topic ID ${topic.topic_id}`,
           issue: 'DevLab exercises are missing or invalid',
         });
       }
     }
+
+    logger.info('[PublishCourseUseCase] Course validation completed', { 
+      courseId,
+      valid: errors.length === 0,
+      errorsCount: errors.length,
+      errors: errors.map(e => ({ topic: e.topic, issue: e.issue })),
+    });
 
     return {
       valid: errors.length === 0,
