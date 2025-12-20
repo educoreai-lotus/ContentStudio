@@ -217,25 +217,34 @@
         // Remove duplicates
         const uniqueElements = [...new Set(elementsToHide)];
         
-        // Hide all chat panel elements with maximum force
+        // Hide all chat panel elements with maximum force - ALWAYS hide, don't check visibility
         uniqueElements.forEach(el => {
-          // Check if element is actually visible
-          const computedStyle = window.getComputedStyle(el);
-          const isVisible = computedStyle.display !== 'none' && 
-                          computedStyle.visibility !== 'hidden' && 
-                          computedStyle.opacity !== '0';
+          // Always hide, regardless of current state
+          el.style.setProperty('display', 'none', 'important');
+          el.style.setProperty('visibility', 'hidden', 'important');
+          el.style.setProperty('opacity', '0', 'important');
+          el.style.setProperty('pointer-events', 'none', 'important');
+          el.style.setProperty('position', 'absolute', 'important');
+          el.style.setProperty('left', '-9999px', 'important');
+          el.style.setProperty('width', '0', 'important');
+          el.style.setProperty('height', '0', 'important');
+          el.style.setProperty('max-width', '0', 'important');
+          el.style.setProperty('max-height', '0', 'important');
+          el.style.setProperty('overflow', 'hidden', 'important');
+          el.style.setProperty('transform', 'scale(0)', 'important');
+          el.style.setProperty('clip-path', 'inset(100%)', 'important');
+          el.style.setProperty('margin', '0', 'important');
+          el.style.setProperty('padding', '0', 'important');
+          el.style.setProperty('border', 'none', 'important');
           
-          if (isVisible) {
-            el.style.setProperty('display', 'none', 'important');
-            el.style.setProperty('visibility', 'hidden', 'important');
-            el.style.setProperty('opacity', '0', 'important');
-            el.style.setProperty('pointer-events', 'none', 'important');
-            el.style.setProperty('position', 'absolute', 'important');
-            el.style.setProperty('left', '-9999px', 'important');
-            el.style.setProperty('width', '0', 'important');
-            el.style.setProperty('height', '0', 'important');
-            el.style.setProperty('overflow', 'hidden', 'important');
-          }
+          // Also hide all children recursively
+          const children = el.querySelectorAll('*');
+          children.forEach(child => {
+            child.style.setProperty('display', 'none', 'important');
+            child.style.setProperty('visibility', 'hidden', 'important');
+            child.style.setProperty('opacity', '0', 'important');
+            child.style.setProperty('pointer-events', 'none', 'important');
+          });
         });
         
         // Ensure icon button is visible (find the first button that's not the close button)
