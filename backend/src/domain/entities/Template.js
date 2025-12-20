@@ -75,41 +75,12 @@ export class Template {
       }
 
       // REQUIRED: Template must include all 5 mandatory formats
-      // Note: text_audio counts as text for validation purposes
-      const mandatoryFormats = ['text', 'code', 'presentation', 'audio', 'mind_map'];
-      const hasText = this.format_order.includes('text') || this.format_order.includes('text_audio');
-      const missingFormats = mandatoryFormats.filter(format => {
-        if (format === 'text') {
-          return !hasText;
-        }
-        return !this.format_order.includes(format);
-      });
+      const mandatoryFormats = ['text_audio', 'code', 'presentation', 'mind_map', 'avatar_video'];
+      const missingFormats = mandatoryFormats.filter(format => !this.format_order.includes(format));
       if (missingFormats.length > 0) {
         errors.push(
           `Template must include all 5 mandatory formats. Missing: ${missingFormats.join(', ')}`
         );
-      }
-
-      // REQUIRED: Audio must always be with text (text before or immediately after audio)
-      // Note: text_audio counts as text for this validation (hasText already defined above)
-      const audioIndex = this.format_order.indexOf('audio');
-      const textIndex = this.format_order.indexOf('text');
-      
-      if (audioIndex !== -1) {
-        if (!hasText) {
-          errors.push('Audio format requires text format to be present');
-        } else if (textIndex !== -1) {
-          // Check if text is before audio or immediately after
-          const isTextBeforeAudio = textIndex < audioIndex;
-          const isTextImmediatelyAfter = textIndex === audioIndex + 1;
-          
-          if (!isTextBeforeAudio && !isTextImmediatelyAfter) {
-            errors.push(
-              'Audio format must always be with text. Text must appear before audio or immediately after it in the format order.'
-            );
-          }
-        }
-        // If text_audio is present, it's valid (it contains text)
       }
     }
 

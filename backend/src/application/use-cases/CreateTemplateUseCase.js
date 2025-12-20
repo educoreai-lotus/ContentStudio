@@ -10,33 +10,31 @@ export class CreateTemplateUseCase {
 
   async execute(templateData) {
     // Ensure all 5 mandatory formats are included
-    const mandatoryFormats = ['text', 'code', 'presentation', 'audio', 'mind_map'];
+    const mandatoryFormats = ['text_audio', 'code', 'presentation', 'mind_map', 'avatar_video'];
     const providedFormats = templateData.format_order || [];
+
+    // Handle legacy formats: convert 'text' and 'audio' to 'text_audio'
+    let normalizedFormats = [...providedFormats];
+    const hasText = normalizedFormats.includes('text');
+    const hasAudio = normalizedFormats.includes('audio');
+    if (hasText || hasAudio) {
+      normalizedFormats = normalizedFormats.filter(f => f !== 'text' && f !== 'audio');
+      if (!normalizedFormats.includes('text_audio')) {
+        normalizedFormats.unshift('text_audio');
+      }
+    }
 
     // Add missing mandatory formats if not provided
     const missingFormats = mandatoryFormats.filter(
-      format => !providedFormats.includes(format)
+      format => !normalizedFormats.includes(format)
     );
 
     if (missingFormats.length > 0) {
       // Add missing formats at the end
-      templateData.format_order = [...providedFormats, ...missingFormats];
+      normalizedFormats = [...normalizedFormats, ...missingFormats];
     }
 
-    // Ensure audio is with text (text before or immediately after audio)
-    const audioIndex = templateData.format_order.indexOf('audio');
-    const textIndex = templateData.format_order.indexOf('text');
-
-    if (audioIndex !== -1 && textIndex !== -1) {
-      const isTextBeforeAudio = textIndex < audioIndex;
-      const isTextImmediatelyAfter = textIndex === audioIndex + 1;
-
-      if (!isTextBeforeAudio && !isTextImmediatelyAfter) {
-        // Fix: Move text to be immediately after audio
-        templateData.format_order.splice(textIndex, 1); // Remove text from current position
-        templateData.format_order.splice(audioIndex + 1, 0, 'text'); // Insert after audio
-      }
-    }
+    templateData.format_order = normalizedFormats;
 
     const template = new Template({
       template_type: templateData.template_type || 'manual',
