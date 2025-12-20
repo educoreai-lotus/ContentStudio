@@ -22,7 +22,7 @@ import { getLanguageName } from '../../../utils/languageMapper.js';
  *    - Generate all 6 formats per topic
  * 
  * @param {Object} requestData - Full request object (new structure: { success, action, data, ... })
- * @returns {Promise<Object>} Same request object with response.courses populated
+ * @returns {Promise<Object>} Same request object with response.course populated
  */
 export async function fillCourseBuilderService(requestData) {
   try {
@@ -53,10 +53,7 @@ export async function fillCourseBuilderService(requestData) {
       requestData.response = {};
     }
 
-    // Support both response.courses (plural) and response.course (singular)
-    if (!Array.isArray(requestData.response.courses)) {
-      requestData.response.courses = [];
-    }
+    // Initialize response.course (singular only - no courses plural)
     if (!Array.isArray(requestData.response.course)) {
       requestData.response.course = [];
     }
@@ -82,7 +79,6 @@ export async function fillCourseBuilderService(requestData) {
       
       if (!learning_path) {
         logger.warn('[fillCourseBuilderService] No learning_path provided');
-        requestData.response.courses = [];
         requestData.response.course = [];
         return requestData;
       }
@@ -232,8 +228,7 @@ export async function fillCourseBuilderService(requestData) {
       }
     }
 
-    requestData.response.courses = allCourses;
-    // Also populate response.course for backward compatibility
+    // Set response.course (singular only - no courses plural)
     requestData.response.course = allCourses;
 
     return requestData;
@@ -242,11 +237,10 @@ export async function fillCourseBuilderService(requestData) {
       error: error.message,
       stack: error.stack,
     });
-    // Return request with empty courses array on error
+    // Return request with empty course array on error
     if (!requestData.response) {
       requestData.response = {};
     }
-    requestData.response.courses = [];
     requestData.response.course = [];
     return requestData;
   }
