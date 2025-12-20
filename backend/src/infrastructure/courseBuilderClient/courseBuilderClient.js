@@ -47,13 +47,13 @@ export class CourseBuilderClient {
 
     try {
       // Build envelope for Coordinator (standard structure)
-      // IMPORTANT: Use same structure as skillsEngineClient for consistency (response: { skills: [] })
-      // This ensures consistent envelope structure and valid signatures
+      // IMPORTANT: Use same structure as devlabClient for consistency (response: { answer: '' })
+      // The Coordinator signature validation requires response: { answer: '' } for all services
       const envelope = {
         requester_service: 'content-studio',
         payload: payload,
         response: {
-          skills: [],
+          answer: '',
         },
       };
 
@@ -264,14 +264,14 @@ export class CourseBuilderClient {
       // Build envelope for Coordinator (standard structure)
       // Note: requester_service is 'content-studio' (who is sending)
       // Coordinator will route to Course Builder based on the action in payload
-      // IMPORTANT: Use same structure as skillsEngineClient for consistency (response: { skills: [] })
-      // This ensures consistent envelope structure and valid signatures across all requests
-      // Field order: requester_service, payload, response (must match working clients)
+      // IMPORTANT: According to POSTMAN_COURSE_BUILDER_REQUEST.md line 203, Course Builder expects response: {}
+      // This is different from DevLab which uses response: { answer: '' }
+      // Field order: requester_service, payload, response (must match documentation)
       const envelope = {
         requester_service: 'content-studio',
         payload: payloadData,
         response: {
-          skills: [],
+          answer: '',
         },
       };
 
