@@ -46,8 +46,16 @@ export function TemplateSelectionModal({
       // Users should be able to see and select any template
       const filtered = result || [];
 
+      console.log('[TemplateSelectionModal] Loaded templates:', {
+        totalFromAPI: result?.length || 0,
+        totalAfterFilter: filtered.length,
+        templateIds: filtered.map(t => t.template_id),
+        templateNames: filtered.map(t => t.template_name),
+      });
+
       setTemplates(filtered);
     } catch (err) {
+      console.error('[TemplateSelectionModal] Error loading templates:', err);
       setError(err?.error?.message || 'Failed to load templates');
     } finally {
       setLoading(false);
@@ -240,6 +248,10 @@ export function TemplateSelectionModal({
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {console.log('[TemplateSelectionModal] Rendering templates:', {
+                templatesCount: templates.length,
+                templateIds: templates.map(t => t.template_id),
+              })}
               {templates.map(template => (
                 <div
                   key={template.template_id}
