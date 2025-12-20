@@ -224,10 +224,11 @@ export class CourseBuilderClient {
       }
 
       // Build payload in the required format (flat structure, no nesting)
-      // IMPORTANT: Course Builder payload does NOT include targetService or description (see POSTMAN_COURSE_BUILDER_REQUEST.md)
-      // This is different from DevLab which includes them
+      // IMPORTANT: Match devlabClient structure exactly - include targetService and description for Coordinator routing
       const payloadData = {
         action: 'send this trainer course to publish',
+        description: 'Send course to Course Builder for publishing',
+        targetService: 'course-builder-service',
         course_id: courseData.course_id || '',
         course_name: courseData.course_name || '',
         course_description: courseData.course_description || '',
