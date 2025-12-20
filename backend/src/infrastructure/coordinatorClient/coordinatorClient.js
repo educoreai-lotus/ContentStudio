@@ -48,10 +48,31 @@ export async function postToCoordinator(envelope, options = {}) {
     // This ensures the object we sign is identical to what we send
     const envelopeToSend = JSON.parse(JSON.stringify(envelope));
     
+    // Log the exact envelope structure before signing
+    const envelopeStringForSigning = JSON.stringify(envelopeToSend);
+    logger.info('[CoordinatorClient] Envelope to sign and send', {
+      envelopeString: envelopeStringForSigning.substring(0, 500) + (envelopeStringForSigning.length > 500 ? '...' : ''),
+      envelopeStringLength: envelopeStringForSigning.length,
+      envelopeKeys: Object.keys(envelopeToSend),
+      payloadKeys: envelopeToSend.payload ? Object.keys(envelopeToSend.payload) : [],
+      responseKeys: envelopeToSend.response ? Object.keys(envelopeToSend.response) : [],
+    });
+    
     // IMPORTANT: Sign the FULL envelope (as per POSTMAN_COURSE_BUILDER_REQUEST.md)
     // Message format: "educoreai-{serviceName}-{sha256(JSON.stringify(envelope))}"
     const signature = generateSignature(SERVICE_NAME, privateKey, envelopeToSend);
 
+    // Log what axios will actually send (after serialization)
+    const envelopeStringForAxios = JSON.stringify(envelopeToSend);
+    const matchesSigned = envelopeStringForSigning === envelopeStringForAxios;
+    
+    logger.info('[CoordinatorClient] Envelope string that axios will send', {
+      envelopeString: envelopeStringForAxios.substring(0, 500) + (envelopeStringForAxios.length > 500 ? '...' : ''),
+      envelopeStringLength: envelopeStringForAxios.length,
+      matchesSigned,
+      signedStringLength: envelopeStringForSigning.length,
+    });
+    
     // Send POST request with signature headers
     // Use responseType: 'text' to get raw response body for signature verification
     // Use envelopeToSend (cloned) to ensure it matches what we signed
