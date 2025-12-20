@@ -387,25 +387,117 @@ ${inputText.trim()}`;
       // Gamma Public API v1.0 with exportAs: "pptx" or "pdf" returns:
       // Option 1: { exportUrl: "<temporary_download_url>" }
       // Option 2: { export: { pptx: "<temporary_download_url>" } or { pdf: "<temporary_download_url>" } }
+      // Option 3: { gammaUrl: "https://gamma.app/docs/{deckId}" } - need to extract deckId and request export
       const resultData = result.result || result;
       logger.info('[GammaClient] Generation completed, extracting export URLs', { 
         resultKeys: Object.keys(resultData),
         hasExport: !!resultData.export,
         hasExportUrl: !!resultData.exportUrl,
+        hasGammaUrl: !!resultData.gammaUrl,
         exportKeys: resultData.export ? Object.keys(resultData.export) : [],
         exportFormat,
       });
       
       // Extract download URL - check both exportUrl (direct) and export.pptx/export.pdf (nested)
       // This is a TEMPORARY URL that expires - we MUST download immediately
-      const downloadUrl = resultData.exportUrl || resultData.export?.[exportFormat];
+      let downloadUrl = resultData.exportUrl || resultData.export?.[exportFormat];
       const gammaUrl = resultData.gammaUrl; // For metadata only, NOT for storage
+      
+      // Fallback: If no exportUrl, try to extract deckId from gammaUrl and request export
+      if (!downloadUrl && gammaUrl) {
+        logger.warn('[GammaClient] No exportUrl found, attempting to extract deckId from gammaUrl', {
+          gammaUrl,
+          exportFormat,
+        });
+        
+        // Extract deckId from gammaUrl: https://gamma.app/docs/{deckId}
+        const deckIdMatch = gammaUrl.match(/gamma\.app\/docs\/([^\/\?]+)/);
+        if (deckIdMatch && deckIdMatch[1]) {
+          const deckId = deckIdMatch[1];
+          logger.info('[GammaClient] Extracted deckId from gammaUrl, requesting export', {
+            deckId,
+            exportFormat,
+          });
+          
+          try {
+            // Request export from deck endpoint
+            const exportResponse = await axios.get(
+              `${this.baseUrl}/v1/decks/${deckId}/export`,
+              {
+                headers: {
+                  'X-API-KEY': this.apiKey,
+                },
+                params: {
+                  format: exportFormat, // 'pdf' or 'pptx'
+                },
+                responseType: 'arraybuffer',
+                timeout: 120000, // 2 minutes for large files
+                maxContentLength: 100 * 1024 * 1024, // 100MB max
+              }
+            );
+            
+            // If we got the file directly, upload it to storage
+            const fileBuffer = Buffer.from(exportResponse.data);
+            const contentType = exportResponse.headers['content-type'] || 
+              (exportFormat === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.presentationml.presentation');
+            
+            logger.info('[GammaClient] Successfully downloaded file from deck export endpoint', {
+              deckId,
+              exportFormat,
+              fileSize: fileBuffer.length,
+              contentType,
+            });
+            
+            // Upload directly to storage (skip downloadUrl step)
+            const mimeType = exportFormat === 'pdf' 
+              ? 'application/pdf'
+              : 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+            const uploadResult = await this._uploadToStorage(fileBuffer, topicName, language, mimeType);
+            
+            if (uploadResult.url && uploadResult.path) {
+              logger.info('[GammaClient] Presentation uploaded to storage via deck export fallback', {
+                storagePath: uploadResult.path,
+                url: uploadResult.url,
+                fileSize: fileBuffer.length,
+                exportFormat,
+              });
+              
+              return {
+                presentationUrl: uploadResult.url,
+                storagePath: uploadResult.path,
+                sha256Hash: uploadResult.sha256Hash || null,
+                digitalSignature: uploadResult.digitalSignature || null,
+                exportFormat,
+                rawResponse: {
+                  generationId,
+                  status: result.status,
+                  result: resultData,
+                },
+              };
+            } else {
+              throw new Error(`${exportFormat.toUpperCase()} uploaded but no URL or path returned from storage`);
+            }
+          } catch (exportError) {
+            logger.error('[GammaClient] Failed to get export from deck endpoint', {
+              deckId: deckIdMatch[1],
+              error: exportError.message,
+              status: exportError.response?.status,
+            });
+            // Continue to throw original error
+          }
+        } else {
+          logger.warn('[GammaClient] Could not extract deckId from gammaUrl', {
+            gammaUrl,
+          });
+        }
+      }
       
       if (!downloadUrl) {
         logger.error('[GammaClient] No export URL found in Gamma response', { 
           resultData: JSON.stringify(resultData).substring(0, 500),
           availableKeys: Object.keys(resultData),
           exportFormat,
+          hasGammaUrl: !!gammaUrl,
         });
         throw new Error(`Gamma API did not return ${exportFormat.toUpperCase()} export URL. exportAs: "${exportFormat}" must be included in request payload.`);
       }
