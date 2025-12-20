@@ -277,12 +277,33 @@ export default function TopicContentManager() {
     if (!topicDetails?.devlab_exercises) {
       return false;
     }
-    // devlab_exercises can be a JSON string or an array
+    // devlab_exercises can be a JSON string or an object with structure: { html: "...", questions: [...], metadata: {...} }
     try {
       const exercises = typeof topicDetails.devlab_exercises === 'string'
         ? JSON.parse(topicDetails.devlab_exercises)
         : topicDetails.devlab_exercises;
-      return Array.isArray(exercises) && exercises.length > 0;
+      
+      // If it's an array (legacy format), check if it has items
+      if (Array.isArray(exercises)) {
+        return exercises.length > 0;
+      }
+      
+      // If it's an object, check the structure: { html: "...", questions: [...], metadata: {...} }
+      if (typeof exercises === 'object' && exercises !== null) {
+        // Check if it has questions array with at least one question
+        if (exercises.questions && Array.isArray(exercises.questions) && exercises.questions.length > 0) {
+          return true;
+        }
+        // Check if it has html content
+        if (exercises.html && typeof exercises.html === 'string' && exercises.html.trim().length > 0) {
+          return true;
+        }
+        // Fallback: check if object has any meaningful keys (not just metadata)
+        const keys = Object.keys(exercises);
+        return keys.length > 0 && keys.some(key => key !== 'metadata');
+      }
+      
+      return false;
     } catch {
       return false;
     }
