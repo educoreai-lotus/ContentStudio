@@ -426,15 +426,24 @@ export class PublishCourseUseCase {
    * @returns {Promise<{success: boolean, message: string}>}
    */
   async execute(courseId) {
+    logger.info('[PublishCourseUseCase] Starting publish course execution', { courseId });
+    
     // Validate course
     const validation = await this.validateCourse(courseId);
     
     if (!validation.valid) {
+      logger.error('[PublishCourseUseCase] Course validation failed', {
+        courseId,
+        errorsCount: validation.errors.length,
+        errors: validation.errors,
+      });
       const errorMessages = validation.errors.map(err => 
         `Cannot transfer the course:\n${err.issue} for the lesson: "${err.topic}"`
       );
       throw new Error(errorMessages.join('\n\n'));
     }
+    
+    logger.info('[PublishCourseUseCase] Course validation passed, building course object', { courseId });
 
     // Build course object
     const courseData = await this.buildCourseObject(courseId);
