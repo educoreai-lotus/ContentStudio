@@ -44,13 +44,18 @@ export async function postToCoordinator(envelope, options = {}) {
   const timeout = options.timeout || 1200000; // 20 minutes default timeout
 
   try {
+    // IMPORTANT: Deep clone envelope before signing to prevent mutations by axios
+    // This ensures the object we sign is identical to what we send
+    const envelopeToSend = JSON.parse(JSON.stringify(envelope));
+    
     // IMPORTANT: Sign the FULL envelope (as per POSTMAN_COURSE_BUILDER_REQUEST.md)
     // Message format: "educoreai-{serviceName}-{sha256(JSON.stringify(envelope))}"
-    const signature = generateSignature(SERVICE_NAME, privateKey, envelope);
+    const signature = generateSignature(SERVICE_NAME, privateKey, envelopeToSend);
 
     // Send POST request with signature headers
     // Use responseType: 'text' to get raw response body for signature verification
-    const response = await axios.post(registrationUrl, envelope, {
+    // Use envelopeToSend (cloned) to ensure it matches what we signed
+    const response = await axios.post(registrationUrl, envelopeToSend, {
       headers: {
         'Content-Type': 'application/json',
         'X-Service-Name': SERVICE_NAME,
