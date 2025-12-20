@@ -197,7 +197,6 @@ export class ContentMetricsController {
                 return;
               }
 
-              requestBody.response.courses = [];
               requestBody.response.course = [];
               
               // Log error response body before sending
