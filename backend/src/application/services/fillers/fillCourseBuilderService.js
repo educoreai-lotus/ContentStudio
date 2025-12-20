@@ -902,7 +902,7 @@ Generate ${wrappedVariables.language} code that demonstrates the concepts clearl
       topic_description: promptVariables.lessonDescription,
       topic_language: language,
       template_id: null,
-      format_order: ['text', 'code', 'presentation', 'mind_map', 'avatar_video'],
+      format_order: ['text_audio', 'code', 'presentation', 'mind_map', 'avatar_video'],
       contents,
       devlab_exercises: null, // Will be generated after topic is saved to DB
       skills: promptVariables.skillsListArray, // Store skills for DevLab and persistence

@@ -4,10 +4,9 @@ import { templatesService } from '../../services/templates.js';
 import { useApp } from '../../context/AppContext.jsx';
 
 const AVAILABLE_FORMATS = [
-  { value: 'text', label: 'Text' },
+  { value: 'text_audio', label: 'Text & Audio' },
   { value: 'code', label: 'Code' },
   { value: 'presentation', label: 'Presentation' },
-  { value: 'audio', label: 'Audio' },
   { value: 'mind_map', label: 'Mind Map' },
   { value: 'avatar_video', label: 'Avatar Video' },
 ];

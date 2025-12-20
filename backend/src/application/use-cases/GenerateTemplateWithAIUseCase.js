@@ -30,7 +30,7 @@ export class GenerateTemplateWithAIUseCase {
       throw new Error('Topic not found');
     }
 
-    const baseOrder = ['text', 'audio', 'presentation', 'code', 'mind_map', 'avatar_video'];
+    const baseOrder = ['text_audio', 'presentation', 'code', 'mind_map', 'avatar_video'];
     let aiSuggestedOrder = [...baseOrder];
     let aiTemplateName =
       templateName ||
@@ -45,11 +45,11 @@ You are an educational content template designer for EduCore Content Studio.
 You must output a JSON object only.
 
 Rules:
-- Formats must be one of: text, audio, code, presentation, mind_map, avatar_video.
-- Include each format exactly once (6 items total).
-- Place "audio" immediately after "text" (either text then audio, or audio then text).
+- Formats must be one of: text_audio, code, presentation, mind_map, avatar_video.
+- Include each format exactly once (5 items total).
+- Note: "text_audio" is a combined format (text and audio together).
 - Include "avatar_video" as one of the formats (it's a video avatar explaining the content).
-- Return JSON: {"template_name": "...", "format_order": ["text","audio","presentation","code","mind_map","avatar_video"], "notes": "...", "feedback": "..."}.
+- Return JSON: {"template_name": "...", "format_order": ["text_audio","presentation","code","mind_map","avatar_video"], "notes": "...", "feedback": "..."}.
 - The "feedback" field should explain WHY you chose this specific order for the formats. Be concise (2-3 sentences) and educational.
 
 Context:
@@ -113,38 +113,34 @@ Return only JSON (no extra text).
    * @returns {string[]}
    */
   normalizeFormatOrder(order = []) {
-    const allowed = ['text', 'audio', 'code', 'presentation', 'mind_map', 'avatar_video'];
+    const allowed = ['text_audio', 'code', 'presentation', 'mind_map', 'avatar_video'];
     let sanitized = order
-      .map(item => item && item.toLowerCase())
+      .map(item => item && item.toLowerCase().trim())
       .filter(item => allowed.includes(item));
+
+    // Handle legacy format: convert 'text' and 'audio' to 'text_audio'
+    const hasText = sanitized.includes('text');
+    const hasAudio = sanitized.includes('audio');
+    if (hasText || hasAudio) {
+      sanitized = sanitized.filter(item => item !== 'text' && item !== 'audio');
+      if (!sanitized.includes('text_audio')) {
+        sanitized.unshift('text_audio');
+      }
+    }
 
     // Remove duplicates preserving order
     sanitized = sanitized.filter((item, index) => sanitized.indexOf(item) === index);
 
     // Ensure all mandatory formats exist
-    const mandatory = ['text', 'code', 'presentation', 'audio', 'mind_map', 'avatar_video'];
+    const mandatory = ['text_audio', 'code', 'presentation', 'mind_map', 'avatar_video'];
     mandatory.forEach(format => {
       if (!sanitized.includes(format)) {
         sanitized.push(format);
       }
     });
 
-    // Ensure audio is immediately after text
-    const textIndex = sanitized.indexOf('text');
-    const audioIndex = sanitized.indexOf('audio');
-
-    if (textIndex === -1 || audioIndex === -1) {
-      return ['text', 'audio', 'presentation', 'code', 'mind_map', 'avatar_video'];
-    }
-
-    if (audioIndex !== textIndex + 1) {
-      // Remove audio and re-insert immediately after text
-      sanitized.splice(audioIndex, 1);
-      sanitized.splice(textIndex + 1, 0, 'audio');
-    }
-
-    // Trim to exactly 6 formats in case extras were added
-    return sanitized.slice(0, 6);
+    // Trim to exactly 5 formats in case extras were added
+    return sanitized.slice(0, 5);
   }
 }
 

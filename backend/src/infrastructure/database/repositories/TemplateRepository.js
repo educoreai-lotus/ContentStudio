@@ -20,7 +20,7 @@ export class TemplateRepository extends ITemplateRepository {
       {
         template_name: 'Foundational Learning Flow',
         template_type: 'ready_template',
-        format_order: ['text_audio', 'audio', 'presentation', 'code', 'mind_map'],
+        format_order: ['text_audio', 'presentation', 'code', 'mind_map', 'avatar_video'],
         description: 'Balanced sequence starting with narration and visual support.',
         created_by: 'system',
         is_active: true,
@@ -28,7 +28,7 @@ export class TemplateRepository extends ITemplateRepository {
       {
         template_name: 'Hands-On Coding Sprint',
         template_type: 'ready_template',
-        format_order: ['text_audio', 'audio', 'code', 'presentation', 'mind_map'],
+        format_order: ['text_audio', 'code', 'presentation', 'mind_map', 'avatar_video'],
         description: 'Ideal for coding lessons with guided narration and practical examples.',
         created_by: 'system',
         is_active: true,
@@ -36,7 +36,7 @@ export class TemplateRepository extends ITemplateRepository {
       {
         template_name: 'Visual Storytelling Journey',
         template_type: 'ready_template',
-        format_order: ['text_audio', 'audio', 'mind_map', 'presentation', 'code'],
+        format_order: ['text_audio', 'mind_map', 'presentation', 'code', 'avatar_video'],
         description: 'Starts with narration and mind map to reinforce story-driven lessons.',
         created_by: 'system',
         is_active: true,
@@ -44,7 +44,7 @@ export class TemplateRepository extends ITemplateRepository {
       {
         template_name: 'Workshop Collaboration Loop',
         template_type: 'ready_template',
-        format_order: ['text_audio', 'audio', 'presentation', 'mind_map', 'code'],
+        format_order: ['text_audio', 'presentation', 'mind_map', 'code', 'avatar_video'],
         description: 'Blends narration with collaborative visuals and practical coding.',
         created_by: 'system',
         is_active: true,
@@ -52,7 +52,7 @@ export class TemplateRepository extends ITemplateRepository {
       {
         template_name: 'Assessment Ready Sequence',
         template_type: 'ready_template',
-        format_order: ['text_audio', 'audio', 'code', 'mind_map', 'presentation'],
+        format_order: ['text_audio', 'code', 'mind_map', 'presentation', 'avatar_video'],
         description: 'Helps learners review key concepts before assessments.',
         created_by: 'system',
         is_active: true,
@@ -60,7 +60,7 @@ export class TemplateRepository extends ITemplateRepository {
       {
         template_name: 'Immersive Video Kickoff',
         template_type: 'ready_template',
-        format_order: ['text_audio', 'audio', 'avatar_video', 'presentation', 'code', 'mind_map'],
+        format_order: ['text_audio', 'avatar_video', 'presentation', 'code', 'mind_map'],
         description: 'Starts with narration and avatar video to increase engagement before diving into content.',
         created_by: 'system',
         is_active: true,

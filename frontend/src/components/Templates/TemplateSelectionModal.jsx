@@ -6,8 +6,7 @@ import { useApp } from '../../context/AppContext.jsx';
 import { useNavigate } from 'react-router-dom';
 
 const FORMAT_LABELS = {
-  text: 'Text',
-  audio: 'Audio',
+  text_audio: 'Text & Audio',
   code: 'Code',
   presentation: 'Presentation',
   mind_map: 'Mind Map',
