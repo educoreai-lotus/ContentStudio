@@ -137,19 +137,32 @@ export class ContentMetricsController {
                 return;
               }
 
-              // Log response body before sending to course builder
-              const responseSize = JSON.stringify(filledRequest).length;
-              logger.info('[ContentMetricsController] Sending response to course-builder-service', {
+              // Log FULL response body before sending to course builder via Coordinator
+              const stringifiedResponse = JSON.stringify(filledRequest);
+              const responseSize = stringifiedResponse.length;
+              
+              logger.info('[ContentMetricsController] ===== FULL RESPONSE BODY TO COURSE BUILDER (before sending to Coordinator) =====', {
                 responseSize,
                 responseSizeKB: Math.round(responseSize / 1024),
+                responseSizeMB: (responseSize / (1024 * 1024)).toFixed(2),
                 coursesCount: filledRequest.response?.courses?.length || 0,
                 courseCount: filledRequest.response?.course?.length || 0,
                 hasCourses: !!filledRequest.response?.courses,
                 hasCourse: !!filledRequest.response?.course,
-                responsePreview: JSON.stringify(filledRequest).substring(0, 500),
+                requester_service: filledRequest.requester_service,
+                payloadKeys: filledRequest.payload ? Object.keys(filledRequest.payload) : [],
+                responseKeys: filledRequest.response ? Object.keys(filledRequest.response) : [],
               });
               
-              const stringifiedResponse = JSON.stringify(filledRequest);
+              // Log the FULL response body (entire JSON string)
+              logger.info('[ContentMetricsController] FULL RESPONSE BODY JSON:', {
+                fullResponseBody: stringifiedResponse,
+              });
+              
+              // Also log a formatted preview (first 2000 characters)
+              logger.info('[ContentMetricsController] Response preview (first 2000 chars):', {
+                responsePreview: stringifiedResponse.substring(0, 2000),
+              });
               
               // Ensure headers are set before sending
               res.setHeader('Content-Type', 'application/json');
@@ -652,6 +665,27 @@ export class ContentMetricsController {
 
       // Stringify the entire original request object
       const stringifiedData = JSON.stringify(requestData);
+
+      // Log FULL response body before sending to course builder via Coordinator
+      logger.info('[ContentMetricsController] ===== FULL RESPONSE BODY TO COURSE BUILDER (handleCourseBuilderFormat - before sending to Coordinator) =====', {
+        responseSize: stringifiedData.length,
+        responseSizeKB: Math.round(stringifiedData.length / 1024),
+        responseSizeMB: (stringifiedData.length / (1024 * 1024)).toFixed(2),
+        topicsCount: resolvedTopics.length,
+        requester_service: requestData.requester_service,
+        payloadKeys: requestData.payload ? Object.keys(requestData.payload) : [],
+        responseKeys: requestData.response ? Object.keys(requestData.response) : [],
+      });
+      
+      // Log the FULL response body (entire JSON string)
+      logger.info('[ContentMetricsController] FULL RESPONSE BODY JSON (handleCourseBuilderFormat):', {
+        fullResponseBody: stringifiedData,
+      });
+      
+      // Also log a formatted preview (first 2000 characters)
+      logger.info('[ContentMetricsController] Response preview (first 2000 chars - handleCourseBuilderFormat):', {
+        responsePreview: stringifiedData.substring(0, 2000),
+      });
 
       logger.info('[ContentMetricsController] Successfully completed Course Builder workflow', {
         topicsCount: resolvedTopics.length,
