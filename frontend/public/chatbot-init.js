@@ -147,8 +147,12 @@
       
       console.log('✅ RAG Bot: Initialized successfully!');
       
+      // Track if chat should be closed (prevents auto-opening)
+      let chatShouldBeClosed = true; // Start with chat closed
+      
       // Function to hide chat panel and show only icon
       function hideChatPanel() {
+        chatShouldBeClosed = true; // Mark that chat should be closed
         const container = document.querySelector('#edu-bot-container');
         if (!container) return;
         
@@ -252,18 +256,69 @@
           iconButton.style.setProperty('pointer-events', 'auto', 'important');
           iconButton.style.setProperty('position', 'relative', 'important');
           iconButton.style.setProperty('z-index', '100000', 'important');
+          
+          // Add click listener to icon button to allow opening chat
+          if (!iconButton.hasAttribute('data-icon-listener-attached')) {
+            iconButton.setAttribute('data-icon-listener-attached', 'true');
+            iconButton.addEventListener('click', () => {
+              chatShouldBeClosed = false; // Allow chat to open when icon is clicked
+              console.log('🖱️ Icon button clicked, allowing chat to open...');
+            }, true);
+          }
         }
         
         console.log('✅ Chat panel hidden, icon visible', {
           hiddenElements: uniqueElements.length,
-          iconButtonFound: !!iconButton
+          iconButtonFound: !!iconButton,
+          chatShouldBeClosed
         });
       }
       
       // After initialization, ensure chat panel is hidden and only icon is visible
       setTimeout(() => {
+        chatShouldBeClosed = true;
         hideChatPanel();
       }, 1000);
+      
+      // Set up MutationObserver to keep chat panel hidden if it tries to open
+      setTimeout(() => {
+        const container = document.querySelector('#edu-bot-container');
+        if (container) {
+          const keepChatClosedObserver = new MutationObserver(() => {
+            // If chat should be closed, hide any visible chat panels
+            if (chatShouldBeClosed) {
+              const chatInput = container.querySelector('input[type="text"], textarea');
+              const chatPanel = container.querySelector('[class*="panel"]:not([class*="icon"]):not([class*="fab"])');
+              const chatWindow = container.querySelector('[class*="window"]:not([class*="icon"])');
+              const chatDialog = container.querySelector('[class*="dialog"]:not([class*="icon"])');
+              const suggestions = container.querySelector('[class*="suggestions"]');
+              const greeting = container.querySelector('[class*="greeting"]');
+              const header = container.querySelector('[class*="header"]:not([class*="icon"]):not([class*="fab"])');
+              
+              // Check if any chat element is visible
+              const isVisible = [chatInput, chatPanel, chatWindow, chatDialog, suggestions, greeting, header].some(el => {
+                if (!el) return false;
+                const style = window.getComputedStyle(el);
+                return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
+              });
+              
+              if (isVisible) {
+                console.log('🔒 Chat panel tried to open, forcing it closed...');
+                hideChatPanel();
+              }
+            }
+          });
+          
+          keepChatClosedObserver.observe(container, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: ['style', 'class']
+          });
+          
+          console.log('👁️ MutationObserver set up to keep chat closed');
+        }
+      }, 2000);
       
       // Set up event listener for close button (X)
       setTimeout(() => {
@@ -321,7 +376,7 @@
           // This is more reliable than trying to find the button directly
           const setupCloseButtonListener = () => {
             // Use event delegation on the container to catch all clicks
-            container.addEventListener('click', (e) => {
+            const clickHandler = (e) => {
               const target = e.target;
               const button = target.closest('button');
               
@@ -349,17 +404,35 @@
                 e.stopImmediatePropagation();
                 console.log('🖱️ Close button clicked, hiding chat panel...');
                 
+                // Mark that chat should be closed
+                chatShouldBeClosed = true;
+                
                 // Hide immediately
                 hideChatPanel();
                 
-                // Also hide after a short delay to catch any delayed rendering
-                setTimeout(hideChatPanel, 100);
-                setTimeout(hideChatPanel, 300);
-                setTimeout(hideChatPanel, 500);
+                // Also hide after short delays to catch any delayed rendering
+                setTimeout(() => {
+                  chatShouldBeClosed = true;
+                  hideChatPanel();
+                }, 100);
+                setTimeout(() => {
+                  chatShouldBeClosed = true;
+                  hideChatPanel();
+                }, 300);
+                setTimeout(() => {
+                  chatShouldBeClosed = true;
+                  hideChatPanel();
+                }, 500);
+                setTimeout(() => {
+                  chatShouldBeClosed = true;
+                  hideChatPanel();
+                }, 1000);
                 
                 return false;
               }
-            }, true); // Use capture phase
+            };
+            
+            container.addEventListener('click', clickHandler, true); // Use capture phase
             
             console.log('✅ Close button listener attached via event delegation');
           };
@@ -377,10 +450,12 @@
                 e.stopPropagation();
                 e.stopImmediatePropagation();
                 console.log('🖱️ Close button clicked (via observer), hiding chat panel...');
+                chatShouldBeClosed = true;
                 hideChatPanel();
-                setTimeout(hideChatPanel, 100);
-                setTimeout(hideChatPanel, 300);
-                setTimeout(hideChatPanel, 500);
+                setTimeout(() => { chatShouldBeClosed = true; hideChatPanel(); }, 100);
+                setTimeout(() => { chatShouldBeClosed = true; hideChatPanel(); }, 300);
+                setTimeout(() => { chatShouldBeClosed = true; hideChatPanel(); }, 500);
+                setTimeout(() => { chatShouldBeClosed = true; hideChatPanel(); }, 1000);
                 return false;
               }, true);
               console.log('✅ Close button listener attached via observer');
