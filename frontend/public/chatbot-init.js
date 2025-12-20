@@ -152,7 +152,10 @@
         const container = document.querySelector('#edu-bot-container');
         if (!container) return;
         
-        // Find all chat panel elements
+        // Find ALL elements in container (more aggressive approach)
+        const allElements = container.querySelectorAll('*');
+        
+        // Find all chat panel elements with multiple selectors
         const chatPanel = container.querySelector('[class*="panel"]:not([class*="icon"]):not([class*="fab"])');
         const chatWindow = container.querySelector('[class*="window"]:not([class*="icon"])');
         const chatDialog = container.querySelector('[class*="dialog"]:not([class*="icon"])');
@@ -163,26 +166,98 @@
         const greeting = container.querySelector('[class*="greeting"]');
         const header = container.querySelector('[class*="header"]:not([class*="icon"]):not([class*="fab"])');
         
-        // Hide all chat panel elements
-        [chatPanel, chatWindow, chatDialog, chatContainer, chatInput?.closest('[class*="panel"], [class*="window"]'), messages?.closest('[class*="panel"], [class*="window"]'), suggestions, greeting, header]
-          .filter(Boolean)
-          .forEach(el => {
+        // Also find elements by common chat widget patterns
+        const chatElements = Array.from(allElements).filter(el => {
+          const className = el.className || '';
+          const tagName = el.tagName || '';
+          const id = el.id || '';
+          
+          // Skip icon/fab buttons
+          if (className.includes('icon') || className.includes('fab') || className.includes('Fab')) {
+            return false;
+          }
+          
+          // Hide if it's a chat-related element
+          return (
+            className.includes('panel') ||
+            className.includes('window') ||
+            className.includes('dialog') ||
+            className.includes('chat') ||
+            className.includes('message') ||
+            className.includes('conversation') ||
+            className.includes('suggestion') ||
+            className.includes('greeting') ||
+            className.includes('header') ||
+            tagName === 'INPUT' ||
+            tagName === 'TEXTAREA' ||
+            id.includes('chat') ||
+            id.includes('panel') ||
+            id.includes('window')
+          );
+        });
+        
+        // Combine all elements to hide
+        const elementsToHide = [
+          chatPanel, 
+          chatWindow, 
+          chatDialog, 
+          chatContainer, 
+          chatInput?.closest('[class*="panel"], [class*="window"]'), 
+          messages?.closest('[class*="panel"], [class*="window"]'), 
+          suggestions, 
+          greeting, 
+          header,
+          ...chatElements
+        ].filter(Boolean);
+        
+        // Remove duplicates
+        const uniqueElements = [...new Set(elementsToHide)];
+        
+        // Hide all chat panel elements with maximum force
+        uniqueElements.forEach(el => {
+          // Check if element is actually visible
+          const computedStyle = window.getComputedStyle(el);
+          const isVisible = computedStyle.display !== 'none' && 
+                          computedStyle.visibility !== 'hidden' && 
+                          computedStyle.opacity !== '0';
+          
+          if (isVisible) {
             el.style.setProperty('display', 'none', 'important');
             el.style.setProperty('visibility', 'hidden', 'important');
             el.style.setProperty('opacity', '0', 'important');
             el.style.setProperty('pointer-events', 'none', 'important');
-          });
+            el.style.setProperty('position', 'absolute', 'important');
+            el.style.setProperty('left', '-9999px', 'important');
+            el.style.setProperty('width', '0', 'important');
+            el.style.setProperty('height', '0', 'important');
+            el.style.setProperty('overflow', 'hidden', 'important');
+          }
+        });
         
-        // Ensure icon button is visible
-        const iconButton = container.querySelector('button[class*="icon"], button[class*="fab"], button:first-child');
+        // Ensure icon button is visible (find the first button that's not the close button)
+        const allButtons = Array.from(container.querySelectorAll('button'));
+        const iconButton = allButtons.find(btn => {
+          const className = btn.className || '';
+          // Skip close button (usually has w-8 h-8 or close in class)
+          if (className.includes('w-8') && className.includes('h-8')) {
+            return false;
+          }
+          return true;
+        }) || allButtons[0];
+        
         if (iconButton) {
           iconButton.style.setProperty('display', 'block', 'important');
           iconButton.style.setProperty('visibility', 'visible', 'important');
           iconButton.style.setProperty('opacity', '1', 'important');
           iconButton.style.setProperty('pointer-events', 'auto', 'important');
+          iconButton.style.setProperty('position', 'relative', 'important');
+          iconButton.style.setProperty('z-index', '100000', 'important');
         }
         
-        console.log('✅ Chat panel hidden, icon visible');
+        console.log('✅ Chat panel hidden, icon visible', {
+          hiddenElements: uniqueElements.length,
+          iconButtonFound: !!iconButton
+        });
       }
       
       // After initialization, ensure chat panel is hidden and only icon is visible
@@ -242,27 +317,51 @@
             }) || allButtons[1]; // Fallback to 2nd button
           };
           
-          // Set up click listener for close button
+          // Set up click listener for close button using event delegation
+          // This is more reliable than trying to find the button directly
           const setupCloseButtonListener = () => {
-            const closeButton = findCloseButton();
-            if (closeButton) {
-              // Remove any existing listeners
-              const newCloseButton = closeButton.cloneNode(true);
-              closeButton.parentNode?.replaceChild(newCloseButton, closeButton);
+            // Use event delegation on the container to catch all clicks
+            container.addEventListener('click', (e) => {
+              const target = e.target;
+              const button = target.closest('button');
               
-              // Add click listener
-              newCloseButton.addEventListener('click', (e) => {
+              if (!button) return;
+              
+              // Check if this is the close button
+              const className = button.className || '';
+              const ariaLabel = button.getAttribute('aria-label') || '';
+              const title = button.getAttribute('title') || '';
+              const text = button.textContent || '';
+              const isCloseButton = (
+                ariaLabel.toLowerCase().includes('close') ||
+                title.toLowerCase().includes('close') ||
+                className.toLowerCase().includes('close') ||
+                text.trim() === '×' ||
+                text.trim() === 'X' ||
+                (className.includes('w-8') && className.includes('h-8') && className.includes('rounded-full')) ||
+                // Check if button is in top-right corner (usually close button)
+                (button.querySelector('svg') && button.offsetParent !== null)
+              );
+              
+              if (isCloseButton) {
                 e.preventDefault();
                 e.stopPropagation();
+                e.stopImmediatePropagation();
                 console.log('🖱️ Close button clicked, hiding chat panel...');
+                
+                // Hide immediately
                 hideChatPanel();
-              }, true); // Use capture phase to catch early
-              
-              console.log('✅ Close button listener attached');
-            } else {
-              // Retry after a delay if button not found yet
-              setTimeout(setupCloseButtonListener, 500);
-            }
+                
+                // Also hide after a short delay to catch any delayed rendering
+                setTimeout(hideChatPanel, 100);
+                setTimeout(hideChatPanel, 300);
+                setTimeout(hideChatPanel, 500);
+                
+                return false;
+              }
+            }, true); // Use capture phase
+            
+            console.log('✅ Close button listener attached via event delegation');
           };
           
           // Try to set up listener immediately
@@ -276,8 +375,13 @@
               closeButton.addEventListener('click', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
+                e.stopImmediatePropagation();
                 console.log('🖱️ Close button clicked (via observer), hiding chat panel...');
                 hideChatPanel();
+                setTimeout(hideChatPanel, 100);
+                setTimeout(hideChatPanel, 300);
+                setTimeout(hideChatPanel, 500);
+                return false;
               }, true);
               console.log('✅ Close button listener attached via observer');
             }

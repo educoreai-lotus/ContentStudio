@@ -116,6 +116,7 @@
 
 /* Hide chat panel initially - show only icon button */
 /* CRITICAL: Always hide chat panel elements unless explicitly opened by user */
+/* Use multiple selectors to catch all possible chat panel elements */
 #edu-bot-container [class*="chat"]:not([class*="icon"]):not([class*="fab"]):not([class*="button"]),
 #edu-bot-container [class*="panel"]:not([class*="icon"]):not([class*="fab"]),
 #edu-bot-container [class*="window"]:not([class*="icon"]):not([class*="fab"]),
@@ -129,11 +130,25 @@
 #edu-bot-container [class*="conversation"],
 #edu-bot-container [class*="suggestions"],
 #edu-bot-container [class*="greeting"],
-#edu-bot-container [class*="header"]:not([class*="icon"]):not([class*="fab"]) {
+#edu-bot-container [class*="header"]:not([class*="icon"]):not([class*="fab"]),
+/* Additional selectors for chat panel elements */
+#edu-bot-container > div:not([class*="icon"]):not([class*="fab"]):not(:first-child),
+#edu-bot-container [role="dialog"]:not([class*="icon"]),
+#edu-bot-container [role="region"]:not([class*="icon"]) {
   display: none !important;
   visibility: hidden !important;
   opacity: 0 !important;
   pointer-events: none !important;
+  position: absolute !important;
+  left: -9999px !important;
+  width: 0 !important;
+  height: 0 !important;
+  overflow: hidden !important;
+  max-width: 0 !important;
+  max-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
 }
 
 /* Keep icon/button visible and clickable */
