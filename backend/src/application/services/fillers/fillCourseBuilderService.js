@@ -631,7 +631,7 @@ async function generateTopicForStep({ step, language, aiGenerationService }) {
     const contents = [];
     let text = null;
 
-    // 1. Generate text_audio (type 1)
+    // 1. Generate text_audio (type 1) - MANDATORY
     try {
       const textPrompt = `You are an expert educational content creator in EduCore Content Studio.
 🎯 Objective: Generate a concise, audio-friendly lesson text for ${wrappedVariables.lessonTopic}.
@@ -670,8 +670,15 @@ Output only pure, conversational text in ${wrappedVariables.language}. Keep it u
           format: 'mp3',
           language: promptVariables.language,
         });
+        logger.info('[fillCourseBuilderService] Audio generated successfully', {
+          topic: promptVariables.lessonTopic,
+          hasAudioUrl: !!audioData?.audioUrl,
+        });
       } catch (audioError) {
-        logger.warn('[fillCourseBuilderService] Failed to generate audio', { error: audioError.message });
+        logger.error('[fillCourseBuilderService] Failed to generate audio', { 
+          error: audioError.message,
+          topic: promptVariables.lessonTopic,
+        });
       }
 
       contents.push({
@@ -684,11 +691,22 @@ Output only pure, conversational text in ${wrappedVariables.language}. Keep it u
           audioVoice: audioData?.voice,
         }),
       });
+      
+      logger.info('[fillCourseBuilderService] Text content generated successfully', {
+        topic: promptVariables.lessonTopic,
+        hasText: !!text,
+        textLength: text?.length || 0,
+        hasAudio: !!audioData?.audioUrl,
+      });
     } catch (error) {
-      logger.warn('[fillCourseBuilderService] Failed to generate text', { error: error.message });
+      logger.error('[fillCourseBuilderService] Failed to generate text', { 
+        error: error.message,
+        stack: error.stack,
+        topic: promptVariables.lessonTopic,
+      });
     }
 
-    // 2. Generate code (type 2)
+    // 2. Generate code (type 2) - MANDATORY
     try {
       const codePrompt = `You are a senior coding mentor in EduCore Content Studio.
 🎯 Objective: Generate clean, production-ready code example related to ${wrappedVariables.lessonTopic}.
@@ -713,11 +731,21 @@ Generate ${wrappedVariables.language} code that demonstrates the concepts clearl
           metadata: { programming_language: 'javascript' },
         }),
       });
+      
+      logger.info('[fillCourseBuilderService] Code content generated successfully', {
+        topic: promptVariables.lessonTopic,
+        hasCode: !!codeResult?.code,
+        codeLength: codeResult?.code?.length || 0,
+      });
     } catch (error) {
-      logger.warn('[fillCourseBuilderService] Failed to generate code', { error: error.message });
+      logger.error('[fillCourseBuilderService] Failed to generate code', { 
+        error: error.message,
+        stack: error.stack,
+        topic: promptVariables.lessonTopic,
+      });
     }
 
-    // 3. Generate presentation (type 3)
+    // 3. Generate presentation (type 3) - MANDATORY
     try {
       const presentationContent = {
         topicName: promptVariables.lessonTopic,
@@ -748,11 +776,22 @@ Generate ${wrappedVariables.language} code that demonstrates the concepts clearl
           },
         }),
       });
+      
+      logger.info('[fillCourseBuilderService] Presentation content generated successfully', {
+        topic: promptVariables.lessonTopic,
+        hasPresentationUrl: !!presentation.presentationUrl,
+        hasStoragePath: !!presentation.storagePath,
+        format: presentation.format || 'gamma',
+      });
     } catch (error) {
-      logger.warn('[fillCourseBuilderService] Failed to generate presentation', { error: error.message });
+      logger.error('[fillCourseBuilderService] Failed to generate presentation', { 
+        error: error.message,
+        stack: error.stack,
+        topic: promptVariables.lessonTopic,
+      });
     }
 
-    // 4. Generate mind_map (type 5)
+    // 4. Generate mind_map (type 5) - MANDATORY
     try {
       const mindMap = await aiGenerationService.generateMindMap(promptVariables.lessonDescription, {
         topic_title: promptVariables.lessonTopic,
@@ -766,8 +805,20 @@ Generate ${wrappedVariables.language} code that demonstrates the concepts clearl
         content_type: 'mind_map',
         content_data: ContentDataCleaner.cleanMindMapData(mindMap),
       });
+      
+      logger.info('[fillCourseBuilderService] Mind map content generated successfully', {
+        topic: promptVariables.lessonTopic,
+        hasNodes: !!mindMap?.nodes && Array.isArray(mindMap.nodes) && mindMap.nodes.length > 0,
+        hasEdges: !!mindMap?.edges && Array.isArray(mindMap.edges) && mindMap.edges.length > 0,
+        nodesCount: mindMap?.nodes?.length || 0,
+        edgesCount: mindMap?.edges?.length || 0,
+      });
     } catch (error) {
-      logger.warn('[fillCourseBuilderService] Failed to generate mind_map', { error: error.message });
+      logger.error('[fillCourseBuilderService] Failed to generate mind_map', { 
+        error: error.message,
+        stack: error.stack,
+        topic: promptVariables.lessonTopic,
+      });
     }
 
     // 5. Generate avatar_video (type 6)
@@ -787,14 +838,66 @@ Generate ${wrappedVariables.language} code that demonstrates the concepts clearl
         topicName: promptVariables.lessonTopic,
       });
 
-      if (avatarResult.status !== 'failed') {
-        contents.push({
-          content_type: 'avatar_video',
-          content_data: ContentDataCleaner.cleanAvatarVideoData(avatarResult),
+      // Always add avatar_video content, even if status is 'failed' or 'skipped'
+      // The frontend can handle these statuses appropriately
+      contents.push({
+        content_type: 'avatar_video',
+        content_data: ContentDataCleaner.cleanAvatarVideoData(avatarResult),
+      });
+      
+      logger.info('[fillCourseBuilderService] Avatar video generation completed', {
+        topic: promptVariables.lessonTopic,
+        status: avatarResult.status,
+        hasVideoUrl: !!avatarResult.videoUrl,
+      });
+    } catch (error) {
+      logger.error('[fillCourseBuilderService] Failed to generate avatar_video', { 
+        error: error.message,
+        stack: error.stack,
+        topic: promptVariables.lessonTopic,
+      });
+      // Still add empty avatar_video content to maintain structure
+      contents.push({
+        content_type: 'avatar_video',
+        content_data: {
+          videoUrl: null,
+          videoId: null,
+          status: 'failed',
+          error: error.message,
+        },
+      });
+    }
+
+    // CRITICAL: Validate that all required formats were generated
+    const requiredFormats = ['text', 'code', 'presentation', 'mind_map', 'avatar_video'];
+    const generatedFormats = contents.map(c => c.content_type);
+    const missingFormats = requiredFormats.filter(format => !generatedFormats.includes(format));
+    
+    if (missingFormats.length > 0) {
+      logger.error('[fillCourseBuilderService] MISSING REQUIRED FORMATS', {
+        topic: promptVariables.lessonTopic,
+        missingFormats,
+        generatedFormats,
+        requiredFormats,
+        contentsCount: contents.length,
+      });
+      
+      // Log detailed information about each content type
+      for (const format of requiredFormats) {
+        const content = contents.find(c => c.content_type === format);
+        logger.info('[fillCourseBuilderService] Format status', {
+          format,
+          exists: !!content,
+          hasData: !!content?.content_data,
+          dataKeys: content?.content_data ? Object.keys(content.content_data) : [],
         });
       }
-    } catch (error) {
-      logger.warn('[fillCourseBuilderService] Failed to generate avatar_video', { error: error.message });
+    } else {
+      logger.info('[fillCourseBuilderService] All required formats generated successfully', {
+        topic: promptVariables.lessonTopic,
+        formats: generatedFormats,
+        contentsCount: contents.length,
+      });
     }
 
     // 6. DevLab exercises will be generated AFTER topic is saved to database (to get topic_id)
