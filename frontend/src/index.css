@@ -134,7 +134,10 @@
 /* Additional selectors for chat panel elements */
 #edu-bot-container > div:not([class*="icon"]):not([class*="fab"]):not(:first-child),
 #edu-bot-container [role="dialog"]:not([class*="icon"]),
-#edu-bot-container [role="region"]:not([class*="icon"]) {
+#edu-bot-container [role="region"]:not([class*="icon"]),
+/* More aggressive selectors */
+#edu-bot-container div[style*="display"]:not([class*="icon"]):not([class*="fab"]),
+#edu-bot-container div[style*="opacity"]:not([class*="icon"]):not([class*="fab"]) {
   display: none !important;
   visibility: hidden !important;
   opacity: 0 !important;
@@ -149,6 +152,8 @@
   margin: 0 !important;
   padding: 0 !important;
   border: none !important;
+  transform: scale(0) !important;
+  clip-path: inset(100%) !important;
 }
 
 /* Keep icon/button visible and clickable */

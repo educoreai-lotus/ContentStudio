@@ -316,7 +316,37 @@
             attributeFilter: ['style', 'class']
           });
           
-          console.log('👁️ MutationObserver set up to keep chat closed');
+          // Also set up an interval to continuously check and force close if needed
+          const forceCloseInterval = setInterval(() => {
+            if (chatShouldBeClosed) {
+              const chatInput = container.querySelector('input[type="text"], textarea');
+              const chatPanel = container.querySelector('[class*="panel"]:not([class*="icon"]):not([class*="fab"])');
+              const chatWindow = container.querySelector('[class*="window"]:not([class*="icon"])');
+              const chatDialog = container.querySelector('[class*="dialog"]:not([class*="icon"])');
+              const suggestions = container.querySelector('[class*="suggestions"]');
+              const greeting = container.querySelector('[class*="greeting"]');
+              const header = container.querySelector('[class*="header"]:not([class*="icon"]):not([class*="fab"])');
+              
+              // Check if any chat element is visible
+              const isVisible = [chatInput, chatPanel, chatWindow, chatDialog, suggestions, greeting, header].some(el => {
+                if (!el) return false;
+                const style = window.getComputedStyle(el);
+                const rect = el.getBoundingClientRect();
+                return style.display !== 'none' && 
+                       style.visibility !== 'hidden' && 
+                       style.opacity !== '0' &&
+                       rect.width > 0 && 
+                       rect.height > 0;
+              });
+              
+              if (isVisible) {
+                console.log('🔒 Interval check: Chat panel is visible but should be closed, forcing close...');
+                hideChatPanel();
+              }
+            }
+          }, 500); // Check every 500ms
+          
+          console.log('👁️ MutationObserver and interval set up to keep chat closed');
         }
       }, 2000);
       
