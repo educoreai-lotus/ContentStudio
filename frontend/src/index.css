@@ -102,10 +102,13 @@
   min-height: 50px !important;
 }
 
-/* Override any hidden or display:none styles */
-#edu-bot-container [style*="display: none"],
-#edu-bot-container [style*="visibility: hidden"],
-#edu-bot-container [style*="opacity: 0"] {
+/* Override any hidden or display:none styles - BUT NOT for chat panel elements */
+/* Only override for icon/button elements, not for chat panels */
+#edu-bot-container button[class*="icon"],
+#edu-bot-container button[class*="fab"],
+#edu-bot-container button[class*="Fab"],
+#edu-bot-container [class*="icon"]:not([class*="panel"]):not([class*="window"]):not([class*="dialog"]),
+#edu-bot-container [class*="fab"]:not([class*="panel"]):not([class*="window"]):not([class*="dialog"]) {
   display: block !important;
   visibility: visible !important;
   opacity: 1 !important;
