@@ -10,7 +10,7 @@ const SERVICE_NAME = process.env.SERVICE_NAME || 'content-studio';
  * @param {Object} envelope - Request envelope (exactly as it was before)
  * @param {Object} options - Optional configuration
  * @param {string} options.endpoint - Custom endpoint (default: /api/fill-content-metrics)
- * @param {number} options.timeout - Request timeout in ms (default: 1200000 = 20 minutes)
+ * @param {number} options.timeout - Request timeout in ms (default: 180000 = 3 minutes)
  * @returns {Promise<Object>} Response data from Coordinator
  * @throws {Error} If request fails
  */
@@ -39,61 +39,16 @@ export async function postToCoordinator(envelope, options = {}) {
 
   const registrationUrl = `${cleanCoordinatorUrl}${endpoint}`;
 
-  // Default timeout: 20 minutes (1200000 ms) to match server timeout
-  // This is needed for long-running AI content generation requests
-  const timeout = options.timeout || 1200000; // 20 minutes default timeout
+  const timeout = options.timeout || 180000; // 3 minutes default timeout
 
   try {
-    // IMPORTANT: Deep clone envelope before signing to prevent mutations by axios
-    // This ensures the object we sign is identical to what we send
-    const envelopeToSend = JSON.parse(JSON.stringify(envelope));
-    
-    // Log the exact envelope structure before signing
-    const envelopeStringForSigning = JSON.stringify(envelopeToSend);
-    
-    // Calculate hash for comparison
-    const crypto = await import('crypto');
-    const envelopeHash = crypto.createHash('sha256').update(envelopeStringForSigning).digest('hex');
-    const messageForSigning = `educoreai-${SERVICE_NAME}-${envelopeHash}`;
-    
-    logger.info('[CoordinatorClient] Envelope to sign and send', {
-      envelopeString: envelopeStringForSigning.substring(0, 500) + (envelopeStringForSigning.length > 500 ? '...' : ''),
-      envelopeStringLength: envelopeStringForSigning.length,
-      envelopeHash: envelopeHash.substring(0, 16) + '...',
-      messageForSigning: messageForSigning.substring(0, 100) + '...',
-      envelopeKeys: Object.keys(envelopeToSend),
-      payloadKeys: envelopeToSend.payload ? Object.keys(envelopeToSend.payload) : [],
-      responseKeys: envelopeToSend.response ? Object.keys(envelopeToSend.response) : [],
-      responseType: typeof envelopeToSend.response,
-      responseIsEmpty: Object.keys(envelopeToSend.response || {}).length === 0,
-      responseValue: JSON.stringify(envelopeToSend.response),
-    });
-    
-    // IMPORTANT: Sign the FULL envelope (as per POSTMAN_COURSE_BUILDER_REQUEST.md)
-    // Message format: "educoreai-{serviceName}-{sha256(JSON.stringify(envelope))}"
-    const signature = generateSignature(SERVICE_NAME, privateKey, envelopeToSend);
+    // IMPORTANT:
+    // Sign EXACTLY the same object we send (the envelope)
+    const signature = generateSignature(SERVICE_NAME, privateKey, envelope);
 
-    // Log what axios will actually send (after serialization)
-    const envelopeStringForAxios = JSON.stringify(envelopeToSend);
-    const matchesSigned = envelopeStringForSigning === envelopeStringForAxios;
-    const envelopeHashForAxios = crypto.createHash('sha256').update(envelopeStringForAxios).digest('hex');
-    const messageForAxios = `educoreai-${SERVICE_NAME}-${envelopeHashForAxios}`;
-    
-    logger.info('[CoordinatorClient] Envelope string that axios will send', {
-      envelopeString: envelopeStringForAxios.substring(0, 500) + (envelopeStringForAxios.length > 500 ? '...' : ''),
-      envelopeStringLength: envelopeStringForAxios.length,
-      envelopeHashForAxios: envelopeHashForAxios.substring(0, 16) + '...',
-      messageForAxios: messageForAxios.substring(0, 100) + '...',
-      matchesSigned,
-      signedStringLength: envelopeStringForSigning.length,
-      hashMatches: envelopeHash === envelopeHashForAxios,
-      messageMatches: messageForSigning === messageForAxios,
-    });
-    
     // Send POST request with signature headers
     // Use responseType: 'text' to get raw response body for signature verification
-    // Use envelopeToSend (cloned) to ensure it matches what we signed
-    const response = await axios.post(registrationUrl, envelopeToSend, {
+    const response = await axios.post(registrationUrl, envelope, {
       headers: {
         'Content-Type': 'application/json',
         'X-Service-Name': SERVICE_NAME,
