@@ -1642,7 +1642,7 @@ export default function TopicContentManager() {
 
                 {/* Save and Finish Lesson Button - Only for standalone lessons */}
                 {!topicDetails?.course_id && (
-                  <div className="relative inline-block group">
+                  <div className="relative inline-block group mt-6">
                     <button
                       onClick={handlePublishStandalone}
                       disabled={publishing || !isStandaloneReady}
