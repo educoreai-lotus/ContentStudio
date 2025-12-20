@@ -109,8 +109,14 @@ export class PublishCourseUseCase {
           
           // Map template format names to database type names
           if (normalizedTypeName === 'text_audio' || normalizedTypeName === 'text') {
+            // Create entries for both individual formats and combined format
             contentByType['text'] = content;
             contentByType['audio'] = content; // Audio is usually part of text_audio
+            contentByType['text_audio'] = content; // CRITICAL: Also create text_audio entry for template format matching
+          } else if (normalizedTypeName === 'audio') {
+            // If we have separate audio, also map it to text_audio
+            contentByType['audio'] = content;
+            contentByType['text_audio'] = content; // Map audio to text_audio for template matching
           } else {
             contentByType[normalizedTypeName] = content;
           }
