@@ -273,57 +273,7 @@ export class CourseBuilderClient {
         response: {},
       };
 
-      // Log full request envelope (what we send to Coordinator)
-      // Also log the exact JSON string that will be used for signature
-      const envelopeString = JSON.stringify(envelope);
       
-      // Write envelope to file for debugging
-      try {
-        const fs = await import('fs');
-        const path = await import('path');
-        const debugPath = path.join(process.cwd(), 'debug-course-builder-envelope.json');
-        fs.writeFileSync(debugPath, JSON.stringify(envelope, null, 2));
-        logger.info('[CourseBuilderClient] Wrote envelope to debug file', { debugPath });
-      } catch (err) {
-        logger.warn('[CourseBuilderClient] Failed to write debug file', { error: err.message });
-      }
-      
-      logger.info('[CourseBuilderClient] Full request envelope to Coordinator (sendCourseToCourseBuilder)', {
-        envelope: JSON.stringify(envelope, null, 2),
-        envelopeKeys: Object.keys(envelope),
-        payloadKeys: Object.keys(payloadData),
-        fullPayload: JSON.stringify(payloadData, null, 2),
-        envelopeStringified: envelopeString, // Exact string that will be signed
-        envelopeStringLength: envelopeString.length,
-      });
-
-      logger.info('[CourseBuilderClient] Sending course to Course Builder via Coordinator', {
-        courseId: courseData.course_id,
-        courseName: courseData.course_name,
-        topicsCount: courseData.topics?.length || 0,
-      });
-
-      // Log request details before sending (same as devlabClient)
-      // CRITICAL: Log the exact envelope structure that will be signed
-      const envelopeForSigning = JSON.stringify(envelope);
-      const crypto = await import('crypto');
-      const envelopeHash = crypto.createHash('sha256').update(envelopeForSigning).digest('hex');
-      
-      logger.info('[CourseBuilderClient] About to send request to Coordinator', {
-        endpoint: '/api/fill-content-metrics',
-        timeout: 1200000,
-        envelopePayloadKeys: Object.keys(envelope.payload),
-        actionValue: envelope.payload.action,
-        hasTargetService: !!envelope.payload.targetService,
-        hasDescription: !!envelope.payload.description,
-        responseType: typeof envelope.response,
-        responseKeys: Object.keys(envelope.response || {}),
-        envelopeStringified: envelopeForSigning, // Log full envelope for debugging signature
-        envelopeHash: envelopeHash.substring(0, 16) + '...', // Log hash for comparison
-      });
-
-      // Send request via Coordinator - fire and forget (no response expected)
-      // Coordinator will route to Course Builder based on the action in payload
       await postToCoordinator(envelope, {
         endpoint: '/api/fill-content-metrics',
         timeout: 1200000, // 20 minutes timeout (matches server timeout for long-running requests)
