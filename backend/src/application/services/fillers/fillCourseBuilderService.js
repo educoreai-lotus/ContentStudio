@@ -153,7 +153,6 @@ export async function fillCourseBuilderService(requestData) {
 
       if (learners_data.length === 0) {
         logger.warn('[fillCourseBuilderService] No learners_data provided');
-        requestData.response.courses = [];
         requestData.response.course = [];
         return requestData;
       }
