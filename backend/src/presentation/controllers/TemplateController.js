@@ -58,6 +58,14 @@ export class TemplateController {
 
       const templates = await this.getTemplatesUseCase.execute(filters);
 
+      console.log('[TemplateController] GET /api/templates:', {
+        filters,
+        templatesCount: templates.length,
+        templateIds: templates.map(t => t.template_id),
+        templateNames: templates.map(t => t.template_name),
+        createdByValues: templates.map(t => t.created_by),
+      });
+
       res.json({
         success: true,
         data: TemplateDTO.toTemplateListResponse(templates),

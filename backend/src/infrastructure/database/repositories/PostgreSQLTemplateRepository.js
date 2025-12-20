@@ -66,15 +66,31 @@ export class PostgreSQLTemplateRepository extends ITemplateRepository {
       paramIndex++;
     }
 
+    // If created_by is specified, filter by it
+    // Otherwise, return ALL templates (system templates + trainer templates)
     if (filters.created_by) {
       query += ` AND created_by = $${paramIndex}`;
       params.push(filters.created_by);
       paramIndex++;
     }
+    // If no created_by filter, return all templates (system + all trainers)
 
     query += ' ORDER BY created_at DESC';
 
+    console.log('[PostgreSQLTemplateRepository] findAll query:', {
+      query,
+      params,
+      filters,
+    });
+
     const result = await this.db.query(query, params);
+    
+    console.log('[PostgreSQLTemplateRepository] findAll result:', {
+      rowsCount: result.rows.length,
+      templateIds: result.rows.map(r => r.template_id),
+      createdByValues: result.rows.map(r => r.created_by),
+    });
+
     return result.rows.map(row => this.mapRowToTemplate(row));
   }
 
