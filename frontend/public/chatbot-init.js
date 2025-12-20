@@ -172,7 +172,10 @@
         
         // Also find elements by common chat widget patterns
         const chatElements = Array.from(allElements).filter(el => {
-          const className = el.className || '';
+          // Convert className to string (it might be DOMTokenList)
+          const className = typeof el.className === 'string' 
+            ? el.className 
+            : (el.className?.baseVal || el.className?.toString() || '');
           const tagName = el.tagName || '';
           const id = el.id || '';
           
@@ -250,7 +253,10 @@
         // Ensure icon button is visible (find the first button that's not the close button)
         const allButtons = Array.from(container.querySelectorAll('button'));
         const iconButton = allButtons.find(btn => {
-          const className = btn.className || '';
+          // Convert className to string (it might be DOMTokenList)
+          const className = typeof btn.className === 'string' 
+            ? btn.className 
+            : (btn.className?.baseVal || btn.className?.toString() || '');
           // Skip close button (usually has w-8 h-8 or close in class)
           if (className.includes('w-8') && className.includes('h-8')) {
             return false;
