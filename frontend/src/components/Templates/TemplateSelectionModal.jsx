@@ -42,13 +42,9 @@ export function TemplateSelectionModal({
       setLoading(true);
       setError(null);
       const result = await templatesService.getTemplates();
-      let filtered = result || [];
-
-      if (hasAvatarVideo) {
-        filtered = filtered.filter(template =>
-          (template.format_order || []).includes('avatar_video')
-        );
-      }
+      // Always show all templates - don't filter by hasAvatarVideo
+      // Users should be able to see and select any template
+      const filtered = result || [];
 
       setTemplates(filtered);
     } catch (err) {
