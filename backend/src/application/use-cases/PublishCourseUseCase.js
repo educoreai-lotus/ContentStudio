@@ -127,11 +127,30 @@ export class PublishCourseUseCase {
         'avatar_video': 'avatar_video',
       };
 
+      logger.info('[PublishCourseUseCase] Validating formats', {
+        topicId: topic.topic_id,
+        formatOrder,
+        contentByTypeKeys: Object.keys(contentByType),
+      });
+
       for (const formatName of formatOrder) {
         const dbTypeName = formatNameToDbName[formatName] || formatName;
         const content = contentByType[formatName] || contentByType[dbTypeName];
 
+        logger.info('[PublishCourseUseCase] Checking format', {
+          topicId: topic.topic_id,
+          formatName,
+          dbTypeName,
+          hasContent: !!content,
+          contentId: content?.content_id,
+        });
+
         if (!content) {
+          logger.warn('[PublishCourseUseCase] Missing format', {
+            topicId: topic.topic_id,
+            formatName,
+            availableFormats: Object.keys(contentByType),
+          });
           errors.push({
             topic: topic.topic_name || `Topic ID ${topic.topic_id}`,
             issue: `Required format '${formatName}' has not been generated for this lesson`,
@@ -140,19 +159,45 @@ export class PublishCourseUseCase {
         }
 
         // 4. Check if content is empty or failed
-        const contentData = typeof content.content_data === 'string' 
-          ? JSON.parse(content.content_data) 
-          : content.content_data || {};
+        let contentData;
+        try {
+          contentData = typeof content.content_data === 'string' 
+            ? JSON.parse(content.content_data) 
+            : content.content_data || {};
+        } catch (parseError) {
+          logger.error('[PublishCourseUseCase] Failed to parse content_data', {
+            topicId: topic.topic_id,
+            formatName,
+            contentId: content.content_id,
+            error: parseError.message,
+          });
+          errors.push({
+            topic: topic.topic_name || `Topic ID ${topic.topic_id}`,
+            issue: `Content data for format '${formatName}' is invalid (parse error)`,
+          });
+          continue;
+        }
 
         // Check for failed status (for avatar_video, check if videoUrl is missing)
         if (content.content_type_id === 6) { // avatar_video
           if (!contentData.videoUrl || contentData.error) {
+            logger.warn('[PublishCourseUseCase] Avatar video incomplete', {
+              topicId: topic.topic_id,
+              formatName,
+              hasVideoUrl: !!contentData.videoUrl,
+              hasError: !!contentData.error,
+            });
             errors.push({
               topic: topic.topic_name || `Topic ID ${topic.topic_id}`,
               issue: `Avatar video generation failed or is incomplete for format '${formatName}'`,
             });
           }
         } else if (contentData.status === 'failed') {
+          logger.warn('[PublishCourseUseCase] Content generation failed', {
+            topicId: topic.topic_id,
+            formatName,
+            status: contentData.status,
+          });
           errors.push({
             topic: topic.topic_name || `Topic ID ${topic.topic_id}`,
             issue: `Content generation failed for format '${formatName}'`,
@@ -161,7 +206,17 @@ export class PublishCourseUseCase {
 
         // Check if content is empty
         const isEmpty = this.isContentEmpty(contentData, formatName);
+        logger.info('[PublishCourseUseCase] Content empty check', {
+          topicId: topic.topic_id,
+          formatName,
+          isEmpty,
+        });
         if (isEmpty) {
+          logger.warn('[PublishCourseUseCase] Content is empty', {
+            topicId: topic.topic_id,
+            formatName,
+            contentDataKeys: Object.keys(contentData),
+          });
           errors.push({
             topic: topic.topic_name || `Topic ID ${topic.topic_id}`,
             issue: `Content for format '${formatName}' is empty or incomplete`,
