@@ -155,17 +155,50 @@ export class PublishCourseUseCase {
         }
       }
 
-      // 5. Check DevLab exercises (if required by template or business logic)
-      // For now, we'll check if exercises exist, but not require them unless specified
-      // This can be enhanced based on business requirements
-      try {
-        const exercises = await this.exerciseRepository.findByTopicId(topic.topic_id);
-        // If template requires exercises or business logic requires them, validate here
-        // For now, we'll just log if exercises are missing (optional validation)
-      } catch (error) {
-        logger.warn('[PublishCourseUseCase] Could not check exercises', {
-          topicId: topic.topic_id,
-          error: error.message,
+      // 5. Check DevLab exercises (stored in topics.devlab_exercises JSONB field)
+      // devlab_exercises can be: null, array, or object with { html, questions, metadata }
+      const hasValidExercises = (exercises) => {
+        if (!exercises) return false;
+        
+        // If it's a string, try to parse it
+        if (typeof exercises === 'string') {
+          try {
+            const parsed = JSON.parse(exercises);
+            return hasValidExercises(parsed);
+          } catch {
+            // If parsing fails, check if string is not empty
+            return exercises.trim().length > 0;
+          }
+        }
+        
+        // If it's an array, check if it has items
+        if (Array.isArray(exercises)) {
+          return exercises.length > 0;
+        }
+        
+        // If it's an object, check the structure: { html: "...", questions: [...], metadata: {...} }
+        if (typeof exercises === 'object') {
+          // Check if it has questions array with at least one question
+          if (exercises.questions && Array.isArray(exercises.questions) && exercises.questions.length > 0) {
+            return true;
+          }
+          // Check if it has html content
+          if (exercises.html && typeof exercises.html === 'string' && exercises.html.trim().length > 0) {
+            return true;
+          }
+          // Fallback: check if object has any meaningful keys (not just metadata)
+          const keys = Object.keys(exercises);
+          return keys.length > 0 && keys.some(key => key !== 'metadata');
+        }
+        
+        return false;
+      };
+      
+      const exercises = topic.devlab_exercises;
+      if (!hasValidExercises(exercises)) {
+        errors.push({
+          topic: topic.topic_name || `Topic ID ${topic.topic_id}`,
+          issue: 'DevLab exercises are missing or invalid',
         });
       }
     }
