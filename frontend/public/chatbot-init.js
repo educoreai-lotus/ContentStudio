@@ -140,178 +140,45 @@
         // Optional: Custom container (defaults to "#edu-bot-container")
         container: "#edu-bot-container",
         
-        // Start collapsed (icon only) - user clicks to open chat
-        // Note: The bot script should handle icon mode automatically
-        // If these options don't work, the bot may use different parameter names
+        // Start as icon only - user must click to open chat
+        autoOpen: false,
+        initialMode: 'icon',
       });
       
       console.log('✅ RAG Bot: Initialized successfully!');
       
-      // Flag to prevent infinite loops in MutationObserver
-      let isCollapsing = false;
-      let collapseAttempts = 0;
-      const MAX_COLLAPSE_ATTEMPTS = 3;
-      let observer = null;
-      
-      // Function to collapse the chat widget to icon only
-      function collapseChatWidget() {
-        // Prevent infinite loops
-        if (isCollapsing) {
-          return false;
-        }
-        
-        collapseAttempts++;
-        if (collapseAttempts > MAX_COLLAPSE_ATTEMPTS) {
-          console.warn('⚠️ Max collapse attempts reached, stopping to prevent infinite loop');
-          if (observer) {
-            observer.disconnect();
-            observer = null;
-          }
-          return false;
-        }
-        
-        isCollapsing = true;
+      // After initialization, ensure chat panel is hidden and only icon is visible
+      setTimeout(() => {
         const container = document.querySelector('#edu-bot-container');
-        if (!container) {
-          isCollapsing = false;
-          return false;
-        }
-        
-        // Find all buttons - from logs, Element 2 is usually the close button
-        const allButtons = Array.from(container.querySelectorAll('button'));
-        
-        // Element 2 from logs has class "w-8 h-8" - this is likely the close button
-        const closeButton = allButtons.find(btn => {
-          const classList = btn.className || '';
-          // Look for the small rounded button (Element 2 from logs)
-          return classList.includes('w-8') && classList.includes('h-8') && classList.includes('rounded-full');
-        }) || allButtons[1]; // Fallback to 2nd button
-        
-        if (closeButton) {
-          console.log('🖱️ Clicking close button to collapse widget...', {
-            className: closeButton.className,
-            index: allButtons.indexOf(closeButton),
-            attempt: collapseAttempts
-          });
-          closeButton.click();
-          
-          // Also hide chat panel with CSS after a short delay
-          setTimeout(() => {
-            const chatPanel = container.querySelector('[class*="panel"], [class*="window"], [class*="dialog"], [class*="chat"]:not([class*="icon"]):not([class*="fab"])');
-            const chatInput = container.querySelector('input[type="text"], textarea, [class*="input"]');
-            const messages = container.querySelector('[class*="messages"], [class*="conversation"]');
-            
-            [chatPanel, chatInput?.closest('[class*="panel"]'), messages?.closest('[class*="panel"]')]
-              .filter(Boolean)
-              .forEach(el => {
-                el.style.setProperty('display', 'none', 'important');
-              });
-            
-            // Ensure icon button (Element 1) is visible
-            const iconButton = allButtons[0];
-            if (iconButton) {
-              iconButton.style.setProperty('display', 'block', 'important');
-              iconButton.style.setProperty('visibility', 'visible', 'important');
-              iconButton.style.setProperty('opacity', '1', 'important');
-              console.log('✅ Icon button should be visible now');
-            }
-            
-            // Re-enable collapsing after a delay
-            setTimeout(() => {
-              isCollapsing = false;
-            }, 1000);
-          }, 200);
-          
-          return true;
-        } else {
-          console.warn('⚠️ Close button not found, trying CSS approach...');
-          // Fallback: hide chat panel with CSS
-          const chatPanel = container.querySelector('[class*="panel"], [class*="window"], [class*="dialog"]');
+        if (container) {
+          // Hide chat panel elements
+          const chatPanel = container.querySelector('[class*="panel"]:not([class*="icon"]):not([class*="fab"])');
+          const chatWindow = container.querySelector('[class*="window"]:not([class*="icon"])');
+          const chatDialog = container.querySelector('[class*="dialog"]:not([class*="icon"])');
           const chatInput = container.querySelector('input[type="text"], textarea');
-          if (chatPanel || chatInput) {
-            const toHide = chatPanel || chatInput.closest('[class*="panel"], [class*="window"]');
-            if (toHide) {
-              toHide.style.setProperty('display', 'none', 'important');
-            }
+          const messages = container.querySelector('[class*="messages"], [class*="conversation"]');
+          
+          // Hide all chat panel elements
+          [chatPanel, chatWindow, chatDialog, chatInput?.closest('[class*="panel"], [class*="window"]'), messages?.closest('[class*="panel"], [class*="window"]')]
+            .filter(Boolean)
+            .forEach(el => {
+              const computedStyle = window.getComputedStyle(el);
+              if (computedStyle.display !== 'none') {
+                el.style.setProperty('display', 'none', 'important');
+              }
+            });
+          
+          // Ensure icon button is visible
+          const iconButton = container.querySelector('button[class*="icon"], button[class*="fab"], button:first-child');
+          if (iconButton) {
+            iconButton.style.setProperty('display', 'block', 'important');
+            iconButton.style.setProperty('visibility', 'visible', 'important');
+            iconButton.style.setProperty('opacity', '1', 'important');
           }
           
-          // Re-enable collapsing after a delay
-          setTimeout(() => {
-            isCollapsing = false;
-          }, 1000);
-          
-          return false;
+          console.log('✅ Chat widget initialized as icon only');
         }
-      }
-      
-      // Use MutationObserver to detect when widget opens and close it immediately
-      // BUT with debouncing to prevent infinite loops
-      const container = document.querySelector('#edu-bot-container');
-      if (container) {
-        let lastMutationTime = 0;
-        const DEBOUNCE_MS = 500; // Wait 500ms between collapse attempts
-        
-        observer = new MutationObserver((mutations) => {
-          // Debounce: only process if enough time has passed since last mutation
-          const now = Date.now();
-          if (now - lastMutationTime < DEBOUNCE_MS) {
-            return; // Skip this mutation
-          }
-          lastMutationTime = now;
-          
-          // Check if chat panel appeared
-          const chatInput = container.querySelector('input[type="text"], textarea, [class*="input"]');
-          const chatPanel = container.querySelector('[class*="panel"], [class*="window"], [class*="dialog"]');
-          
-          // Only collapse if panel is actually visible (not already hidden)
-          const isPanelVisible = chatPanel && window.getComputedStyle(chatPanel).display !== 'none';
-          const isInputVisible = chatInput && window.getComputedStyle(chatInput.closest('[class*="panel"], [class*="window"]') || chatInput).display !== 'none';
-          
-          if ((chatInput && isInputVisible) || (chatPanel && isPanelVisible)) {
-            console.log('🔍 Detected chat widget opened, attempting to close...');
-            collapseChatWidget();
-          }
-        });
-        
-        observer.observe(container, {
-          childList: true,
-          subtree: true,
-          attributes: true,
-          attributeFilter: ['style', 'class']
-        });
-        
-        console.log('👁️ MutationObserver set up to watch for widget opening (with debouncing)');
-      }
-      
-      // Also try to collapse after delays (in case MutationObserver misses it)
-      // But only if we haven't already collapsed
-      setTimeout(() => {
-        if (!isCollapsing && collapseAttempts < MAX_COLLAPSE_ATTEMPTS) {
-          console.log('🔄 Attempting to collapse chat widget (first attempt)...');
-          collapseChatWidget();
-        }
-      }, 2000);
-      
-      setTimeout(() => {
-        if (!isCollapsing && collapseAttempts < MAX_COLLAPSE_ATTEMPTS) {
-          console.log('🔄 Attempting to collapse chat widget (second attempt)...');
-          collapseChatWidget();
-        }
-      }, 3500);
-      
-      setTimeout(() => {
-        if (!isCollapsing && collapseAttempts < MAX_COLLAPSE_ATTEMPTS) {
-          console.log('🔄 Attempting to collapse chat widget (third attempt)...');
-          collapseChatWidget();
-        }
-        
-        // Disconnect observer after final attempt to prevent any further mutations
-        if (observer) {
-          observer.disconnect();
-          observer = null;
-          console.log('👁️ MutationObserver disconnected after final collapse attempt');
-        }
-      }, 5000);
+      }, 1000);
     } catch (error) {
       console.error('❌ RAG Bot: Initialization failed:', error);
       // Retry after 1 second

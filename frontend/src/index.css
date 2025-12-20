@@ -112,17 +112,25 @@
 }
 
 /* Hide chat panel initially - show only icon button */
+/* CRITICAL: Always hide chat panel elements unless explicitly opened by user */
 #edu-bot-container [class*="chat"]:not([class*="icon"]):not([class*="fab"]):not([class*="button"]),
-#edu-bot-container [class*="panel"],
-#edu-bot-container [class*="window"],
-#edu-bot-container [class*="dialog"],
+#edu-bot-container [class*="panel"]:not([class*="icon"]):not([class*="fab"]),
+#edu-bot-container [class*="window"]:not([class*="icon"]):not([class*="fab"]),
+#edu-bot-container [class*="dialog"]:not([class*="icon"]):not([class*="fab"]),
+#edu-bot-container [class*="container"]:not([class*="icon"]):not([class*="fab"]),
 #edu-bot-container input[type="text"],
 #edu-bot-container textarea,
 #edu-bot-container [class*="input"],
 #edu-bot-container [class*="message"],
 #edu-bot-container [class*="messages"],
-#edu-bot-container [class*="conversation"] {
+#edu-bot-container [class*="conversation"],
+#edu-bot-container [class*="suggestions"],
+#edu-bot-container [class*="greeting"],
+#edu-bot-container [class*="header"]:not([class*="icon"]):not([class*="fab"]) {
   display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
 
 /* Keep icon/button visible and clickable */
