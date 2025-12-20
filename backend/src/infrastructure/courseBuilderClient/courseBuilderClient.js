@@ -264,9 +264,8 @@ export class CourseBuilderClient {
       // Build envelope for Coordinator (standard structure)
       // Note: requester_service is 'content-studio' (who is sending)
       // Coordinator will route to Course Builder based on the action in payload
-      // IMPORTANT: According to POSTMAN_COURSE_BUILDER_REQUEST.md line 203, Course Builder expects response: {}
-      // This is different from DevLab which uses response: { answer: '' }
-      // Field order: requester_service, payload, response (must match documentation)
+      // IMPORTANT: Use same structure as devlabClient for consistency (response: { answer: '' })
+      // Field order: requester_service, payload, response (must match working clients)
       const envelope = {
         requester_service: 'content-studio',
         payload: payloadData,
@@ -275,8 +274,12 @@ export class CourseBuilderClient {
         },
       };
 
+      // CRITICAL: Deep clone envelope to ensure byte-identical signature
+      // The object signed must be exactly the same as what Coordinator receives
+      // Any mutation (even by axios serialization) will cause signature mismatch
+      const envelopeToSign = JSON.parse(JSON.stringify(envelope));
       
-      await postToCoordinator(envelope, {
+      await postToCoordinator(envelopeToSign, {
         endpoint: '/api/fill-content-metrics',
         timeout: 1200000, // 20 minutes timeout (matches server timeout for long-running requests)
       });
