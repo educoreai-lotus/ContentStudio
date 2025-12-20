@@ -1589,7 +1589,7 @@ export default function TopicContentManager() {
 
             {/* View Lesson Button - Always visible, disabled until all formats are ready AND template is selected */}
             {existingContent.length > 0 && (
-              <div className="mt-8 text-center space-y-4">
+              <div className="mt-8 text-center flex flex-col items-center gap-6">
                 <div className="relative inline-block group">
                   <button
                     onClick={() => {
@@ -1642,7 +1642,7 @@ export default function TopicContentManager() {
 
                 {/* Save and Finish Lesson Button - Only for standalone lessons */}
                 {!topicDetails?.course_id && (
-                  <div className="relative inline-block group mt-6">
+                  <div className="relative inline-block group">
                     <button
                       onClick={handlePublishStandalone}
                       disabled={publishing || !isStandaloneReady}
