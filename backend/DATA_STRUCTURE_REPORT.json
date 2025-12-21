@@ -1,8 +1,10 @@
 {
   "service_name": "content-studio",
-  "description": "Manages educational courses, topics (lessons), content items, and exercises for trainers. Handles AI-generated content, presentations, videos, and DevLab exercises.",
-  "version": "1.0.0",
+  "description": "Manages educational courses, topics (lessons), and content items for trainers. Exports courses with nested topics and content, plus stand-alone topics with content. Only exports text_audio content (content_type_id = 1) with text extracted from content_data JSONB.",
+  "version": "2.0.0",
   "data_structure": {
+    "courses": "array",
+    "stand_alone_topics": "array",
     "course_id": "integer",
     "course_name": "string",
     "trainer_id": "string",
@@ -19,132 +21,316 @@
     "topic_id": "integer",
     "topic_name": "string",
     "template_id": "integer",
+    "generation_methods_id": "integer",
     "devlab_exercises": "object",
-    "contents": "array",
+    "content": "array",
     "content_id": "integer",
     "content_type_id": "integer",
-    "content_data": "object",
+    "content_data": "string",
     "generation_method_id": "integer",
-    "quality_check_status": "string"
+    "quality_check_status": "string",
+    "quality_check_data": "object",
+    "quality_checked_at": "datetime"
   },
   "field_descriptions": {
-    "course_id": "Unique identifier for the course",
-    "course_name": "Display name of the course",
-    "trainer_id": "ID of the trainer who created the course",
-    "description": "Detailed description of the course content",
-    "skills": "Array of skills covered in the course (e.g., ['JavaScript', 'React', 'Node.js'])",
-    "language": "Language code for the course (e.g., 'en', 'he', 'ar')",
-    "status": "Course status: 'active', 'archived', or 'deleted'",
-    "company_logo": "URL to company logo image",
-    "permissions": "JSON string containing organization permissions from Directory service",
-    "usage_count": "Number of times the course has been accessed/used",
-    "created_at": "Timestamp when course was created",
-    "updated_at": "Timestamp when course was last modified",
-    "topics": "Array of topics (lessons) belonging to the course",
-    "topic_id": "Unique identifier for the topic/lesson",
-    "topic_name": "Display name of the topic/lesson",
-    "template_id": "ID of the template used for this topic",
-    "devlab_exercises": "JSONB object containing DevLab exercises with structure: { html: string, questions: array, metadata: object }",
-    "contents": "Array of content items for the topic (text, code, presentation, audio, mind_map, avatar_video)",
-    "content_id": "Unique identifier for the content item",
-    "content_type_id": "ID of the content type (1=text, 2=code, 3=presentation, 4=audio, 5=mind_map, 6=avatar_video)",
-    "content_data": "JSONB object containing content-specific data (varies by type)",
-    "generation_method_id": "ID of the generation method used (1=video_to_lesson, 2=ai_assisted, 3=manual)",
-    "quality_check_status": "Quality check status: 'pending', 'passed', 'failed', or null"
+    "courses": "Array of course objects, each containing course information with nested topics and content",
+    "stand_alone_topics": "Array of topic objects that are not part of any course (course_id IS NULL), each containing topic information with nested content",
+    "course_id": "Unique identifier for the course (Primary Key, required)",
+    "course_name": "Name of the course (VARCHAR(255), required)",
+    "trainer_id": "Identifier of the trainer who created the course (VARCHAR(50), required)",
+    "description": "Detailed description of the course (TEXT, nullable)",
+    "skills": "Array of skills associated with the course (TEXT[], can be empty)",
+    "language": "Language code for the course (VARCHAR(10), default: 'en')",
+    "status": "Course status - can only be: 'active', 'archived', 'deleted'",
+    "company_logo": "URL or path to company logo (VARCHAR(500), nullable)",
+    "permissions": "Organization permissions from Directory service (TEXT, nullable)",
+    "usage_count": "Number of times the course was fetched (INTEGER, default: 0)",
+    "created_at": "Date and time when the course was created (TIMESTAMP, ISO 8601 format)",
+    "updated_at": "Date and time of last update (TIMESTAMP, ISO 8601 format)",
+    "topics": "Array of topic objects belonging to the course, each containing topic information with nested content",
+    "topic_id": "Unique identifier for the topic/lesson (Primary Key, required)",
+    "topic_name": "Name of the topic/lesson (VARCHAR(255), required)",
+    "description": "Description of the topic (TEXT, nullable)",
+    "trainer_id": "Identifier of the trainer who created the topic (VARCHAR(50), required)",
+    "language": "Language code for the topic (VARCHAR(10), default: 'en')",
+    "status": "Topic status - can only be: 'active', 'archived', 'deleted'",
+    "skills": "Array of skills associated with the topic (TEXT[], can be empty)",
+    "template_id": "Template identifier (INTEGER, nullable, Foreign Key to templates)",
+    "generation_methods_id": "Generation method identifier (INTEGER, nullable, Foreign Key to generation_methods)",
+    "usage_count": "Number of times the topic was fetched (INTEGER, default: 0)",
+    "devlab_exercises": "DevLab exercises data (JSONB, nullable)",
+    "created_at": "Date and time when the topic was created (TIMESTAMP, ISO 8601 format)",
+    "updated_at": "Date and time of last update (TIMESTAMP, ISO 8601 format)",
+    "content": "Array of content objects for the topic, filtered to only include content_type_id = 1 (text_audio)",
+    "content_id": "Unique identifier for the content (Primary Key, required)",
+    "content_type_id": "Content type - must be 1 (text_audio). Only content with content_type_id = 1 is exported",
+    "content_data": "Only the text string extracted from content_data.text field. The original content_data JSONB object contains text, audioUrl, audioFormat, audioDuration, audioVoice, but only the text field is exported as a string",
+    "generation_method_id": "Generation method identifier (INTEGER, Foreign Key to generation_methods, required)",
+    "quality_check_status": "Quality check status - can be: 'pending', 'approved', 'rejected', 'needs_revision' (nullable)",
+    "quality_check_data": "Quality check data (JSONB, nullable)",
+    "quality_checked_at": "Quality check date (TIMESTAMP, nullable, ISO 8601 format)",
+    "created_at": "Date and time when the content was created (TIMESTAMP, ISO 8601 format)",
+    "updated_at": "Date and time of last update (TIMESTAMP, ISO 8601 format)"
   },
   "sample_data": {
-    "course_id": 42,
-    "course_name": "Python Programming & Data Structures",
-    "trainer_id": "trainer-12345",
-    "description": "Comprehensive course covering Python fundamentals and advanced data structures including lists, dictionaries, sets, and algorithms.",
-    "skills": [
-      "Python",
-      "Data Structures",
-      "Algorithms",
-      "Object-Oriented Programming"
-    ],
-    "language": "en",
-    "status": "active",
-    "company_logo": "https://storage.example.com/logos/company-abc.png",
-    "permissions": "{\"allowed_organizations\": [\"org-1\", \"org-2\"]}",
-    "usage_count": 127,
-    "created_at": "2025-01-15T10:00:00.000Z",
-    "updated_at": "2025-01-18T14:30:00.000Z",
-    "topics": [
+    "courses": [
       {
-        "topic_id": 101,
-        "topic_name": "Introduction to Python Lists",
-        "description": "Learn the basics of Python lists, indexing, and common operations",
-        "template_id": 5,
+        "course_id": 42,
+        "course_name": "Advanced Python Programming",
+        "trainer_id": "trainer-uuid-12345",
+        "description": "Comprehensive course covering Python fundamentals and advanced data structures including lists, dictionaries, sets, and algorithms. Perfect for developers looking to master Python programming.",
         "skills": [
           "Python",
-          "Lists",
-          "Data Structures"
+          "Data Structures",
+          "Algorithms",
+          "Object-Oriented Programming"
         ],
         "language": "en",
         "status": "active",
-        "usage_count": 45,
+        "company_logo": "https://storage.example.com/logos/tech-company-abc.png",
+        "permissions": "{\"allowed_organizations\": [\"org-uuid-001\", \"org-uuid-002\"]}",
+        "usage_count": 127,
+        "created_at": "2025-01-15T10:00:00.000Z",
+        "updated_at": "2025-01-18T14:30:00.000Z",
+        "topics": [
+          {
+            "topic_id": 101,
+            "topic_name": "Introduction to Python Lists",
+            "description": "Learn the basics of Python lists, indexing, and common operations. This lesson covers creating lists, accessing elements, and performing basic list operations.",
+            "trainer_id": "trainer-uuid-12345",
+            "language": "en",
+            "status": "active",
+            "skills": [
+              "Python",
+              "Lists",
+              "Data Structures"
+            ],
+            "template_id": 5,
+            "generation_methods_id": 2,
+            "usage_count": 45,
+            "devlab_exercises": {
+              "html": "<div class='exercise-container'><h3>Python Lists Exercise</h3><p>Practice creating and manipulating lists</p></div>",
+              "questions": [
+                {
+                  "question_id": "q1",
+                  "question_text": "What is the output of [1, 2, 3][-1]?",
+                  "question_type": "multiple_choice",
+                  "options": ["1", "2", "3", "Error"],
+                  "correct_answer": "3"
+                }
+              ],
+              "metadata": {
+                "generated_at": "2025-01-15T11:00:00.000Z",
+                "programming_language": "python"
+              }
+            },
+            "created_at": "2025-01-15T10:30:00.000Z",
+            "updated_at": "2025-01-15T11:00:00.000Z",
+            "content": [
+              {
+                "content_id": 501,
+                "content_type_id": 1,
+                "content_data": "Python lists are ordered collections of items that can contain elements of different types. You can create a list by placing items inside square brackets, separated by commas. For example: my_list = [1, 2, 3, 'hello', 'world']. Lists are mutable, meaning you can modify them after creation. You can access list elements using zero-based indexing, where the first element is at index 0. Negative indexing is also supported, where -1 refers to the last element.",
+                "generation_method_id": 2,
+                "quality_check_status": "approved",
+                "quality_check_data": {
+                  "checked_by": "system",
+                  "plagiarism_score": 0.02,
+                  "readability_score": 85
+                },
+                "quality_checked_at": "2025-01-15T11:15:00.000Z",
+                "created_at": "2025-01-15T10:35:00.000Z",
+                "updated_at": "2025-01-15T11:15:00.000Z"
+              }
+            ]
+          },
+          {
+            "topic_id": 102,
+            "topic_name": "Working with Dictionaries",
+            "description": "Understanding Python dictionaries, key-value pairs, and dictionary methods",
+            "trainer_id": "trainer-uuid-12345",
+            "language": "en",
+            "status": "active",
+            "skills": [
+              "Python",
+              "Dictionaries",
+              "Data Structures"
+            ],
+            "template_id": 5,
+            "generation_methods_id": 2,
+            "usage_count": 38,
+            "devlab_exercises": null,
+            "created_at": "2025-01-15T12:00:00.000Z",
+            "updated_at": "2025-01-15T12:30:00.000Z",
+            "content": [
+              {
+                "content_id": 502,
+                "content_type_id": 1,
+                "content_data": "Python dictionaries are unordered collections of key-value pairs. Each key must be unique and immutable. You can create a dictionary using curly braces or the dict() constructor. Keys and values are separated by colons, and pairs are separated by commas. Dictionaries are mutable and support various methods for accessing and modifying data.",
+                "generation_method_id": 2,
+                "quality_check_status": "pending",
+                "quality_check_data": null,
+                "quality_checked_at": null,
+                "created_at": "2025-01-15T12:05:00.000Z",
+                "updated_at": "2025-01-15T12:05:00.000Z"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "stand_alone_topics": [
+      {
+        "topic_id": 201,
+        "topic_name": "Introduction to Machine Learning Basics",
+        "description": "A standalone lesson covering fundamental concepts of machine learning, including supervised and unsupervised learning, training data, and model evaluation.",
+        "trainer_id": "trainer-uuid-67890",
+        "language": "en",
+        "status": "active",
+        "skills": [
+          "Machine Learning",
+          "Data Science",
+          "Python"
+        ],
+        "template_id": 7,
+        "generation_methods_id": 1,
+        "usage_count": 92,
         "devlab_exercises": {
-          "html": "<div>Exercise HTML content</div>",
-          "questions": [
-            {
-              "question_id": "q1",
-              "question_text": "What is the output of [1, 2, 3][-1]?",
-              "question_type": "multiple_choice",
-              "options": ["1", "2", "3", "Error"],
-              "correct_answer": "3"
-            }
-          ],
+          "html": "<div class='ml-exercise'><h3>ML Basics Quiz</h3></div>",
+          "questions": [],
           "metadata": {
-            "generated_at": "2025-01-15T11:00:00.000Z",
-            "programming_language": "python"
+            "generated_at": "2025-01-10T09:00:00.000Z"
           }
         },
-        "created_at": "2025-01-15T10:30:00.000Z",
-        "updated_at": "2025-01-15T11:00:00.000Z",
-        "contents": [
+        "created_at": "2025-01-10T08:00:00.000Z",
+        "updated_at": "2025-01-12T16:20:00.000Z",
+        "content": [
           {
-            "content_id": 501,
+            "content_id": 601,
             "content_type_id": 1,
-            "content_data": {
-              "text": "Python lists are ordered collections of items...",
-              "format": "markdown"
-            },
-            "generation_method_id": 2,
-            "quality_check_status": "passed"
-          },
-          {
-            "content_id": 502,
-            "content_type_id": 2,
-            "content_data": {
-              "code": "my_list = [1, 2, 3]\nprint(my_list[-1])",
-              "language": "python"
-            },
-            "generation_method_id": 2,
-            "quality_check_status": "passed"
-          },
-          {
-            "content_id": 503,
-            "content_type_id": 3,
-            "content_data": {
-              "file_url": "https://storage.example.com/presentations/topic-101.pptx",
-              "slides_count": 15
-            },
+            "content_data": "Machine learning is a subset of artificial intelligence that enables computers to learn from data without being explicitly programmed. There are three main types of machine learning: supervised learning, where the algorithm learns from labeled training data; unsupervised learning, where the algorithm finds patterns in unlabeled data; and reinforcement learning, where an agent learns by interacting with an environment and receiving rewards or penalties.",
             "generation_method_id": 1,
-            "quality_check_status": "pending"
+            "quality_check_status": "approved",
+            "quality_check_data": {
+              "checked_by": "trainer-uuid-67890",
+              "plagiarism_score": 0.01,
+              "readability_score": 88
+            },
+            "quality_checked_at": "2025-01-10T09:30:00.000Z",
+            "created_at": "2025-01-10T08:15:00.000Z",
+            "updated_at": "2025-01-10T09:30:00.000Z"
+          },
+          {
+            "content_id": 602,
+            "content_type_id": 1,
+            "content_data": "Training a machine learning model involves feeding it a dataset and allowing it to identify patterns and relationships. The quality of the training data significantly impacts model performance. Common challenges include overfitting, where the model memorizes training data but fails on new data, and underfitting, where the model is too simple to capture underlying patterns.",
+            "generation_method_id": 1,
+            "quality_check_status": "approved",
+            "quality_check_data": {
+              "checked_by": "trainer-uuid-67890",
+              "plagiarism_score": 0.03,
+              "readability_score": 82
+            },
+            "quality_checked_at": "2025-01-10T09:35:00.000Z",
+            "created_at": "2025-01-10T08:20:00.000Z",
+            "updated_at": "2025-01-10T09:35:00.000Z"
+          }
+        ]
+      },
+      {
+        "topic_id": 202,
+        "topic_name": "Git Version Control Fundamentals",
+        "description": "Essential Git commands and workflows for version control",
+        "trainer_id": "trainer-uuid-11111",
+        "language": "en",
+        "status": "active",
+        "skills": [
+          "Git",
+          "Version Control",
+          "Software Development"
+        ],
+        "template_id": 3,
+        "generation_methods_id": 3,
+        "usage_count": 156,
+        "devlab_exercises": null,
+        "created_at": "2025-01-08T14:00:00.000Z",
+        "updated_at": "2025-01-20T10:00:00.000Z",
+        "content": [
+          {
+            "content_id": 701,
+            "content_type_id": 1,
+            "content_data": "Git is a distributed version control system that tracks changes in files and coordinates work among multiple developers. Key concepts include repositories, which store project history; commits, which represent snapshots of changes; branches, which allow parallel development; and merges, which combine changes from different branches.",
+            "generation_method_id": 3,
+            "quality_check_status": "approved",
+            "quality_check_data": {
+              "checked_by": "trainer-uuid-11111",
+              "plagiarism_score": 0.00,
+              "readability_score": 90
+            },
+            "quality_checked_at": "2025-01-08T15:00:00.000Z",
+            "created_at": "2025-01-08T14:10:00.000Z",
+            "updated_at": "2025-01-08T15:00:00.000Z"
           }
         ]
       }
     ]
   },
   "notes": [
-    "Courses contain multiple topics (lessons), each topic can have multiple content items of different types",
-    "Content types: 1=text, 2=code, 3=presentation, 4=audio, 5=mind_map, 6=avatar_video",
-    "devlab_exercises is a JSONB field that can contain HTML, questions array, and metadata",
-    "content_data structure varies by content_type_id - text has text/format, code has code/language, presentation has file_url/slides_count",
-    "Status field uses soft delete - records are never physically deleted, status changes to 'deleted'",
-    "skills is stored as PostgreSQL TEXT[] array",
-    "permissions field contains JSON string with organization access control data from Directory service"
+    "The export structure contains two top-level arrays: 'courses' and 'stand_alone_topics'",
+    "",
+    "courses (array) - each item contains:",
+    "  └─ course_id (integer): Unique course identifier",
+    "  └─ course_name (string): Course display name",
+    "  └─ trainer_id (string): Trainer who created the course",
+    "  └─ description (text): Course description, can be null",
+    "  └─ skills (array of strings): List of skills, can be empty array",
+    "  └─ language (string): ISO 639-1 language code (e.g., 'en', 'he', 'ar')",
+    "  └─ status (string): 'active', 'archived', or 'deleted'",
+    "  └─ company_logo (string): Logo URL, can be null",
+    "  └─ permissions (text): JSON string with organization permissions, can be null",
+    "  └─ usage_count (integer): Number of times course was accessed",
+    "  └─ created_at (datetime): ISO 8601 timestamp",
+    "  └─ updated_at (datetime): ISO 8601 timestamp",
+    "  └─ topics (array): Nested topics belonging to this course",
+    "",
+    "topics (array within courses) - each item contains:",
+    "  └─ topic_id (integer): Unique topic identifier",
+    "  └─ topic_name (string): Topic display name",
+    "  └─ description (text): Topic description, can be null",
+    "  └─ trainer_id (string): Trainer who created the topic",
+    "  └─ language (string): ISO 639-1 language code",
+    "  └─ status (string): 'active', 'archived', or 'deleted'",
+    "  └─ skills (array of strings): List of skills, can be empty array",
+    "  └─ template_id (integer): Template identifier, can be null",
+    "  └─ generation_methods_id (integer): Generation method identifier, can be null",
+    "  └─ usage_count (integer): Number of times topic was accessed",
+    "  └─ devlab_exercises (object): JSONB object with exercises data, can be null",
+    "  └─ created_at (datetime): ISO 8601 timestamp",
+    "  └─ updated_at (datetime): ISO 8601 timestamp",
+    "  └─ content (array): Nested content items for this topic",
+    "",
+    "content (array within topics) - each item contains:",
+    "  └─ content_id (integer): Unique content identifier",
+    "  └─ content_type_id (integer): Always 1 (text_audio) - only this type is exported",
+    "  └─ content_data (string): Only the text field extracted from the original JSONB object. The original content_data JSONB contains: { text, audioUrl, audioFormat, audioDuration, audioVoice }, but only the 'text' field is exported as a string",
+    "  └─ generation_method_id (integer): Generation method identifier",
+    "  └─ quality_check_status (string): 'pending', 'approved', 'rejected', 'needs_revision', or null",
+    "  └─ quality_check_data (object): JSONB object with quality check details, can be null",
+    "  └─ quality_checked_at (datetime): When quality check was performed, can be null",
+    "  └─ created_at (datetime): ISO 8601 timestamp",
+    "  └─ updated_at (datetime): ISO 8601 timestamp",
+    "",
+    "stand_alone_topics (array) - each item has the same structure as topics within courses:",
+    "  └─ Same fields as topics above (topic_id, topic_name, description, trainer_id, language, status, skills, template_id, generation_methods_id, usage_count, devlab_exercises, created_at, updated_at, content)",
+    "  └─ These topics have course_id = NULL in the database (not part of any course)",
+    "",
+    "CRITICAL RULES:",
+    "1. Only content with content_type_id = 1 (text_audio) is exported. All other content types (code, presentation, audio, mind_map, avatar_video) are excluded",
+    "2. For content_data field: Only the 'text' string is exported. The original JSONB object contains multiple fields (text, audioUrl, audioFormat, audioDuration, audioVoice), but the export extracts only the 'text' field as a string",
+    "3. Status filtering: Only 'active' and 'archived' courses/topics are exported. 'deleted' items are excluded",
+    "4. Incremental sync: When 'since' parameter is provided, items are filtered by: (created_at >= since OR updated_at >= since)",
+    "5. All datetime fields are in ISO 8601 format with UTC timezone",
+    "6. Arrays can be empty ([]), objects can be null",
+    "7. skills array uses PostgreSQL TEXT[] type and can contain zero or more skill strings"
   ]
 }
-

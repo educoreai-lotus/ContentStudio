@@ -168,19 +168,28 @@ class ProcessHandler {
     });
     const hasMore = page * limit < totalCount;
 
+    // Data is now an object with { courses: [], stand_alone_topics: [] }
+    // Wrap it in items array for batch sync format
+    const coursesCount = data.courses?.length || 0;
+    const topicsCount = data.stand_alone_topics?.length || 0;
+    const totalRecords = coursesCount + topicsCount;
+
     logger.info('[Batch Sync] Data fetched', {
       service: process.env.SERVICE_NAME || 'content-studio',
       tenant_id,
       page,
-      records: data.length,
+      courses: coursesCount,
+      stand_alone_topics: topicsCount,
+      total_records: totalRecords,
       total: totalCount,
       has_more: hasMore,
     });
 
     // ⚠️ CRITICAL: Return format MUST be { items: [...] }
+    // Wrap the data object in an array since it contains both courses and stand_alone_topics
     return {
       data: {
-        items: data, // ⭐ Your actual data array
+        items: [data], // ⭐ Single object containing courses and stand_alone_topics arrays
         page,
         limit,
         total: totalCount,
@@ -251,20 +260,74 @@ class ProcessHandler {
   }
 
   /**
+   * Extract text from content_data JSONB object
+   * Only extracts the "text" field as a string for content_type_id = 1 (text_audio)
+   */
+  extractTextFromContentData(contentData) {
+    if (!contentData) return null;
+    
+    // If it's already a string, return it
+    if (typeof contentData === 'string') {
+      try {
+        const parsed = JSON.parse(contentData);
+        return parsed?.text || null;
+      } catch {
+        return contentData;
+      }
+    }
+    
+    // If it's an object, extract the text field
+    if (typeof contentData === 'object') {
+      return contentData.text || null;
+    }
+    
+    return null;
+  }
+
+  /**
    * Query database with pagination (for Batch Sync)
-   * Returns courses with their topics and content
+   * Returns courses with their topics and content, plus stand-alone topics
+   * Structure: { courses: [...], stand_alone_topics: [...] }
    */
   async queryDatabase({ tenant_id, limit, offset, since }) {
     await db.ready;
 
     if (!db.isConnected()) {
       logger.error('[Database Query] Database not connected');
-      return [];
+      return { courses: [], stand_alone_topics: [] };
     }
 
     try {
-      // Build query to get courses with topics and content
-      let query = `
+      // Build where clause for courses - handle both Full Sync and Incremental Sync
+      const courseParams = [];
+      const courseWhereConditions = [];
+      let courseParamIndex = 1;
+
+      // Status filter: 'active' or 'archived' (exclude 'deleted')
+      courseWhereConditions.push(`c.status IN ($${courseParamIndex}, $${courseParamIndex + 1})`);
+      courseParams.push('active', 'archived');
+      courseParamIndex += 2;
+
+      if (tenant_id) {
+        courseWhereConditions.push(`c.trainer_id = $${courseParamIndex}`);
+        courseParams.push(tenant_id);
+        courseParamIndex++;
+      }
+
+      // Incremental Sync: Check BOTH created_at AND updated_at
+      if (since) {
+        const sinceDate = new Date(since);
+        courseWhereConditions.push(`(c.created_at >= $${courseParamIndex} OR c.updated_at >= $${courseParamIndex})`);
+        courseParams.push(sinceDate);
+        courseParamIndex++;
+      }
+
+      // Query courses first (without topics)
+      const limitParamIndex = courseParamIndex;
+      const offsetParamIndex = courseParamIndex + 1;
+      courseParams.push(limit, offset);
+
+      let courseQuery = `
         SELECT 
           c.course_id,
           c.course_name,
@@ -277,72 +340,128 @@ class ProcessHandler {
           c.permissions,
           c.usage_count,
           c.created_at,
-          c.updated_at,
-          COALESCE(
-            json_agg(
-              DISTINCT jsonb_build_object(
-                'topic_id', t.topic_id,
-                'topic_name', t.topic_name,
-                'description', t.description,
-                'template_id', t.template_id,
-                'skills', t.skills,
-                'language', t.language,
-                'status', t.status,
-                'usage_count', t.usage_count,
-                'devlab_exercises', t.devlab_exercises,
-                'created_at', t.created_at,
-                'updated_at', t.updated_at
-              )
-            ) FILTER (WHERE t.topic_id IS NOT NULL),
-            '[]'::json
-          ) as topics
+          c.updated_at
         FROM trainer_courses c
-        LEFT JOIN topics t ON c.course_id = t.course_id AND t.status = 'active'
-        WHERE c.status = 'active'
-      `;
-
-      const params = [];
-      let paramIndex = 1;
-
-      if (tenant_id) {
-        query += ` AND c.trainer_id = $${paramIndex}`;
-        params.push(tenant_id);
-        paramIndex++;
-      }
-
-      if (since) {
-        query += ` AND c.updated_at >= $${paramIndex}`;
-        params.push(new Date(since));
-        paramIndex++;
-      }
-
-      query += `
-        GROUP BY c.course_id
+        WHERE ${courseWhereConditions.join(' AND ')}
         ORDER BY c.updated_at DESC
-        LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+        LIMIT $${limitParamIndex} OFFSET $${offsetParamIndex}
       `;
-      params.push(limit, offset);
 
-      const result = await db.query(query, params);
+      const courseResult = await db.query(courseQuery, courseParams);
+      const courseIds = courseResult.rows.map(row => row.course_id);
 
-      // Process results to include content for each topic
+      // Query topics for these courses
+      let topicsForCourses = [];
+      if (courseIds.length > 0) {
+        const topicParams = [];
+        const topicWhereConditions = [`t.course_id = ANY($1::INTEGER[])`, `t.status IN ($2, $3)`];
+        topicParams.push(courseIds, 'active', 'archived');
+        let topicParamIndex = 4;
+
+        // Incremental Sync: Check BOTH created_at AND updated_at
+        if (since) {
+          const sinceDate = new Date(since);
+          topicWhereConditions.push(`(t.created_at >= $${topicParamIndex} OR t.updated_at >= $${topicParamIndex})`);
+          topicParams.push(sinceDate);
+        }
+
+        const topicQuery = `
+          SELECT 
+            t.topic_id,
+            t.topic_name,
+            t.description,
+            t.trainer_id,
+            t.language,
+            t.status,
+            t.skills,
+            t.template_id,
+            t.generation_methods_id,
+            t.usage_count,
+            t.devlab_exercises,
+            t.created_at,
+            t.updated_at,
+            t.course_id
+          FROM topics t
+          WHERE ${topicWhereConditions.join(' AND ')}
+          ORDER BY t.created_at DESC
+        `;
+
+        const topicResult = await db.query(topicQuery, topicParams);
+        topicsForCourses = topicResult.rows;
+      }
+
+      // Group topics by course_id
+      const topicsByCourseId = new Map();
+      topicsForCourses.forEach(topic => {
+        const courseId = topic.course_id;
+        if (!topicsByCourseId.has(courseId)) {
+          topicsByCourseId.set(courseId, []);
+        }
+        topicsByCourseId.get(courseId).push(topic);
+      });
+
+      // Process courses to include content for each topic
       const courses = await Promise.all(
-        result.rows.map(async (row) => {
-          const topics = row.topics || [];
+        courseResult.rows.map(async (row) => {
+          const courseTopics = topicsByCourseId.get(row.course_id) || [];
           const topicsWithContent = await Promise.all(
-            topics.map(async (topic) => {
-              const contents = await this.contentRepository.findAllByTopicId(topic.topic_id);
+            courseTopics.map(async (topic) => {
+              // Query content for this topic - ONLY content_type_id = 1 (text_audio)
+              const contentParams = [topic.topic_id];
+              let contentQuery = `
+                SELECT 
+                  content_id,
+                  content_type_id,
+                  content_data,
+                  generation_method_id,
+                  quality_check_status,
+                  quality_check_data,
+                  quality_checked_at,
+                  created_at,
+                  updated_at
+                FROM content
+                WHERE topic_id = $1
+                  AND content_type_id = 1
+              `;
+              
+              // Incremental Sync: Check BOTH created_at AND updated_at
+              if (since) {
+                contentQuery += ` AND (created_at >= $2 OR updated_at >= $2)`;
+                contentParams.push(new Date(since));
+              }
+              
+              contentQuery += ` ORDER BY created_at DESC`;
+              
+              const contentResult = await db.query(contentQuery, contentParams);
+              
+              // Extract only the text field from content_data
+              const content = contentResult.rows.map((contentRow) => ({
+                content_id: contentRow.content_id,
+                content_type_id: contentRow.content_type_id,
+                content_data: this.extractTextFromContentData(contentRow.content_data), // Extract only text
+                generation_method_id: contentRow.generation_method_id,
+                quality_check_status: contentRow.quality_check_status,
+                quality_check_data: contentRow.quality_check_data,
+                quality_checked_at: contentRow.quality_checked_at,
+                created_at: contentRow.created_at,
+                updated_at: contentRow.updated_at,
+              }));
+
               return {
-                ...topic,
-                contents: contents.map((content) => ({
-                  content_id: content.content_id,
-                  content_type_id: content.content_type_id,
-                  content_data: content.content_data,
-                  generation_method_id: content.generation_method_id,
-                  quality_check_status: content.quality_check_status,
-                  created_at: content.created_at,
-                  updated_at: content.updated_at,
-                })),
+                topic_id: topic.topic_id,
+                topic_name: topic.topic_name,
+                description: topic.description || null,
+                trainer_id: topic.trainer_id,
+                language: topic.language,
+                status: topic.status,
+                skills: topic.skills || [],
+                template_id: topic.template_id,
+                generation_methods_id: topic.generation_methods_id,
+                usage_count: topic.usage_count || 0,
+                devlab_exercises: topic.devlab_exercises,
+                created_at: topic.created_at,
+                updated_at: topic.updated_at,
+                content: content,
               };
             })
           );
@@ -365,7 +484,123 @@ class ProcessHandler {
         })
       );
 
-      return courses;
+      // Query stand-alone topics (course_id IS NULL)
+      const standaloneParams = [];
+      const standaloneWhereConditions = ['t.course_id IS NULL'];
+      let standaloneParamIndex = 1;
+
+      // Status filter: 'active' or 'archived' (exclude 'deleted')
+      standaloneWhereConditions.push(`t.status IN ($${standaloneParamIndex}, $${standaloneParamIndex + 1})`);
+      standaloneParams.push('active', 'archived');
+      standaloneParamIndex += 2;
+
+      if (tenant_id) {
+        standaloneWhereConditions.push(`t.trainer_id = $${standaloneParamIndex}`);
+        standaloneParams.push(tenant_id);
+        standaloneParamIndex++;
+      }
+
+      // Incremental Sync: Check BOTH created_at AND updated_at
+      if (since) {
+        const sinceDate = new Date(since);
+        standaloneWhereConditions.push(`(t.created_at >= $${standaloneParamIndex} OR t.updated_at >= $${standaloneParamIndex})`);
+        standaloneParams.push(sinceDate);
+        standaloneParamIndex++;
+      }
+
+      const standaloneLimitParamIndex = standaloneParamIndex;
+      const standaloneOffsetParamIndex = standaloneParamIndex + 1;
+      standaloneParams.push(limit, offset);
+
+      let standaloneQuery = `
+        SELECT 
+          t.topic_id,
+          t.topic_name,
+          t.description,
+          t.trainer_id,
+          t.language,
+          t.status,
+          t.skills,
+          t.template_id,
+          t.generation_methods_id,
+          t.usage_count,
+          t.devlab_exercises,
+          t.created_at,
+          t.updated_at
+        FROM topics t
+        WHERE ${standaloneWhereConditions.join(' AND ')}
+        ORDER BY t.updated_at DESC
+        LIMIT $${standaloneLimitParamIndex} OFFSET $${standaloneOffsetParamIndex}
+      `;
+      const standaloneResult = await db.query(standaloneQuery, standaloneParams);
+
+      // Process stand-alone topics to include content
+      const standAloneTopics = await Promise.all(
+        standaloneResult.rows.map(async (topic) => {
+          // Query content for this topic - ONLY content_type_id = 1 (text_audio)
+          const contentParams = [topic.topic_id];
+          let contentQuery = `
+            SELECT 
+              content_id,
+              content_type_id,
+              content_data,
+              generation_method_id,
+              quality_check_status,
+              quality_check_data,
+              quality_checked_at,
+              created_at,
+              updated_at
+            FROM content
+            WHERE topic_id = $1
+              AND content_type_id = 1
+          `;
+          
+          // Incremental Sync: Check BOTH created_at AND updated_at
+          if (since) {
+            contentQuery += ` AND (created_at >= $2 OR updated_at >= $2)`;
+            contentParams.push(new Date(since));
+          }
+          
+          contentQuery += ` ORDER BY created_at DESC`;
+          
+          const contentResult = await db.query(contentQuery, contentParams);
+          
+          // Extract only the text field from content_data
+          const content = contentResult.rows.map((contentRow) => ({
+            content_id: contentRow.content_id,
+            content_type_id: contentRow.content_type_id,
+            content_data: this.extractTextFromContentData(contentRow.content_data), // Extract only text
+            generation_method_id: contentRow.generation_method_id,
+            quality_check_status: contentRow.quality_check_status,
+            quality_check_data: contentRow.quality_check_data,
+            quality_checked_at: contentRow.quality_checked_at,
+            created_at: contentRow.created_at,
+            updated_at: contentRow.updated_at,
+          }));
+
+          return {
+            topic_id: topic.topic_id,
+            topic_name: topic.topic_name,
+            description: topic.description || null,
+            trainer_id: topic.trainer_id,
+            language: topic.language,
+            status: topic.status,
+            skills: topic.skills || [],
+            template_id: topic.template_id,
+            generation_methods_id: topic.generation_methods_id,
+            usage_count: topic.usage_count || 0,
+            devlab_exercises: topic.devlab_exercises,
+            created_at: topic.created_at,
+            updated_at: topic.updated_at,
+            content: content,
+          };
+        })
+      );
+
+      return {
+        courses: courses,
+        stand_alone_topics: standAloneTopics,
+      };
     } catch (error) {
       logger.error('[Database Query] Error querying database', {
         error: error.message,
@@ -377,6 +612,7 @@ class ProcessHandler {
 
   /**
    * Get total count (for Batch Sync pagination)
+   * Returns total count of courses + stand-alone topics
    */
   async getTotalCount({ tenant_id, since }) {
     await db.ready;
@@ -386,28 +622,64 @@ class ProcessHandler {
     }
 
     try {
-      let query = `
-        SELECT COUNT(*) as total
-        FROM trainer_courses
-        WHERE status = 'active'
-      `;
-
-      const params = [];
-      let paramIndex = 1;
+      // Count courses
+      const courseParams = [];
+      const courseWhereConditions = ['status IN ($1, $2)']; // 'active' or 'archived'
+      courseParams.push('active', 'archived');
+      let courseParamIndex = 3;
 
       if (tenant_id) {
-        query += ` AND trainer_id = $${paramIndex}`;
-        params.push(tenant_id);
-        paramIndex++;
+        courseWhereConditions.push(`trainer_id = $${courseParamIndex}`);
+        courseParams.push(tenant_id);
+        courseParamIndex++;
       }
 
+      // Incremental Sync: Check BOTH created_at AND updated_at
       if (since) {
-        query += ` AND updated_at >= $${paramIndex}`;
-        params.push(new Date(since));
+        const sinceDate = new Date(since);
+        courseWhereConditions.push(`(created_at >= $${courseParamIndex} OR updated_at >= $${courseParamIndex})`);
+        courseParams.push(sinceDate);
       }
 
-      const result = await db.query(query, params);
-      return parseInt(result.rows[0].total, 10);
+      const courseQuery = `
+        SELECT COUNT(*) as total
+        FROM trainer_courses
+        WHERE ${courseWhereConditions.join(' AND ')}
+      `;
+
+      const courseResult = await db.query(courseQuery, courseParams);
+      const courseCount = parseInt(courseResult.rows[0].total, 10);
+
+      // Count stand-alone topics
+      const topicParams = [];
+      const topicWhereConditions = ['course_id IS NULL', 'status IN ($1, $2)']; // 'active' or 'archived'
+      topicParams.push('active', 'archived');
+      let topicParamIndex = 3;
+
+      if (tenant_id) {
+        topicWhereConditions.push(`trainer_id = $${topicParamIndex}`);
+        topicParams.push(tenant_id);
+        topicParamIndex++;
+      }
+
+      // Incremental Sync: Check BOTH created_at AND updated_at
+      if (since) {
+        const sinceDate = new Date(since);
+        topicWhereConditions.push(`(created_at >= $${topicParamIndex} OR updated_at >= $${topicParamIndex})`);
+        topicParams.push(sinceDate);
+      }
+
+      const topicQuery = `
+        SELECT COUNT(*) as total
+        FROM topics
+        WHERE ${topicWhereConditions.join(' AND ')}
+      `;
+
+      const topicResult = await db.query(topicQuery, topicParams);
+      const topicCount = parseInt(topicResult.rows[0].total, 10);
+
+      // Return sum of courses and stand-alone topics
+      return courseCount + topicCount;
     } catch (error) {
       logger.error('[Database Query] Error getting total count', {
         error: error.message,
@@ -491,24 +763,57 @@ class ProcessHandler {
       // Get topics for this course
       const topics = await this.topicRepository.findByCourseId(courseId);
 
-      // Get content for each topic
+      // Get content for each topic - ONLY content_type_id = 1 (text_audio)
       const topicsWithContent = await Promise.all(
         topics.map(async (topic) => {
-          const contents = await this.contentRepository.findAllByTopicId(topic.topic_id);
+          // Query content - ONLY content_type_id = 1
+          const contentQuery = `
+            SELECT 
+              content_id,
+              content_type_id,
+              content_data,
+              generation_method_id,
+              quality_check_status,
+              quality_check_data,
+              quality_checked_at,
+              created_at,
+              updated_at
+            FROM content
+            WHERE topic_id = $1
+              AND content_type_id = 1
+            ORDER BY created_at DESC
+          `;
+          
+          const contentResult = await db.query(contentQuery, [topic.topic_id]);
+          
+          // Extract only the text field from content_data
+          const content = contentResult.rows.map((contentRow) => ({
+            content_id: contentRow.content_id,
+            content_type_id: contentRow.content_type_id,
+            content_data: this.extractTextFromContentData(contentRow.content_data), // Extract only text
+            generation_method_id: contentRow.generation_method_id,
+            quality_check_status: contentRow.quality_check_status,
+            quality_check_data: contentRow.quality_check_data,
+            quality_checked_at: contentRow.quality_checked_at,
+            created_at: contentRow.created_at,
+            updated_at: contentRow.updated_at,
+          }));
+
           return {
             topic_id: topic.topic_id,
             topic_name: topic.topic_name,
-            description: topic.description,
-            skills: topic.skills,
+            description: topic.description || null,
+            trainer_id: topic.trainer_id,
             language: topic.language,
+            status: topic.status,
+            skills: topic.skills || [],
+            template_id: topic.template_id,
+            generation_methods_id: topic.generation_methods_id,
+            usage_count: topic.usage_count || 0,
             devlab_exercises: topic.devlab_exercises,
-            contents: contents.map((content) => ({
-              content_id: content.content_id,
-              content_type_id: content.content_type_id,
-              content_data: content.content_data,
-              generation_method_id: content.generation_method_id,
-              quality_check_status: content.quality_check_status,
-            })),
+            created_at: topic.created_at,
+            updated_at: topic.updated_at,
+            content: content,
           };
         })
       );
@@ -551,27 +856,54 @@ class ProcessHandler {
         return null;
       }
 
-      // Get content for this topic
-      const contents = await this.contentRepository.findAllByTopicId(topicId);
+      // Get content for this topic - ONLY content_type_id = 1 (text_audio)
+      const contentQuery = `
+        SELECT 
+          content_id,
+          content_type_id,
+          content_data,
+          generation_method_id,
+          quality_check_status,
+          quality_check_data,
+          quality_checked_at,
+          created_at,
+          updated_at
+        FROM content
+        WHERE topic_id = $1
+          AND content_type_id = 1
+        ORDER BY created_at DESC
+      `;
+      
+      const contentResult = await db.query(contentQuery, [topicId]);
+      
+      // Extract only the text field from content_data
+      const content = contentResult.rows.map((contentRow) => ({
+        content_id: contentRow.content_id,
+        content_type_id: contentRow.content_type_id,
+        content_data: this.extractTextFromContentData(contentRow.content_data), // Extract only text
+        generation_method_id: contentRow.generation_method_id,
+        quality_check_status: contentRow.quality_check_status,
+        quality_check_data: contentRow.quality_check_data,
+        quality_checked_at: contentRow.quality_checked_at,
+        created_at: contentRow.created_at,
+        updated_at: contentRow.updated_at,
+      }));
 
       return {
         topic_id: topic.topic_id,
         topic_name: topic.topic_name,
+        description: topic.description || null,
         trainer_id: topic.trainer_id,
-        course_id: topic.course_id,
-        description: topic.description,
-        skills: topic.skills,
         language: topic.language,
+        status: topic.status,
+        skills: topic.skills || [],
+        template_id: topic.template_id,
+        generation_methods_id: topic.generation_methods_id,
+        usage_count: topic.usage_count || 0,
         devlab_exercises: topic.devlab_exercises,
         created_at: topic.created_at,
         updated_at: topic.updated_at,
-        contents: contents.map((content) => ({
-          content_id: content.content_id,
-          content_type_id: content.content_type_id,
-          content_data: content.content_data,
-          generation_method_id: content.generation_method_id,
-          quality_check_status: content.quality_check_status,
-        })),
+        content: content,
       };
     } catch (error) {
       logger.error('[Real-time Query] Error getting topic by ID', {
