@@ -449,6 +449,297 @@ Include all topics and contents for the course.`;
 }
 
 /**
+ * Search for existing archived topic matching step criteria
+ * Checks if there's a topic with:
+ * - status = 'archived'
+ * - matching skills (array containment)
+ * - matching language (handles both short code and full name)
+ * 
+ * @param {Object} params - Search parameters
+ * @param {Object} params.step - Step object from learning path
+ * @param {string} params.language - Language code (from preferred_language in request)
+ * @returns {Promise<Object|null>} Existing topic with all contents or null
+ */
+async function searchExistingTopicForStep({ step, language }) {
+  try {
+    await db.ready;
+    if (!db.isConnected()) {
+      logger.warn('[fillCourseBuilderService] Database not connected, skipping topic search');
+      return null;
+    }
+
+    // Extract skills from step using existing function
+    const skills = extractSkillsFromStep(step);
+    
+    if (skills.length === 0) {
+      logger.info('[fillCourseBuilderService] No skills extracted from step, skipping topic search', {
+        stepTitle: step.title,
+      });
+      return null;
+    }
+
+    // Normalize language - handle both short code (en) and full name (english)
+    // In topics table, language field can contain either format
+    const normalizedLanguage = language ? language.toLowerCase().trim() : 'en';
+    const languageFullName = getLanguageName(normalizedLanguage);
+    
+    // Build language conditions for SQL query
+    // Check both short code and full name
+    const languageConditions = [];
+    if (normalizedLanguage.length <= 3) {
+      // Short code (en, he, ru) - check both code and full name
+      languageConditions.push(`'${normalizedLanguage}'`);
+      languageConditions.push(`'${languageFullName}'`);
+    } else {
+      // Full name (english, hebrew) - check both full name and code
+      languageConditions.push(`'${normalizedLanguage}'`);
+      // Try to find code from full name (reverse lookup)
+      const codeFromName = Object.entries({
+        'en': 'english',
+        'he': 'hebrew',
+        'ar': 'arabic',
+        'es': 'spanish',
+        'fr': 'french',
+        'de': 'german',
+        'it': 'italian',
+        'pt': 'portuguese',
+        'ru': 'russian',
+        'zh': 'chinese',
+        'ja': 'japanese',
+        'ko': 'korean',
+        'hi': 'hindi',
+        'tr': 'turkish',
+        'pl': 'polish',
+        'nl': 'dutch',
+        'sv': 'swedish',
+        'da': 'danish',
+        'no': 'norwegian',
+        'fi': 'finnish',
+        'cs': 'czech',
+        'ro': 'romanian',
+        'hu': 'hungarian',
+        'el': 'greek',
+        'th': 'thai',
+        'vi': 'vietnamese',
+        'id': 'indonesian',
+        'ms': 'malay',
+        'uk': 'ukrainian',
+        'bg': 'bulgarian',
+        'hr': 'croatian',
+        'sk': 'slovak',
+        'sl': 'slovenian',
+        'sr': 'serbian',
+        'et': 'estonian',
+        'lv': 'latvian',
+        'lt': 'lithuanian',
+        'mk': 'macedonian',
+        'sq': 'albanian',
+        'is': 'icelandic',
+        'ga': 'irish',
+        'mt': 'maltese',
+        'cy': 'welsh',
+        'eu': 'basque',
+        'ca': 'catalan',
+        'gl': 'galician',
+      }).find(([code, name]) => name === normalizedLanguage);
+      if (codeFromName) {
+        languageConditions.push(`'${codeFromName[0]}'`);
+      }
+    }
+    const languageCondition = languageConditions.join(', ');
+
+    // Load database schema
+    const migrationContent = loadDatabaseSchema();
+
+    // Business rules for topic search
+    const businessRules = `RULE 1: topics.status MUST be 'archived' (NOT 'active' or 'deleted')
+RULE 2: topics.language field can contain either short code (en, he, ru) OR full name (english, hebrew, russian)
+RULE 3: Check BOTH short code AND full name: (topics.language = 'en' OR topics.language = 'english')
+RULE 4: topics.skills is a TEXT[] (text array) column - use array contains operator: skills @> ARRAY['skill1', 'skill2']::text[] to check if skills array contains ALL provided skills
+RULE 5: Include all contents for the topic (LEFT JOIN with contents table)
+RULE 6: content table does NOT have a status column - include all contents
+RULE 7: Join with content_types table to get type_name as content_type
+RULE 8: Return flat result set with all topic and content fields in each row
+RULE 9: Use LEFT JOIN for contents to include topic even if no contents exist
+RULE 10: If multiple matches exist, return the most recent (ORDER BY created_at DESC LIMIT 1)
+CRITICAL: topics.skills is TEXT[] (array), NOT text - use @> operator with ARRAY[]::text[]
+CRITICAL: topics.language field name is 'language' (NOT 'topic_language')
+CRITICAL: Handle language matching for both formats - if input is 'en', check both 'en' AND 'english'; if input is 'english', check both 'english' AND 'en'`;
+
+    const requestBody = {
+      step_title: step.title || '',
+      skills,
+      language: normalizedLanguage,
+      language_full_name: languageFullName,
+      language_conditions: languageConditions,
+    };
+
+    const task = `Generate a PostgreSQL SELECT query to find an existing ARCHIVED topic where:
+- status = 'archived' (NOT 'active' or 'deleted')
+- language matches: (language = ${languageCondition}) - check BOTH short code and full name
+- skills contains all of: ${JSON.stringify(skills)}
+Include all contents for the topic.`;
+
+    // Generate SQL query using shared prompt
+    let sqlQuery;
+    try {
+      sqlQuery = await generateSQLQueryUsingSharedPrompt({
+        schema: migrationContent,
+        requestBody,
+        businessRules,
+        task,
+      });
+      
+      // Log the generated query
+      logger.info('[fillCourseBuilderService] Generated SQL query for topic search', {
+        stepTitle: step.title,
+        skills,
+        language: normalizedLanguage,
+        languageFullName,
+        sqlQuery: sqlQuery.substring(0, 500), // Log first 500 chars
+        sqlQueryFull: sqlQuery, // Log full query
+      });
+    } catch (queryGenError) {
+      logger.error('[fillCourseBuilderService] Failed to generate SQL query for topic search', {
+        error: queryGenError.message,
+        stepTitle: step.title,
+        stack: queryGenError.stack,
+      });
+      return null; // Return null to trigger AI generation
+    }
+
+    // Execute query with error handling
+    let result;
+    try {
+      result = await db.query(sqlQuery);
+    } catch (queryError) {
+      logger.error('[fillCourseBuilderService] SQL query execution failed for topic search', {
+        error: queryError.message,
+        code: queryError.code,
+        sqlQuery: sqlQuery.substring(0, 500), // Log first 500 chars of query
+        stepTitle: step.title,
+        stack: queryError.stack,
+      });
+      // Return null to trigger AI generation instead of failing silently
+      return null;
+    }
+
+    if (result.rows && result.rows.length > 0) {
+      // Map result to topic structure
+      // CRITICAL: Archived topics are read-only - fetch and return as-is, no modifications
+      const topicRow = result.rows[0];
+      
+      // Verify status is archived (safety check)
+      if (topicRow.status !== 'archived') {
+        logger.warn('[fillCourseBuilderService] Topic found but status is not archived, ignoring', {
+          topic_id: topicRow.topic_id,
+          status: topicRow.status,
+          stepTitle: step.title,
+        });
+        return null;
+      }
+
+      // Parse format_order if it's a string
+      let formatOrder = topicRow.format_order || [];
+      if (typeof formatOrder === 'string') {
+        try {
+          formatOrder = JSON.parse(formatOrder);
+        } catch {
+          formatOrder = [];
+        }
+      }
+
+      // Parse skills if it's a string or array
+      let topicSkills = topicRow.skills || skills; // Fallback to step skills if not in DB
+      if (typeof topicSkills === 'string') {
+        try {
+          topicSkills = JSON.parse(topicSkills);
+        } catch {
+          topicSkills = skills; // Fallback to step skills
+        }
+      }
+      if (!Array.isArray(topicSkills)) {
+        topicSkills = skills; // Fallback to step skills
+      }
+
+      // Group contents
+      const contents = [];
+      const seenContentIds = new Set();
+      
+      for (const row of result.rows) {
+        if (row.content_id && !seenContentIds.has(row.content_id)) {
+          seenContentIds.add(row.content_id);
+          
+          let contentData = row.content_data;
+          if (typeof contentData === 'string') {
+            try {
+              contentData = JSON.parse(contentData);
+            } catch {
+              contentData = {};
+            }
+          }
+          
+          contents.push({
+            content_id: row.content_id,
+            content_type: row.content_type || 'unknown',
+            content_data: contentData || {},
+          });
+        }
+      }
+
+      // Parse devlab_exercises if it's a string
+      let devlabExercises = topicRow.devlab_exercises || null;
+      if (typeof devlabExercises === 'string' && devlabExercises.trim() !== '') {
+        try {
+          // Try to parse as JSON, but keep as string if it's already valid JSON string
+          devlabExercises = JSON.parse(devlabExercises);
+        } catch {
+          // Keep as string if parsing fails
+        }
+      }
+
+      // Return archived topic structure (read-only, no modifications)
+      const existingTopic = {
+        topic_id: topicRow.topic_id,
+        topic_name: topicRow.topic_name || step.title || '',
+        topic_description: topicRow.description || step.description || '',
+        topic_language: topicRow.language || normalizedLanguage,
+        template_id: topicRow.template_id || null,
+        format_order: formatOrder,
+        contents: contents,
+        devlab_exercises: devlabExercises,
+        skills: topicSkills,
+      };
+
+      logger.info('[fillCourseBuilderService] Found existing archived topic', {
+        topic_id: existingTopic.topic_id,
+        topic_name: existingTopic.topic_name,
+        stepTitle: step.title,
+        language: normalizedLanguage,
+        skillsCount: topicSkills.length,
+        contentsCount: contents.length,
+      });
+
+      return existingTopic;
+    }
+
+    logger.info('[fillCourseBuilderService] No existing archived topic found for step', {
+      stepTitle: step.title,
+      language: normalizedLanguage,
+      skills,
+    });
+    return null;
+  } catch (error) {
+    logger.error('[fillCourseBuilderService] Error searching for existing topic', {
+      error: error.message,
+      stepTitle: step?.title,
+      stack: error.stack,
+    });
+    return null;
+  }
+}
+
+/**
  * Generate full AI courses from learning paths
  * @param {Object} params - Generation parameters
  * @returns {Promise<Array>} Array of courses
@@ -493,14 +784,33 @@ async function generateFullAICourses({ career_learning_paths, trainer_id, compan
       for (const module of path.learning_path.learning_modules) {
         if (module.steps && Array.isArray(module.steps)) {
           for (const step of module.steps) {
-            const topic = await generateTopicForStep({
+            // Step 1: Check if there's an existing archived topic matching this step
+            const existingTopic = await searchExistingTopicForStep({
               step,
               language,
-              aiGenerationService,
             });
 
-            if (topic) {
-              topics.push(topic);
+            if (existingTopic) {
+              // Found existing archived topic - reuse it (no AI generation needed)
+              topics.push(existingTopic);
+              logger.info('[fillCourseBuilderService] Reused existing archived topic', {
+                topic_id: existingTopic.topic_id,
+                topic_name: existingTopic.topic_name,
+                stepTitle: step.title,
+                language: language,
+                contentsCount: existingTopic.contents?.length || 0,
+              });
+            } else {
+              // No existing topic found - generate with AI
+              const topic = await generateTopicForStep({
+                step,
+                language,
+                aiGenerationService,
+              });
+
+              if (topic) {
+                topics.push(topic);
+              }
             }
           }
         }
