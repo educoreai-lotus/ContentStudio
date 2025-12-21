@@ -82,13 +82,15 @@ COMMENT ON TABLE templates IS 'Stores both structural templates (format order) a
 -- ============================================
 
 CREATE TABLE IF NOT EXISTS content_types (
-    type_id SERIAL PRIMARY KEY,
-    type_name VARCHAR(50) NOT NULL UNIQUE,
-    display_name VARCHAR(100) NOT NULL
-);
+    type_id SERIAL NOT NULL,
+    type_name CHARACTER VARYING(50) NOT NULL,
+    display_name CHARACTER VARYING(100) NOT NULL,
+    CONSTRAINT content_types_pkey PRIMARY KEY (type_id),
+    CONSTRAINT content_types_type_name_key UNIQUE (type_name)
+) TABLESPACE pg_default;
 
 -- Indexes for content_types
-CREATE INDEX IF NOT EXISTS idx_content_types_type_name ON content_types(type_name);
+CREATE INDEX IF NOT EXISTS idx_content_types_type_name ON content_types(type_name) TABLESPACE pg_default;
 
 -- Seed Data for content_types
 INSERT INTO content_types (type_name, display_name) VALUES
@@ -174,36 +176,36 @@ COMMENT ON COLUMN topics.devlab_exercises IS 'Stores DevLab exercises as JSONB. 
 -- ============================================
 
 CREATE TABLE IF NOT EXISTS content (
-    content_id SERIAL PRIMARY KEY,
+    content_id SERIAL NOT NULL,
     topic_id INTEGER NOT NULL,
     content_type_id INTEGER NOT NULL,
-    content_data JSONB,
+    content_data JSONB NULL,
     generation_method_id INTEGER NOT NULL,
+    quality_check_data JSONB NULL,
+    quality_check_status CHARACTER VARYING(20) NULL,
+    quality_checked_at TIMESTAMP WITHOUT TIME ZONE NULL,
+    created_at TIMESTAMP WITHOUT TIME ZONE NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITHOUT TIME ZONE NULL DEFAULT CURRENT_TIMESTAMP,
     
-    -- Quality check fields (stored in content table)
-    quality_check_data JSONB,
-    quality_check_status VARCHAR(20),
-    quality_checked_at TIMESTAMP,
-    
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    -- Primary Key
+    CONSTRAINT content_pkey PRIMARY KEY (content_id),
     
     -- Foreign Keys
-    CONSTRAINT fk_content_topic_id FOREIGN KEY (topic_id) 
-        REFERENCES topics(topic_id) ON DELETE RESTRICT,
     CONSTRAINT fk_content_content_type_id FOREIGN KEY (content_type_id) 
         REFERENCES content_types(type_id) ON DELETE RESTRICT,
     CONSTRAINT fk_content_generation_method_id FOREIGN KEY (generation_method_id) 
-        REFERENCES generation_methods(method_id) ON DELETE RESTRICT
-);
+        REFERENCES generation_methods(method_id) ON DELETE RESTRICT,
+    CONSTRAINT fk_content_topic_id FOREIGN KEY (topic_id) 
+        REFERENCES topics(topic_id) ON DELETE RESTRICT
+) TABLESPACE pg_default;
 
 -- Indexes for content
-CREATE INDEX IF NOT EXISTS idx_content_topic_id ON content(topic_id);
-CREATE INDEX IF NOT EXISTS idx_content_content_type_id ON content(content_type_id);
-CREATE INDEX IF NOT EXISTS idx_content_generation_method_id ON content(generation_method_id);
-CREATE INDEX IF NOT EXISTS idx_content_content_data ON content USING GIN (content_data);
-CREATE INDEX IF NOT EXISTS idx_content_quality_check_status ON content(quality_check_status);
-CREATE INDEX IF NOT EXISTS idx_content_quality_check_data ON content USING GIN (quality_check_data);
+CREATE INDEX IF NOT EXISTS idx_content_topic_id ON content(topic_id) TABLESPACE pg_default;
+CREATE INDEX IF NOT EXISTS idx_content_content_type_id ON content(content_type_id) TABLESPACE pg_default;
+CREATE INDEX IF NOT EXISTS idx_content_generation_method_id ON content(generation_method_id) TABLESPACE pg_default;
+CREATE INDEX IF NOT EXISTS idx_content_content_data ON content USING GIN (content_data) TABLESPACE pg_default;
+CREATE INDEX IF NOT EXISTS idx_content_quality_check_status ON content(quality_check_status) TABLESPACE pg_default;
+CREATE INDEX IF NOT EXISTS idx_content_quality_check_data ON content USING GIN (quality_check_data) TABLESPACE pg_default;
 
 -- Comments for content
 COMMENT ON TABLE content IS 'Stores each content item (format-specific data) belonging to a topic';
