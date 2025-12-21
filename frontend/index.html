@@ -17,11 +17,35 @@
   <body>
     <div id="root"></div>
     
-    <!-- RAG Bot Script - Load before app initialization -->
-    <script src="https://rag-production-3a4c.up.railway.app/embed/bot.js"></script>
+    <!-- ✅ EDUCORE BOT - DO NOT MODIFY -->
+    <div id="edu-bot-container"></div>
+    <!-- ✅ END BOT CONTAINER -->
     
-    <!-- RAG Bot Initialization -->
-    <script src="/chatbot-init.js"></script>
+    <!-- ✅ BOT SCRIPT -->
+    <script src="https://rag-production-3a4c.up.railway.app/embed/bot.js"></script>
+    <!-- ✅ END BOT SCRIPT -->
+    
+    <!-- ✅ INITIALIZATION -->
+    <script>
+      // Wait for bot script to load
+      window.addEventListener('load', function() {
+        // Get user data from localStorage
+        const token = localStorage.getItem('auth_token') || '';
+        const userId = localStorage.getItem('user_id') || 'trainer-maya-levi';
+        const tenantId = localStorage.getItem('tenant_id') || 'default';
+        
+        // Initialize bot
+        if (window.initializeEducoreBot) {
+          window.initializeEducoreBot({
+            microservice: 'CONTENT',  // Content Studio microservice
+            userId: userId,
+            token: token,
+            tenantId: tenantId
+          });
+        }
+      });
+    </script>
+    <!-- ✅ END INITIALIZATION -->
     
     <script type="module" src="/src/main.jsx"></script>
   </body>
