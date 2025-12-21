@@ -306,9 +306,11 @@ RULE 6: trainer_courses.permissions is a TEXT column (NOT array) - check if perm
 RULE 7: If multiple matches exist, return the most recent (ORDER BY created_at DESC LIMIT 1)
 RULE 8: Include all topics for the course (t.status != 'deleted')
 RULE 9: For each topic, include all contents (content table does NOT have a status column - include all contents)
-RULE 10: Join with content_types table to get type_name as content_type
-RULE 11: Return flat result set with all course, topic, and content fields in each row
-RULE 12: Use LEFT JOIN for topics and contents to include course even if no topics/contents exist
+RULE 10: CRITICAL - Join with content_types table: LEFT JOIN content_types ct ON c.content_type_id = ct.type_id
+RULE 11: CRITICAL - Select type_name from content_types: ct.type_name AS content_type (NOT content_type_id)
+RULE 12: CRITICAL - contents table only has content_type_id (integer), NOT content_type name - you MUST join content_types to get type_name
+RULE 13: Return flat result set with all course, topic, and content fields in each row, including ct.type_name AS content_type
+RULE 14: Use LEFT JOIN for topics and contents to include course even if no topics/contents exist
 RULE 13: Do NOT filter by status='active' - ONLY 'archived' courses are valid for reuse
 CRITICAL: trainer_courses.skills is TEXT[] (array), NOT text - use @> operator with ARRAY[]::text[]`;
 
@@ -558,13 +560,16 @@ RULE 3: Check BOTH short code AND full name: (topics.language = 'en' OR topics.l
 RULE 4: topics.skills is a TEXT[] (text array) column - use array contains operator: skills @> ARRAY['skill1', 'skill2']::text[] to check if skills array contains ALL provided skills
 RULE 5: Include all contents for the topic (LEFT JOIN with contents table)
 RULE 6: content table does NOT have a status column - include all contents
-RULE 7: Join with content_types table to get type_name as content_type
-RULE 8: Return flat result set with all topic and content fields in each row
-RULE 9: Use LEFT JOIN for contents to include topic even if no contents exist
-RULE 10: If multiple matches exist, return the most recent (ORDER BY created_at DESC LIMIT 1)
+RULE 7: CRITICAL - Join with content_types table: LEFT JOIN content_types ct ON c.content_type_id = ct.type_id
+RULE 8: CRITICAL - Select type_name from content_types: ct.type_name AS content_type (NOT content_type_id)
+RULE 9: CRITICAL - contents table only has content_type_id (integer), NOT content_type name - you MUST join content_types to get type_name
+RULE 10: Return flat result set with all topic and content fields in each row, including ct.type_name AS content_type
+RULE 11: Use LEFT JOIN for contents to include topic even if no contents exist
+RULE 12: If multiple matches exist, return the most recent (ORDER BY created_at DESC LIMIT 1)
 CRITICAL: topics.skills is TEXT[] (array), NOT text - use @> operator with ARRAY[]::text[]
 CRITICAL: topics.language field name is 'language' (NOT 'topic_language')
-CRITICAL: Handle language matching for both formats - if input is 'en', check both 'en' AND 'english'; if input is 'english', check both 'english' AND 'en'`;
+CRITICAL: Handle language matching for both formats - if input is 'en', check both 'en' AND 'english'; if input is 'english', check both 'english' AND 'en'
+CRITICAL: Example SELECT clause: SELECT t.*, c.*, ct.type_name AS content_type FROM topics t LEFT JOIN content c ON t.topic_id = c.topic_id LEFT JOIN content_types ct ON c.content_type_id = ct.type_id`;
 
     const requestBody = {
       step_title: step.title || '',
@@ -1302,6 +1307,35 @@ async function persistGeneratedCoursesToDatabase(courses, trainer_id, company_id
       // 2. Insert topics for this course
       for (const topic of course.topics || []) {
         try {
+          let topicId;
+          
+          // Check if topic already exists (reused from existing archived topic)
+          // topic_id can be number or string (PostgreSQL SERIAL can return as string)
+          if (topic.topic_id && (typeof topic.topic_id === 'number' || (typeof topic.topic_id === 'string' && !isNaN(Number(topic.topic_id))))) {
+            // Topic already exists - just update course_id to link it to new course
+            topicId = typeof topic.topic_id === 'number' ? topic.topic_id : Number(topic.topic_id);
+            
+            const updateTopicSql = `
+              UPDATE topics
+              SET course_id = $1
+              WHERE topic_id = $2
+            `;
+            
+            await db.query(updateTopicSql, [courseId, topicId]);
+            
+            logger.info('[fillCourseBuilderService] Reused topic linked to new course', {
+              topic_id: topicId,
+              topic_name: topic.topic_name,
+              course_id: courseId,
+              action: 'updated_course_id',
+            });
+            
+            // Skip content insertion and DevLab generation for reused topics
+            // They already have contents and devlab_exercises
+            continue;
+          }
+          
+          // Topic is new - insert it
           const insertTopicSql = `
             INSERT INTO topics (
               topic_name, description, language, skills, trainer_id, course_id,
@@ -1329,7 +1363,7 @@ async function persistGeneratedCoursesToDatabase(courses, trainer_id, company_id
             0, // usage_count starts at 0
           ]);
 
-          const topicId = topicResult.rows[0].topic_id;
+          topicId = topicResult.rows[0].topic_id;
           topic.topic_id = topicId;
 
           logger.info('[fillCourseBuilderService] Topic persisted', {
@@ -1338,7 +1372,7 @@ async function persistGeneratedCoursesToDatabase(courses, trainer_id, company_id
             course_id: courseId,
           });
 
-          // 3. Insert contents for this topic
+          // 3. Insert contents for this topic (only for new topics)
           for (const content of topic.contents || []) {
             try {
               const contentTypeId = CONTENT_TYPE_MAP[content.content_type] || null;
@@ -1383,6 +1417,7 @@ async function persistGeneratedCoursesToDatabase(courses, trainer_id, company_id
           }
 
           // 4. Generate DevLab exercises NOW that we have topic_id from database
+          // Only for new topics (reused topics already have devlab_exercises)
           let devlabExercises = null;
           try {
             logger.info('[fillCourseBuilderService] Generating DevLab exercises for topic (after DB persistence)', {
