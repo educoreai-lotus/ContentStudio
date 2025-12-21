@@ -565,11 +565,12 @@ RULE 8: CRITICAL - Select type_name from content_types: ct.type_name AS content_
 RULE 9: CRITICAL - contents table only has content_type_id (integer), NOT content_type name - you MUST join content_types to get type_name
 RULE 10: Return flat result set with all topic and content fields in each row, including ct.type_name AS content_type
 RULE 11: Use LEFT JOIN for contents to include topic even if no contents exist
-RULE 12: If multiple matches exist, return the most recent (ORDER BY created_at DESC LIMIT 1)
+RULE 12: If multiple matches exist, return the most recent (ORDER BY t.created_at DESC LIMIT 1) - MUST use t.created_at (topics table), NOT c.created_at (content table may be NULL)
 CRITICAL: topics.skills is TEXT[] (array), NOT text - use @> operator with ARRAY[]::text[]
 CRITICAL: topics.language field name is 'language' (NOT 'topic_language')
 CRITICAL: Handle language matching for both formats - if input is 'en', check both 'en' AND 'english'; if input is 'english', check both 'english' AND 'en'
-CRITICAL: Example SELECT clause: SELECT t.*, c.*, ct.type_name AS content_type FROM topics t LEFT JOIN content c ON t.topic_id = c.topic_id LEFT JOIN content_types ct ON c.content_type_id = ct.type_id`;
+CRITICAL: Example SELECT clause: SELECT t.*, c.*, ct.type_name AS content_type FROM topics t LEFT JOIN content c ON t.topic_id = c.topic_id LEFT JOIN content_types ct ON c.content_type_id = ct.type_id
+CRITICAL: MUST select t.topic_id explicitly to ensure it's not NULL - if topic_id is NULL, the query result is invalid`;
 
     const requestBody = {
       step_title: step.title || '',
@@ -633,6 +634,18 @@ Include all contents for the topic.`;
       // Map result to topic structure
       // CRITICAL: Archived topics are read-only - fetch and return as-is, no modifications
       const topicRow = result.rows[0];
+      
+      // CRITICAL: Verify topic_id exists - if NULL, the query didn't find a valid topic
+      if (!topicRow.topic_id || topicRow.topic_id === null) {
+        logger.warn('[fillCourseBuilderService] Query returned rows but topic_id is NULL - no valid topic found', {
+          stepTitle: step.title,
+          language: normalizedLanguage,
+          skills,
+          rowKeys: Object.keys(topicRow),
+          firstRowPreview: JSON.stringify(topicRow).substring(0, 200),
+        });
+        return null;
+      }
       
       // Verify status is archived (safety check)
       if (topicRow.status !== 'archived') {
