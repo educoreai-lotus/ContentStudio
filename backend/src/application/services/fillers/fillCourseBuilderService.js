@@ -565,15 +565,33 @@ RULE 8: CRITICAL - Select type_name from content_types: ct.type_name AS content_
 RULE 9: CRITICAL - contents table only has content_type_id (integer), NOT content_type name - you MUST join content_types to get type_name
 RULE 10: Return flat result set with all topic and content fields in each row, including ct.type_name AS content_type
 RULE 11: Use LEFT JOIN for contents to include topic even if no contents exist
-RULE 12: If multiple topics match, return the most recent topic (ORDER BY t.created_at DESC) BUT include ALL contents for that topic - use DISTINCT ON (t.topic_id) to get one topic with all its contents, NOT LIMIT 1 (which would only return first content)
-RULE 12a: CRITICAL - Use DISTINCT ON (t.topic_id) with ORDER BY t.topic_id, t.created_at DESC, c.content_id to return the newest topic with ALL its contents in multiple rows
+RULE 12: If multiple topics match, return the most recent topic (ORDER BY t.created_at DESC) BUT include ALL contents for that topic
+RULE 12a: CRITICAL - Use a subquery pattern: First find the newest topic_id with LIMIT 1 in subquery ONLY, then SELECT ALL rows for that topic_id with ALL its contents (no LIMIT in main query)
+RULE 12b: CRITICAL - Pattern: WITH newest_topic AS (SELECT topic_id FROM topics WHERE ... ORDER BY created_at DESC LIMIT 1) SELECT ... FROM newest_topic JOIN topics ... LEFT JOIN content ... - this returns ALL contents for the newest topic
+RULE 12c: CRITICAL - The LIMIT 1 is ONLY in the subquery to find topic_id. The main SELECT must return ALL rows (one row per content) for that topic_id - NO LIMIT in main query
 RULE 13: CRITICAL - MUST explicitly select t.topic_id in SELECT clause (e.g., SELECT t.topic_id, t.*, c.*, ct.type_name AS content_type) to ensure topic_id is always present
 RULE 14: CRITICAL - The WHERE clause MUST filter topics table (t.status = 'archived'), NOT content table - if no topic matches, return NO rows
 CRITICAL: topics.skills is TEXT[] (array), NOT text - use @> operator with ARRAY[]::text[]
 CRITICAL: topics.language field name is 'language' (NOT 'topic_language')
 CRITICAL: Handle language matching for both formats - if input is 'en', check both 'en' AND 'english'; if input is 'english', check both 'english' AND 'en'
-CRITICAL: Example SELECT clause: SELECT DISTINCT ON (t.topic_id) t.topic_id, t.topic_name, t.description, t.language, t.status, t.skills, t.template_id, t.generation_methods_id, t.usage_count, t.devlab_exercises, t.created_at, t.updated_at, c.content_id, c.content_type_id, c.content_data, c.generation_method_id, ct.type_name AS content_type FROM topics t LEFT JOIN content c ON t.topic_id = c.topic_id LEFT JOIN content_types ct ON c.content_type_id = ct.type_id WHERE t.status = 'archived' ORDER BY t.topic_id, t.created_at DESC, c.content_id
-CRITICAL: DO NOT use LIMIT 1 - it will only return the first content row. Use DISTINCT ON (t.topic_id) to return the newest topic with ALL its contents in multiple rows.
+CRITICAL: Example SELECT clause using subquery pattern (LIMIT 1 ONLY in subquery, NOT in main query):
+WITH newest_topic AS (
+  SELECT topic_id FROM topics 
+  WHERE status = 'archived' 
+  AND language IN ('en', 'english') 
+  AND skills @> ARRAY['React Hooks']::text[]
+  ORDER BY created_at DESC 
+  LIMIT 1
+)
+SELECT t.topic_id, t.topic_name, t.description, t.language, t.status, t.skills, t.template_id, t.generation_methods_id, t.usage_count, t.devlab_exercises, t.created_at, t.updated_at, c.content_id, c.content_type_id, c.content_data, c.generation_method_id, ct.type_name AS content_type
+FROM newest_topic nt
+JOIN topics t ON nt.topic_id = t.topic_id
+LEFT JOIN content c ON t.topic_id = c.topic_id
+LEFT JOIN content_types ct ON c.content_type_id = ct.type_id
+ORDER BY c.content_id;
+-- NO LIMIT in main query - must return ALL contents (text_audio, code, presentation, mind_map, avatar_video)
+
+CRITICAL: LIMIT 1 is ONLY in the subquery to find the newest topic_id. The main SELECT must return ALL rows (one per content) - NO LIMIT, NO DISTINCT ON in main query.
 CRITICAL: MUST select t.topic_id explicitly as FIRST column to ensure it's not NULL - if topic_id is NULL, the query result is invalid and should return NO rows`;
 
     const requestBody = {
@@ -588,7 +606,10 @@ CRITICAL: MUST select t.topic_id explicitly as FIRST column to ensure it's not N
 - status = 'archived' (NOT 'active' or 'deleted')
 - language matches: (language = ${languageCondition}) - check BOTH short code and full name
 - skills contains all of: ${JSON.stringify(skills)}
-CRITICAL: Include ALL contents for the topic - use DISTINCT ON (t.topic_id) with ORDER BY t.topic_id, t.created_at DESC, c.content_id to return the newest matching topic with ALL its contents in multiple rows (one row per content). DO NOT use LIMIT 1 as it will only return the first content.`;
+CRITICAL: Include ALL contents for the topic (text_audio, code, presentation, mind_map, avatar_video - all 6 formats). 
+Use subquery pattern: WITH newest_topic AS (SELECT topic_id FROM topics WHERE ... ORDER BY created_at DESC LIMIT 1) 
+Then SELECT ALL rows for that topic_id with ALL its contents - NO LIMIT in main query, NO DISTINCT ON. 
+The main query must return one row per content (if topic has 5 contents, return 5 rows).`;
 
     // Generate SQL query using shared prompt
     let sqlQuery;
@@ -704,11 +725,18 @@ CRITICAL: Include ALL contents for the topic - use DISTINCT ON (t.topic_id) with
         topicSkills = skills; // Fallback to step skills
       }
 
-      // Group contents
+      // Group contents - CRITICAL: Only collect contents for the selected topic_id
       const contents = [];
       const seenContentIds = new Set();
+      const selectedTopicId = topicRow.topic_id;
       
       for (const row of result.rows) {
+        // CRITICAL: Only collect contents that belong to the selected topic_id
+        // This prevents collecting contents from other topics if query returns multiple topics
+        if (row.topic_id !== selectedTopicId) {
+          continue; // Skip rows from other topics
+        }
+        
         if (row.content_id && !seenContentIds.has(row.content_id)) {
           seenContentIds.add(row.content_id);
           
@@ -728,6 +756,13 @@ CRITICAL: Include ALL contents for the topic - use DISTINCT ON (t.topic_id) with
           });
         }
       }
+      
+      logger.info('[fillCourseBuilderService] Collected contents for topic', {
+        topic_id: selectedTopicId,
+        contentsCount: contents.length,
+        contentTypes: contents.map(c => c.content_type),
+        contentIds: contents.map(c => c.content_id),
+      });
 
       // Parse devlab_exercises if it's a string
       let devlabExercises = topicRow.devlab_exercises || null;
