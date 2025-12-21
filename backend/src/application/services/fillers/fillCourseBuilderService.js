@@ -620,6 +620,14 @@ Include all contents for the topic.`;
     let result;
     try {
       result = await db.query(sqlQuery);
+      
+      // Log query result summary
+      logger.info('[fillCourseBuilderService] SQL query executed for topic search', {
+        stepTitle: step.title,
+        rowsReturned: result.rows?.length || 0,
+        skills,
+        language: normalizedLanguage,
+      });
     } catch (queryError) {
       logger.error('[fillCourseBuilderService] SQL query execution failed for topic search', {
         error: queryError.message,
@@ -644,10 +652,22 @@ Include all contents for the topic.`;
           language: normalizedLanguage,
           skills,
           rowKeys: Object.keys(topicRow),
-          firstRowPreview: JSON.stringify(topicRow).substring(0, 200),
+          firstRowPreview: JSON.stringify(topicRow).substring(0, 500),
+          fullRow: topicRow, // Log full row to see what was returned
+          allRowsCount: result.rows.length,
         });
         return null;
       }
+      
+      // Log successful topic found
+      logger.info('[fillCourseBuilderService] Valid topic found in query result', {
+        topic_id: topicRow.topic_id,
+        topic_name: topicRow.topic_name,
+        status: topicRow.status,
+        language: topicRow.language,
+        skills: topicRow.skills,
+        stepTitle: step.title,
+      });
       
       // Verify status is archived (safety check)
       if (topicRow.status !== 'archived') {
