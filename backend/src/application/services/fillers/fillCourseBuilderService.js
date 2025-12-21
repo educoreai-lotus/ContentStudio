@@ -565,13 +565,15 @@ RULE 8: CRITICAL - Select type_name from content_types: ct.type_name AS content_
 RULE 9: CRITICAL - contents table only has content_type_id (integer), NOT content_type name - you MUST join content_types to get type_name
 RULE 10: Return flat result set with all topic and content fields in each row, including ct.type_name AS content_type
 RULE 11: Use LEFT JOIN for contents to include topic even if no contents exist
-RULE 12: If multiple matches exist, return the most recent (ORDER BY t.created_at DESC LIMIT 1) - MUST use t.created_at (topics table), NOT c.created_at (content table may be NULL)
+RULE 12: If multiple topics match, return the most recent topic (ORDER BY t.created_at DESC) BUT include ALL contents for that topic - use DISTINCT ON (t.topic_id) to get one topic with all its contents, NOT LIMIT 1 (which would only return first content)
+RULE 12a: CRITICAL - Use DISTINCT ON (t.topic_id) with ORDER BY t.topic_id, t.created_at DESC, c.content_id to return the newest topic with ALL its contents in multiple rows
 RULE 13: CRITICAL - MUST explicitly select t.topic_id in SELECT clause (e.g., SELECT t.topic_id, t.*, c.*, ct.type_name AS content_type) to ensure topic_id is always present
 RULE 14: CRITICAL - The WHERE clause MUST filter topics table (t.status = 'archived'), NOT content table - if no topic matches, return NO rows
 CRITICAL: topics.skills is TEXT[] (array), NOT text - use @> operator with ARRAY[]::text[]
 CRITICAL: topics.language field name is 'language' (NOT 'topic_language')
 CRITICAL: Handle language matching for both formats - if input is 'en', check both 'en' AND 'english'; if input is 'english', check both 'english' AND 'en'
-CRITICAL: Example SELECT clause: SELECT t.topic_id, t.topic_name, t.description, t.language, t.status, t.skills, t.template_id, t.generation_methods_id, t.usage_count, t.devlab_exercises, t.created_at, t.updated_at, c.content_id, c.content_type_id, c.content_data, c.generation_method_id, ct.type_name AS content_type FROM topics t LEFT JOIN content c ON t.topic_id = c.topic_id LEFT JOIN content_types ct ON c.content_type_id = ct.type_id WHERE t.status = 'archived'
+CRITICAL: Example SELECT clause: SELECT DISTINCT ON (t.topic_id) t.topic_id, t.topic_name, t.description, t.language, t.status, t.skills, t.template_id, t.generation_methods_id, t.usage_count, t.devlab_exercises, t.created_at, t.updated_at, c.content_id, c.content_type_id, c.content_data, c.generation_method_id, ct.type_name AS content_type FROM topics t LEFT JOIN content c ON t.topic_id = c.topic_id LEFT JOIN content_types ct ON c.content_type_id = ct.type_id WHERE t.status = 'archived' ORDER BY t.topic_id, t.created_at DESC, c.content_id
+CRITICAL: DO NOT use LIMIT 1 - it will only return the first content row. Use DISTINCT ON (t.topic_id) to return the newest topic with ALL its contents in multiple rows.
 CRITICAL: MUST select t.topic_id explicitly as FIRST column to ensure it's not NULL - if topic_id is NULL, the query result is invalid and should return NO rows`;
 
     const requestBody = {
@@ -586,7 +588,7 @@ CRITICAL: MUST select t.topic_id explicitly as FIRST column to ensure it's not N
 - status = 'archived' (NOT 'active' or 'deleted')
 - language matches: (language = ${languageCondition}) - check BOTH short code and full name
 - skills contains all of: ${JSON.stringify(skills)}
-Include all contents for the topic.`;
+CRITICAL: Include ALL contents for the topic - use DISTINCT ON (t.topic_id) with ORDER BY t.topic_id, t.created_at DESC, c.content_id to return the newest matching topic with ALL its contents in multiple rows (one row per content). DO NOT use LIMIT 1 as it will only return the first content.`;
 
     // Generate SQL query using shared prompt
     let sqlQuery;
