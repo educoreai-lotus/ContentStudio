@@ -1080,7 +1080,7 @@ async function persistGeneratedCoursesToDatabase(courses, trainer_id, company_id
               topic_name: topic.topic_name,
               skills_count: topic.skills?.length || 0,
               question_type: 'code',
-              programming_language: 'javascript',
+              programming_language: 'python',
             });
 
             const exerciseRequest = {
@@ -1088,7 +1088,7 @@ async function persistGeneratedCoursesToDatabase(courses, trainer_id, company_id
               topic_name: topic.topic_name,
               skills: Array.isArray(topic.skills) ? topic.skills : [],
               question_type: 'code',
-              programming_language: 'javascript', // Default programming language
+              programming_language: 'python', // Default programming language
               language: topic.topic_language || language || 'en',
             };
 
