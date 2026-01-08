@@ -1014,7 +1014,7 @@ async function generateTopicForStep({ step, language, aiGenerationService }) {
     // 1. Generate text_audio (type 1) - MANDATORY
     try {
       const textPrompt = `You are an expert educational content creator in EduCore Content Studio.
-🎯 Objective: Generate a concise, audio-friendly lesson text for ${wrappedVariables.lessonTopic}.
+Objective: Generate a concise, audio-friendly lesson text for ${wrappedVariables.lessonTopic}.
 
 Lesson Context:
 - Topic: ${wrappedVariables.lessonTopic}
@@ -1022,20 +1022,31 @@ Lesson Context:
 - Language: ${wrappedVariables.language}
 - Skills Focus: ${wrappedVariables.skillsList}
 
-⚠️ CRITICAL CONSTRAINTS:
-1. **Maximum Length: 1200 characters** (strict limit for HeyGen avatar video - 1500 char max)
-2. **Keep it SHORT and CONCISE** - focus on key points only
-3. **NO CODE EXAMPLES** - this is pure explanatory text (code has its own format)
-4. **NO special symbols or formatting** - plain text only for audio conversion
-5. **Be brief** - summarize main concepts, not detailed explanations
+ CRITICAL CONSTRAINTS:
+1. **Maximum Length: 3500 characters** (to fit audio narration limit of 4000 chars)
+2. **NO CODE EXAMPLES** - this is pure explanatory text (code has its own format)
+3. **NO special symbols or formatting** - plain text only for audio conversion
 
-Output only pure, conversational text in ${wrappedVariables.language}. Keep it under 1200 characters.`;
+Structure (keep concise):
+- **Introduction** (2-3 sentences): Brief overview of the topic
+- **Explanation** (main content): Clear, simple explanation of key concepts
+- **Real-world Examples** (2-3 examples): Short, practical examples WITHOUT code
+- **Summary** (2-3 sentences): Quick recap of main points
+
+Writing Style:
+- Use simple, clear language suitable for audio narration
+- Short paragraphs (2-4 sentences each)
+- Avoid technical jargon unless necessary
+- Write as if speaking to a student
+- NO bullet points, NO code blocks, NO markdown
+
+Output only pure, conversational text in ${wrappedVariables.language}.`;
 
       const textPromptWithSecurity = `${securityInstruction}\n\n${textPrompt}`;
       text = await aiGenerationService.generateText(textPromptWithSecurity, {
         language: promptVariables.language,
         temperature: 0.7,
-        max_tokens: 800, // Reduced from 2000 to ensure text stays under 1500 chars for HeyGen
+        // Use default max_tokens (typically 2000+) to allow full 3500 character text generation
       });
 
       if (text && typeof text === 'string') {
