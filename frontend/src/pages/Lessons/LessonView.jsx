@@ -79,6 +79,15 @@ export default function LessonView() {
     // Get language from topic if available, otherwise default to 'en'
     const language = lessonView?.topic?.language || 'en';
     const textDir = getTextDirection(language);
+    
+    // Debug: log language detection (remove in production if needed)
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[LessonView] Language detection:', { 
+        language, 
+        isRTL: textDir === 'rtl', 
+        direction: textDir 
+      });
+    }
 
     if (!textValue || textValue.trim() === '') {
       return (
