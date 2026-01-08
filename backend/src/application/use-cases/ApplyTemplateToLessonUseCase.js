@@ -312,6 +312,15 @@ export class ApplyTemplateToLessonUseCase {
         template_id: templateId,
         template_name: template.template_name,
       },
+      topic: {
+        topic_id: topic.topic_id,
+        topic_name: topic.topic_name,
+        name: topic.topic_name, // Alias for compatibility
+        description: topic.description,
+        topic_description: topic.description, // Alias for compatibility
+        language: topic.language || 'en',
+        template_id: templateId,
+      },
       template: {
         template_id: template.template_id,
         template_name: template.template_name,

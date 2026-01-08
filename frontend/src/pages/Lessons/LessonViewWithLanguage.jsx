@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { multilingualService } from '../../services/multilingual';
 import LanguageSelector from '../../components/LanguageSelector';
 import { useApp } from '../../context/AppContext';
+import { getTextDirection } from '../../utils/languageUtils';
 
 /**
  * Lesson View with Language Support
@@ -183,22 +184,29 @@ export default function LessonViewWithLanguage() {
 
         {/* Content */}
         {content && content.content && (
-          <div className={`p-6 rounded-lg ${
-            theme === 'day-mode'
-              ? 'bg-white border border-gray-200 shadow-sm'
-              : 'bg-gray-800 border border-gray-700 shadow-lg'
-          }`}>
+          <div 
+            className={`p-6 rounded-lg ${
+              theme === 'day-mode'
+                ? 'bg-white border border-gray-200 shadow-sm'
+                : 'bg-gray-800 border border-gray-700 shadow-lg'
+            }`}
+            dir={getTextDirection(selectedLanguage)}
+          >
             {typeof content.content === 'string' ? (
               <div
                 className={`prose max-w-none ${
                   theme === 'day-mode' ? 'text-gray-900' : 'text-white'
                 }`}
+                dir={getTextDirection(selectedLanguage)}
                 dangerouslySetInnerHTML={{ __html: content.content }}
               />
             ) : (
-              <pre className={`text-sm overflow-x-auto ${
-                theme === 'day-mode' ? 'text-gray-800' : 'text-gray-200'
-              }`}>
+              <pre 
+                className={`text-sm overflow-x-auto ${
+                  theme === 'day-mode' ? 'text-gray-800' : 'text-gray-200'
+                }`}
+                dir={getTextDirection(selectedLanguage)}
+              >
                 {JSON.stringify(content.content, null, 2)}
               </pre>
             )}

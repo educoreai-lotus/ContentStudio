@@ -1,15 +1,38 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import { useApp } from '../../context/AppContext.jsx';
 import { MindMapViewer } from '../../components/MindMapViewer';
+import { getTextDirection } from '../../utils/languageUtils';
+import { topicsService } from '../../services/topics';
 
 export const ContentViewer = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { topicId } = useParams();
   const { theme } = useApp();
+  const [topicLanguage, setTopicLanguage] = useState('en');
   
   const { content } = location.state || {};
+
+  useEffect(() => {
+    // Fetch topic language if topicId is available
+    if (topicId) {
+      fetchTopicLanguage();
+    }
+  }, [topicId]);
+
+  const fetchTopicLanguage = async () => {
+    try {
+      const response = await topicsService.getById(parseInt(topicId));
+      const topicData = response.topic || response.data || response;
+      if (topicData?.language) {
+        setTopicLanguage(topicData.language);
+      }
+    } catch (err) {
+      console.warn('Failed to fetch topic language:', err);
+      // Default to 'en' if fetch fails
+    }
+  };
 
   if (!content) {
     return (
@@ -121,11 +144,13 @@ export const ContentViewer = () => {
                 className={`p-4 rounded-lg ${
                   theme === 'day-mode' ? 'bg-gray-50' : 'bg-gray-900'
                 }`}
+                dir={getTextDirection(topicLanguage)}
               >
                 <pre
                   className={`whitespace-pre-wrap font-sans ${
                     theme === 'day-mode' ? 'text-gray-900' : 'text-gray-100'
                   }`}
+                  dir={getTextDirection(topicLanguage)}
                 >
                   {content.content_data?.text}
                 </pre>
@@ -379,6 +404,7 @@ export const ContentViewer = () => {
                     className={`whitespace-pre-wrap font-sans ${
                       theme === 'day-mode' ? 'text-gray-900' : 'text-gray-100'
                     }`}
+                    dir={getTextDirection(topicLanguage)}
                   >
                     {content.content_data.script}
                   </pre>

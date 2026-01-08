@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { templateApplicationService } from '../../services/template-application';
 import { useApp } from '../../context/AppContext';
 import { MindMapViewer } from '../../components/MindMapViewer.jsx';
+import { getTextDirection } from '../../utils/languageUtils';
 
 /**
  * Lesson View Component
@@ -75,6 +76,10 @@ export default function LessonView() {
     const textValue = parsedData?.text || parsedData?.content || '';
     const hasAudio = !!parsedData?.audioUrl;
 
+    // Get language from topic if available, otherwise default to 'en'
+    const language = lessonView?.topic?.language || 'en';
+    const textDir = getTextDirection(language);
+
     if (!textValue || textValue.trim() === '') {
       return (
         <div
@@ -143,6 +148,7 @@ export default function LessonView() {
         className={`p-4 rounded-lg ${
           theme === 'day-mode' ? 'bg-gray-50 border border-gray-200' : 'bg-gray-900 border border-gray-700'
         }`}
+        dir={textDir}
       >
         {/* Show audio first if audioFirst is true */}
         {audioFirst && renderAudioSection()}
@@ -152,6 +158,7 @@ export default function LessonView() {
           className={`whitespace-pre-wrap font-sans ${
             theme === 'day-mode' ? 'text-gray-900' : 'text-gray-100'
           }`}
+          dir={textDir}
         >
           {textValue}
         </div>
@@ -480,6 +487,7 @@ export default function LessonView() {
               className={`whitespace-pre-wrap font-sans ${
                 theme === 'day-mode' ? 'text-gray-900' : 'text-gray-100'
               }`}
+              dir={getTextDirection(lessonView?.topic?.language || 'en')}
             >
               {parsedData.script}
             </div>
