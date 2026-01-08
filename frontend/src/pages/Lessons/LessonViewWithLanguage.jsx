@@ -191,6 +191,7 @@ export default function LessonViewWithLanguage() {
                 : 'bg-gray-800 border border-gray-700 shadow-lg'
             }`}
             dir={getTextDirection(selectedLanguage)}
+            style={{ direction: getTextDirection(selectedLanguage) }}
           >
             {typeof content.content === 'string' ? (
               <div
@@ -198,6 +199,7 @@ export default function LessonViewWithLanguage() {
                   theme === 'day-mode' ? 'text-gray-900' : 'text-white'
                 }`}
                 dir={getTextDirection(selectedLanguage)}
+                style={{ direction: getTextDirection(selectedLanguage) }}
                 dangerouslySetInnerHTML={{ __html: content.content }}
               />
             ) : (
@@ -206,6 +208,7 @@ export default function LessonViewWithLanguage() {
                   theme === 'day-mode' ? 'text-gray-800' : 'text-gray-200'
                 }`}
                 dir={getTextDirection(selectedLanguage)}
+                style={{ direction: getTextDirection(selectedLanguage) }}
               >
                 {JSON.stringify(content.content, null, 2)}
               </pre>

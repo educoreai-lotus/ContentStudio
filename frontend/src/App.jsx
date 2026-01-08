@@ -35,7 +35,7 @@ function AppContent() {
   return (
     <>
       <Router>
-        <div className="min-h-screen transition-colors duration-300 bg-[#f8fafc] dark:bg-[#1e293b] text-gray-900 dark:text-[#f8fafc]">
+        <div className="min-h-screen transition-colors duration-300 bg-[#f8fafc] dark:bg-[#1e293b] text-gray-900 dark:text-[#f8fafc]" dir="ltr">
             <Header />
             <SharedSidebar />
             <div className={`pt-20 transition-all duration-300 ${mainContentMargin}`}>

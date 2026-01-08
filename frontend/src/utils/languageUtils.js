@@ -109,11 +109,14 @@ export function normalizeLanguage(language) {
  */
 export function isRTL(language) {
   if (!language || typeof language !== 'string') {
+    console.warn('[isRTL] Invalid language input:', language);
     return false;
   }
 
   const normalized = normalizeLanguage(language);
-  return RTL_LANGUAGES.includes(normalized);
+  const result = RTL_LANGUAGES.includes(normalized);
+  console.log('[isRTL] Language check:', { language, normalized, result, RTL_LANGUAGES });
+  return result;
 }
 
 /**

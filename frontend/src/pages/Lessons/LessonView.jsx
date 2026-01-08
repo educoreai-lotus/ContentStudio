@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { templateApplicationService } from '../../services/template-application';
 import { useApp } from '../../context/AppContext';
 import { MindMapViewer } from '../../components/MindMapViewer.jsx';
-import { getTextDirection } from '../../utils/languageUtils';
+import { getTextDirection, isRTL, normalizeLanguage } from '../../utils/languageUtils';
 
 /**
  * Lesson View Component
@@ -77,17 +77,17 @@ export default function LessonView() {
     const hasAudio = !!parsedData?.audioUrl;
 
     // Get language from topic if available, otherwise default to 'en'
-    const language = lessonView?.topic?.language || 'en';
+    const language = lessonView?.topic?.language || lessonView?.lesson?.language || 'en';
     const textDir = getTextDirection(language);
     
-    // Debug: log language detection (remove in production if needed)
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[LessonView] Language detection:', { 
-        language, 
-        isRTL: textDir === 'rtl', 
-        direction: textDir 
-      });
-    }
+    // Debug: log language detection
+    console.log('[LessonView] Language detection:', { 
+      topic: lessonView?.topic,
+      language, 
+      normalized: normalizeLanguage(language),
+      isRTL: isRTL(language),
+      direction: textDir 
+    });
 
     if (!textValue || textValue.trim() === '') {
       return (
@@ -152,12 +152,16 @@ export default function LessonView() {
       );
     };
 
+    // Ensure textDir is valid - should be 'ltr' or 'rtl'
+    const validDir = textDir === 'rtl' ? 'rtl' : 'ltr';
+    
     return (
       <div
         className={`p-4 rounded-lg ${
           theme === 'day-mode' ? 'bg-gray-50 border border-gray-200' : 'bg-gray-900 border border-gray-700'
         }`}
-        dir={textDir}
+        dir={validDir}
+        style={{ direction: validDir }}
       >
         {/* Show audio first if audioFirst is true */}
         {audioFirst && renderAudioSection()}
@@ -167,7 +171,8 @@ export default function LessonView() {
           className={`whitespace-pre-wrap font-sans ${
             theme === 'day-mode' ? 'text-gray-900' : 'text-gray-100'
           }`}
-          dir={textDir}
+          dir={validDir}
+          style={{ direction: validDir }}
         >
           {textValue}
         </div>

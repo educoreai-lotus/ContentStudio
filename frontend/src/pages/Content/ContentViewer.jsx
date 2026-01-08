@@ -145,12 +145,14 @@ export const ContentViewer = () => {
                   theme === 'day-mode' ? 'bg-gray-50' : 'bg-gray-900'
                 }`}
                 dir={getTextDirection(topicLanguage)}
+                style={{ direction: getTextDirection(topicLanguage) }}
               >
                 <pre
                   className={`whitespace-pre-wrap font-sans ${
                     theme === 'day-mode' ? 'text-gray-900' : 'text-gray-100'
                   }`}
                   dir={getTextDirection(topicLanguage)}
+                  style={{ direction: getTextDirection(topicLanguage) }}
                 >
                   {content.content_data?.text}
                 </pre>
