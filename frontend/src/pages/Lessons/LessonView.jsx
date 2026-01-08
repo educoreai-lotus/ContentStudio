@@ -77,16 +77,35 @@ export default function LessonView() {
     const hasAudio = !!parsedData?.audioUrl;
 
     // Get language from topic if available, otherwise default to 'en'
-    const language = lessonView?.topic?.language || lessonView?.lesson?.language || 'en';
+    let language = lessonView?.topic?.language || lessonView?.lesson?.language || 'en';
+    
+    // CRITICAL FIX: If topic language is 'he' but text appears to be English/LTR,
+    // detect language from actual text content to prevent incorrect RTL display
+    if (language === 'he' && textValue) {
+      // Check if text contains Hebrew characters
+      const hebrewPattern = /[\u0590-\u05FF]/;
+      const arabicPattern = /[\u0600-\u06FF]/;
+      const hasHebrew = hebrewPattern.test(textValue);
+      const hasArabic = arabicPattern.test(textValue);
+      
+      // If no Hebrew/Arabic characters found, but has English/Latin characters, assume English
+      if (!hasHebrew && !hasArabic && /[a-zA-Z]/.test(textValue)) {
+        console.warn('[LessonView] Topic language is "he" but text appears to be English/LTR. Overriding to "en"');
+        language = 'en';
+      }
+    }
+    
     const textDir = getTextDirection(language);
     
     // Debug: log language detection
     console.log('[LessonView] Language detection:', { 
       topic: lessonView?.topic,
-      language, 
+      originalLanguage: lessonView?.topic?.language || lessonView?.lesson?.language,
+      detectedLanguage: language,
       normalized: normalizeLanguage(language),
       isRTL: isRTL(language),
-      direction: textDir 
+      direction: textDir,
+      textPreview: textValue.substring(0, 100)
     });
 
     if (!textValue || textValue.trim() === '') {
