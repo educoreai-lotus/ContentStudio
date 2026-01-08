@@ -119,9 +119,9 @@ export function isRTL(language) {
 /**
  * Get text direction for a language
  * @param {string} language - Language code
- * @returns {'rtl'|'ltr'} Text direction
+ * @returns {'rtl'|'ltr'|null} Text direction - returns null for LTR (let browser default)
  */
 export function getTextDirection(language) {
-  return isRTL(language) ? 'rtl' : 'ltr';
+  return isRTL(language) ? 'rtl' : null; // Return null for LTR to use browser default
 }
 
