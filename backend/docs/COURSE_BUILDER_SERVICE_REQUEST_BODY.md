@@ -243,3 +243,8 @@ Content Studio ממלא את `response.courses` במערך של אובייקטי
 3. **Permissions**: הקוד מחפש קורסים עם `permissions` שמכיל את `company_id` או `'all'` או `null`
 4. **Full AI Generation**: כל step הופך ל-Topic אחד, כל Topic מקבל 6 פורמטים
 
+
+
+
+
+

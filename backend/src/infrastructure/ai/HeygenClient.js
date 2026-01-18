@@ -504,12 +504,12 @@ export class HeygenClient {
             // Add background: gray-white color (not white, close to white and gray)
             // Use solid color background if no presentation provided
             background: usePresentationBackground && payload.presentation_file_url ? {
-              type: 'image',
-              url: payload.presentation_file_url,
+                type: 'image',
+                url: payload.presentation_file_url,
             } : {
               type: 'color',
               color: '#F5F5F5', // Light gray-white color (close to white and gray)
-            },
+              },
           },
         ],
         dimension: {
@@ -774,7 +774,7 @@ export class HeygenClient {
           duration_seconds: duration || 15,
           status: 'completed',
           fallback: storageUrl === shareUrl, // Mark as fallback if we're using share URL
-          // Include full storage metadata if available
+          // Include full storage metadata if available (both as property and spread for compatibility)
           ...(storageMetadata && {
             fileUrl: storageMetadata.fileUrl,
             fileName: storageMetadata.fileName,
@@ -785,6 +785,8 @@ export class HeygenClient {
             sha256Hash: storageMetadata.sha256Hash,
             digitalSignature: storageMetadata.digitalSignature,
           }),
+          // Also include storageMetadata as a property for structured access
+          storageMetadata: storageMetadata || null,
           // Include Heygen URLs in metadata
           metadata: {
             heygen_video_url: shareUrl, // Always keep share URL in metadata
@@ -1185,7 +1187,7 @@ export class HeygenClient {
           logger.info('[HeyGen] Full payload being sent', {
             payload: JSON.stringify(payload, null, 2),
           });
-          
+
           // CRITICAL: Validate presentation image variables (imageOne-imageFive)
           for (const imageName of presentationImageNames) {
             const imageVar = payload.variables[imageName];
@@ -1258,7 +1260,7 @@ export class HeygenClient {
         if (payloadToSend.variables) {
           const presentationImageNames = ['imageOne', 'imageTow', 'imageThree', 'imageFour', 'imageFive'];
           const speechVars = Object.keys(payloadToSend.variables).filter(k => k.startsWith('speech_'));
-          
+
           // Validate presentation images
           for (const imageName of presentationImageNames) {
             const imageVar = payloadToSend.variables[imageName];

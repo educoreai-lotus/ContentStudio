@@ -754,7 +754,9 @@ This presentation should be educational and suitable for ${audience}.`;
       let videoScript = '';
       
       if (this.openaiClient) {
-        const openaiPrompt = `Create a concise educational narration script for a 30-second video lesson. 
+        const openaiPrompt = `Create a concise educational narration script for a 30-second video lesson.
+IMPORTANT: This video has NO slides or presentation. The avatar speaks directly to the camera.
+Do NOT mention slides, presentations, or refer to any visual elements that are not present.
 The script must be EXACTLY 30 seconds when spoken (approximately 300 characters).
 Topic: ${topic || 'General lesson'}
 Description: ${description || ''}
@@ -766,7 +768,9 @@ Requirements:
 - Educational and clear
 - In ${language} language
 - Professional tone
-- Complete sentences only`;
+- Complete sentences only
+- NO references to slides, presentations, or visual elements
+- The avatar speaks directly to the camera without any background presentation`;
 
         logger.info('[AIGenerationService] Generating 30-second script using OpenAI', {
           topic,
@@ -862,13 +866,25 @@ Requirements:
       }
 
       // Extract storage metadata if available
-      const storageMetadata = videoResult.storageMetadata || null;
+      // storageMetadata may be a property OR spread directly into videoResult
+      const storageMetadata = videoResult.storageMetadata || (
+        (videoResult.fileUrl || videoResult.fileName || videoResult.storagePath) ? {
+          fileUrl: videoResult.fileUrl,
+          fileName: videoResult.fileName,
+          fileSize: videoResult.fileSize,
+          fileType: videoResult.fileType,
+          storagePath: videoResult.storagePath,
+          uploadedAt: videoResult.uploadedAt,
+          sha256Hash: videoResult.sha256Hash,
+          digitalSignature: videoResult.digitalSignature,
+        } : null
+      );
 
       return {
         videoUrl: videoResult.videoUrl,
         videoId: videoResult.videoId,
         language: config.language || 'en',
-        duration_seconds: videoResult.duration || 15,
+        duration_seconds: videoResult.duration_seconds || videoResult.duration || 15,
         status: videoResult.status || 'completed',
         fallback: !!videoResult.fallback,
         // Include full storage metadata if available

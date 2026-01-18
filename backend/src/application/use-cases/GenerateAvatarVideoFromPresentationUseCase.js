@@ -431,13 +431,13 @@ Requirements:
         }
 
         logger.info('[GenerateAvatarVideoFromPresentation] OpenAI script generated', {
-          jobId,
+            jobId,
           scriptLength: videoScript.length,
           scriptPreview: videoScript.substring(0, 100),
         });
       } catch (openaiError) {
         logger.error('[GenerateAvatarVideoFromPresentation] Failed to generate script with OpenAI, using combined slide text', {
-          jobId,
+            jobId,
           error: openaiError.message,
         });
         // Fallback: use first slide speech or combined text (truncated to 300 chars)
@@ -447,7 +447,7 @@ Requirements:
           videoScript = videoScript.substring(0, lastSpace);
         }
       }
-
+      
       // Step 9: Call HeyGen /v2/video/generate API (not template)
       logger.info('[GenerateAvatarVideoFromPresentation] Step 9: Calling HeyGen /v2/video/generate API', {
         jobId,
@@ -468,11 +468,11 @@ Requirements:
         // Check if generation failed or was skipped
         if (heygenResult.status === 'failed' || heygenResult.status === 'skipped') {
           logger.error('[GenerateAvatarVideoFromPresentation] HeyGen video generation failed or skipped', {
-            jobId,
+          jobId,
             status: heygenResult.status,
             error: heygenResult.error,
             reason: heygenResult.reason,
-          });
+        });
           throw new Error(`HeyGen video generation ${heygenResult.status}: ${heygenResult.error || heygenResult.reason || 'Unknown error'}`);
         }
         

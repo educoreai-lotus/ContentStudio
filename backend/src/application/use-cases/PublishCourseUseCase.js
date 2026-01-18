@@ -434,6 +434,26 @@ export class PublishCourseUseCase {
         };
         contentType = dbToTemplateMap[contentType] || contentType;
 
+        // Ensure avatar_video content_data always has fileUrl (storage URL)
+        if (contentType === 'avatar_video' && contentData) {
+          // If fileUrl is missing but videoUrl exists and is a storage URL, use videoUrl as fileUrl
+          if (!contentData.fileUrl && contentData.videoUrl) {
+            // Check if videoUrl is a storage URL (contains Supabase storage path)
+            if (contentData.videoUrl.includes('/storage/v1/object/public/') || 
+                contentData.videoUrl.includes('supabase.co/storage')) {
+              contentData.fileUrl = contentData.videoUrl;
+            }
+          }
+          // If still no fileUrl, use videoUrl as fallback (but log warning)
+          if (!contentData.fileUrl && contentData.videoUrl) {
+            contentData.fileUrl = contentData.videoUrl;
+            console.warn('[PublishCourseUseCase] Avatar video missing fileUrl, using videoUrl as fallback', {
+              content_id: content.content_id,
+              videoUrl: contentData.videoUrl?.substring(0, 100),
+            });
+          }
+        }
+
         return {
           content_id: String(content.content_id),
           content_type: contentType,

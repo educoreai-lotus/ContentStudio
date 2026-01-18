@@ -173,7 +173,7 @@ export class ContentMetricsController {
               });
               
               try {
-                return res.status(200).send(stringifiedResponse);
+              return res.status(200).send(stringifiedResponse);
               } catch (sendError) {
                 logger.warn('[ContentMetricsController] Failed to send response (connection may have closed)', {
                   error: sendError.message,
@@ -209,7 +209,7 @@ export class ContentMetricsController {
               res.setHeader('Content-Type', 'application/json');
               
               try {
-                return res.status(200).send(stringifiedResponse);
+              return res.status(200).send(stringifiedResponse);
               } catch (sendError) {
                 logger.warn('[ContentMetricsController] Failed to send error response (connection may have closed)', {
                   error: sendError.message,
