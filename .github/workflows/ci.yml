@@ -70,7 +70,7 @@ jobs:
           GAMMA_API: test-gamma-key
 
       - name: Upload coverage reports
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v5
         with:
           file: ./backend/coverage/lcov.info
           flags: backend
@@ -113,7 +113,7 @@ jobs:
         run: npm test -- --coverage --run
 
       - name: Upload coverage reports
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v5
         with:
           file: ./frontend/coverage/lcov.info
           flags: frontend
