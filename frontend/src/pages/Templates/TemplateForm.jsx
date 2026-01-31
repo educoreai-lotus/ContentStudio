@@ -140,7 +140,7 @@ export const TemplateForm = () => {
   if (loading && isEdit) {
     return (
       <div
-        className={`min-h-screen p-8 ${
+        className={`min-h-screen p-4 sm:p-6 md:p-8 ${
           theme === 'day-mode' ? 'bg-gray-50' : 'bg-slate-900'
         }`}
       >
@@ -155,7 +155,7 @@ export const TemplateForm = () => {
 
   return (
     <div
-      className={`min-h-screen p-8 ${
+      className={`min-h-screen p-4 sm:p-6 md:p-8 ${
         theme === 'day-mode' ? 'bg-gray-50' : 'bg-slate-900'
       }`}
     >

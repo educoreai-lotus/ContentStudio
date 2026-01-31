@@ -124,7 +124,7 @@ export const CourseList = () => {
   if (loading && courses.length === 0) {
     return (
       <div
-        className={`min-h-screen p-8 ${
+        className={`min-h-screen p-4 sm:p-6 md:p-8 ${
           theme === 'day-mode' ? 'bg-gray-50' : 'bg-[#1e293b]'
         }`}
       >
@@ -148,7 +148,7 @@ export const CourseList = () => {
 
   return (
     <div
-      className={`min-h-screen p-8 ${
+      className={`min-h-screen p-4 sm:p-6 md:p-8 ${
         theme === 'day-mode' ? 'bg-gray-50' : 'bg-[#1e293b]'
       }`}
     >
@@ -273,8 +273,8 @@ export const CourseList = () => {
                   e.currentTarget.style.boxShadow = 'var(--shadow-card)';
                 }}
               >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                  <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-2">
                       <h3
                         className={`text-xl font-semibold ${
@@ -307,7 +307,7 @@ export const CourseList = () => {
                       <span>Language: {course.language}</span>
                     </div>
                   </div>
-                  <div className="flex gap-2" onClick={e => e.stopPropagation()}>
+                  <div className="flex flex-wrap gap-2 flex-shrink-0" onClick={e => e.stopPropagation()}>
                     <button
                       className={`px-3 py-1 rounded-lg text-sm font-medium transition-all ${
                         theme === 'day-mode'

@@ -804,11 +804,20 @@ export function SharedSidebar({ onRestore }) {
   const displayContext = context;
 
   return (
+    <>
+      {/* Mobile overlay - tap outside to close sidebar */}
+      {isOpen && (
+        <div
+          className="md:hidden fixed inset-0 top-20 left-0 right-0 bottom-0 z-30 bg-black/30"
+          onClick={() => setIsOpen(false)}
+          aria-hidden="true"
+        />
+      )}
     <div
       className={`fixed left-0 top-20 bottom-0 transform transition-all duration-300 z-40 ${
         isOpen ? 'translate-x-0' : '-translate-x-full'
       } ${
-        isCollapsed ? 'w-16' : 'w-72'
+        isCollapsed ? 'w-16' : 'w-[85vw] max-w-[20rem] md:w-72'
       } ${
         theme === 'day-mode'
           ? 'bg-white border-r border-gray-200 shadow-2xl'
@@ -1147,6 +1156,7 @@ export function SharedSidebar({ onRestore }) {
         document.body
       )}
     </div>
+    </>
   );
 }
 

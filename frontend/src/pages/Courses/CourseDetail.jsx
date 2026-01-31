@@ -399,12 +399,12 @@ export const CourseDetail = () => {
 
   return (
     <div
-      className={`min-h-screen p-8 ${
+      className={`min-h-screen p-4 sm:p-6 md:p-8 ${
         theme === 'day-mode' ? 'bg-gray-50' : 'bg-[#1e293b]'
       }`}
     >
       <div className="max-w-6xl mx-auto">
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 md:mb-8">
           <div>
             <button
               onClick={() => navigate('/courses')}

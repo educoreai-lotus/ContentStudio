@@ -10,7 +10,7 @@ const HomePage = () => {
   return (
     <div className={`min-h-screen ${isDark ? 'bg-[#1e293b]' : 'bg-gray-50'} transition-colors duration-300`}>
       {/* Hero Section */}
-      <section className={`hero py-20 ${
+      <section className={`hero py-12 sm:py-16 md:py-20 ${
         isDark ? 'bg-[#1e293b]' : 'bg-gradient-to-br from-emerald-50 to-teal-50'
       }`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -36,10 +36,10 @@ const HomePage = () => {
           </div>
 
           {/* Action Buttons */}
-          <div className="hero-actions flex gap-6 justify-center flex-wrap" style={{ marginTop: 'var(--spacing-xl)' }}>
+          <div className="hero-actions flex flex-col sm:flex-row gap-4 sm:gap-6 justify-center items-center flex-wrap" style={{ marginTop: 'var(--spacing-xl)' }}>
             <button
               onClick={() => navigate('/courses')}
-              className={`btn btn-primary px-6 py-3 rounded-xl text-lg font-semibold text-white border-none cursor-pointer transition-all duration-300 relative overflow-hidden ${
+              className={`btn btn-primary w-full sm:w-auto px-6 py-3 rounded-xl text-lg font-semibold text-white border-none cursor-pointer transition-all duration-300 relative overflow-hidden ${
                 isDark 
                   ? 'bg-gradient-to-r from-emerald-600 to-emerald-700 hover:shadow-lg hover:-translate-y-0.5' 
                   : 'bg-gradient-to-r from-emerald-700 to-emerald-800 hover:shadow-lg hover:-translate-y-0.5'
@@ -50,7 +50,7 @@ const HomePage = () => {
             </button>
             <button
               onClick={() => navigate('/topics')}
-              className={`btn btn-secondary px-6 py-3 rounded-xl text-lg font-semibold cursor-pointer transition-all duration-300 relative overflow-hidden ${
+              className={`btn btn-secondary w-full sm:w-auto px-6 py-3 rounded-xl text-lg font-semibold cursor-pointer transition-all duration-300 relative overflow-hidden ${
                 isDark 
                   ? 'bg-transparent text-slate-50 border-2 border-white/20 hover:bg-gradient-to-r hover:from-emerald-600 hover:to-emerald-700 hover:text-white hover:border-transparent hover:-translate-y-0.5 hover:shadow-lg' 
                   : 'bg-transparent text-gray-900 border-2 border-teal-600 hover:bg-gradient-to-r hover:from-emerald-700 hover:to-emerald-800 hover:text-white hover:border-transparent hover:-translate-y-0.5 hover:shadow-lg'
@@ -64,10 +64,10 @@ const HomePage = () => {
       </section>
 
       {/* Features Section */}
-      <section className={`microservices-section py-20 ${isDark ? 'bg-[#1e293b]' : 'bg-gray-50'} transition-colors duration-300`}>
+      <section className={`microservices-section py-12 sm:py-16 md:py-20 ${isDark ? 'bg-[#1e293b]' : 'bg-gray-50'} transition-colors duration-300`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <h2
-            className="section-title text-center text-4xl font-bold mb-12"
+            className="section-title text-center text-2xl sm:text-3xl md:text-4xl font-bold mb-8 md:mb-12"
             style={{
               background: 'var(--gradient-primary)',
               WebkitBackgroundClip: 'text',

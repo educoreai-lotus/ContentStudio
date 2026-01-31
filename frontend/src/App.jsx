@@ -24,18 +24,18 @@ import LanguageStatsPage from './pages/Multilingual/LanguageStatsPage.jsx';
 function AppContent() {
   const { theme, sidebarState } = useApp();
   
-  // Calculate margin-left for main content based on sidebar state
+  // Calculate margin-left for main content based on sidebar state (desktop only - mobile uses overlay)
   // Add extra space for the toggle button (40px button + 16px gap = 56px) so content doesn't overlap
   const mainContentMargin = sidebarState.isOpen
     ? sidebarState.isCollapsed
-      ? 'ml-30' // 64px sidebar + 56px (40px button + 16px gap) = 120px
-      : 'ml-[344px]' // 288px sidebar + 56px (40px button + 16px gap) = 344px
+      ? 'md:ml-30' // 64px sidebar + 56px (40px button + 16px gap) = 120px
+      : 'md:ml-[344px]' // 288px sidebar + 56px (40px button + 16px gap) = 344px
     : '';
   
   return (
     <>
       <Router>
-        <div className="min-h-screen transition-colors duration-300 bg-[#f8fafc] dark:bg-[#1e293b] text-gray-900 dark:text-[#f8fafc]" dir="ltr">
+        <div className="min-h-screen overflow-x-hidden transition-colors duration-300 bg-[#f8fafc] dark:bg-[#1e293b] text-gray-900 dark:text-[#f8fafc]" dir="ltr">
             <Header />
             <SharedSidebar />
             <div className={`pt-20 transition-all duration-300 ${mainContentMargin}`}>
