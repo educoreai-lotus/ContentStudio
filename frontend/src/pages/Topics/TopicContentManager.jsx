@@ -560,9 +560,14 @@ export default function TopicContentManager() {
           {(gammaUrl || presentationUrl) && (
             <div className="mt-4 space-y-3">
               <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                {gammaUrl && (
-                  <a href={gammaUrl} target="_blank" rel="noopener noreferrer" className="inline-block px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
+                {presentationUrl && (
+                  <a href={presentationUrl} target="_blank" rel="noopener noreferrer" className="inline-block px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
                     <i className="fas fa-external-link-alt mr-2"></i>View Presentation
+                  </a>
+                )}
+                {gammaUrl && !presentationUrl && (
+                  <a href={gammaUrl} target="_blank" rel="noopener noreferrer" className="inline-block px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
+                    <i className="fas fa-external-link-alt mr-2"></i>View on Gamma
                   </a>
                 )}
                 {presentationUrl && (

@@ -88,7 +88,18 @@ export function ContentPreviewRenderer({ sectionId, version, theme }) {
               )}
               {(gammaUrl || presentationUrl) && (
                 <div className="flex flex-wrap gap-2">
-                  {gammaUrl && (
+                  {presentationUrl && (
+                    <a
+                      href={presentationUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-600 hover:text-emerald-700"
+                    >
+                      <i className="fas fa-external-link-alt"></i>
+                      View Presentation
+                    </a>
+                  )}
+                  {gammaUrl && !presentationUrl && (
                     <a
                       href={gammaUrl}
                       target="_blank"
@@ -96,7 +107,7 @@ export function ContentPreviewRenderer({ sectionId, version, theme }) {
                       className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-600 hover:text-emerald-700"
                     >
                       <i className="fas fa-external-link-alt"></i>
-                      View
+                      View on Gamma
                     </a>
                   )}
                   {presentationUrl && (
