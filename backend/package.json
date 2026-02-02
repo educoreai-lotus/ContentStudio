@@ -56,11 +56,11 @@
     "youtubei.js": "^16.0.1"
   },
   "devDependencies": {
-    "@types/jest": "^29.5.8",
+    "@types/jest": "^30.0.0",
     "eslint": "^8.54.0",
     "eslint-config-prettier": "^9.0.0",
     "eslint-plugin-node": "^11.1.0",
-    "jest": "^29.7.0",
+    "jest": "^30.2.0",
     "prettier": "^3.1.0",
     "supertest": "^6.3.3"
   }
