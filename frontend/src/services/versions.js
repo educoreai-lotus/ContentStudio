@@ -46,10 +46,8 @@ export const versionsService = {
    * @param {string} restoredBy - User who restored
    * @returns {Promise<Object>} Restored content
    */
-  async restoreVersion(versionId, restoredBy = 'trainer123') {
-    const response = await apiClient.post(`/api/versions/${versionId}/restore`, {
-      restored_by: restoredBy,
-    });
+  async restoreVersion(versionId) {
+    const response = await apiClient.post(`/api/versions/${versionId}/restore`, {});
     return response.data.data;
   },
 };

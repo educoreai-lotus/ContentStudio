@@ -5,6 +5,7 @@ import { UpdateCourseUseCase } from '../../application/use-cases/UpdateCourseUse
 import { DeleteCourseUseCase } from '../../application/use-cases/DeleteCourseUseCase.js';
 import { PublishCourseUseCase } from '../../application/use-cases/PublishCourseUseCase.js';
 import { CreateCourseDTO, UpdateCourseDTO, CourseResponseDTO } from '../../application/dtos/CourseDTO.js';
+import { getDirectoryUserId } from '../middleware/authHelpers.js';
 
 export class CourseController {
   constructor(courseRepository, topicRepository, contentRepository, templateRepository, exerciseRepository) {
@@ -24,8 +25,10 @@ export class CourseController {
 
   async create(req, res, next) {
     try {
-      const trainerId =
-        req.body.trainer_id || req.auth?.trainer?.trainer_id || req.auth?.trainer?.id;
+      const trainerId = getDirectoryUserId(req);
+      if (!trainerId) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
       const createDTO = new CreateCourseDTO({
         ...req.body,
         trainer_id: trainerId,
@@ -41,8 +44,10 @@ export class CourseController {
 
   async list(req, res, next) {
     try {
-      const trainerId =
-        req.query.trainer_id || req.auth?.trainer?.trainer_id || req.auth?.trainer?.id;
+      const trainerId = getDirectoryUserId(req);
+      if (!trainerId) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
       const filters = {
         status: req.query.status,
         search: req.query.search,

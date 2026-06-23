@@ -22,12 +22,15 @@ export const coursesService = {
    */
   async list(filters = {}, pagination = {}) {
     const params = {
-      trainer_id: filters.trainer_id,
       status: filters.status,
       search: filters.search,
       page: pagination.page || 1,
       limit: pagination.limit || 10,
     };
+
+    if (filters.trainer_id) {
+      params.trainer_id = filters.trainer_id;
+    }
 
     const response = await apiClient.get('/api/courses', { params });
     return response.data;

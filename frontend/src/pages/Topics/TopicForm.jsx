@@ -5,8 +5,6 @@ import { coursesService } from '../../services/courses.js';
 import { useApp } from '../../context/AppContext.jsx';
 import LanguageSelectorWithSearch from '../../components/LanguageSelectorWithSearch.jsx';
 
-const DEFAULT_TRAINER_ID = 'trainer-maya-levi';
-
 export const TopicForm = () => {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -65,7 +63,7 @@ export const TopicForm = () => {
   const loadCourses = async () => {
     try {
       const result = await coursesService.list(
-        { trainer_id: DEFAULT_TRAINER_ID, status: 'active' },
+        { status: 'active' },
         { page: 1, limit: 100 }
       );
       setCourses(result.courses || []);
@@ -88,7 +86,6 @@ export const TopicForm = () => {
         setSkillsLoading(true);
         const result = await topicsService.suggestSkills({
           topic_name: topicName,
-          trainer_id: DEFAULT_TRAINER_ID,
         });
         if (cancelled) return;
         const skills = result.skills || [];
@@ -173,7 +170,6 @@ export const TopicForm = () => {
       setLoading(true);
       const topicData = {
         ...formData,
-        trainer_id: DEFAULT_TRAINER_ID,
       };
 
       if (isEditing) {

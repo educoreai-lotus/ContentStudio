@@ -2,6 +2,8 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import { contentService } from '../../services/content.js';
 import { topicsService } from '../../services/topics.js';
+import apiClient from '../../services/api.js';
+import { applyRotatedTokenFromHeaders } from '../../auth/accessToken.js';
 import { useApp } from '../../context/AppContext.jsx';
 import { StatusStream } from '../../components/StatusStream.jsx';
 import { PopupModal } from '../../components/PopupModal.jsx';
@@ -169,18 +171,14 @@ export const ManualContentForm = () => {
         const uploadFormData = new FormData();
         uploadFormData.append('file', formData.presentationFile);
 
-        const uploadResponse = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'}/api/upload/presentation`, {
-          method: 'POST',
-          body: uploadFormData,
+        const uploadResponse = await apiClient.post('/api/upload/presentation', uploadFormData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
         });
 
-        if (!uploadResponse.ok) {
-          const errorData = await uploadResponse.json();
-          setError('Failed to upload presentation: ' + (errorData.error?.message || 'Unknown error'));
-          return;
-        }
-
-        const uploadResult = await uploadResponse.json();
+        applyRotatedTokenFromHeaders(uploadResponse.headers);
+        const uploadResult = uploadResponse.data;
 
         content_data = {
           ...uploadResult.data,

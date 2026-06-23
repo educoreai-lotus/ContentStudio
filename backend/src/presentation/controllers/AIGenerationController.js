@@ -1,6 +1,7 @@
 import { GenerateContentUseCase } from '../../application/use-cases/GenerateContentUseCase.js';
 import { ContentDTO } from '../../application/dtos/ContentDTO.js';
 import { logger } from '../../infrastructure/logging/Logger.js';
+import { getDirectoryUserId } from '../middleware/authHelpers.js';
 
 /**
  * AI Generation Controller
@@ -507,13 +508,14 @@ export class AIGenerationController {
    */
   async generateAvatarOrchestrator(req, res, next) {
     try {
-      const { trainer_id, topic_id, language_code, mode, input_text, ai_slide_explanations } = req.body;
+      const trainer_id = getDirectoryUserId(req);
+      const { topic_id, language_code, mode, input_text, ai_slide_explanations } = req.body;
 
       // Input validation
-      if (!trainer_id || typeof trainer_id !== 'string') {
-        return res.status(400).json({
+      if (!trainer_id) {
+        return res.status(401).json({
           success: false,
-          error: 'Missing or invalid trainer_id',
+          error: 'Authentication required',
         });
       }
 

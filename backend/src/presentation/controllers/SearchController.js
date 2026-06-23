@@ -1,4 +1,5 @@
 import { SearchContentUseCase } from '../../application/use-cases/SearchContentUseCase.js';
+import { getDirectoryUserId } from '../middleware/authHelpers.js';
 
 /**
  * Search Controller
@@ -15,11 +16,12 @@ export class SearchController {
    */
   async search(req, res, next) {
     try {
+      const trainerId = getDirectoryUserId(req);
       const searchCriteria = {
         query: req.query.q || req.query.query || '',
         filters: {
           type: req.query.type, // 'course', 'topic', 'content', or undefined for all
-          trainer_id: req.query.trainer_id,
+          trainer_id: trainerId || undefined,
           course_id: req.query.course_id ? parseInt(req.query.course_id) : undefined,
           topic_id: req.query.topic_id ? parseInt(req.query.topic_id) : undefined,
           status: req.query.status,

@@ -14,10 +14,9 @@ export const topicsService = {
     return response.data;
   },
 
-  async suggestSkills({ topic_name, trainer_id }) {
+  async suggestSkills({ topic_name }) {
     const response = await apiClient.post('/api/topics/suggest-skills', {
       topic_name,
-      trainer_id,
     });
     return response.data;
   },
@@ -30,13 +29,16 @@ export const topicsService = {
    */
   async list(filters = {}, pagination = {}) {
     const params = {
-      trainer_id: filters.trainer_id,
       status: filters.status,
       course_id: filters.course_id === null || filters.course_id === undefined ? 'null' : filters.course_id,
       search: filters.search,
       page: pagination.page || 1,
       limit: pagination.limit || 10,
     };
+
+    if (filters.trainer_id) {
+      params.trainer_id = filters.trainer_id;
+    }
 
     // Remove undefined values to avoid sending them in query params
     Object.keys(params).forEach(key => {

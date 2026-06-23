@@ -9,7 +9,10 @@ export class BaseUseCase {
    * @returns {string} Resolved trainer ID
    */
   resolveTrainerId(trainerId) {
-    return trainerId || 'trainer-maya-levi';
+    if (!trainerId) {
+      throw new Error('Trainer identity is required');
+    }
+    return trainerId;
   }
 
   /**

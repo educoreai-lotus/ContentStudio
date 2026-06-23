@@ -31,8 +31,24 @@
       window.addEventListener('load', function() {
         // Get user data from localStorage
         const token = localStorage.getItem('auth_token') || '';
-        const userId = localStorage.getItem('user_id') || 'trainer-maya-levi';
-        const tenantId = localStorage.getItem('tenant_id') || 'default';
+        let userId = localStorage.getItem('user_id') || '';
+        let tenantId = localStorage.getItem('tenant_id') || 'default';
+
+        if (token) {
+          try {
+            var parts = token.split('.');
+            if (parts.length === 3) {
+              var b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+              var pad = b64.length % 4;
+              if (pad) b64 += '='.repeat(4 - pad);
+              var claims = JSON.parse(atob(b64));
+              userId = claims.directoryUserId || claims.directory_user_id || claims.sub || userId;
+              tenantId = claims.organizationId || claims.organization_id || claims.companyId || tenantId;
+            }
+          } catch (e) {
+            // keep stored fallbacks
+          }
+        }
         
         // Initialize bot
         if (window.initializeEducoreBot) {

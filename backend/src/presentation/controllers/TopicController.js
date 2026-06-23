@@ -8,6 +8,7 @@ import { ApplyTemplateToLessonUseCase } from '../../application/use-cases/ApplyT
 import { PublishStandaloneTopicUseCase } from '../../application/use-cases/PublishStandaloneTopicUseCase.js';
 import { CreateTopicDTO, UpdateTopicDTO, TopicResponseDTO } from '../../application/dtos/TopicDTO.js';
 import { logger } from '../../infrastructure/logging/Logger.js';
+import { getDirectoryUserId } from '../middleware/authHelpers.js';
 
 export class TopicController {
   constructor(topicRepository, skillsEngineClient = null, templateRepository = null, contentRepository = null, courseRepository = null, exerciseRepository = null) {
@@ -65,8 +66,10 @@ export class TopicController {
 
   async create(req, res, next) {
     try {
-      const trainerId =
-        req.body.trainer_id || req.auth?.trainer?.trainer_id || req.auth?.trainer?.id;
+      const trainerId = getDirectoryUserId(req);
+      if (!trainerId) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
       const createDTO = new CreateTopicDTO({
         ...req.body,
         trainer_id: trainerId,
@@ -82,8 +85,10 @@ export class TopicController {
 
   async list(req, res, next) {
     try {
-      const trainerId =
-        req.query.trainer_id || req.auth?.trainer?.trainer_id || req.auth?.trainer?.id;
+      const trainerId = getDirectoryUserId(req);
+      if (!trainerId) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
       const filters = {
         status: req.query.status,
         course_id:
@@ -238,8 +243,10 @@ export class TopicController {
         });
       }
 
-      const trainerId =
-        req.body.trainer_id || req.query.trainer_id || req.auth?.trainer?.trainer_id || req.auth?.trainer?.id;
+      const trainerId = getDirectoryUserId(req);
+      if (!trainerId) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
 
       let skills = [];
       let source = 'mock';

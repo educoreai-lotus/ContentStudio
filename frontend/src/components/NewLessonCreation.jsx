@@ -27,7 +27,6 @@ export default function NewLessonCreation({
         topic_name: formData.title,
         description: formData.description,
         course_id: courseId || null,
-        trainer_id: 'trainer123', // TODO: Get from auth context
       };
 
       const result = await topicsService.create(lessonData);

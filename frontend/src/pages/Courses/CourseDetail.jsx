@@ -6,8 +6,6 @@ import { contentService } from '../../services/content.js';
 import { useApp } from '../../context/AppContext.jsx';
 import { Badge } from '../../components/common/Badge.jsx';
 
-const DEFAULT_TRAINER_ID = 'trainer-maya-levi';
-
 export const CourseDetail = () => {
   const { id } = useParams();
   const courseId = useMemo(() => parseInt(id, 10), [id]);
@@ -51,7 +49,6 @@ export const CourseDetail = () => {
       setLoadingTopics(true);
       const result = await topicsService.list(
         {
-          trainer_id: DEFAULT_TRAINER_ID,
           course_id: courseId,
           status: 'active', // Only show active topics (exclude deleted)
         },
@@ -530,7 +527,7 @@ export const CourseDetail = () => {
               >
                 <li>
                   <strong>Trainer:</strong>{' '}
-                  {course?.trainer_id || DEFAULT_TRAINER_ID}
+                  {course?.trainer_id || '—'}
                 </li>
                 {course?.skills && course.skills.length > 0 && (
                   <li>

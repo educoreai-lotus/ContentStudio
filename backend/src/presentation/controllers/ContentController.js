@@ -4,6 +4,7 @@ import { RegenerateContentUseCase } from '../../application/use-cases/Regenerate
 import { ContentDTO } from '../../application/dtos/ContentDTO.js';
 import { FileIntegrityService } from '../../infrastructure/security/FileIntegrityService.js';
 import { logger } from '../../infrastructure/logging/Logger.js';
+import { getDirectoryUserId } from '../middleware/authHelpers.js';
 
 /**
  * Content Controller
@@ -393,7 +394,10 @@ export class ContentController {
         }
       });
 
-      const updatedBy = req.body.updated_by || 'trainer123'; // TODO: Get from auth
+      const updatedBy = getDirectoryUserId(req);
+      if (!updatedBy) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
       const statusMessages = req.body.status_messages || null;
       const updatedContent = await this.updateContentUseCase.execute(
         contentId,

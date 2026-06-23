@@ -2,6 +2,7 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { logger } from '../../infrastructure/logging/Logger.js';
+import { getDirectoryUserId } from '../middleware/authHelpers.js';
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -63,7 +64,8 @@ export class VideoToLessonController {
    */
   async transform(req, res, next) {
     try {
-      const { trainer_id, topic_name, description, course_id } = req.body;
+      const trainer_id = getDirectoryUserId(req);
+      const { topic_name, description, course_id } = req.body;
 
       if (!req.file) {
         return res.status(400).json({
@@ -75,7 +77,7 @@ export class VideoToLessonController {
       if (!trainer_id || !topic_name) {
         return res.status(400).json({
           success: false,
-          error: 'trainer_id and topic_name are required',
+          error: 'topic_name is required',
         });
       }
 
@@ -342,7 +344,7 @@ export class VideoToLessonController {
           });
 
           // Get trainer_id from request body or authentication
-          const trainer_id = req.body.trainer_id || req.auth?.trainer?.trainer_id || null;
+          const trainer_id = getDirectoryUserId(req);
 
           // Progress callback to collect events
           const onProgress = (format, status, message) => {

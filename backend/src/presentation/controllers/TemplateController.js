@@ -5,6 +5,7 @@ import { UpdateTemplateUseCase } from '../../application/use-cases/UpdateTemplat
 import { DeleteTemplateUseCase } from '../../application/use-cases/DeleteTemplateUseCase.js';
 import { GenerateTemplateWithAIUseCase } from '../../application/use-cases/GenerateTemplateWithAIUseCase.js';
 import { TemplateDTO } from '../../application/dtos/TemplateDTO.js';
+import { getDirectoryUserId } from '../middleware/authHelpers.js';
 
 /**
  * Template Controller
@@ -25,10 +26,14 @@ export class TemplateController {
 
   async create(req, res, next) {
     try {
+      const createdBy = getDirectoryUserId(req);
+      if (!createdBy) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
       const templateData = {
         template_name: req.body.template_name,
         format_order: req.body.format_order,
-        created_by: req.body.created_by || 'trainer123', // TODO: Get from auth
+        created_by: createdBy,
       };
 
       const template = await this.createTemplateUseCase.execute(templateData);
@@ -146,7 +151,10 @@ export class TemplateController {
   async generateWithAI(req, res, next) {
     try {
       const topicId = parseInt(req.body.topic_id);
-      const trainerId = req.body.trainer_id || req.auth?.trainer?.trainer_id || 'system';
+      const trainerId = getDirectoryUserId(req);
+      if (!trainerId) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
       const templateName = req.body.template_name;
 
       const result = await this.generateTemplateWithAIUseCase.execute({

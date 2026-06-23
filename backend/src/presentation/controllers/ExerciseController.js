@@ -2,6 +2,7 @@ import { logger } from '../../infrastructure/logging/Logger.js';
 import { CreateExercisesUseCase } from '../../application/use-cases/CreateExercisesUseCase.js';
 import { PostgreSQLExerciseRepository } from '../../infrastructure/database/repositories/PostgreSQLExerciseRepository.js';
 import { PostgreSQLTopicRepository } from '../../infrastructure/database/repositories/PostgreSQLTopicRepository.js';
+import { getDirectoryUserId } from '../middleware/authHelpers.js';
 
 /**
  * Exercise Controller
@@ -147,7 +148,7 @@ export class ExerciseController {
   async generateAIExercises(req, res, next) {
     try {
       const { topic_id, question_type, programming_language, language, amount, theoretical_question_type } = req.body;
-      const trainerId = req.auth?.trainer?.trainer_id || req.body.trainer_id;
+      const trainerId = getDirectoryUserId(req);
 
       if (!trainerId) {
         return res.status(401).json({
@@ -236,7 +237,7 @@ export class ExerciseController {
         language,
         exercises, // Array of 4 exercises
       } = req.body;
-      const trainerId = req.auth?.trainer?.trainer_id || req.body.trainer_id;
+      const trainerId = getDirectoryUserId(req);
 
       if (!trainerId) {
         return res.status(401).json({
@@ -347,7 +348,7 @@ export class ExerciseController {
   async createManualExercisesBatch(req, res, next) {
     try {
       const { topic_id, exercises } = req.body;
-      const trainerId = req.auth?.trainer?.trainer_id || req.body.trainer_id;
+      const trainerId = getDirectoryUserId(req);
 
       if (!trainerId) {
         return res.status(401).json({

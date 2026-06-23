@@ -1,6 +1,9 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AppProvider, useApp } from './context/AppContext.jsx';
+import { AuthProvider } from './context/AuthContext.jsx';
+import ProtectedRoute from './components/ProtectedRoute.jsx';
+import AccessDeniedPage from './pages/AccessDeniedPage.jsx';
 import Header from './components/Header.jsx';
 import { SharedSidebar } from './components/SharedSidebar.jsx';
 import HomePage from './pages/HomePage.jsx';
@@ -39,30 +42,184 @@ function AppContent() {
             <Header />
             <SharedSidebar />
             <div className={`pt-20 transition-all duration-300 ${mainContentMargin}`}>
-              {/* Routes */}
               <Routes>
-                <Route path="/" element={<HomePage />} />
-                <Route path="/courses" element={<CourseList />} />
-                <Route path="/courses/new" element={<CourseForm />} />
-                <Route path="/courses/:id" element={<CourseDetail />} />
-                <Route path="/courses/:id/edit" element={<CourseForm />} />
-            <Route path="/topics" element={<TopicList />} />
-            <Route path="/lessons" element={<TopicList />} />
-            <Route path="/topics/new" element={<TopicForm />} />
-            <Route path="/topics/:id/edit" element={<TopicForm />} />
-            <Route path="/topics/:topicId/content/new" element={<ManualContentForm />} />
-            <Route path="/topics/:topicId/content/manual-create" element={<ManualContentForm />} />
-            <Route path="/topics/:topicId/content/ai-generate" element={<AIContentForm />} />
-            <Route path="/topics/:topicId/content/preview" element={<AIContentPreview />} />
-            <Route path="/topics/:topicId/content/view" element={<ContentViewer />} />
-            <Route path="/topics/:topicId/content" element={<TopicContentManager />} />
-            <Route path="/lessons/:topicId/view" element={<LessonView />} />
-            <Route path="/lessons/:topicId/language" element={<LessonViewWithLanguage />} />
-            <Route path="/languages/stats" element={<LanguageStatsPage />} />
-            <Route path="/search" element={<SearchResults />} />
-            <Route path="/templates" element={<TemplateList />} />
-            <Route path="/templates/new" element={<TemplateForm />} />
-            <Route path="/templates/:id/edit" element={<TemplateForm />} />
+                <Route path="/access-denied" element={<AccessDeniedPage />} />
+                <Route
+                  path="/"
+                  element={
+                    <ProtectedRoute>
+                      <HomePage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/courses"
+                  element={
+                    <ProtectedRoute>
+                      <CourseList />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/courses/new"
+                  element={
+                    <ProtectedRoute>
+                      <CourseForm />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/courses/:id"
+                  element={
+                    <ProtectedRoute>
+                      <CourseDetail />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/courses/:id/edit"
+                  element={
+                    <ProtectedRoute>
+                      <CourseForm />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/topics"
+                  element={
+                    <ProtectedRoute>
+                      <TopicList />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/lessons"
+                  element={
+                    <ProtectedRoute>
+                      <TopicList />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/topics/new"
+                  element={
+                    <ProtectedRoute>
+                      <TopicForm />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/topics/:id/edit"
+                  element={
+                    <ProtectedRoute>
+                      <TopicForm />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/topics/:topicId/content/new"
+                  element={
+                    <ProtectedRoute>
+                      <ManualContentForm />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/topics/:topicId/content/manual-create"
+                  element={
+                    <ProtectedRoute>
+                      <ManualContentForm />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/topics/:topicId/content/ai-generate"
+                  element={
+                    <ProtectedRoute>
+                      <AIContentForm />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/topics/:topicId/content/preview"
+                  element={
+                    <ProtectedRoute>
+                      <AIContentPreview />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/topics/:topicId/content/view"
+                  element={
+                    <ProtectedRoute>
+                      <ContentViewer />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/topics/:topicId/content"
+                  element={
+                    <ProtectedRoute>
+                      <TopicContentManager />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/lessons/:topicId/view"
+                  element={
+                    <ProtectedRoute>
+                      <LessonView />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/lessons/:topicId/language"
+                  element={
+                    <ProtectedRoute>
+                      <LessonViewWithLanguage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/languages/stats"
+                  element={
+                    <ProtectedRoute>
+                      <LanguageStatsPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/search"
+                  element={
+                    <ProtectedRoute>
+                      <SearchResults />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/templates"
+                  element={
+                    <ProtectedRoute>
+                      <TemplateList />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/templates/new"
+                  element={
+                    <ProtectedRoute>
+                      <TemplateForm />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/templates/:id/edit"
+                  element={
+                    <ProtectedRoute>
+                      <TemplateForm />
+                    </ProtectedRoute>
+                  }
+                />
               </Routes>
             </div>
           </div>
@@ -74,7 +231,9 @@ function AppContent() {
 function App() {
   return (
     <AppProvider>
-      <AppContent />
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
     </AppProvider>
   );
 }

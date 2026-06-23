@@ -18,7 +18,6 @@ export const TopicList = ({ courseId = null }) => {
   const initialCourseId = courseIdFromQuery === 'null' ? null : (courseIdFromQuery ? parseInt(courseIdFromQuery) : courseId);
   
   const [filters, setFilters] = useState({
-    trainer_id: 'trainer-maya-levi',
     status: 'active', // Only show active topics by default (exclude deleted)
     course_id: initialCourseId,
     search: '',

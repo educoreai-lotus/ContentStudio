@@ -7,8 +7,6 @@ import { topicsService } from '../services/topics.js';
 import { contentService } from '../services/content.js';
 import { ContentPreviewRenderer } from './Content/ContentPreviewRenderer.jsx';
 
-const DEFAULT_TRAINER_ID = 'trainer-maya-levi';
-
 // Section definitions (matching ContentHistorySidebar structure)
 const SECTION_DEFINITIONS = [
   { id: 'text_audio', label: 'Text & Audio', icon: 'fa-file-audio', typeId: 1 },
@@ -314,7 +312,6 @@ export function SharedSidebar({ onRestore }) {
           console.log('[SharedSidebar] Loading deleted courses');
           result = await coursesService.list(
             {
-              trainer_id: DEFAULT_TRAINER_ID,
               status: 'deleted',
             },
             { page: 1, limit: 50 }
@@ -328,7 +325,6 @@ export function SharedSidebar({ onRestore }) {
         } else if (context.type === 'topics') {
           // Load deleted topics - if courseId is provided, load topics for that course, otherwise standalone topics
           const filters = {
-            trainer_id: DEFAULT_TRAINER_ID,
             status: 'deleted',
           };
           
@@ -662,7 +658,6 @@ export function SharedSidebar({ onRestore }) {
       if (context.type === 'courses') {
         result = await coursesService.list(
           {
-            trainer_id: DEFAULT_TRAINER_ID,
             status: 'deleted',
           },
           { page: 1, limit: 50 }
@@ -671,7 +666,6 @@ export function SharedSidebar({ onRestore }) {
       } else if (context.type === 'topics') {
         // Reload deleted topics - if courseId is provided, load topics for that course, otherwise standalone topics
         const filters = {
-          trainer_id: DEFAULT_TRAINER_ID,
           status: 'deleted',
         };
         

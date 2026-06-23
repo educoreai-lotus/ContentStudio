@@ -76,7 +76,7 @@ export const CourseForm = () => {
       setLoading(true);
       const courseData = {
         ...formData,
-        // trainer_id will be set by backend from req.auth
+        // trainer_id is set by backend from authenticated req.user
       };
 
       if (isEditing) {

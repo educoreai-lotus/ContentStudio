@@ -3,6 +3,7 @@ import { GetContentVersionsUseCase } from '../../application/use-cases/GetConten
 import { GetVersionUseCase } from '../../application/use-cases/GetVersionUseCase.js';
 import { RestoreContentVersionUseCase } from '../../application/use-cases/RestoreContentVersionUseCase.js';
 import { ContentVersionDTO } from '../../application/dtos/ContentVersionDTO.js';
+import { getDirectoryUserId } from '../middleware/authHelpers.js';
 
 /**
  * Content Version Controller
@@ -38,7 +39,10 @@ export class ContentVersionController {
     try {
       const contentId = parseInt(req.params.contentId);
       const { content_data, change_description } = req.body;
-      const createdBy = req.body.created_by || 'trainer123'; // TODO: Get from auth
+      const createdBy = getDirectoryUserId(req);
+      if (!createdBy) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
 
       const version = await this.createContentVersionUseCase.execute(
         contentId,
@@ -107,7 +111,10 @@ export class ContentVersionController {
   async restore(req, res, next) {
     try {
       const versionId = parseInt(req.params.id);
-      const restoredBy = req.body.restored_by || 'trainer123'; // TODO: Get from auth
+      const restoredBy = getDirectoryUserId(req);
+      if (!restoredBy) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
 
       const content = await this.restoreContentVersionUseCase.execute(
         versionId,

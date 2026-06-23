@@ -121,7 +121,6 @@ export const TemplateForm = () => {
         await templatesService.createTemplate({
           template_name: formData.template_name,
           format_order: formData.format_order,
-          created_by: 'trainer123', // TODO: Get from auth
         });
       }
 

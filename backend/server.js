@@ -3,7 +3,8 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { authenticationMiddleware } from './src/presentation/middleware/authentication.js';
+import { authenticate } from './src/presentation/middleware/authentication.js';
+import { requireTrainer } from './src/presentation/middleware/authorizeTrainer.js';
 import { requestLogger } from './src/presentation/middleware/requestLogger.js';
 import { logger } from './src/infrastructure/logging/Logger.js';
 
@@ -21,19 +22,34 @@ app.use(express.urlencoded({ extended: true, limit: '100mb' }));
 
 // Middleware
 // CORS configuration
+function normalizeOrigin(value) {
+  if (!value || typeof value !== 'string') return '';
+  return value.trim().replace(/\/+$/, '');
+}
+
+const corsAllowedOrigins = (process.env.ALLOWED_ORIGINS?.split(',') || [])
+  .map(normalizeOrigin)
+  .filter(Boolean);
+const corsFrontendUrl = normalizeOrigin(process.env.FRONTEND_URL);
+
+if (process.env.NODE_ENV === 'production' && process.env.ENABLE_MOCK_AUTH === 'true') {
+  logger.warn(
+    '[Startup] ENABLE_MOCK_AUTH=true is set in production but mock auth is disabled; remove this variable'
+  );
+}
+
 const corsOptions = {
   origin: function (origin, callback) {
     // Allow requests with no origin (mobile apps, Postman, etc.)
     if (!origin) return callback(null, true);
 
-    const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',').map(o => o.trim()) || [];
-    const frontendUrl = process.env.FRONTEND_URL;
+    const normalizedOrigin = normalizeOrigin(origin);
 
     // Check if origin is allowed
     if (
-      allowedOrigins.includes(origin) ||
-      origin === frontendUrl ||
-      (process.env.NODE_ENV === 'development' && origin.startsWith('http://localhost'))
+      corsAllowedOrigins.includes(normalizedOrigin) ||
+      (corsFrontendUrl && normalizedOrigin === corsFrontendUrl) ||
+      (process.env.NODE_ENV === 'development' && normalizedOrigin.startsWith('http://localhost'))
     ) {
       callback(null, true);
     } else {
@@ -43,6 +59,7 @@ const corsOptions = {
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
+  exposedHeaders: ['X-New-Access-Token'],
 };
 
 app.use(cors(corsOptions));
@@ -68,9 +85,6 @@ app.get('/health', (req, res) => {
     });
   }
 });
-
-// Apply authentication middleware to API routes (but not /health)
-app.use('/api', authenticationMiddleware);
 
 // Request logging (only in development or if LOG_REQUESTS=true)
 if (process.env.NODE_ENV !== 'production' || process.env.LOG_REQUESTS === 'true') {
@@ -113,24 +127,33 @@ import contentMetricsRouter from './src/presentation/routes/content-metrics.js';
 import exercisesRouter from './src/presentation/routes/exercises.js';
 import { errorHandler } from './src/presentation/middleware/errorHandler.js';
 
-app.use('/api/courses', coursesRouter);
-app.use('/api/topics', topicsRouter);
-app.use('/api/content', contentRouter);
-app.use('/api/search', searchRouter);
-app.use('/api/content', aiGenerationRouter);
-app.use('/api/templates', templatesRouter);
-app.use('/api', templateApplicationRouter);
-app.use('/api/quality-checks', qualityChecksRouter);
-app.use('/api', versionsRouter);
-app.use('/api/video-to-lesson', videoToLessonRouter);
-app.use('/api/content/multilingual', multilingualRouter);
-app.use('/api/content/multilingual', multilingualStatsRouter);
-app.use('/api/jobs', jobsRouter);
+// Inter-service routes (Coordinator / other microservices — no end-user JWT)
 app.use('/api/exchange', exchangeRouter);
-app.use('/api/upload', uploadRouter);
-app.use('/api/debug', debugRouter);
 app.use('/api/fill-content-metrics', contentMetricsRouter);
-app.use('/api/exercises', exercisesRouter);
+
+// Trainer-protected API routes
+const protectedApiRouter = express.Router();
+protectedApiRouter.use(authenticate);
+protectedApiRouter.use(requireTrainer);
+
+protectedApiRouter.use('/courses', coursesRouter);
+protectedApiRouter.use('/topics', topicsRouter);
+protectedApiRouter.use('/content', contentRouter);
+protectedApiRouter.use('/search', searchRouter);
+protectedApiRouter.use('/content', aiGenerationRouter);
+protectedApiRouter.use('/templates', templatesRouter);
+protectedApiRouter.use('/', templateApplicationRouter);
+protectedApiRouter.use('/quality-checks', qualityChecksRouter);
+protectedApiRouter.use('/', versionsRouter);
+protectedApiRouter.use('/video-to-lesson', videoToLessonRouter);
+protectedApiRouter.use('/content/multilingual', multilingualRouter);
+protectedApiRouter.use('/content/multilingual', multilingualStatsRouter);
+protectedApiRouter.use('/jobs', jobsRouter);
+protectedApiRouter.use('/upload', uploadRouter);
+protectedApiRouter.use('/debug', debugRouter);
+protectedApiRouter.use('/exercises', exercisesRouter);
+
+app.use('/api', protectedApiRouter);
 
 // Error handling middleware (must be after routes)
 app.use(errorHandler);

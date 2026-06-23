@@ -1,65 +1,102 @@
-import { AuthenticationClient } from '../../infrastructure/integrations/AuthenticationClient.js';
 import { authMockData } from '../../infrastructure/mock/authMockData.js';
 import { logger } from '../../infrastructure/logging/Logger.js';
+import {
+  buildReqUserFromValidation,
+  postAuthValidationToCoordinator,
+  resolveCoordinatorApiUrl,
+} from '../../infrastructure/auth/coordinatorRequestAuth.js';
 
-const authenticationClient = new AuthenticationClient({
-  serviceUrl: process.env.AUTH_SERVICE_URL,
-});
+function isMockAuthEnabled() {
+  return process.env.NODE_ENV !== 'production' && process.env.ENABLE_MOCK_AUTH === 'true';
+}
 
-const buildAuthFromMock = (trainerId) => {
-  const trainerInfo =
-    trainerId && authMockData.trainer
-      ? { ...authMockData.trainer, trainer_id: trainerId }
-      : authMockData.trainer;
-
+function buildMockUser() {
+  const trainerId = authMockData.trainer?.trainer_id || 'trainer-maya-levi';
   return {
-    ...authMockData,
-    trainer: trainerInfo,
+    directoryUserId: trainerId,
+    userId: trainerId,
+    organizationId: authMockData.trainer?.company_id || 'default',
+    primaryRole: 'TRAINER',
+    isSystemAdmin: false,
+    isTrainer: true,
     source: 'mock',
   };
-};
+}
 
-export const authenticationMiddleware = async (req, res, next) => {
-  if (req.method === 'OPTIONS') {
-    return next();
+function extractBearerToken(req) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return null;
   }
 
-  const trainerId =
-    req.headers['x-trainer-id'] ||
-    req.headers['trainer-id'] ||
-    req.query.trainer_id ||
-    req.body?.trainer_id ||
-    null;
+  const token = authHeader.slice(7).trim();
+  return token || null;
+}
 
-  try {
-    const tokenPayload = await authenticationClient.requestToken({ trainerId });
+export const authenticate = async (req, res, next) => {
+  const token = extractBearerToken(req);
 
-    if (tokenPayload && tokenPayload.token) {
-      req.auth = {
-        ...tokenPayload,
-        source: 'authentication-service',
-      };
-
-      if (!req.auth.trainer && trainerId) {
-        req.auth.trainer = { trainer_id: trainerId };
-      }
-
+  if (!token) {
+    if (isMockAuthEnabled()) {
+      req.user = buildMockUser();
       return next();
     }
 
-    logger.warn('Authentication token missing in response, using mock data', {
-      trainerId,
-    });
-    req.auth = buildAuthFromMock(trainerId);
-  } catch (error) {
-    logger.warn('Authentication service unavailable, using mock data fallback', {
-      error: error.message,
-      trainerId,
-    });
-    req.auth = buildAuthFromMock(trainerId);
+    return res.status(401).json({ error: 'Missing bearer token' });
   }
 
-  return next();
+  const coordinatorUrl = resolveCoordinatorApiUrl();
+  if (!coordinatorUrl) {
+    if (isMockAuthEnabled()) {
+      logger.warn(
+        '[Auth] COORDINATOR_API_URL/COORDINATOR_URL not set; using mock auth in development'
+      );
+      req.user = buildMockUser();
+      return next();
+    }
+
+    if (process.env.NODE_ENV === 'production') {
+      logger.error('[Auth] COORDINATOR_API_URL or COORDINATOR_URL is required in production');
+      return res.status(503).json({ error: 'Authentication service not configured' });
+    }
+
+    return res.status(401).json({ error: 'Authentication service not configured' });
+  }
+
+  try {
+    const { validation } = await postAuthValidationToCoordinator({
+      accessToken: token,
+      route: req.originalUrl || req.path || '',
+      method: req.method || 'GET',
+    });
+
+    if (!validation || validation.valid !== true) {
+      return res.status(401).json({ error: 'Invalid or expired token' });
+    }
+
+    req.user = buildReqUserFromValidation(validation);
+    req.user.source = 'coordinator-nauth';
+
+    const newAccessToken = validation.new_access_token || validation.newAccessToken;
+    if (typeof newAccessToken === 'string' && newAccessToken.trim() !== '') {
+      res.setHeader('X-New-Access-Token', newAccessToken.trim());
+    }
+
+    return next();
+  } catch (error) {
+    logger.warn('[Auth] Coordinator token validation failed', {
+      error: error.message,
+      route: req.originalUrl,
+    });
+
+    if (isMockAuthEnabled()) {
+      req.user = buildMockUser();
+      return next();
+    }
+
+    return res.status(401).json({ error: 'Authentication failed' });
+  }
 };
 
-
+/** @deprecated Use `authenticate` — kept for imports that still reference the old name */
+export const authenticationMiddleware = authenticate;
