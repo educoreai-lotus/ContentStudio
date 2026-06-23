@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { createSupabaseClient } from './createSupabaseClient.js';
 import { logger } from '../logging/Logger.js';
 import { FileIntegrityService } from '../security/FileIntegrityService.js';
 
@@ -24,7 +24,7 @@ export class AvatarVideoStorageService {
       return;
     }
 
-    this.client = createClient(supabaseUrl, supabaseKey);
+    this.client = createSupabaseClient(supabaseUrl, supabaseKey);
     this.bucketName = process.env.SUPABASE_BUCKET_NAME || 'media';
     this.integrityService = new FileIntegrityService();
   }

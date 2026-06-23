@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { createSupabaseClient } from './createSupabaseClient.js';
 import { FileIntegrityService } from '../security/FileIntegrityService.js';
 import { logger } from '../logging/Logger.js';
 
@@ -44,7 +44,7 @@ export class SupabaseStorageClient {
       }
     }
 
-    this.client = createClient(resolvedUrl, resolvedKey);
+    this.client = createSupabaseClient(resolvedUrl, resolvedKey);
     // Use bucket name from parameter, env var, or default to 'media' (Railway default)
     this.bucketName = bucketName || process.env.SUPABASE_BUCKET_NAME || 'media';
     this.integrityService = new FileIntegrityService();

@@ -536,8 +536,8 @@ export class PostgreSQLContentRepository extends IContentRepository {
       if (storagePathToDelete) {
         try {
           if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
-            const { createClient } = await import('@supabase/supabase-js');
-            const supabase = createClient(
+            const { createSupabaseClient } = await import('../../storage/createSupabaseClient.js');
+            const supabase = createSupabaseClient(
               process.env.SUPABASE_URL,
               process.env.SUPABASE_SERVICE_ROLE_KEY
             );
