@@ -1,12 +1,25 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useApp } from '../context/AppContext.jsx';
+import { useAuth } from '../context/AuthContext.jsx';
+import { logout } from '../auth/logout.js';
 
 const Header = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { theme, toggleTheme, handleNewLesson } = useApp();
+  const { hasToken } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  const showLogout =
+    hasToken && location.pathname !== '/access-denied';
+
+  const handleLogout = async () => {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    await logout();
+  };
 
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
   const logoUrl = `${API_BASE_URL}/api/logo/${theme === 'day-mode' ? 'light' : 'dark'}`;
@@ -92,6 +105,16 @@ const Header = () => {
 
             {/* Header Controls - Desktop only */}
             <div className="hidden md:flex items-center gap-4">
+              {showLogout && (
+                <button
+                  onClick={handleLogout}
+                  disabled={loggingOut}
+                  className="px-4 py-2 rounded-xl transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm font-medium flex items-center gap-2 border border-gray-200 dark:border-white/10 text-gray-600 dark:text-[#cbd5e1] hover:text-emerald-600 dark:hover:text-[#f8fafc] hover:bg-emerald-50 dark:hover:bg-[#334155] disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <i className="fas fa-right-from-bracket w-4 h-4"></i>
+                  <span>{loggingOut ? 'Logging out...' : 'Logout'}</span>
+                </button>
+              )}
               <button
                 onClick={() => navigate('/courses/new')}
                 className="px-4 py-2 rounded-xl transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm font-medium flex items-center gap-2 bg-gradient-to-r from-emerald-600 to-emerald-700 dark:from-emerald-600 dark:to-emerald-700 text-white border-none hover:from-emerald-700 hover:to-emerald-800 dark:hover:from-emerald-700 dark:hover:to-emerald-800 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
@@ -154,6 +177,16 @@ const Header = () => {
               <span>Lessons</span>
             </button>
             <div className="border-t my-2 border-gray-200 dark:border-[#334155]" />
+            {showLogout && (
+              <button
+                onClick={handleLogout}
+                disabled={loggingOut}
+                className="px-4 py-3 rounded-xl text-sm font-medium flex items-center justify-center gap-2 border border-gray-200 dark:border-[#334155] text-gray-600 dark:text-[#cbd5e1] w-full disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <i className="fas fa-right-from-bracket w-4 h-4"></i>
+                <span>{loggingOut ? 'Logging out...' : 'Logout'}</span>
+              </button>
+            )}
             <button
               onClick={() => handleNavClick('/courses/new')}
               className="px-4 py-3 rounded-xl text-sm font-medium flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-600 to-emerald-700 text-white w-full"

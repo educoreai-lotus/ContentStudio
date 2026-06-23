@@ -27,4 +27,15 @@ describe('App', () => {
     const coursesLinks = screen.getAllByText('Courses');
     expect(coursesLinks.length).toBeGreaterThan(0);
   });
+
+  it('shows Logout for authenticated users', () => {
+    render(<App />);
+    expect(screen.getAllByRole('button', { name: 'Logout' }).length).toBeGreaterThan(0);
+  });
+
+  it('does not show Logout when unauthenticated', () => {
+    localStorage.clear();
+    render(<App />);
+    expect(screen.queryByRole('button', { name: 'Logout' })).not.toBeInTheDocument();
+  });
 });
