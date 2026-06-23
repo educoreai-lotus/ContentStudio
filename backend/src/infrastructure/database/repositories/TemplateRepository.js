@@ -97,7 +97,11 @@ export class TemplateRepository extends ITemplateRepository {
   async findAll(filters = {}) {
     let results = this.templates.filter(t => t.is_active);
 
-    if (filters.created_by) {
+    if (filters.readableByTrainer) {
+      results = results.filter(
+        t => t.created_by === filters.readableByTrainer || t.created_by === 'system'
+      );
+    } else if (filters.created_by) {
       results = results.filter(t => t.created_by === filters.created_by);
     }
 

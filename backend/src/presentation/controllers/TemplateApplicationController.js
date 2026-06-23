@@ -1,4 +1,10 @@
 import { ApplyTemplateToLessonUseCase } from '../../application/use-cases/ApplyTemplateToLessonUseCase.js';
+import {
+  assertTrainerCanReadTemplate,
+  assertTrainerOwnsTopic,
+  requireAuthenticatedTrainerId,
+  respondToOwnershipError,
+} from '../middleware/ownershipHelpers.js';
 
 export class TemplateApplicationController {
   constructor({ applyTemplateToLessonUseCase }) {
@@ -11,11 +17,15 @@ export class TemplateApplicationController {
    */
   async applyTemplate(req, res, next) {
     try {
+      const trainerId = requireAuthenticatedTrainerId(req);
       const { templateId, topicId } = req.params;
+
+      await assertTrainerOwnsTopic(parseInt(topicId), trainerId);
+      await assertTrainerCanReadTemplate(parseInt(templateId), trainerId);
 
       const result = await this.applyTemplateToLessonUseCase.execute({
         topicId: parseInt(topicId),
-        templateId: parseInt(templateId), // templateId from URL
+        templateId: parseInt(templateId),
       });
 
       res.json({
@@ -23,6 +33,7 @@ export class TemplateApplicationController {
         data: result,
       });
     } catch (error) {
+      if (respondToOwnershipError(error, res)) return;
       next(error);
     }
   }
@@ -33,13 +44,16 @@ export class TemplateApplicationController {
    */
   async getLessonView(req, res, next) {
     try {
+      const trainerId = requireAuthenticatedTrainerId(req);
       const { topicId } = req.params;
+      const topicIdNum = parseInt(topicId);
 
-      // Get topic to find its template_id
+      await assertTrainerOwnsTopic(topicIdNum, trainerId);
+
       const { RepositoryFactory } = await import('../../infrastructure/database/repositories/RepositoryFactory.js');
       
       const topicRepository = await RepositoryFactory.getTopicRepository();
-      const topic = await topicRepository.findById(parseInt(topicId));
+      const topic = await topicRepository.findById(topicIdNum);
 
       if (!topic) {
         return res.status(404).json({
@@ -55,10 +69,11 @@ export class TemplateApplicationController {
         });
       }
 
-      // Use ApplyTemplateToLessonUseCase to get the view
+      await assertTrainerCanReadTemplate(topic.template_id, trainerId);
+
       const result = await this.applyTemplateToLessonUseCase.execute({
-        topicId: parseInt(topicId),
-        templateId: topic.template_id, // Use topic's template_id
+        topicId: topicIdNum,
+        templateId: topic.template_id,
       });
 
       res.json({
@@ -66,8 +81,8 @@ export class TemplateApplicationController {
         data: result.view_data,
       });
     } catch (error) {
+      if (respondToOwnershipError(error, res)) return;
       next(error);
     }
   }
 }
-

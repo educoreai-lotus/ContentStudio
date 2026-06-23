@@ -2,6 +2,11 @@ import { TriggerQualityCheckUseCase } from '../../application/use-cases/TriggerQ
 import { GetQualityCheckUseCase } from '../../application/use-cases/GetQualityCheckUseCase.js';
 import { GetContentQualityChecksUseCase } from '../../application/use-cases/GetContentQualityChecksUseCase.js';
 import { QualityCheckDTO } from '../../application/dtos/QualityCheckDTO.js';
+import {
+  assertTrainerOwnsContent,
+  requireAuthenticatedTrainerId,
+  respondToOwnershipError,
+} from '../middleware/ownershipHelpers.js';
 
 /**
  * Quality Check Controller
@@ -25,7 +30,9 @@ export class QualityCheckController {
    */
   async trigger(req, res, next) {
     try {
+      const trainerId = requireAuthenticatedTrainerId(req);
       const contentId = parseInt(req.params.contentId);
+      await assertTrainerOwnsContent(contentId, trainerId);
       const checkType = req.body.check_type || 'full';
 
       const qualityCheck = await this.triggerQualityCheckUseCase.execute(
@@ -39,6 +46,7 @@ export class QualityCheckController {
         message: 'Quality check triggered successfully',
       });
     } catch (error) {
+      if (respondToOwnershipError(error, res)) return;
       next(error);
     }
   }
@@ -49,6 +57,7 @@ export class QualityCheckController {
    */
   async getById(req, res, next) {
     try {
+      const trainerId = requireAuthenticatedTrainerId(req);
       const qualityCheckId = parseInt(req.params.id);
       const qualityCheck = await this.getQualityCheckUseCase.execute(qualityCheckId);
 
@@ -59,11 +68,14 @@ export class QualityCheckController {
         });
       }
 
+      await assertTrainerOwnsContent(qualityCheck.content_id, trainerId);
+
       res.json({
         success: true,
         data: QualityCheckDTO.toQualityCheckResponse(qualityCheck),
       });
     } catch (error) {
+      if (respondToOwnershipError(error, res)) return;
       next(error);
     }
   }
@@ -74,7 +86,9 @@ export class QualityCheckController {
    */
   async getByContentId(req, res, next) {
     try {
+      const trainerId = requireAuthenticatedTrainerId(req);
       const contentId = parseInt(req.params.contentId);
+      await assertTrainerOwnsContent(contentId, trainerId);
       const qualityChecks = await this.getContentQualityChecksUseCase.execute(
         contentId
       );
@@ -84,10 +98,8 @@ export class QualityCheckController {
         data: QualityCheckDTO.toQualityCheckListResponse(qualityChecks),
       });
     } catch (error) {
+      if (respondToOwnershipError(error, res)) return;
       next(error);
     }
   }
 }
-
-
-

@@ -10,6 +10,23 @@ export const errorHandler = (err, req, res, next) => {
     query: req.query,
   });
 
+  if (err.statusCode === 401 || err.name === 'OwnershipUnauthorizedError') {
+    return res.status(401).json({
+      error: err.message || 'Authentication required',
+    });
+  }
+
+  if (err.statusCode === 404 || err.name === 'OwnershipNotFoundError') {
+    return res.status(404).json({
+      success: false,
+      error: {
+        code: 'NOT_FOUND',
+        message: 'Resource not found',
+        timestamp: new Date().toISOString(),
+      },
+    });
+  }
+
   // Validation errors
   if (err.message.includes('required') || 
       err.message.includes('must be') || 

@@ -1,4 +1,9 @@
 import { GetLessonByLanguageUseCase } from '../../application/use-cases/GetLessonByLanguageUseCase.js';
+import {
+  assertTrainerOwnsTopic,
+  requireAuthenticatedTrainerId,
+  respondToOwnershipError,
+} from '../middleware/ownershipHelpers.js';
 
 /**
  * Multilingual Content Controller
@@ -12,17 +17,10 @@ export class MultilingualContentController {
   /**
    * Get lesson content in preferred language
    * POST /api/content/multilingual/lesson
-   * Expected from Course Builder:
-   * {
-   *   "lesson_id": "123",
-   *   "preferred_language": "he",
-   *   "content_type": "text",
-   *   "learner_id": "learner456",
-   *   "course_metadata": {...}
-   * }
    */
   async getLessonContent(req, res, next) {
     try {
+      const trainerId = requireAuthenticatedTrainerId(req);
       const { lesson_id, preferred_language, content_type = 'text', learner_id, course_metadata } = req.body;
 
       if (!lesson_id || !preferred_language) {
@@ -30,6 +28,11 @@ export class MultilingualContentController {
           success: false,
           error: 'lesson_id and preferred_language are required',
         });
+      }
+
+      const lessonIdNum = parseInt(lesson_id, 10);
+      if (!Number.isNaN(lessonIdNum)) {
+        await assertTrainerOwnsTopic(lessonIdNum, trainerId);
       }
 
       const result = await this.getLessonByLanguageUseCase.execute({
@@ -52,9 +55,8 @@ export class MultilingualContentController {
         },
       });
     } catch (error) {
+      if (respondToOwnershipError(error, res)) return;
       next(error);
     }
   }
-
 }
-

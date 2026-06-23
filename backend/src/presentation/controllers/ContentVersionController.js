@@ -3,7 +3,12 @@ import { GetContentVersionsUseCase } from '../../application/use-cases/GetConten
 import { GetVersionUseCase } from '../../application/use-cases/GetVersionUseCase.js';
 import { RestoreContentVersionUseCase } from '../../application/use-cases/RestoreContentVersionUseCase.js';
 import { ContentVersionDTO } from '../../application/dtos/ContentVersionDTO.js';
-import { getDirectoryUserId } from '../middleware/authHelpers.js';
+import {
+  assertTrainerOwnsContent,
+  assertTrainerOwnsHistory,
+  requireAuthenticatedTrainerId,
+  respondToOwnershipError,
+} from '../middleware/ownershipHelpers.js';
 
 /**
  * Content Version Controller
@@ -39,10 +44,8 @@ export class ContentVersionController {
     try {
       const contentId = parseInt(req.params.contentId);
       const { content_data, change_description } = req.body;
-      const createdBy = getDirectoryUserId(req);
-      if (!createdBy) {
-        return res.status(401).json({ error: 'Authentication required' });
-      }
+      const createdBy = requireAuthenticatedTrainerId(req);
+      await assertTrainerOwnsContent(contentId, createdBy);
 
       const version = await this.createContentVersionUseCase.execute(
         contentId,
@@ -57,6 +60,7 @@ export class ContentVersionController {
         message: 'Version created successfully',
       });
     } catch (error) {
+      if (respondToOwnershipError(error, res)) return;
       next(error);
     }
   }
@@ -67,7 +71,9 @@ export class ContentVersionController {
    */
   async list(req, res, next) {
     try {
+      const trainerId = requireAuthenticatedTrainerId(req);
       const contentId = parseInt(req.params.contentId);
+      await assertTrainerOwnsContent(contentId, trainerId);
       const versions = await this.getContentVersionsUseCase.execute(contentId);
 
       res.json({
@@ -75,6 +81,7 @@ export class ContentVersionController {
         data: ContentVersionDTO.toVersionSummaryListResponse(versions),
       });
     } catch (error) {
+      if (respondToOwnershipError(error, res)) return;
       next(error);
     }
   }
@@ -85,7 +92,9 @@ export class ContentVersionController {
    */
   async getById(req, res, next) {
     try {
+      const trainerId = requireAuthenticatedTrainerId(req);
       const versionId = parseInt(req.params.id);
+      await assertTrainerOwnsHistory(versionId, trainerId);
       const version = await this.getVersionUseCase.execute(versionId);
 
       if (!version) {
@@ -100,6 +109,7 @@ export class ContentVersionController {
         data: ContentVersionDTO.toVersionResponse(version),
       });
     } catch (error) {
+      if (respondToOwnershipError(error, res)) return;
       next(error);
     }
   }
@@ -111,10 +121,8 @@ export class ContentVersionController {
   async restore(req, res, next) {
     try {
       const versionId = parseInt(req.params.id);
-      const restoredBy = getDirectoryUserId(req);
-      if (!restoredBy) {
-        return res.status(401).json({ error: 'Authentication required' });
-      }
+      const restoredBy = requireAuthenticatedTrainerId(req);
+      await assertTrainerOwnsHistory(versionId, restoredBy);
 
       const content = await this.restoreContentVersionUseCase.execute(
         versionId,
@@ -127,6 +135,7 @@ export class ContentVersionController {
         message: 'Version restored successfully',
       });
     } catch (error) {
+      if (respondToOwnershipError(error, res)) return;
       next(error);
     }
   }

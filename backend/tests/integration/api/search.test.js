@@ -1,19 +1,25 @@
 import request from 'supertest';
-import express from 'express';
-import cors from 'cors';
 import searchRouter from '../../../src/presentation/routes/search.js';
-import { errorHandler } from '../../../src/presentation/middleware/errorHandler.js';
+import { createIntegrationTestApp } from '../../helpers/testAuth.js';
 
-// Create test app
-const app = express();
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use('/api/search', searchRouter);
-app.use(errorHandler);
+const app = createIntegrationTestApp([{ path: '/api/search', router: searchRouter }]);
+
+const unauthenticatedApp = createIntegrationTestApp(
+  [{ path: '/api/search', router: searchRouter }],
+  { authenticated: false }
+);
 
 describe('Search API Integration Tests', () => {
   describe('GET /api/search', () => {
+    it('should return 401 without authenticated trainer', async () => {
+      const response = await request(unauthenticatedApp)
+        .get('/api/search')
+        .query({ q: 'test' })
+        .expect(401);
+
+      expect(response.body.error).toBeDefined();
+    });
+
     it('should search content with query', async () => {
       const response = await request(app)
         .get('/api/search')
@@ -105,6 +111,3 @@ describe('Search API Integration Tests', () => {
     });
   });
 });
-
-
-

@@ -2,6 +2,11 @@
 // Set NODE_ENV to 'test' so server.js knows it's running in test environment
 process.env.NODE_ENV = 'test';
 
+import { patchRepositoryFactoryForTests } from './helpers/patchRepositoryFactoryForTests.js';
+
+// Share in-memory repositories across routes and OwnershipService during tests
+patchRepositoryFactoryForTests();
+
 // Suppress console.warn and console.error during tests to prevent noise from expected warnings
 // (e.g., Supabase credentials warnings in test environment)
 // This is done at module load time since setupFiles run before each test file

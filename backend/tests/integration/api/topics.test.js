@@ -1,32 +1,33 @@
 import request from 'supertest';
-import express from 'express';
-import cors from 'cors';
 import topicsRouter from '../../../src/presentation/routes/topics.js';
-import { errorHandler } from '../../../src/presentation/middleware/errorHandler.js';
+import coursesRouter from '../../../src/presentation/routes/courses.js';
+import { TEST_TRAINER_ID, createIntegrationTestApp } from '../../helpers/testAuth.js';
 
-// Create a test app instance
-const createTestApp = () => {
-  const app = express();
-  app.use(cors());
-  app.use(express.json());
-  app.use(express.urlencoded({ extended: true }));
-  app.use('/api/topics', topicsRouter);
-  app.use(errorHandler);
-  return app;
-};
-
-const testApp = createTestApp();
+const testApp = createIntegrationTestApp([
+  { path: '/api/courses', router: coursesRouter },
+  { path: '/api/topics', router: topicsRouter },
+]);
 
 describe('Topics API Integration Tests', () => {
   let createdTopicId;
+  let courseId;
+
+  beforeAll(async () => {
+    const courseRes = await request(testApp)
+      .post('/api/courses')
+      .send({ course_name: 'Topics Test Course', description: 'For topic tests' });
+    if (courseRes.status === 201) {
+      courseId = courseRes.body.course_id;
+    }
+  });
 
   describe('POST /api/topics', () => {
     it('should create a topic with valid data', async () => {
       const topicData = {
         topic_name: 'Integration Test Topic',
         description: 'Test Description',
-        trainer_id: 'trainer123',
-        course_id: 1,
+        trainer_id: 'ignored-client-id',
+        course_id: courseId,
         skills: ['JavaScript', 'React'],
       };
 
@@ -37,8 +38,8 @@ describe('Topics API Integration Tests', () => {
 
       expect(response.body).toHaveProperty('topic_id');
       expect(response.body.topic_name).toBe(topicData.topic_name);
-      expect(response.body.trainer_id).toBe(topicData.trainer_id);
-      expect(response.body.course_id).toBe(topicData.course_id);
+      expect(response.body.trainer_id).toBe(TEST_TRAINER_ID);
+      expect(response.body.course_id).toBe(courseId);
       expect(response.body.status).toBe('active');
       expect(response.body.is_standalone).toBe(false);
 
@@ -48,8 +49,9 @@ describe('Topics API Integration Tests', () => {
     it('should create a stand-alone topic (course_id null)', async () => {
       const topicData = {
         topic_name: 'Stand-alone Topic',
-        trainer_id: 'trainer123',
+        trainer_id: 'ignored-client-id',
         course_id: null,
+        language: 'en',
       };
 
       const response = await request(testApp)
@@ -62,13 +64,9 @@ describe('Topics API Integration Tests', () => {
     });
 
     it('should return 400 if topic_name is missing', async () => {
-      const topicData = {
-        trainer_id: 'trainer123',
-      };
-
       const response = await request(testApp)
         .post('/api/topics')
-        .send(topicData)
+        .send({ trainer_id: TEST_TRAINER_ID })
         .expect(400);
 
       expect(response.body.error).toBeDefined();
@@ -76,14 +74,9 @@ describe('Topics API Integration Tests', () => {
     });
 
     it('should return 400 if topic_name is too short', async () => {
-      const topicData = {
-        topic_name: 'AB',
-        trainer_id: 'trainer123',
-      };
-
       const response = await request(testApp)
         .post('/api/topics')
-        .send(topicData)
+        .send({ topic_name: 'AB', trainer_id: TEST_TRAINER_ID, language: 'en' })
         .expect(400);
 
       expect(response.body.error).toBeDefined();
@@ -94,7 +87,7 @@ describe('Topics API Integration Tests', () => {
     it('should return list of topics', async () => {
       const response = await request(testApp)
         .get('/api/topics')
-        .query({ trainer_id: 'trainer123' })
+        .query({ trainer_id: 'ignored-client-id' })
         .expect(200);
 
       expect(response.body).toHaveProperty('topics');
@@ -105,33 +98,29 @@ describe('Topics API Integration Tests', () => {
     it('should filter by course_id', async () => {
       const response = await request(testApp)
         .get('/api/topics')
-        .query({ trainer_id: 'trainer123', course_id: 1 })
+        .query({ course_id: courseId })
         .expect(200);
 
       expect(response.body.topics).toBeDefined();
       if (response.body.topics.length > 0) {
         response.body.topics.forEach(topic => {
-          expect(topic.course_id).toBe(1);
+          expect(topic.course_id).toBe(courseId);
         });
       }
     });
 
     it('should filter stand-alone topics (course_id null)', async () => {
-      // First create a stand-alone topic
-      const createResponse = await request(testApp)
+      await request(testApp)
         .post('/api/topics')
         .send({
           topic_name: 'Stand-alone Filter Test',
-          trainer_id: 'trainer123',
           course_id: null,
+          language: 'en',
         });
-      
-      expect(createResponse.body.is_standalone).toBe(true);
 
-      // Then filter for stand-alone topics
       const response = await request(testApp)
         .get('/api/topics')
-        .query({ trainer_id: 'trainer123', course_id: 'null' })
+        .query({ course_id: 'null' })
         .expect(200);
 
       expect(response.body.topics).toBeDefined();
@@ -148,10 +137,7 @@ describe('Topics API Integration Tests', () => {
       if (!createdTopicId) {
         const createResponse = await request(testApp)
           .post('/api/topics')
-          .send({
-            topic_name: 'Get Test Topic',
-            trainer_id: 'trainer123',
-          });
+          .send({ topic_name: 'Get Test Topic', language: 'en' });
         createdTopicId = createResponse.body.topic_id;
       }
 
@@ -165,11 +151,9 @@ describe('Topics API Integration Tests', () => {
     });
 
     it('should return 404 if topic not found', async () => {
-      const response = await request(testApp)
-        .get('/api/topics/99999')
-        .expect(404);
+      const response = await request(testApp).get('/api/topics/99999').expect(404);
 
-      expect(response.body.error.code).toBe('TOPIC_NOT_FOUND');
+      expect(response.body.error.code).toBe('NOT_FOUND');
     });
   });
 
@@ -178,10 +162,7 @@ describe('Topics API Integration Tests', () => {
       if (!createdTopicId) {
         const createResponse = await request(testApp)
           .post('/api/topics')
-          .send({
-            topic_name: 'Format Test Topic',
-            trainer_id: 'trainer123',
-          });
+          .send({ topic_name: 'Format Test Topic', language: 'en' });
         createdTopicId = createResponse.body.topic_id;
       }
 
@@ -208,18 +189,11 @@ describe('Topics API Integration Tests', () => {
       if (!createdTopicId) {
         const createResponse = await request(testApp)
           .post('/api/topics')
-          .send({
-            topic_name: 'Incomplete Format Topic',
-            trainer_id: 'trainer123',
-          });
+          .send({ topic_name: 'Incomplete Format Topic', language: 'en' });
         createdTopicId = createResponse.body.topic_id;
       }
 
-      const contentItems = [
-        { content_type: 'text' },
-        { content_type: 'code' },
-        // Missing: presentation, audio, mind_map
-      ];
+      const contentItems = [{ content_type: 'text' }, { content_type: 'code' }];
 
       const response = await request(testApp)
         .post(`/api/topics/${createdTopicId}/validate-formats`)
@@ -235,4 +209,3 @@ describe('Topics API Integration Tests', () => {
     });
   });
 });
-

@@ -1,5 +1,9 @@
 import { SearchContentUseCase } from '../../application/use-cases/SearchContentUseCase.js';
-import { getDirectoryUserId } from '../middleware/authHelpers.js';
+import {
+  assertTrainerOwnsTopic,
+  requireAuthenticatedTrainerId,
+  respondToOwnershipError,
+} from '../middleware/ownershipHelpers.js';
 
 /**
  * Search Controller
@@ -16,14 +20,20 @@ export class SearchController {
    */
   async search(req, res, next) {
     try {
-      const trainerId = getDirectoryUserId(req);
+      const trainerId = requireAuthenticatedTrainerId(req);
+      const topicIdFilter = req.query.topic_id ? parseInt(req.query.topic_id) : undefined;
+
+      if (topicIdFilter) {
+        await assertTrainerOwnsTopic(topicIdFilter, trainerId);
+      }
+
       const searchCriteria = {
         query: req.query.q || req.query.query || '',
         filters: {
-          type: req.query.type, // 'course', 'topic', 'content', or undefined for all
-          trainer_id: trainerId || undefined,
+          type: req.query.type,
+          trainer_id: trainerId,
           course_id: req.query.course_id ? parseInt(req.query.course_id) : undefined,
-          topic_id: req.query.topic_id ? parseInt(req.query.topic_id) : undefined,
+          topic_id: topicIdFilter,
           status: req.query.status,
           content_type_id: req.query.content_type_id,
           generation_method_id: req.query.generation_method_id,
@@ -48,6 +58,7 @@ export class SearchController {
         data: results,
       });
     } catch (error) {
+      if (respondToOwnershipError(error, res)) return;
       next(error);
     }
   }

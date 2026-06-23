@@ -5,7 +5,11 @@ import { UpdateCourseUseCase } from '../../application/use-cases/UpdateCourseUse
 import { DeleteCourseUseCase } from '../../application/use-cases/DeleteCourseUseCase.js';
 import { PublishCourseUseCase } from '../../application/use-cases/PublishCourseUseCase.js';
 import { CreateCourseDTO, UpdateCourseDTO, CourseResponseDTO } from '../../application/dtos/CourseDTO.js';
-import { getDirectoryUserId } from '../middleware/authHelpers.js';
+import {
+  assertTrainerOwnsCourse,
+  requireAuthenticatedTrainerId,
+  respondToOwnershipError,
+} from '../middleware/ownershipHelpers.js';
 
 export class CourseController {
   constructor(courseRepository, topicRepository, contentRepository, templateRepository, exerciseRepository) {
@@ -25,10 +29,7 @@ export class CourseController {
 
   async create(req, res, next) {
     try {
-      const trainerId = getDirectoryUserId(req);
-      if (!trainerId) {
-        return res.status(401).json({ error: 'Authentication required' });
-      }
+      const trainerId = requireAuthenticatedTrainerId(req);
       const createDTO = new CreateCourseDTO({
         ...req.body,
         trainer_id: trainerId,
@@ -44,10 +45,7 @@ export class CourseController {
 
   async list(req, res, next) {
     try {
-      const trainerId = getDirectoryUserId(req);
-      if (!trainerId) {
-        return res.status(401).json({ error: 'Authentication required' });
-      }
+      const trainerId = requireAuthenticatedTrainerId(req);
       const filters = {
         status: req.query.status,
         search: req.query.search,
@@ -70,7 +68,9 @@ export class CourseController {
 
   async getById(req, res, next) {
     try {
+      const trainerId = requireAuthenticatedTrainerId(req);
       const courseId = parseInt(req.params.id);
+      await assertTrainerOwnsCourse(courseId, trainerId);
       const course = await this.getCourseUseCase.execute(courseId);
 
       if (!course) {
@@ -86,13 +86,16 @@ export class CourseController {
       const responseDTO = new CourseResponseDTO(course);
       res.status(200).json(responseDTO);
     } catch (error) {
+      if (respondToOwnershipError(error, res)) return;
       next(error);
     }
   }
 
   async update(req, res, next) {
     try {
+      const trainerId = requireAuthenticatedTrainerId(req);
       const courseId = parseInt(req.params.id);
+      await assertTrainerOwnsCourse(courseId, trainerId, { includeDeleted: true });
       const updateDTO = new UpdateCourseDTO(req.body);
       const course = await this.updateCourseUseCase.execute(courseId, updateDTO);
 
@@ -120,13 +123,16 @@ export class CourseController {
           },
         });
       }
+      if (respondToOwnershipError(error, res)) return;
       next(error);
     }
   }
 
   async delete(req, res, next) {
     try {
+      const trainerId = requireAuthenticatedTrainerId(req);
       const courseId = parseInt(req.params.id);
+      await assertTrainerOwnsCourse(courseId, trainerId, { includeDeleted: true });
       await this.deleteCourseUseCase.execute(courseId);
 
       res.status(200).json({
@@ -134,6 +140,7 @@ export class CourseController {
         message: 'Course deleted successfully',
       });
     } catch (error) {
+      if (respondToOwnershipError(error, res)) return;
       next(error);
     }
   }
@@ -149,6 +156,7 @@ export class CourseController {
    */
   async publish(req, res, next) {
     try {
+      const trainerId = requireAuthenticatedTrainerId(req);
       const courseId = parseInt(req.params.id);
       
       if (!courseId || isNaN(courseId)) {
@@ -160,6 +168,8 @@ export class CourseController {
           },
         });
       }
+
+      await assertTrainerOwnsCourse(courseId, trainerId);
 
       const result = await this.publishCourseUseCase.execute(courseId);
 
@@ -192,8 +202,8 @@ export class CourseController {
         });
       }
 
+      if (respondToOwnershipError(error, res)) return;
       next(error);
     }
   }
 }
-

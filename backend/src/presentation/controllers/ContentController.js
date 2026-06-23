@@ -4,7 +4,13 @@ import { RegenerateContentUseCase } from '../../application/use-cases/Regenerate
 import { ContentDTO } from '../../application/dtos/ContentDTO.js';
 import { FileIntegrityService } from '../../infrastructure/security/FileIntegrityService.js';
 import { logger } from '../../infrastructure/logging/Logger.js';
-import { getDirectoryUserId } from '../middleware/authHelpers.js';
+import {
+  assertTrainerOwnsContent,
+  assertTrainerOwnsHistory,
+  assertTrainerOwnsTopic,
+  requireAuthenticatedTrainerId,
+  respondToOwnershipError,
+} from '../middleware/ownershipHelpers.js';
 
 /**
  * Content Controller
@@ -51,6 +57,10 @@ export class ContentController {
    */
   async create(req, res, next) {
     try {
+      const trainerId = requireAuthenticatedTrainerId(req);
+      const topicId = parseInt(req.body.topic_id);
+      await assertTrainerOwnsTopic(topicId, trainerId);
+
       const contentData = {
         topic_id: parseInt(req.body.topic_id),
         content_type_id: req.body.content_type_id,
@@ -65,6 +75,7 @@ export class ContentController {
         data: ContentDTO.toContentResponse(content),
       });
     } catch (error) {
+      if (respondToOwnershipError(error, res)) return;
       // Handle language validation errors
       if (error.code === 'LANGUAGE_MISMATCH' || error.code === 'LANGUAGE_DETECTION_FAILED' || error.code === 'LANGUAGE_VALIDATION_ERROR') {
         return res.status(400).json({
@@ -87,6 +98,8 @@ export class ContentController {
    */
   async approve(req, res, next) {
     try {
+      const trainerId = requireAuthenticatedTrainerId(req);
+
       console.log('[Content Approve] 🚀 APPROVE ENDPOINT CALLED - Request received:', {
         body_keys: Object.keys(req.body),
         topic_id: req.body.topic_id,
@@ -105,6 +118,8 @@ export class ContentController {
         original_content_data,
           generation_method_id: requestedGenerationMethod,
         } = req.body;
+
+      await assertTrainerOwnsTopic(parseInt(topic_id), trainerId);
 
       console.log('[Content Approve] 📝 Parsed request data:', {
         topic_id,
@@ -238,6 +253,7 @@ export class ContentController {
         status_messages: content.status_messages || [],
       });
     } catch (error) {
+      if (respondToOwnershipError(error, res)) return;
       console.error('[Content Approve] Error:', error.message);
       
       // Handle language validation errors
@@ -310,7 +326,9 @@ export class ContentController {
    */
   async getById(req, res, next) {
     try {
+      const trainerId = requireAuthenticatedTrainerId(req);
       const contentId = parseInt(req.params.id);
+      await assertTrainerOwnsContent(contentId, trainerId);
       const content = await this.contentRepository.findById(contentId);
 
       if (!content) {
@@ -330,6 +348,7 @@ export class ContentController {
         data: ContentDTO.toContentResponse(content),
       });
     } catch (error) {
+      if (respondToOwnershipError(error, res)) return;
       next(error);
     }
   }
@@ -340,6 +359,7 @@ export class ContentController {
    */
   async list(req, res, next) {
     try {
+      const trainerId = requireAuthenticatedTrainerId(req);
       const topicId = req.query.topic_id ? parseInt(req.query.topic_id) : null;
       const filters = {
         content_type_id: req.query.content_type_id,
@@ -355,6 +375,8 @@ export class ContentController {
         });
       }
 
+      await assertTrainerOwnsTopic(topicId, trainerId);
+
       const contents = await this.contentRepository.findAllByTopicId(topicId, filters);
 
       // Verify integrity for all content items
@@ -368,6 +390,7 @@ export class ContentController {
         ...response,
       });
     } catch (error) {
+      if (respondToOwnershipError(error, res)) return;
       next(error);
     }
   }
@@ -380,7 +403,10 @@ export class ContentController {
    */
   async update(req, res, next) {
     try {
+      const trainerId = requireAuthenticatedTrainerId(req);
       const contentId = parseInt(req.params.id);
+      await assertTrainerOwnsContent(contentId, trainerId);
+
       const updates = {
         content_data: req.body.content_data,
         quality_check_data: req.body.quality_check_data,
@@ -394,10 +420,7 @@ export class ContentController {
         }
       });
 
-      const updatedBy = getDirectoryUserId(req);
-      if (!updatedBy) {
-        return res.status(401).json({ error: 'Authentication required' });
-      }
+      const updatedBy = trainerId;
       const statusMessages = req.body.status_messages || null;
       const updatedContent = await this.updateContentUseCase.execute(
         contentId,
@@ -451,6 +474,67 @@ export class ContentController {
         status_messages: updatedContent.status_messages || [],
       });
     } catch (error) {
+      if (respondToOwnershipError(error, res)) return;
+      if (error.message.includes('not found')) {
+        return res.status(404).json({
+          error: {
+            code: 'CONTENT_NOT_FOUND',
+            message: error.message,
+          },
+        });
+      }
+      next(error);
+    }
+  }
+
+  /**
+   * Regenerate content in place (archives previous version to history first)
+   * POST /api/content/:id/regenerate
+   */
+  async regenerate(req, res, next) {
+    try {
+      const trainerId = requireAuthenticatedTrainerId(req);
+      const contentId = parseInt(req.params.id);
+      const existingContent = await assertTrainerOwnsContent(contentId, trainerId);
+
+      const topicId = parseInt(req.body.topic_id ?? existingContent.topic_id);
+      const contentTypeId = parseInt(
+        req.body.content_type_id ?? existingContent.content_type_id
+      );
+
+      const regenerateRequest = {
+        content_id: contentId,
+        topic_id: topicId,
+        content_type_id: contentTypeId,
+        prompt: req.body.prompt,
+        template_id: req.body.template_id,
+        template_variables: req.body.template_variables,
+        lessonTopic: req.body.lessonTopic,
+        lessonDescription: req.body.lessonDescription,
+        language: req.body.language,
+        skillsList: req.body.skillsList,
+        style: req.body.style,
+        difficulty: req.body.difficulty,
+        programming_language: req.body.programming_language,
+        voice: req.body.voice,
+        slide_count: req.body.slide_count,
+        audio_format: req.body.audio_format,
+        tts_model: req.body.tts_model,
+        audience: req.body.audience,
+        trainerPrompt: req.body.trainerPrompt,
+        transcriptText: req.body.transcriptText,
+        generation_method_id: req.body.generation_method_id,
+      };
+
+      const updatedContent = await this.regenerateContentUseCase.execute(regenerateRequest);
+
+      res.json({
+        success: true,
+        data: ContentDTO.toContentResponse(updatedContent),
+        message: 'Content regenerated successfully. Previous version archived to history.',
+      });
+    } catch (error) {
+      if (respondToOwnershipError(error, res)) return;
       if (error.message.includes('not found')) {
         return res.status(404).json({
           error: {
@@ -471,7 +555,9 @@ export class ContentController {
    */
   async remove(req, res, next) {
     try {
+      const trainerId = requireAuthenticatedTrainerId(req);
       const contentId = parseInt(req.params.id);
+      await assertTrainerOwnsContent(contentId, trainerId);
       const existingContent = await this.contentRepository.findById(contentId);
 
       if (!existingContent) {
@@ -519,6 +605,7 @@ export class ContentController {
 
       res.status(204).send();
     } catch (error) {
+      if (respondToOwnershipError(error, res)) return;
       if (error.message.includes('not found')) {
         return res.status(404).json({
           error: {
@@ -537,7 +624,9 @@ export class ContentController {
    */
   async history(req, res, next) {
     try {
+      const trainerId = requireAuthenticatedTrainerId(req);
       const contentId = parseInt(req.params.id);
+      await assertTrainerOwnsContent(contentId, trainerId);
       const history = await this.contentHistoryService.getHistoryByContent(contentId);
 
       res.json({
@@ -545,6 +634,7 @@ export class ContentController {
         data: history,
       });
     } catch (error) {
+      if (respondToOwnershipError(error, res)) return;
       if (error.message.includes('not found')) {
         return res.status(404).json({
           error: {
@@ -563,7 +653,9 @@ export class ContentController {
    */
   async topicHistory(req, res, next) {
     try {
+      const trainerId = requireAuthenticatedTrainerId(req);
       const topicId = parseInt(req.params.topicId);
+      await assertTrainerOwnsTopic(topicId, trainerId);
       const history = await this.contentHistoryService.getHistoryByTopic(topicId);
 
       res.json({
@@ -571,6 +663,7 @@ export class ContentController {
         data: history,
       });
     } catch (error) {
+      if (respondToOwnershipError(error, res)) return;
       next(error);
     }
   }
@@ -581,7 +674,9 @@ export class ContentController {
    */
   async restoreHistory(req, res, next) {
     try {
+      const trainerId = requireAuthenticatedTrainerId(req);
       const historyId = parseInt(req.params.historyId);
+      await assertTrainerOwnsHistory(historyId, trainerId);
       const restoredContent = await this.contentHistoryService.restoreVersion(historyId);
 
       res.json({
@@ -590,6 +685,7 @@ export class ContentController {
         message: 'Content restored successfully.',
       });
     } catch (error) {
+      if (respondToOwnershipError(error, res)) return;
       if (error.message.includes('not found')) {
         return res.status(404).json({
           error: {
@@ -608,10 +704,13 @@ export class ContentController {
    */
   async deleteHistory(req, res, next) {
     try {
+      const trainerId = requireAuthenticatedTrainerId(req);
       const historyId = parseInt(req.params.historyId);
+      await assertTrainerOwnsHistory(historyId, trainerId);
       await this.contentHistoryService.deleteVersion(historyId);
       res.status(204).send();
     } catch (error) {
+      if (respondToOwnershipError(error, res)) return;
       if (error.message.includes('not found')) {
         return res.status(404).json({
           error: {

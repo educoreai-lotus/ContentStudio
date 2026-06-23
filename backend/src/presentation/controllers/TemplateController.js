@@ -5,7 +5,13 @@ import { UpdateTemplateUseCase } from '../../application/use-cases/UpdateTemplat
 import { DeleteTemplateUseCase } from '../../application/use-cases/DeleteTemplateUseCase.js';
 import { GenerateTemplateWithAIUseCase } from '../../application/use-cases/GenerateTemplateWithAIUseCase.js';
 import { TemplateDTO } from '../../application/dtos/TemplateDTO.js';
-import { getDirectoryUserId } from '../middleware/authHelpers.js';
+import {
+  assertTrainerCanReadTemplate,
+  assertTrainerOwnsTemplate,
+  assertTrainerOwnsTopic,
+  requireAuthenticatedTrainerId,
+  respondToOwnershipError,
+} from '../middleware/ownershipHelpers.js';
 
 /**
  * Template Controller
@@ -26,10 +32,7 @@ export class TemplateController {
 
   async create(req, res, next) {
     try {
-      const createdBy = getDirectoryUserId(req);
-      if (!createdBy) {
-        return res.status(401).json({ error: 'Authentication required' });
-      }
+      const createdBy = requireAuthenticatedTrainerId(req);
       const templateData = {
         template_name: req.body.template_name,
         format_order: req.body.format_order,
@@ -49,8 +52,9 @@ export class TemplateController {
 
   async list(req, res, next) {
     try {
+      const trainerId = requireAuthenticatedTrainerId(req);
       const filters = {
-        created_by: req.query.created_by,
+        readableByTrainer: trainerId,
         template_name: req.query.search,
       };
 
@@ -82,8 +86,9 @@ export class TemplateController {
 
   async getById(req, res, next) {
     try {
+      const trainerId = requireAuthenticatedTrainerId(req);
       const templateId = parseInt(req.params.id);
-      const template = await this.getTemplateUseCase.execute(templateId);
+      const template = await assertTrainerCanReadTemplate(templateId, trainerId);
 
       if (!template) {
         return res.status(404).json({
@@ -97,13 +102,17 @@ export class TemplateController {
         data: TemplateDTO.toTemplateResponse(template),
       });
     } catch (error) {
+      if (respondToOwnershipError(error, res)) return;
       next(error);
     }
   }
 
   async update(req, res, next) {
     try {
+      const trainerId = requireAuthenticatedTrainerId(req);
       const templateId = parseInt(req.params.id);
+      await assertTrainerOwnsTemplate(templateId, trainerId);
+
       const updates = {
         template_name: req.body.template_name,
         format_order: req.body.format_order,
@@ -130,13 +139,16 @@ export class TemplateController {
         data: TemplateDTO.toTemplateResponse(template),
       });
     } catch (error) {
+      if (respondToOwnershipError(error, res)) return;
       next(error);
     }
   }
 
   async remove(req, res, next) {
     try {
+      const trainerId = requireAuthenticatedTrainerId(req);
       const templateId = parseInt(req.params.id);
+      await assertTrainerOwnsTemplate(templateId, trainerId);
       await this.deleteTemplateUseCase.execute(templateId);
 
       res.json({
@@ -144,6 +156,7 @@ export class TemplateController {
         message: 'Template deleted successfully',
       });
     } catch (error) {
+      if (respondToOwnershipError(error, res)) return;
       next(error);
     }
   }
@@ -151,10 +164,8 @@ export class TemplateController {
   async generateWithAI(req, res, next) {
     try {
       const topicId = parseInt(req.body.topic_id);
-      const trainerId = getDirectoryUserId(req);
-      if (!trainerId) {
-        return res.status(401).json({ error: 'Authentication required' });
-      }
+      const trainerId = requireAuthenticatedTrainerId(req);
+      await assertTrainerOwnsTopic(topicId, trainerId);
       const templateName = req.body.template_name;
 
       const result = await this.generateTemplateWithAIUseCase.execute({
@@ -172,6 +183,7 @@ export class TemplateController {
         aiFeedback: aiFeedback || null,
       });
     } catch (error) {
+      if (respondToOwnershipError(error, res)) return;
       next(error);
     }
   }

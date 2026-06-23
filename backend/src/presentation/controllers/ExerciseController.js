@@ -2,7 +2,11 @@ import { logger } from '../../infrastructure/logging/Logger.js';
 import { CreateExercisesUseCase } from '../../application/use-cases/CreateExercisesUseCase.js';
 import { PostgreSQLExerciseRepository } from '../../infrastructure/database/repositories/PostgreSQLExerciseRepository.js';
 import { PostgreSQLTopicRepository } from '../../infrastructure/database/repositories/PostgreSQLTopicRepository.js';
-import { getDirectoryUserId } from '../middleware/authHelpers.js';
+import {
+  assertTrainerOwnsTopic,
+  requireAuthenticatedTrainerId,
+  respondToOwnershipError,
+} from '../middleware/ownershipHelpers.js';
 
 /**
  * Exercise Controller
@@ -29,6 +33,7 @@ export class ExerciseController {
    */
   async getExercisesByTopic(req, res, next) {
     try {
+      const trainerId = requireAuthenticatedTrainerId(req);
       const { topicId } = req.params;
       const topicIdNum = parseInt(topicId);
 
@@ -37,6 +42,8 @@ export class ExerciseController {
           error: 'Invalid topic ID',
         });
       }
+
+      await assertTrainerOwnsTopic(topicIdNum, trainerId);
 
       logger.info('[ExerciseController] Fetching exercises for topic', {
         topic_id: topicIdNum,
@@ -133,6 +140,7 @@ export class ExerciseController {
         source: 'exercises_table',
       });
     } catch (error) {
+      if (respondToOwnershipError(error, res)) return;
       logger.error('[ExerciseController] Error fetching exercises', {
         error: error.message,
         stack: error.stack,
@@ -148,13 +156,8 @@ export class ExerciseController {
   async generateAIExercises(req, res, next) {
     try {
       const { topic_id, question_type, programming_language, language, amount, theoretical_question_type } = req.body;
-      const trainerId = getDirectoryUserId(req);
-
-      if (!trainerId) {
-        return res.status(401).json({
-          error: 'Trainer ID is required',
-        });
-      }
+      const trainerId = requireAuthenticatedTrainerId(req);
+      await assertTrainerOwnsTopic(parseInt(topic_id), trainerId);
 
       logger.info('[ExerciseController] Generating AI exercises', {
         topic_id,
@@ -202,6 +205,7 @@ export class ExerciseController {
         return res.status(200).json({ success: false });
       }
     } catch (error) {
+      if (respondToOwnershipError(error, res)) return;
       logger.error('[ExerciseController] Error generating AI exercises', {
         error: error.message,
         stack: error.stack,
@@ -237,13 +241,8 @@ export class ExerciseController {
         language,
         exercises, // Array of 4 exercises
       } = req.body;
-      const trainerId = getDirectoryUserId(req);
-
-      if (!trainerId) {
-        return res.status(401).json({
-          error: 'Trainer ID is required',
-        });
-      }
+      const trainerId = requireAuthenticatedTrainerId(req);
+      await assertTrainerOwnsTopic(parseInt(topic_id), trainerId);
 
       // Validate that only code questions can be manual
       if (question_type !== 'code') {
@@ -316,6 +315,7 @@ export class ExerciseController {
         },
       });
     } catch (error) {
+      if (respondToOwnershipError(error, res)) return;
       logger.error('[ExerciseController] Error creating manual exercises', {
         error: error.message,
         stack: error.stack,
@@ -348,13 +348,8 @@ export class ExerciseController {
   async createManualExercisesBatch(req, res, next) {
     try {
       const { topic_id, exercises } = req.body;
-      const trainerId = getDirectoryUserId(req);
-
-      if (!trainerId) {
-        return res.status(401).json({
-          error: 'Trainer ID is required',
-        });
-      }
+      const trainerId = requireAuthenticatedTrainerId(req);
+      await assertTrainerOwnsTopic(parseInt(topic_id), trainerId);
 
       logger.info('[ExerciseController] Creating batch of manual exercises', {
         topic_id,
@@ -374,6 +369,7 @@ export class ExerciseController {
         count: createdExercises.length,
       });
     } catch (error) {
+      if (respondToOwnershipError(error, res)) return;
       logger.error('[ExerciseController] Error creating batch of manual exercises', {
         error: error.message,
         stack: error.stack,

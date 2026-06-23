@@ -9,6 +9,13 @@ import { PublishStandaloneTopicUseCase } from '../../application/use-cases/Publi
 import { CreateTopicDTO, UpdateTopicDTO, TopicResponseDTO } from '../../application/dtos/TopicDTO.js';
 import { logger } from '../../infrastructure/logging/Logger.js';
 import { getDirectoryUserId } from '../middleware/authHelpers.js';
+import {
+  assertTrainerCanReadTemplate,
+  assertTrainerOwnsCourse,
+  assertTrainerOwnsTopic,
+  requireAuthenticatedTrainerId,
+  respondToOwnershipError,
+} from '../middleware/ownershipHelpers.js';
 
 export class TopicController {
   constructor(topicRepository, skillsEngineClient = null, templateRepository = null, contentRepository = null, courseRepository = null, exerciseRepository = null) {
@@ -66,14 +73,14 @@ export class TopicController {
 
   async create(req, res, next) {
     try {
-      const trainerId = getDirectoryUserId(req);
-      if (!trainerId) {
-        return res.status(401).json({ error: 'Authentication required' });
-      }
+      const trainerId = requireAuthenticatedTrainerId(req);
       const createDTO = new CreateTopicDTO({
         ...req.body,
         trainer_id: trainerId,
       });
+      if (createDTO.course_id) {
+        await assertTrainerOwnsCourse(createDTO.course_id, trainerId);
+      }
       const topic = await this.createTopicUseCase.execute(createDTO);
       const responseDTO = await this.buildTopicResponse(topic);
 
@@ -85,10 +92,7 @@ export class TopicController {
 
   async list(req, res, next) {
     try {
-      const trainerId = getDirectoryUserId(req);
-      if (!trainerId) {
-        return res.status(401).json({ error: 'Authentication required' });
-      }
+      const trainerId = requireAuthenticatedTrainerId(req);
       const filters = {
         status: req.query.status,
         course_id:
@@ -121,7 +125,9 @@ export class TopicController {
 
   async getById(req, res, next) {
     try {
+      const trainerId = requireAuthenticatedTrainerId(req);
       const topicId = parseInt(req.params.id);
+      await assertTrainerOwnsTopic(topicId, trainerId);
       const topic = await this.getTopicUseCase.execute(topicId);
 
       if (!topic) {
@@ -137,13 +143,16 @@ export class TopicController {
       const responseDTO = await this.buildTopicResponse(topic);
       res.status(200).json(responseDTO);
     } catch (error) {
+      if (respondToOwnershipError(error, res)) return;
       next(error);
     }
   }
 
   async update(req, res, next) {
     try {
+      const trainerId = requireAuthenticatedTrainerId(req);
       const topicId = parseInt(req.params.id);
+      await assertTrainerOwnsTopic(topicId, trainerId, { includeDeleted: true });
       const updateDTO = new UpdateTopicDTO(req.body);
       const topic = await this.updateTopicUseCase.execute(topicId, updateDTO);
 
@@ -160,13 +169,16 @@ export class TopicController {
       const responseDTO = await this.buildTopicResponse(topic);
       res.status(200).json(responseDTO);
     } catch (error) {
+      if (respondToOwnershipError(error, res)) return;
       next(error);
     }
   }
 
   async delete(req, res, next) {
     try {
+      const trainerId = requireAuthenticatedTrainerId(req);
       const topicId = parseInt(req.params.id);
+      await assertTrainerOwnsTopic(topicId, trainerId, { includeDeleted: true });
       await this.deleteTopicUseCase.execute(topicId);
 
       res.status(200).json({
@@ -174,13 +186,16 @@ export class TopicController {
         message: 'Topic deleted successfully',
       });
     } catch (error) {
+      if (respondToOwnershipError(error, res)) return;
       next(error);
     }
   }
 
   async validateFormatRequirements(req, res, next) {
     try {
+      const trainerId = requireAuthenticatedTrainerId(req);
       const topicId = parseInt(req.params.id);
+      await assertTrainerOwnsTopic(topicId, trainerId);
       if (!topicId || isNaN(topicId)) {
         return res.status(400).json({
           error: {
@@ -196,6 +211,7 @@ export class TopicController {
 
       res.status(200).json(result);
     } catch (error) {
+      if (respondToOwnershipError(error, res)) return;
       next(error);
     }
   }
@@ -209,6 +225,7 @@ export class TopicController {
         });
       }
 
+      const trainerId = requireAuthenticatedTrainerId(req);
       const topicId = parseInt(req.params.id);
       const templateId = parseInt(req.body.template_id);
 
@@ -219,6 +236,9 @@ export class TopicController {
         });
       }
 
+      await assertTrainerOwnsTopic(topicId, trainerId);
+      await assertTrainerCanReadTemplate(templateId, trainerId);
+
       const result = await this.applyTemplateToLessonUseCase.execute({
         topicId,
         templateId,
@@ -226,6 +246,7 @@ export class TopicController {
 
       res.status(200).json(result);
     } catch (error) {
+      if (respondToOwnershipError(error, res)) return;
       next(error);
     }
   }
@@ -342,10 +363,14 @@ export class TopicController {
         });
       }
 
+      const trainerId = requireAuthenticatedTrainerId(req);
+      await assertTrainerOwnsTopic(topicId, trainerId);
+
       const result = await this.publishStandaloneTopicUseCase.execute(topicId);
 
       res.status(200).json(result);
     } catch (error) {
+      if (respondToOwnershipError(error, res)) return;
       next(error);
     }
   }

@@ -1,7 +1,12 @@
 import { GenerateContentUseCase } from '../../application/use-cases/GenerateContentUseCase.js';
 import { ContentDTO } from '../../application/dtos/ContentDTO.js';
 import { logger } from '../../infrastructure/logging/Logger.js';
-import { getDirectoryUserId } from '../middleware/authHelpers.js';
+import {
+  assertTrainerOwnsContent,
+  assertTrainerOwnsTopic,
+  requireAuthenticatedTrainerId,
+  respondToOwnershipError,
+} from '../middleware/ownershipHelpers.js';
 
 /**
  * AI Generation Controller
@@ -74,12 +79,14 @@ export class AIGenerationController {
 
   async handleGeneration(req, res, next, contentTypeOverride) {
     try {
+      const trainerId = requireAuthenticatedTrainerId(req);
+      this.validateBody(req.body, contentTypeOverride);
+      await assertTrainerOwnsTopic(parseInt(req.body.topic_id), trainerId);
+
       console.log('[AI Generation] Starting generation:', {
         topic_id: req.body.topic_id,
         content_type: contentTypeOverride || req.body.content_type_id,
       });
-      
-      this.validateBody(req.body, contentTypeOverride);
       
       // If lesson fields are missing, fetch them from the topic
       if (!req.body.lessonTopic || !req.body.lessonDescription || !req.body.skillsList) {
@@ -242,6 +249,7 @@ export class AIGenerationController {
         message: 'Content generated successfully',
       });
     } catch (error) {
+      if (respondToOwnershipError(error, res)) return;
       console.error('[AI Generation] Error:', error.message, error.stack);
       next(error);
     }
@@ -277,17 +285,16 @@ export class AIGenerationController {
    */
   async generateAvatarVideo(req, res, next) {
     try {
+      const trainerId = requireAuthenticatedTrainerId(req);
       const { topic_id, presentation_content_id } = req.body;
 
-      // NEW WORKFLOW: Avatar video must be created from a presentation
-      // Check if presentation_content_id is provided
       if (presentation_content_id) {
-        // Use new workflow: generate from presentation
+        await assertTrainerOwnsContent(parseInt(presentation_content_id), trainerId);
         return this.generateAvatarVideoFromPresentation(req, res, next);
       }
 
-      // If no presentation_content_id, check if topic has a presentation
       if (topic_id) {
+        await assertTrainerOwnsTopic(parseInt(topic_id), trainerId);
         const { RepositoryFactory } = await import('../../infrastructure/database/repositories/RepositoryFactory.js');
         const contentRepository = await RepositoryFactory.getContentRepository();
         
@@ -372,6 +379,7 @@ export class AIGenerationController {
       });
 
     } catch (error) {
+      if (respondToOwnershipError(error, res)) return;
       logger.error('[AIGenerationController] Error in generateAvatarVideo', {
         error: error.message,
         stack: error.stack,
@@ -394,6 +402,7 @@ export class AIGenerationController {
    */
   async generateAvatarVideoFromPresentation(req, res, next) {
     try {
+      const trainerId = requireAuthenticatedTrainerId(req);
       const { presentation_content_id, custom_prompt, avatar_id, language } = req.body;
 
       if (!presentation_content_id) {
@@ -402,6 +411,8 @@ export class AIGenerationController {
           error: 'presentation_content_id is required',
         });
       }
+
+      await assertTrainerOwnsContent(parseInt(presentation_content_id), trainerId);
 
       // Import dependencies
       const { RepositoryFactory } = await import('../../infrastructure/database/repositories/RepositoryFactory.js');
@@ -478,6 +489,7 @@ export class AIGenerationController {
       });
 
     } catch (error) {
+      if (respondToOwnershipError(error, res)) return;
       logger.error('[AIGenerationController] Error generating avatar video from presentation', {
         error: error.message,
         stack: error.stack,
@@ -508,16 +520,8 @@ export class AIGenerationController {
    */
   async generateAvatarOrchestrator(req, res, next) {
     try {
-      const trainer_id = getDirectoryUserId(req);
+      const trainer_id = requireAuthenticatedTrainerId(req);
       const { topic_id, language_code, mode, input_text, ai_slide_explanations } = req.body;
-
-      // Input validation
-      if (!trainer_id) {
-        return res.status(401).json({
-          success: false,
-          error: 'Authentication required',
-        });
-      }
 
       if (!topic_id || typeof topic_id !== 'number') {
         return res.status(400).json({
@@ -525,6 +529,8 @@ export class AIGenerationController {
           error: 'Missing or invalid topic_id',
         });
       }
+
+      await assertTrainerOwnsTopic(topic_id, trainer_id);
 
       if (!language_code || typeof language_code !== 'string') {
         return res.status(400).json({
@@ -654,6 +660,7 @@ export class AIGenerationController {
       });
 
     } catch (error) {
+      if (respondToOwnershipError(error, res)) return;
       logger.error('[AIGenerationController] Error in avatar orchestrator', {
         error: error.message,
         stack: error.stack,

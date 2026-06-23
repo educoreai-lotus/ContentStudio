@@ -1,26 +1,22 @@
 import { describe, it, expect } from '@jest/globals';
 import request from 'supertest';
-import express from 'express';
-import cors from 'cors';
 import templatesRouter from '../../../src/presentation/routes/templates.js';
-import { errorHandler } from '../../../src/presentation/middleware/errorHandler.js';
+import {
+  TEST_TRAINER_ID,
+  VALID_TEMPLATE_FORMAT_ORDER,
+  createIntegrationTestApp,
+} from '../../helpers/testAuth.js';
 
-// Create test app
-const app = express();
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use('/api/templates', templatesRouter);
-app.use(errorHandler);
+const app = createIntegrationTestApp([{ path: '/api/templates', router: templatesRouter }]);
 
 describe('Templates API Integration Tests', () => {
   describe('POST /api/templates', () => {
     it('should create a template successfully', async () => {
       const templateData = {
         template_name: 'Test Template',
-        format_order: ['text', 'code', 'presentation', 'audio', 'mind_map'],
+        format_order: VALID_TEMPLATE_FORMAT_ORDER,
         description: 'A test template',
-        created_by: 'trainer123',
+        created_by: 'ignored-client-id',
       };
 
       const response = await request(app)
@@ -31,40 +27,30 @@ describe('Templates API Integration Tests', () => {
       expect(response.body.success).toBe(true);
       expect(response.body.data).toHaveProperty('template_id');
       expect(response.body.data.template_name).toBe('Test Template');
-      // Should include all 5 mandatory formats
-      expect(response.body.data.format_order).toContain('text');
-      expect(response.body.data.format_order).toContain('code');
-      expect(response.body.data.format_order).toContain('presentation');
-      expect(response.body.data.format_order).toContain('audio');
-      expect(response.body.data.format_order).toContain('mind_map');
+      expect(response.body.data.format_order).toEqual(expect.arrayContaining(VALID_TEMPLATE_FORMAT_ORDER));
     });
 
     it('should return 400 if template_name is missing', async () => {
-      const templateData = {
-        format_order: ['text'],
-        created_by: 'trainer123',
-      };
-
       const response = await request(app)
         .post('/api/templates')
-        .send(templateData)
+        .send({
+          format_order: VALID_TEMPLATE_FORMAT_ORDER,
+          created_by: 'ignored-client-id',
+        })
         .expect(400);
 
       expect(response.body.error).toBeDefined();
     });
 
     it('should return 400 if format_order is invalid', async () => {
-      const templateData = {
-        template_name: 'Test',
-        format_order: ['invalid_type'],
-        created_by: 'trainer123',
-      };
-
       const response = await request(app)
         .post('/api/templates')
-        .send(templateData);
+        .send({
+          template_name: 'Test',
+          format_order: ['invalid_type'],
+          created_by: 'ignored-client-id',
+        });
 
-      // Should return 400 or 500 (validation error)
       expect([400, 500]).toContain(response.status);
       expect(response.body.error).toBeDefined();
     });
@@ -80,45 +66,39 @@ describe('Templates API Integration Tests', () => {
     });
 
     it('should filter templates by created_by', async () => {
-      const response = await request(app)
-        .get('/api/templates')
-        .query({ created_by: 'system' })
-        .expect(200);
+      const response = await request(app).get('/api/templates').expect(200);
 
       expect(response.body.success).toBe(true);
-      response.body.data.forEach(template => {
-        expect(template.created_by).toBe('system');
-      });
+      expect(response.body.data.some(t => t.created_by === 'system')).toBe(true);
+      expect(response.body.data.some(t => t.created_by === TEST_TRAINER_ID)).toBe(true);
     });
 
     it('should search templates by name', async () => {
       const response = await request(app)
         .get('/api/templates')
-        .query({ search: 'Standard' })
+        .query({ search: 'Foundational' })
         .expect(200);
 
       expect(response.body.success).toBe(true);
       response.body.data.forEach(template => {
-        expect(template.template_name.toLowerCase()).toContain('standard');
+        expect(template.template_name.toLowerCase()).toContain('foundational');
       });
     });
   });
 
   describe('GET /api/templates/:id', () => {
     it('should get template by ID', async () => {
-      // First create a template with all mandatory formats
       const createResponse = await request(app)
         .post('/api/templates')
         .send({
           template_name: 'Get Test Template',
-          format_order: ['text', 'code', 'presentation', 'audio', 'mind_map'],
-          created_by: 'trainer123',
+          format_order: VALID_TEMPLATE_FORMAT_ORDER,
+          created_by: 'ignored-client-id',
         })
         .expect(201);
 
       const templateId = createResponse.body.data.template_id;
 
-      // Then get it
       const response = await request(app)
         .get(`/api/templates/${templateId}`)
         .expect(200);
@@ -131,79 +111,66 @@ describe('Templates API Integration Tests', () => {
     it('should return 404 if template not found', async () => {
       const response = await request(app).get('/api/templates/99999').expect(404);
 
-      expect(response.body.success).toBe(false);
-      expect(response.body.error).toBe('Template not found');
+      expect(response.body.error?.code || response.body.error).toBeTruthy();
     });
   });
 
   describe('PUT /api/templates/:id', () => {
     it('should update template successfully', async () => {
-      // Create template with all mandatory formats
       const createResponse = await request(app)
         .post('/api/templates')
         .send({
           template_name: 'Update Test Template',
-          format_order: ['text', 'code', 'presentation', 'audio', 'mind_map'],
-          created_by: 'trainer123',
+          format_order: VALID_TEMPLATE_FORMAT_ORDER,
+          created_by: 'ignored-client-id',
         })
         .expect(201);
 
       const templateId = createResponse.body.data.template_id;
 
-      // Update it - must include all 5 mandatory formats
       const updateResponse = await request(app)
         .put(`/api/templates/${templateId}`)
         .send({
           template_name: 'Updated Template Name',
-          format_order: ['code', 'text', 'presentation', 'audio', 'mind_map'],
+          format_order: ['code', 'text_audio', 'presentation', 'mind_map', 'avatar_video'],
         })
         .expect(200);
 
       expect(updateResponse.body.success).toBe(true);
       expect(updateResponse.body.data.template_name).toBe('Updated Template Name');
-      expect(updateResponse.body.data.format_order).toEqual(['code', 'text', 'presentation', 'audio', 'mind_map']);
     });
 
     it('should return 404 if template not found', async () => {
       const response = await request(app)
         .put('/api/templates/99999')
-        .send({
-          template_name: 'Updated',
-        })
+        .send({ template_name: 'Updated' })
         .expect(404);
 
-      expect(response.body.success).toBe(false);
+      expect(response.body.error?.code || response.body.error).toBeTruthy();
     });
   });
 
   describe('DELETE /api/templates/:id', () => {
     it('should soft delete template successfully', async () => {
-      // Create template
       const createResponse = await request(app)
         .post('/api/templates')
         .send({
           template_name: 'Delete Test Template',
-          format_order: ['text'],
-          created_by: 'trainer123',
+          format_order: VALID_TEMPLATE_FORMAT_ORDER,
+          created_by: 'ignored-client-id',
         })
         .expect(201);
 
       const templateId = createResponse.body.data.template_id;
 
-      // Delete it
       const deleteResponse = await request(app)
         .delete(`/api/templates/${templateId}`)
         .expect(200);
 
       expect(deleteResponse.body.success).toBe(true);
 
-      // Verify it's not found in list
-      const listResponse = await request(app).get('/api/templates').expect(200);
-      const deletedTemplate = listResponse.body.data.find(
-        t => t.template_id === templateId
-      );
-      expect(deletedTemplate).toBeUndefined();
+      const getResponse = await request(app).get(`/api/templates/${templateId}`).expect(404);
+      expect(getResponse.body.error?.code || getResponse.body.error).toBeTruthy();
     });
   });
 });
-

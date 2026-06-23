@@ -1,21 +1,16 @@
 import request from 'supertest';
-import express from 'express';
-import cors from 'cors';
 import coursesRouter from '../../../src/presentation/routes/courses.js';
-import { errorHandler } from '../../../src/presentation/middleware/errorHandler.js';
+import {
+  TEST_TRAINER_ID,
+  createIntegrationTestApp,
+} from '../../helpers/testAuth.js';
 
-// Create a test app instance
-const createTestApp = () => {
-  const app = express();
-  app.use(cors());
-  app.use(express.json());
-  app.use(express.urlencoded({ extended: true }));
-  app.use('/api/courses', coursesRouter);
-  app.use(errorHandler);
-  return app;
-};
+const testApp = createIntegrationTestApp([{ path: '/api/courses', router: coursesRouter }]);
 
-const testApp = createTestApp();
+const unauthenticatedApp = createIntegrationTestApp(
+  [{ path: '/api/courses', router: coursesRouter }],
+  { authenticated: false }
+);
 
 describe('Courses API Integration Tests', () => {
   let createdCourseId;
@@ -25,7 +20,7 @@ describe('Courses API Integration Tests', () => {
       const courseData = {
         course_name: 'Integration Test Course',
         description: 'Test Description',
-        trainer_id: 'trainer123',
+        trainer_id: 'ignored-client-id',
         skills: ['JavaScript', 'React'],
         language: 'en',
       };
@@ -38,7 +33,7 @@ describe('Courses API Integration Tests', () => {
       expect(response.body).toHaveProperty('course_id');
       expect(response.body.course_name).toBe(courseData.course_name);
       expect(response.body.description).toBe(courseData.description);
-      expect(response.body.trainer_id).toBe(courseData.trainer_id);
+      expect(response.body.trainer_id).toBe(TEST_TRAINER_ID);
       expect(response.body.skills).toEqual(courseData.skills);
       expect(response.body.language).toBe(courseData.language);
       expect(response.body.status).toBe('active');
@@ -46,14 +41,19 @@ describe('Courses API Integration Tests', () => {
       createdCourseId = response.body.course_id;
     });
 
-    it('should return 400 if course_name is missing', async () => {
-      const courseData = {
-        trainer_id: 'trainer123',
-      };
+    it('should return 401 without authenticated trainer', async () => {
+      const response = await request(unauthenticatedApp)
+        .post('/api/courses')
+        .send({ course_name: 'Unauthenticated Course' })
+        .expect(401);
 
+      expect(response.body.error).toBeDefined();
+    });
+
+    it('should return 400 if course_name is missing', async () => {
       const response = await request(testApp)
         .post('/api/courses')
-        .send(courseData)
+        .send({ trainer_id: TEST_TRAINER_ID })
         .expect(400);
 
       expect(response.body.error).toBeDefined();
@@ -62,32 +62,22 @@ describe('Courses API Integration Tests', () => {
     });
 
     it('should return 400 if course_name is too short', async () => {
-      const courseData = {
-        course_name: 'AB',
-        trainer_id: 'trainer123',
-      };
-
       const response = await request(testApp)
         .post('/api/courses')
-        .send(courseData)
+        .send({ course_name: 'AB', trainer_id: TEST_TRAINER_ID })
         .expect(400);
 
       expect(response.body.error).toBeDefined();
       expect(response.body.error.code).toBe('VALIDATION_ERROR');
     });
 
-    it('should return 400 if trainer_id is missing', async () => {
-      const courseData = {
-        course_name: 'Test Course',
-      };
-
+    it('should use JWT trainer identity when body trainer_id is omitted', async () => {
       const response = await request(testApp)
         .post('/api/courses')
-        .send(courseData)
-        .expect(400);
+        .send({ course_name: 'JWT Identity Course' })
+        .expect(201);
 
-      expect(response.body.error).toBeDefined();
-      expect(response.body.error.message).toContain('Trainer ID');
+      expect(response.body.trainer_id).toBe(TEST_TRAINER_ID);
     });
   });
 
@@ -95,7 +85,7 @@ describe('Courses API Integration Tests', () => {
     it('should return list of courses', async () => {
       const response = await request(testApp)
         .get('/api/courses')
-        .query({ trainer_id: 'trainer123' })
+        .query({ trainer_id: 'ignored-client-id' })
         .expect(200);
 
       expect(response.body).toHaveProperty('courses');
@@ -110,7 +100,7 @@ describe('Courses API Integration Tests', () => {
     it('should support pagination', async () => {
       const response = await request(testApp)
         .get('/api/courses')
-        .query({ trainer_id: 'trainer123', page: 1, limit: 10 })
+        .query({ page: 1, limit: 10 })
         .expect(200);
 
       expect(response.body.pagination.page).toBe(1);
@@ -120,7 +110,7 @@ describe('Courses API Integration Tests', () => {
     it('should filter by status', async () => {
       const response = await request(testApp)
         .get('/api/courses')
-        .query({ trainer_id: 'trainer123', status: 'active' })
+        .query({ status: 'active' })
         .expect(200);
 
       expect(response.body.courses).toBeDefined();
@@ -134,7 +124,7 @@ describe('Courses API Integration Tests', () => {
     it('should support search', async () => {
       const response = await request(testApp)
         .get('/api/courses')
-        .query({ trainer_id: 'trainer123', search: 'Integration' })
+        .query({ search: 'Integration' })
         .expect(200);
 
       expect(response.body.courses).toBeDefined();
@@ -142,7 +132,7 @@ describe('Courses API Integration Tests', () => {
         const course = response.body.courses[0];
         expect(
           course.course_name.toLowerCase().includes('integration') ||
-          (course.description && course.description.toLowerCase().includes('integration'))
+            (course.description && course.description.toLowerCase().includes('integration'))
         ).toBe(true);
       }
     });
@@ -151,13 +141,9 @@ describe('Courses API Integration Tests', () => {
   describe('GET /api/courses/:id', () => {
     it('should return course by ID', async () => {
       if (!createdCourseId) {
-        // Create a course first if needed
         const createResponse = await request(testApp)
           .post('/api/courses')
-          .send({
-            course_name: 'Get Test Course',
-            trainer_id: 'trainer123',
-          });
+          .send({ course_name: 'Get Test Course' });
         createdCourseId = createResponse.body.course_id;
       }
 
@@ -170,12 +156,10 @@ describe('Courses API Integration Tests', () => {
     });
 
     it('should return 404 if course not found', async () => {
-      const response = await request(testApp)
-        .get('/api/courses/99999')
-        .expect(404);
+      const response = await request(testApp).get('/api/courses/99999').expect(404);
 
       expect(response.body.error).toBeDefined();
-      expect(response.body.error.code).toBe('COURSE_NOT_FOUND');
+      expect(response.body.error.code).toBe('NOT_FOUND');
     });
   });
 
@@ -184,10 +168,7 @@ describe('Courses API Integration Tests', () => {
       if (!createdCourseId) {
         const createResponse = await request(testApp)
           .post('/api/courses')
-          .send({
-            course_name: 'Update Test Course',
-            trainer_id: 'trainer123',
-          });
+          .send({ course_name: 'Update Test Course' });
         createdCourseId = createResponse.body.course_id;
       }
 
@@ -211,19 +192,15 @@ describe('Courses API Integration Tests', () => {
         .send({ course_name: 'Updated' })
         .expect(404);
 
-      expect(response.body.error.code).toBe('COURSE_NOT_FOUND');
+      expect(response.body.error.code).toBe('NOT_FOUND');
     });
   });
 
   describe('DELETE /api/courses/:id', () => {
     it('should soft delete course', async () => {
-      // Create a course to delete
       const createResponse = await request(testApp)
         .post('/api/courses')
-        .send({
-          course_name: 'Delete Test Course',
-          trainer_id: 'trainer123',
-        });
+        .send({ course_name: 'Delete Test Course' });
       const courseIdToDelete = createResponse.body.course_id;
 
       const response = await request(testApp)
@@ -233,7 +210,6 @@ describe('Courses API Integration Tests', () => {
       expect(response.body.success).toBe(true);
       expect(response.body.message).toContain('deleted');
 
-      // Verify course is soft deleted
       const getResponse = await request(testApp)
         .get(`/api/courses/${courseIdToDelete}`)
         .expect(200);

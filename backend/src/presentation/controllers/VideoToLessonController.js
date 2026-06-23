@@ -2,7 +2,12 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { logger } from '../../infrastructure/logging/Logger.js';
-import { getDirectoryUserId } from '../middleware/authHelpers.js';
+import {
+  assertTrainerOwnsCourse,
+  assertTrainerOwnsTopic,
+  requireAuthenticatedTrainerId,
+  respondToOwnershipError,
+} from '../middleware/ownershipHelpers.js';
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -64,7 +69,7 @@ export class VideoToLessonController {
    */
   async transform(req, res, next) {
     try {
-      const trainer_id = getDirectoryUserId(req);
+      const trainer_id = requireAuthenticatedTrainerId(req);
       const { topic_name, description, course_id } = req.body;
 
       if (!req.file) {
@@ -74,11 +79,15 @@ export class VideoToLessonController {
         });
       }
 
-      if (!trainer_id || !topic_name) {
+      if (!topic_name) {
         return res.status(400).json({
           success: false,
           error: 'topic_name is required',
         });
+      }
+
+      if (course_id) {
+        await assertTrainerOwnsCourse(parseInt(course_id), trainer_id);
       }
 
       // Process video
@@ -176,6 +185,9 @@ export class VideoToLessonController {
           errorCode: 'TOPIC_ID_REQUIRED',
         });
       }
+
+      const trainerId = requireAuthenticatedTrainerId(req);
+      await assertTrainerOwnsTopic(parseInt(topic_id), trainerId);
 
       // Perform quality check on transcript
       if (this.qualityCheckService && this.topicRepository && transcriptText) {
@@ -343,8 +355,8 @@ export class VideoToLessonController {
             startTime: new Date().toISOString(),
           });
 
-          // Get trainer_id from request body or authentication
-          const trainer_id = getDirectoryUserId(req);
+          // Get trainer_id from authenticated user
+          const trainer_id = trainerId;
 
           // Progress callback to collect events
           const onProgress = (format, status, message) => {
@@ -449,6 +461,8 @@ export class VideoToLessonController {
       }
 
       // Return error response instead of calling next(error) to avoid generic error handler
+      if (respondToOwnershipError(error, res)) return;
+
       return res.status(500).json({
         success: false,
         error: error.message || 'Transcription failed',

@@ -66,14 +66,15 @@ export class PostgreSQLTemplateRepository extends ITemplateRepository {
       paramIndex++;
     }
 
-    // If created_by is specified, filter by it
-    // Otherwise, return ALL templates (system templates + trainer templates)
-    if (filters.created_by) {
+    if (filters.readableByTrainer) {
+      query += ` AND (created_by = $${paramIndex} OR created_by = 'system')`;
+      params.push(filters.readableByTrainer);
+      paramIndex++;
+    } else if (filters.created_by) {
       query += ` AND created_by = $${paramIndex}`;
       params.push(filters.created_by);
       paramIndex++;
     }
-    // If no created_by filter, return all templates (system + all trainers)
 
     query += ' ORDER BY created_at DESC';
 
