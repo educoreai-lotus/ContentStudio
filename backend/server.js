@@ -7,6 +7,7 @@ import { authenticate } from './src/presentation/middleware/authentication.js';
 import { requireTrainer } from './src/presentation/middleware/authorizeTrainer.js';
 import { requestLogger } from './src/presentation/middleware/requestLogger.js';
 import { logger } from './src/infrastructure/logging/Logger.js';
+import { applyLongRunningServerTimeouts } from './src/infrastructure/config/longRunningServerTimeout.js';
 
 dotenv.config();
 
@@ -235,11 +236,9 @@ async function initializeDatabase() {
 async function startServer() {
   try {
   // Start the Express server immediately (don't wait for DB)
-    // Set longer timeout for video transcription requests (20 minutes)
-    // Video transcription can take a long time (downloading, processing, quality check, content generation)
+    // Allow long-running inbound requests (personalized course generation, transcription) up to 30 minutes
     const server = app.listen(PORT, '0.0.0.0', async () => {
-      // Set server timeout to 20 minutes (1200000 ms) for long-running requests
-      server.timeout = 20 * 60 * 1000; // 20 minutes
+      applyLongRunningServerTimeouts(server);
       console.log(`🚀 Content Studio Backend running on port ${PORT}`);
     logger.info(`🚀 Content Studio Backend running on port ${PORT}`, {
       environment: process.env.NODE_ENV || 'development',

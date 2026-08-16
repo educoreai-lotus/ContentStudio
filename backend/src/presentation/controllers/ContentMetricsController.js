@@ -340,7 +340,7 @@ export class ContentMetricsController {
    * @param {Object} req - Express request object (for accessing trainer_id)
    */
   async handleCourseBuilderFormat(requestData, res, next, req) {
-    // Note: Server timeout is set at server level (20 minutes in server.js)
+    // Note: Server timeout is set at server level (30 minutes in server.js)
     // This endpoint can take a long time due to AI content generation
     
     // Send keep-alive headers to prevent connection timeout
