@@ -300,7 +300,24 @@ async function startServer() {
     // Initialize database in the background (non-blocking)
     // Skip in test environment to prevent Jest from hanging
     if (process.env.NODE_ENV !== 'test' && !process.env.JEST_WORKER_ID) {
-      initializeDatabase().catch(error => {
+      initializeDatabase()
+        .then(async (initialized) => {
+          try {
+            const { db } = await import('./src/infrastructure/database/DatabaseConnection.js');
+            await db.ready;
+            const { startPersonalizedGenerationWorkerIfEnabled } = await import(
+              './src/infrastructure/jobs/PersonalizedGenerationWorker.js'
+            );
+            startPersonalizedGenerationWorkerIfEnabled({
+              dbConnected: Boolean(initialized) && db.isConnected(),
+            });
+          } catch (error) {
+            logger.error('Failed to start personalized generation worker', {
+              error: error.message,
+            });
+          }
+        })
+        .catch(error => {
         console.error('Background database initialization failed:', error.message);
         logger.error('Background database initialization failed', { 
           error: error.message 
@@ -349,6 +366,15 @@ async function shutdown() {
   });
 
   try {
+    try {
+      const { stopPersonalizedGenerationWorker } = await import(
+        './src/infrastructure/jobs/PersonalizedGenerationWorker.js'
+      );
+      stopPersonalizedGenerationWorker();
+    } catch (error) {
+      logger.error('Error stopping personalized generation worker', { error: error.message });
+    }
+
     // Shutdown GRPC server
     if (process.env.NODE_ENV !== 'test' && !process.env.JEST_WORKER_ID) {
       try {

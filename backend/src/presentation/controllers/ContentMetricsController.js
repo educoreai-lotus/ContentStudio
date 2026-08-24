@@ -2,7 +2,7 @@ import { logger } from '../../infrastructure/logging/Logger.js';
 import { fillDirectory } from '../../application/services/fillers/fillDirectory.js';
 import { fillCourseBuilder } from '../../application/services/fillers/fillCourseBuilder.js';
 import { fillCourseBuilderByCompany } from '../../application/services/fillers/fillCourseBuilderByCompany.js';
-import { fillCourseBuilderService } from '../../application/services/fillers/fillCourseBuilderService.js';
+import { executeCourseBuilderServiceRequest } from '../../application/services/personalizedGenerationJobService.js';
 import { fillDevLab } from '../../application/services/fillers/fillDevLab.js';
 import { fillSkillsEngine } from '../../application/services/fillers/fillSkillsEngine.js';
 import { fillManagement } from '../../application/services/fillers/fillManagement.js';
@@ -125,8 +125,10 @@ export class ContentMetricsController {
             break;
 
           case 'course-builder-service':
-            // New handler for course-builder-service with learning paths
-            return await fillCourseBuilderService(requestBody).then(filledRequest => {
+            // New handler for course-builder-service with learning paths.
+            // Async transport actions (payload.cs_generation_action) are additive;
+            // absent/empty action keeps the existing synchronous fillCourseBuilderService path.
+            return await executeCourseBuilderServiceRequest(requestBody).then(filledRequest => {
               // Check if response was already sent or connection closed
               if (res.headersSent || res.writableEnded || !res.writable) {
                 logger.warn('[ContentMetricsController] Response already sent or connection closed, skipping send', {
