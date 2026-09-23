@@ -9,6 +9,7 @@ import { alignPresentationWithBundle } from './alignPresentationWithBundle.js';
 import { createSlideScene } from './createSlideScene.js';
 import { concatenateVideoScenes } from './concatenateVideoScenes.js';
 import { FINAL_DURATION_TOLERANCE_SECONDS } from './videoEncodingDefaults.js';
+import { isNarratedVideoDurationDiagnosticsEnabled } from './durationDiagnostics.js';
 
 /**
  * Isolated provider-neutral narrated presentation video builder.
@@ -23,6 +24,7 @@ export class NarratedPresentationVideoService {
    *   concatenateScenesFn?: Function,
    *   measureDurationFn?: Function,
    *   durationToleranceSeconds?: number,
+   *   durationDiagnosticsEnabled?: boolean,
    * }} [deps]
    */
   constructor({
@@ -31,12 +33,17 @@ export class NarratedPresentationVideoService {
     concatenateScenesFn = null,
     measureDurationFn = null,
     durationToleranceSeconds = FINAL_DURATION_TOLERANCE_SECONDS,
+    durationDiagnosticsEnabled = null,
   } = {}) {
     this.extractPageImagesFn = extractPageImagesFn || extractLocalPdfPageImages;
     this.createSceneFn = createSceneFn || createSlideScene;
     this.concatenateScenesFn = concatenateScenesFn || concatenateVideoScenes;
     this.measureDurationFn = measureDurationFn || measureAudioDuration;
     this.durationToleranceSeconds = durationToleranceSeconds;
+    this.durationDiagnosticsEnabled =
+      typeof durationDiagnosticsEnabled === 'boolean'
+        ? durationDiagnosticsEnabled
+        : isNarratedVideoDurationDiagnosticsEnabled();
   }
 
   /**
@@ -81,6 +88,10 @@ export class NarratedPresentationVideoService {
         slideCount: narrationBundle.slides?.length,
       });
 
+      if (this.durationDiagnosticsEnabled) {
+        logNarrationBundleTimingDiagnostics(narrationBundle, resolvedJobId);
+      }
+
       const pageImages = await this.extractPageImagesFn({
         pdfBuffer: presentationBuffer,
         workingDirectory: workspaceDir,
@@ -89,6 +100,7 @@ export class NarratedPresentationVideoService {
       const aligned = alignPresentationWithBundle(pageImages, narrationBundle);
 
       const scenePaths = [];
+      const slideDurations = [];
 
       for (const page of aligned) {
         const audioPath = join(workspaceDir, `audio-${page.pageNumber}.mp3`);
@@ -108,6 +120,29 @@ export class NarratedPresentationVideoService {
           outputPath: scenePath,
         });
         scenePaths.push(scenePath);
+        slideDurations.push(page.duration);
+
+        if (this.durationDiagnosticsEnabled) {
+          try {
+            const sceneDuration = await this.measureDurationFn(scenePath);
+            logger.info('[NarratedPresentationVideoService] [duration-diagnostics] scene timing', {
+              jobId: resolvedJobId,
+              pageNumber: page.pageNumber,
+              audioDuration: page.duration,
+              sceneDuration,
+              difference: sceneDuration - page.duration,
+            });
+          } catch (diagError) {
+            logger.warn(
+              '[NarratedPresentationVideoService] [duration-diagnostics] scene probe failed',
+              {
+                jobId: resolvedJobId,
+                pageNumber: page.pageNumber,
+                error: diagError.message,
+              }
+            );
+          }
+        }
       }
 
       const finalVideoPath = join(workspaceDir, 'final-video.mp4');
@@ -118,6 +153,22 @@ export class NarratedPresentationVideoService {
       });
 
       const duration = await this.measureDurationFn(finalVideoPath);
+
+      if (this.durationDiagnosticsEnabled) {
+        const sumSlideAudioDurations = slideDurations.reduce((a, b) => a + b, 0);
+        const combinedAudioDuration = narrationBundle.combinedAudioDuration;
+        logger.info('[NarratedPresentationVideoService] [duration-diagnostics] final comparison', {
+          jobId: resolvedJobId,
+          slideDurations,
+          sumSlideAudioDurations,
+          combinedAudioDuration,
+          finalVideoDuration: duration,
+          finalMinusSlideSum: duration - sumSlideAudioDurations,
+          finalMinusCombinedAudio: duration - combinedAudioDuration,
+          slideSumMinusCombinedAudio: sumSlideAudioDurations - combinedAudioDuration,
+        });
+      }
+
       assertDurationWithinTolerance(
         duration,
         narrationBundle.combinedAudioDuration,
@@ -147,6 +198,35 @@ export class NarratedPresentationVideoService {
       cleanupVideoWorkspace(workspaceDir);
     }
   }
+}
+
+/**
+ * @param {{
+ *   slides?: Array<{ pageNumber: number, duration: number }>,
+ *   combinedAudioDuration: number,
+ * }} narrationBundle
+ * @param {string} jobId
+ */
+export function logNarrationBundleTimingDiagnostics(narrationBundle, jobId) {
+  const slides = Array.isArray(narrationBundle.slides) ? narrationBundle.slides : [];
+  const slideDurations = slides.map((s) => ({
+    pageNumber: s.pageNumber,
+    duration: s.duration,
+  }));
+  const sumSlideAudioDurations = slides.reduce(
+    (sum, s) => sum + (Number.isFinite(s.duration) ? s.duration : 0),
+    0
+  );
+  const combinedAudioDuration = narrationBundle.combinedAudioDuration;
+
+  logger.info('[NarratedPresentationVideoService] [duration-diagnostics] narration bundle timing', {
+    jobId,
+    slideCount: slides.length,
+    slides: slideDurations,
+    sumSlideAudioDurations,
+    combinedAudioDuration,
+    slideSumMinusCombinedAudio: sumSlideAudioDurations - combinedAudioDuration,
+  });
 }
 
 /**

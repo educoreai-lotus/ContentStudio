@@ -18,4 +18,6 @@ export {
   NarratedPresentationVideoService,
   assertDurationWithinTolerance,
   cleanupVideoWorkspace,
+  logNarrationBundleTimingDiagnostics,
 } from './NarratedPresentationVideoService.js';
+export { isNarratedVideoDurationDiagnosticsEnabled } from './durationDiagnostics.js';
