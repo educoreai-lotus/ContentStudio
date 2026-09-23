@@ -6,6 +6,11 @@ import { ContentDataCleaner } from '../../utils/ContentDataCleaner.js';
 import { PromptSanitizer } from '../../../infrastructure/security/PromptSanitizer.js';
 import { generateAIExercises } from '../../../infrastructure/devlabClient/devlabClient.js';
 import { getLanguageName } from '../../../utils/languageMapper.js';
+import { isPersonalizedNarratedPresentationEnabled } from './personalizedNarratedPresentationConfig.js';
+import {
+  downloadPresentationBuffer,
+  buildSynchronizedTextAndVideoFromPresentation,
+} from './personalizedSynchronizedContent.js';
 
 /**
  * Fill Course Builder Service request
@@ -955,6 +960,226 @@ function extractSkillsFromStep(step) {
 }
 
 /**
+ * Synchronized Personalized path (flag ON):
+ * Presentation → NarrationBundle once → Type-1 text/audio + Type-6 narrated video.
+ * Final contents[] order: text, code, presentation, mind_map, avatar_video.
+ */
+async function generateTopicForStepSynchronized({
+  promptVariables,
+  wrappedVariables,
+  securityInstruction,
+  language,
+  aiGenerationService,
+  deps = {},
+}) {
+  let textContent = null;
+  let codeContent = null;
+  let presentationContent = null;
+  let mindMapContent = null;
+  let avatarContent = null;
+  let presentationBuffer = null;
+
+  try {
+    const codePrompt = `You are a senior coding mentor in EduCore Content Studio.
+🎯 Objective: Generate clean, production-ready code example related to ${wrappedVariables.lessonTopic}.
+
+Lesson Context:
+- Topic: ${wrappedVariables.lessonTopic}
+- Description: ${wrappedVariables.lessonDescription}
+- Skills: ${wrappedVariables.skillsList}
+- Language: ${wrappedVariables.language}
+
+Generate ${wrappedVariables.language} code that demonstrates the concepts clearly.`;
+
+    const codePromptWithSecurity = `${securityInstruction}\n\n${codePrompt}`;
+    const codeResult = await aiGenerationService.generateCode(codePromptWithSecurity, 'javascript', {
+      include_comments: false,
+    });
+
+    codeContent = {
+      content_type: 'code',
+      content_data: ContentDataCleaner.cleanCodeData({
+        ...codeResult,
+        metadata: { programming_language: 'javascript' },
+      }),
+    };
+  } catch (error) {
+    logger.error('[fillCourseBuilderService] [synced] Failed to generate code', {
+      error: error.message,
+      topic: promptVariables.lessonTopic,
+    });
+  }
+
+  try {
+    const presentationInput = {
+      topicName: promptVariables.lessonTopic,
+      topicDescription: promptVariables.lessonDescription,
+      skills: promptVariables.skillsListArray,
+      trainerPrompt: null,
+      transcriptText: null,
+      audience: 'general',
+      language: promptVariables.language,
+    };
+
+    const presentation = await aiGenerationService.generatePresentation(presentationInput, {
+      language: promptVariables.language,
+      audience: 'general',
+    });
+
+    presentationContent = {
+      content_type: 'presentation',
+      content_data: ContentDataCleaner.cleanPresentationData({
+        format: presentation.format || 'gamma',
+        presentationUrl: presentation.presentationUrl,
+        storagePath: presentation.storagePath,
+        metadata: {
+          source: 'ai_generated',
+          audience: 'general',
+          language: promptVariables.language,
+          generated_at: new Date().toISOString(),
+        },
+      }),
+    };
+
+    const downloadFn = deps.downloadPresentationBufferFn || downloadPresentationBuffer;
+    presentationBuffer = await downloadFn(presentation.presentationUrl);
+  } catch (error) {
+    logger.error('[fillCourseBuilderService] [synced] Failed to generate/download presentation', {
+      error: error.message,
+      stack: error.stack,
+      topic: promptVariables.lessonTopic,
+    });
+    textContent = {
+      content_type: 'text',
+      content_data: ContentDataCleaner.cleanTextAudioData({ text: null }),
+    };
+    avatarContent = {
+      content_type: 'avatar_video',
+      content_data: {
+        videoUrl: null,
+        videoId: null,
+        status: 'failed',
+        error: error.message,
+      },
+    };
+  }
+
+  if (presentationBuffer) {
+    try {
+      const buildSynced =
+        deps.buildSynchronizedTextAndVideoFn || buildSynchronizedTextAndVideoFromPresentation;
+      const synced = await buildSynced({
+        presentationBuffer,
+        language: promptVariables.language,
+        topicName: promptVariables.lessonTopic,
+        aiGenerationService,
+        narrationBundleService: deps.narrationBundleService || null,
+        narratedVideoService: deps.narratedVideoService || null,
+        uploadCombinedAudioFn: deps.uploadCombinedAudioFn || null,
+        uploadVideoFn: deps.uploadVideoFn || null,
+        jobId: deps.jobId || null,
+      });
+
+      textContent = {
+        content_type: 'text',
+        content_data: synced.textContentData,
+      };
+      avatarContent = {
+        content_type: 'avatar_video',
+        content_data: synced.avatarContentData,
+      };
+
+      logger.info('[fillCourseBuilderService] [synced] Text+Video built from NarrationBundle', {
+        topic: promptVariables.lessonTopic,
+        hasText: !!synced.textContentData?.text,
+        hasAudioUrl: !!synced.textContentData?.audioUrl,
+        videoMode: synced.avatarContentData?.videoMode,
+        slideCount: synced.narrationBundle?.slides?.length,
+      });
+    } catch (error) {
+      logger.error('[fillCourseBuilderService] [synced] NarrationBundle/video path failed', {
+        error: error.message,
+        stack: error.stack,
+        topic: promptVariables.lessonTopic,
+      });
+      // Do not fall back to unrelated text LLM/TTS or HeyGen
+      textContent = {
+        content_type: 'text',
+        content_data: {
+          text: null,
+          error: error.message,
+        },
+      };
+      avatarContent = {
+        content_type: 'avatar_video',
+        content_data: {
+          videoUrl: null,
+          videoId: null,
+          status: 'failed',
+          error: error.message,
+          videoMode: 'presentation_narration',
+        },
+      };
+    }
+  }
+
+  try {
+    const mindMap = await aiGenerationService.generateMindMap(promptVariables.lessonDescription, {
+      topic_title: promptVariables.lessonTopic,
+      skills: promptVariables.skillsListArray,
+      trainer_prompt: promptVariables.lessonDescription,
+      language: promptVariables.language,
+      lessonDescription: promptVariables.lessonDescription,
+    });
+
+    mindMapContent = {
+      content_type: 'mind_map',
+      content_data: ContentDataCleaner.cleanMindMapData(mindMap),
+    };
+  } catch (error) {
+    logger.error('[fillCourseBuilderService] [synced] Failed to generate mind_map', {
+      error: error.message,
+      topic: promptVariables.lessonTopic,
+    });
+  }
+
+  const contents = [];
+  if (textContent) contents.push(textContent);
+  if (codeContent) contents.push(codeContent);
+  if (presentationContent) contents.push(presentationContent);
+  if (mindMapContent) contents.push(mindMapContent);
+  if (avatarContent) contents.push(avatarContent);
+
+  const requiredFormats = ['text', 'code', 'presentation', 'mind_map', 'avatar_video'];
+  const generatedFormats = contents.map((c) => c.content_type);
+  const missingFormats = requiredFormats.filter((format) => !generatedFormats.includes(format));
+  if (missingFormats.length > 0) {
+    logger.error('[fillCourseBuilderService] MISSING REQUIRED FORMATS', {
+      topic: promptVariables.lessonTopic,
+      missingFormats,
+      generatedFormats,
+    });
+  } else {
+    logger.info('[fillCourseBuilderService] All required formats generated successfully', {
+      topic: promptVariables.lessonTopic,
+      formats: generatedFormats,
+    });
+  }
+
+  return {
+    topic_id: null,
+    topic_name: promptVariables.lessonTopic,
+    topic_description: promptVariables.lessonDescription,
+    topic_language: language,
+    template_id: null,
+    format_order: ['text_audio', 'code', 'presentation', 'mind_map', 'avatar_video'],
+    contents,
+    devlab_exercises: null,
+    skills: promptVariables.skillsListArray,
+  };
+}
+
+/**
  * Generate a topic with all 6 formats for a step
  * Parameter-driven: Only passes parameters from request, no inference or expansion
  * 
@@ -967,9 +1192,10 @@ function extractSkillsFromStep(step) {
  * @param {Object} step - Step object from learning path (from request)
  * @param {string} language - Language code (from request payload)
  * @param {AIGenerationService} aiGenerationService - AI service instance
+ * @param {Object} [deps] - Optional overrides (tests / synchronized path injection)
  * @returns {Promise<Object|null>} Topic object or null
  */
-async function generateTopicForStep({ step, language, aiGenerationService }) {
+export async function generateTopicForStep({ step, language, aiGenerationService, deps = {} }) {
   try {
     // Parameter mapping: topic_name ← step.title
     const lessonTopic = step.title || 'Untitled Topic';
@@ -1008,6 +1234,23 @@ async function generateTopicForStep({ step, language, aiGenerationService }) {
     };
 
     const securityInstruction = PromptSanitizer.getSystemInstruction();
+
+    const synchronizedMode =
+      typeof deps.synchronizedMode === 'boolean'
+        ? deps.synchronizedMode
+        : isPersonalizedNarratedPresentationEnabled();
+
+    if (synchronizedMode) {
+      return await generateTopicForStepSynchronized({
+        promptVariables,
+        wrappedVariables,
+        securityInstruction,
+        language,
+        aiGenerationService,
+        deps,
+      });
+    }
+
     const contents = [];
     let text = null;
 

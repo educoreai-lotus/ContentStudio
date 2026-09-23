@@ -274,6 +274,12 @@ export class ContentDataCleaner {
       cleaned.duration_seconds = contentData.duration_seconds;
     }
 
+    // Additive video mode for Personalized narrated-presentation path (Phase 3).
+    // Legacy HeyGen payloads omit this field; cleaning must preserve it when present.
+    if (contentData.videoMode) {
+      cleaned.videoMode = contentData.videoMode;
+    }
+
     // Keep storage metadata fields (required for proper file management)
     if (contentData.fileUrl) {
       cleaned.fileUrl = contentData.fileUrl;

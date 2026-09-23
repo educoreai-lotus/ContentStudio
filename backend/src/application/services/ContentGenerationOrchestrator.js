@@ -2,6 +2,11 @@ import { logger } from '../../infrastructure/logging/Logger.js';
 import { GenerateContentUseCase } from '../use-cases/GenerateContentUseCase.js';
 import { Content } from '../../domain/entities/Content.js';
 import { ContentDataCleaner } from '../utils/ContentDataCleaner.js';
+import { isVideoToLessonNarratedPresentationEnabled } from './videoToLessonNarratedPresentationConfig.js';
+import {
+  downloadPresentationBuffer,
+  buildSynchronizedTextAndVideoFromPresentation,
+} from './fillers/personalizedSynchronizedContent.js';
 
 /**
  * Content Generation Orchestrator
@@ -93,7 +98,7 @@ export class ContentGenerationOrchestrator {
       transcriptText: normalizedTranscript, // Pass transcript text for avatar video generation
     };
 
-    // Step 4: Generate all 6 formats in parallel with progress events
+    // Step 4: Generate all 6 formats
     const formats = [
       { id: 1, name: 'text', label: 'Text & Audio', contentType: 'text' },
       { id: 2, name: 'code', label: 'Code Examples', contentType: 'code' },
@@ -105,231 +110,40 @@ export class ContentGenerationOrchestrator {
 
     const results = {};
     const startTime = Date.now();
-    
-    const progressPromises = formats.map(async (format) => {
-      const formatStartTime = Date.now();
-      try {
-        // Emit progress: starting
-        onProgress(format.name, 'starting', `[AI] Starting: ${format.label}`);
-        logger.info(`[ContentGenerationOrchestrator] Starting generation: ${format.label}`, {
-          format: format.name,
-          content_type_id: format.id,
-        });
 
-        // Build generation request for this format
-        const generationRequest = {
-          ...generationRequestBase,
-          content_type_id: format.id,
-        };
+    const synchronizedMode =
+      typeof options.synchronizedMode === 'boolean'
+        ? options.synchronizedMode
+        : isVideoToLessonNarratedPresentationEnabled();
 
-        logger.info(`[ContentGenerationOrchestrator] Calling GenerateContentUseCase for ${format.label}`, {
-          topic_id: generationRequest.topic_id,
-          content_type_id: format.id,
-          lessonTopic: generationRequest.lessonTopic,
-        });
+    if (synchronizedMode) {
+      logger.info('[ContentGenerationOrchestrator] Using synchronized narrated-presentation path', {
+        topicId,
+      });
+      await this._generateAllSynchronized({
+        formats,
+        generationRequestBase,
+        results,
+        onProgress,
+        deps: options.syncDeps || {},
+      });
+    } else {
+      const progressPromises = formats.map((format) =>
+        this._generateFormatViaUseCase({
+          format,
+          generationRequestBase,
+          results,
+          onProgress,
+        })
+      );
 
-        // Generate content using existing GenerateContentUseCase
-        // Add timeout of 5 minutes per format
-        const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => {
-            reject(new Error(`Generation timeout: ${format.label} took more than 5 minutes`));
-          }, 300000); // 5 minutes
-        });
+      logger.info('[ContentGenerationOrchestrator] Waiting for all formats to complete...', {
+        topicId,
+        formatsCount: formats.length,
+      });
 
-        const generatedContent = await Promise.race([
-          this.generateContentUseCase.execute(generationRequest),
-          timeoutPromise,
-        ]);
-
-        logger.info(`[ContentGenerationOrchestrator] Content generated for ${format.label}`, {
-          format: format.name,
-          hasContentData: !!generatedContent.content_data,
-          contentDataKeys: generatedContent.content_data ? Object.keys(generatedContent.content_data) : [],
-          // Status removed for avatar_video - check videoUrl/error instead
-          hasVideoUrl: format.name === 'avatar_video' ? !!generatedContent.content_data?.videoUrl : undefined,
-          hasError: format.name === 'avatar_video' ? !!generatedContent.content_data?.error : undefined,
-        });
-
-        // Check if avatar_video failed (by checking if videoUrl is null/undefined, since status is removed)
-        // Also check if status is 'skipped' - skipped should not be treated as failed
-        const isSkipped = format.name === 'avatar_video' && generatedContent.content_data?.status === 'skipped';
-        const isFailed = format.name === 'avatar_video' && !isSkipped && (!generatedContent.content_data?.videoUrl || generatedContent.content_data?.error);
-
-        // Override generation_method_id to 'video_to_lesson' (instead of 'ai_assisted')
-        generatedContent.generation_method_id = 'video_to_lesson';
-
-        // Step: Check if content already exists for this topic and type
-        // If exists, save to history before creating/updating new content
-        let existingContent = null;
-        try {
-          existingContent = await this.contentRepository.findLatestByTopicAndType(
-            generationRequest.topic_id,
-            format.id
-          );
-          
-          if (existingContent && this.contentHistoryService) {
-            logger.info(`[ContentGenerationOrchestrator] Existing content found for ${format.label}, saving to history...`, {
-              format: format.name,
-              existing_content_id: existingContent.content_id,
-              topic_id: generationRequest.topic_id,
-              content_type_id: format.id,
-            });
-
-            try {
-              await this.contentHistoryService.saveVersion(existingContent, { force: true });
-              logger.info(`[ContentGenerationOrchestrator] Successfully saved previous version to history for ${format.label}`, {
-                format: format.name,
-                content_id: existingContent.content_id,
-              });
-            } catch (historyError) {
-              logger.error(`[ContentGenerationOrchestrator] Failed to save previous version to history for ${format.label}`, {
-                format: format.name,
-                error: historyError.message,
-                stack: historyError.stack,
-              });
-              // Continue with content creation even if history save fails
-            }
-          }
-        } catch (findError) {
-          logger.warn(`[ContentGenerationOrchestrator] Could not check for existing content for ${format.label}`, {
-            format: format.name,
-            error: findError.message,
-          });
-          // Continue with content creation
-        }
-
-        // Save to database (even if failed, save it with failed status)
-        logger.info(`[ContentGenerationOrchestrator] Saving ${format.label} to database...`, {
-          format: format.name,
-          isFailed,
-          hasExistingContent: !!existingContent,
-        });
-
-        // If existing content found, update it instead of creating new
-        let savedContent;
-        if (existingContent) {
-          // Update existing content with new generated content
-          const cleanedContentData = ContentDataCleaner.clean(
-            generatedContent.content_data,
-            format.id
-          );
-          
-          savedContent = await this.contentRepository.update(existingContent.content_id, {
-            content_data: cleanedContentData,
-            generation_method_id: 'video_to_lesson',
-            updated_at: new Date(),
-          });
-          
-          logger.info(`[ContentGenerationOrchestrator] Updated existing content for ${format.label}`, {
-            format: format.name,
-            content_id: savedContent.content_id,
-          });
-        } else {
-          // Create new content
-          savedContent = await this.contentRepository.create(generatedContent);
-        }
-
-        const formatDuration = Date.now() - formatStartTime;
-
-        if (isSkipped) {
-          // Emit progress: skipped
-          const reason = generatedContent.content_data?.reason || 'Avatar video skipped';
-          onProgress(format.name, 'skipped', `[AI] Skipped: ${format.label} - ${reason}`);
-          logger.info(`[ContentGenerationOrchestrator] ⏭️ Avatar video skipped but saved to database`, {
-            format: format.name,
-            content_id: savedContent.content_id,
-            reason,
-            duration: `${formatDuration}ms`,
-          });
-
-          // Return skipped result - but don't throw, allow other formats to continue
-          results[format.name] = {
-            content_id: savedContent.content_id,
-            format: format.name,
-            content_type_id: format.id,
-            generated: false,
-            status: 'skipped',
-            reason,
-            content_data: savedContent.content_data,
-          };
-        } else if (isFailed) {
-          // Emit progress: failed
-          const reason = generatedContent.content_data?.reason || 'Avatar video generation failed';
-          onProgress(format.name, 'failed', `[AI] Failed: ${format.label} - ${reason}`);
-          logger.warn(`[ContentGenerationOrchestrator] ⚠️ Avatar video failed but saved to database`, {
-            format: format.name,
-            content_id: savedContent.content_id,
-            reason,
-            duration: `${formatDuration}ms`,
-          });
-
-          // Return failed result - but don't throw, allow other formats to continue
-          results[format.name] = {
-            content_id: savedContent.content_id,
-            format: format.name,
-            content_type_id: format.id,
-            generated: false,
-            status: 'failed',
-            reason,
-            error: generatedContent.content_data?.error || 'Avatar video generation failed',
-            content_data: savedContent.content_data,
-          };
-        } else {
-          logger.info(`[ContentGenerationOrchestrator] Saved ${format.label} to database`, {
-            format: format.name,
-            content_id: savedContent.content_id,
-            duration: `${formatDuration}ms`,
-          });
-
-          // Emit progress: completed
-          onProgress(format.name, 'completed', `[AI] Completed: ${format.label}`);
-          logger.info(`[ContentGenerationOrchestrator] ✅ Completed generation: ${format.label}`, {
-            content_id: savedContent.content_id,
-            duration: `${formatDuration}ms`,
-          });
-
-          // Return result
-          results[format.name] = {
-            content_id: savedContent.content_id,
-            format: format.name,
-            content_type_id: format.id,
-            generated: true,
-            content_data: savedContent.content_data,
-          };
-        }
-
-        return results[format.name];
-      } catch (error) {
-        const formatDuration = Date.now() - formatStartTime;
-        // Emit progress: failed
-        const errorMessage = error.message || 'Unknown error';
-        onProgress(format.name, 'failed', `[AI] Failed: ${format.label} - ${errorMessage}`);
-        logger.error(`[ContentGenerationOrchestrator] ❌ Failed to generate ${format.label}`, {
-          format: format.name,
-          error: errorMessage,
-          duration: `${formatDuration}ms`,
-          stack: error.stack,
-        });
-
-        results[format.name] = {
-          format: format.name,
-          content_type_id: format.id,
-          generated: false,
-          error: errorMessage,
-        };
-
-        return results[format.name];
-      }
-    });
-
-    // Wait for all formats to complete (or fail)
-    // Use Promise.allSettled to ensure all formats complete even if some fail
-    logger.info('[ContentGenerationOrchestrator] Waiting for all formats to complete...', {
-      topicId,
-      formatsCount: formats.length,
-    });
-
-    const settledResults = await Promise.allSettled(progressPromises);
+      await Promise.allSettled(progressPromises);
+    }
     
     const totalDuration = Date.now() - startTime;
     const successCount = Object.keys(results).filter(k => results[k].generated).length;
@@ -340,7 +154,7 @@ export class ContentGenerationOrchestrator {
       formatsGenerated: successCount,
       formatsFailed: failedCount,
       totalDuration: `${totalDuration}ms (${Math.round(totalDuration / 1000)}s)`,
-      settledResultsCount: settledResults.length,
+      synchronizedMode,
     });
 
     // Log detailed results
@@ -391,6 +205,409 @@ export class ContentGenerationOrchestrator {
         },
       }),
     };
+  }
+
+  /**
+   * Legacy parallel path: all 6 formats via GenerateContentUseCase (flag OFF).
+   */
+  async _generateFormatViaUseCase({ format, generationRequestBase, results, onProgress }) {
+    const formatStartTime = Date.now();
+    try {
+      onProgress(format.name, 'starting', `[AI] Starting: ${format.label}`);
+      logger.info(`[ContentGenerationOrchestrator] Starting generation: ${format.label}`, {
+        format: format.name,
+        content_type_id: format.id,
+      });
+
+      const generationRequest = {
+        ...generationRequestBase,
+        content_type_id: format.id,
+      };
+
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => {
+          reject(new Error(`Generation timeout: ${format.label} took more than 5 minutes`));
+        }, 300000);
+      });
+
+      const generatedContent = await Promise.race([
+        this.generateContentUseCase.execute(generationRequest),
+        timeoutPromise,
+      ]);
+
+      generatedContent.generation_method_id = 'video_to_lesson';
+
+      return await this._persistFormatResult({
+        format,
+        generatedContent,
+        generationRequest,
+        results,
+        onProgress,
+        formatStartTime,
+      });
+    } catch (error) {
+      return this._recordFormatFailure({
+        format,
+        results,
+        onProgress,
+        formatStartTime,
+        error,
+      });
+    }
+  }
+
+  /**
+   * Synchronized path (flag ON):
+   * Code + Mind Map parallel;
+   * Presentation → NarrationBundle → Type1 + Type4 + Type6 (shared audio / exact slide audio).
+   */
+  async _generateAllSynchronized({
+    formats,
+    generationRequestBase,
+    results,
+    onProgress,
+    deps = {},
+  }) {
+    const byName = Object.fromEntries(formats.map((f) => [f.name, f]));
+
+    await Promise.allSettled([
+      this._generateFormatViaUseCase({
+        format: byName.code,
+        generationRequestBase,
+        results,
+        onProgress,
+      }),
+      this._generateFormatViaUseCase({
+        format: byName.mind_map,
+        generationRequestBase,
+        results,
+        onProgress,
+      }),
+      this._generatePresentationThenSyncedDependents({
+        byName,
+        generationRequestBase,
+        results,
+        onProgress,
+        deps,
+      }),
+    ]);
+  }
+
+  async _generatePresentationThenSyncedDependents({
+    byName,
+    generationRequestBase,
+    results,
+    onProgress,
+    deps = {},
+  }) {
+    await this._generateFormatViaUseCase({
+      format: byName.presentation,
+      generationRequestBase,
+      results,
+      onProgress,
+    });
+
+    const presentationResult = results.presentation;
+    if (!presentationResult?.generated || !presentationResult.content_data?.presentationUrl) {
+      const reason =
+        presentationResult?.error ||
+        'Presentation generation failed; synchronized text/audio/video cannot proceed';
+      this._failSyncedDependents({ byName, results, onProgress, reason });
+      return;
+    }
+
+    try {
+      onProgress('text', 'starting', '[AI] Starting: Text & Audio (synchronized)');
+      onProgress('audio', 'starting', '[AI] Starting: Audio (synchronized)');
+      onProgress('avatar_video', 'starting', '[AI] Starting: Avatar Video (synchronized)');
+
+      const downloadFn = deps.downloadPresentationBufferFn || downloadPresentationBuffer;
+      const presentationBuffer = await downloadFn(
+        presentationResult.content_data.presentationUrl
+      );
+
+      const buildSynced =
+        deps.buildSynchronizedTextAndVideoFn ||
+        buildSynchronizedTextAndVideoFromPresentation;
+
+      const synced = await buildSynced({
+        presentationBuffer,
+        language: generationRequestBase.language || 'en',
+        topicName: generationRequestBase.lessonTopic || 'lesson',
+        aiGenerationService: this.aiGenerationService,
+        narrationBundleService: deps.narrationBundleService || null,
+        narratedVideoService: deps.narratedVideoService || null,
+        uploadCombinedAudioFn: deps.uploadCombinedAudioFn || null,
+        uploadVideoFn: deps.uploadVideoFn || null,
+        jobId: deps.jobId || `v2l-${generationRequestBase.topic_id}`,
+      });
+
+      await this._persistDirectContentData({
+        format: byName.text,
+        contentData: synced.textContentData,
+        generationRequestBase,
+        results,
+        onProgress,
+      });
+
+      await this._persistDirectContentData({
+        format: byName.audio,
+        contentData: synced.audioContentData,
+        generationRequestBase,
+        results,
+        onProgress,
+      });
+
+      await this._persistDirectContentData({
+        format: byName.avatar_video,
+        contentData: synced.avatarContentData,
+        generationRequestBase,
+        results,
+        onProgress,
+      });
+    } catch (error) {
+      logger.error('[ContentGenerationOrchestrator] Synchronized NarrationBundle path failed', {
+        error: error.message,
+        stack: error.stack,
+        topic_id: generationRequestBase.topic_id,
+      });
+      // Do not fall back to legacy Type-1/4 TTS or HeyGen
+      this._failSyncedDependents({
+        byName,
+        results,
+        onProgress,
+        reason: error.message,
+      });
+    }
+  }
+
+  _failSyncedDependents({ byName, results, onProgress, reason }) {
+    for (const key of ['text', 'audio', 'avatar_video']) {
+      if (results[key]?.generated) {
+        continue;
+      }
+      const format = byName[key];
+      onProgress(format.name, 'failed', `[AI] Failed: ${format.label} - ${reason}`);
+      results[format.name] = {
+        format: format.name,
+        content_type_id: format.id,
+        generated: false,
+        error: reason,
+        status: 'failed',
+        reason,
+        ...(key === 'avatar_video'
+          ? {
+              content_data: {
+                videoUrl: null,
+                status: 'failed',
+                error: reason,
+                videoMode: 'presentation_narration',
+              },
+            }
+          : {}),
+      };
+    }
+  }
+
+  async _persistDirectContentData({
+    format,
+    contentData,
+    generationRequestBase,
+    results,
+    onProgress,
+  }) {
+    const formatStartTime = Date.now();
+    const generationRequest = {
+      ...generationRequestBase,
+      content_type_id: format.id,
+    };
+
+    const generatedContent = new Content({
+      topic_id: generationRequestBase.topic_id,
+      content_type_id: format.id,
+      content_data: contentData,
+      generation_method_id: 'video_to_lesson',
+    });
+
+    return this._persistFormatResult({
+      format,
+      generatedContent,
+      generationRequest,
+      results,
+      onProgress,
+      formatStartTime,
+    });
+  }
+
+  async _persistFormatResult({
+    format,
+    generatedContent,
+    generationRequest,
+    results,
+    onProgress,
+    formatStartTime,
+  }) {
+    logger.info(`[ContentGenerationOrchestrator] Content generated for ${format.label}`, {
+      format: format.name,
+      hasContentData: !!generatedContent.content_data,
+      contentDataKeys: generatedContent.content_data ? Object.keys(generatedContent.content_data) : [],
+      hasVideoUrl: format.name === 'avatar_video' ? !!generatedContent.content_data?.videoUrl : undefined,
+      hasError: format.name === 'avatar_video' ? !!generatedContent.content_data?.error : undefined,
+    });
+
+    const isSkipped = format.name === 'avatar_video' && generatedContent.content_data?.status === 'skipped';
+    const isFailed = format.name === 'avatar_video' && !isSkipped && (!generatedContent.content_data?.videoUrl || generatedContent.content_data?.error);
+
+    generatedContent.generation_method_id = 'video_to_lesson';
+
+    let existingContent = null;
+    try {
+      existingContent = await this.contentRepository.findLatestByTopicAndType(
+        generationRequest.topic_id,
+        format.id
+      );
+
+      if (existingContent && this.contentHistoryService) {
+        logger.info(`[ContentGenerationOrchestrator] Existing content found for ${format.label}, saving to history...`, {
+          format: format.name,
+          existing_content_id: existingContent.content_id,
+          topic_id: generationRequest.topic_id,
+          content_type_id: format.id,
+        });
+
+        try {
+          await this.contentHistoryService.saveVersion(existingContent, { force: true });
+          logger.info(`[ContentGenerationOrchestrator] Successfully saved previous version to history for ${format.label}`, {
+            format: format.name,
+            content_id: existingContent.content_id,
+          });
+        } catch (historyError) {
+          logger.error(`[ContentGenerationOrchestrator] Failed to save previous version to history for ${format.label}`, {
+            format: format.name,
+            error: historyError.message,
+            stack: historyError.stack,
+          });
+        }
+      }
+    } catch (findError) {
+      logger.warn(`[ContentGenerationOrchestrator] Could not check for existing content for ${format.label}`, {
+        format: format.name,
+        error: findError.message,
+      });
+    }
+
+    logger.info(`[ContentGenerationOrchestrator] Saving ${format.label} to database...`, {
+      format: format.name,
+      isFailed,
+      hasExistingContent: !!existingContent,
+    });
+
+    let savedContent;
+    if (existingContent) {
+      const cleanedContentData = ContentDataCleaner.clean(
+        generatedContent.content_data,
+        format.id
+      );
+
+      savedContent = await this.contentRepository.update(existingContent.content_id, {
+        content_data: cleanedContentData,
+        generation_method_id: 'video_to_lesson',
+        updated_at: new Date(),
+      });
+
+      logger.info(`[ContentGenerationOrchestrator] Updated existing content for ${format.label}`, {
+        format: format.name,
+        content_id: savedContent.content_id,
+      });
+    } else {
+      savedContent = await this.contentRepository.create(generatedContent);
+    }
+
+    const formatDuration = Date.now() - formatStartTime;
+
+    if (isSkipped) {
+      const reason = generatedContent.content_data?.reason || 'Avatar video skipped';
+      onProgress(format.name, 'skipped', `[AI] Skipped: ${format.label} - ${reason}`);
+      logger.info(`[ContentGenerationOrchestrator] ⏭️ Avatar video skipped but saved to database`, {
+        format: format.name,
+        content_id: savedContent.content_id,
+        reason,
+        duration: `${formatDuration}ms`,
+      });
+
+      results[format.name] = {
+        content_id: savedContent.content_id,
+        format: format.name,
+        content_type_id: format.id,
+        generated: false,
+        status: 'skipped',
+        reason,
+        content_data: savedContent.content_data,
+      };
+    } else if (isFailed) {
+      const reason = generatedContent.content_data?.reason || 'Avatar video generation failed';
+      onProgress(format.name, 'failed', `[AI] Failed: ${format.label} - ${reason}`);
+      logger.warn(`[ContentGenerationOrchestrator] ⚠️ Avatar video failed but saved to database`, {
+        format: format.name,
+        content_id: savedContent.content_id,
+        reason,
+        duration: `${formatDuration}ms`,
+      });
+
+      results[format.name] = {
+        content_id: savedContent.content_id,
+        format: format.name,
+        content_type_id: format.id,
+        generated: false,
+        status: 'failed',
+        reason,
+        error: generatedContent.content_data?.error || 'Avatar video generation failed',
+        content_data: savedContent.content_data,
+      };
+    } else {
+      logger.info(`[ContentGenerationOrchestrator] Saved ${format.label} to database`, {
+        format: format.name,
+        content_id: savedContent.content_id,
+        duration: `${formatDuration}ms`,
+      });
+
+      onProgress(format.name, 'completed', `[AI] Completed: ${format.label}`);
+      logger.info(`[ContentGenerationOrchestrator] ✅ Completed generation: ${format.label}`, {
+        content_id: savedContent.content_id,
+        duration: `${formatDuration}ms`,
+      });
+
+      results[format.name] = {
+        content_id: savedContent.content_id,
+        format: format.name,
+        content_type_id: format.id,
+        generated: true,
+        content_data: savedContent.content_data,
+      };
+    }
+
+    return results[format.name];
+  }
+
+  _recordFormatFailure({ format, results, onProgress, formatStartTime, error }) {
+    const formatDuration = Date.now() - formatStartTime;
+    const errorMessage = error.message || 'Unknown error';
+    onProgress(format.name, 'failed', `[AI] Failed: ${format.label} - ${errorMessage}`);
+    logger.error(`[ContentGenerationOrchestrator] ❌ Failed to generate ${format.label}`, {
+      format: format.name,
+      error: errorMessage,
+      duration: `${formatDuration}ms`,
+      stack: error.stack,
+    });
+
+    results[format.name] = {
+      format: format.name,
+      content_type_id: format.id,
+      generated: false,
+      error: errorMessage,
+    };
+
+    return results[format.name];
   }
 
   /**
