@@ -9,7 +9,11 @@ export {
   FINAL_DURATION_TOLERANCE_SECONDS,
 } from './videoEncodingDefaults.js';
 export { alignPresentationWithBundle } from './alignPresentationWithBundle.js';
-export { buildSlideSceneCommand, createSlideScene } from './createSlideScene.js';
+export {
+  buildSlideSceneCommand,
+  createSlideScene,
+  formatSceneDurationForFfmpeg,
+} from './createSlideScene.js';
 export {
   buildVideoConcatCommand,
   concatenateVideoScenes,

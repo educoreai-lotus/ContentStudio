@@ -29,7 +29,7 @@ describe('assertDurationWithinTolerance', () => {
   });
 
   it('rejects excessive deviation', () => {
-    expect(() => assertDurationWithinTolerance(15, 10, 1)).toThrow(/differs from combined audio/);
+    expect(() => assertDurationWithinTolerance(15, 10, 1)).toThrow(/differs from expected slide audio sum/);
   });
 });
 
@@ -48,6 +48,7 @@ describe('NarratedPresentationVideoService', () => {
 
   function buildService(overrides = {}) {
     const audioSeen = {};
+    const durationsSeen = {};
 
     const service = new NarratedPresentationVideoService({
       extractPageImagesFn: async ({ workingDirectory }) => {
@@ -64,13 +65,16 @@ describe('NarratedPresentationVideoService', () => {
           { pageNumber: 3, imagePath: img3 },
         ];
       },
-      createSceneFn: async ({ imagePath, audioPath, outputPath }) => {
+      createSceneFn: async ({ imagePath, audioPath, outputPath, duration }) => {
         const audioBytes = readFileSync(audioPath);
         const pageMatch = /audio-(\d+)\.mp3$/.exec(audioPath.replace(/\\/g, '/'));
         expect(pageMatch).toBeTruthy();
-        audioSeen[Number(pageMatch[1])] = Buffer.from(audioBytes);
-        expect(imagePath).toContain(`slide-${pageMatch[1]}.png`);
-        writeFileSync(outputPath, Buffer.from(`scene-${pageMatch[1]}`));
+        const pageNumber = Number(pageMatch[1]);
+        audioSeen[pageNumber] = Buffer.from(audioBytes);
+        durationsSeen[pageNumber] = duration;
+        expect(Number.isFinite(duration) && duration > 0).toBe(true);
+        expect(imagePath).toContain(`slide-${pageNumber}.png`);
+        writeFileSync(outputPath, Buffer.from(`scene-${pageNumber}`));
         return { outputPath };
       },
       concatenateScenesFn: async ({ scenePaths, outputPath, workingDirectory }) => {
@@ -90,7 +94,7 @@ describe('NarratedPresentationVideoService', () => {
       ...overrides,
     });
 
-    return { service, audioSeen };
+    return { service, audioSeen, durationsSeen };
   }
 
   it('materializes exact NarrationBundle audioBuffers with zero AI/TTS calls', async () => {
@@ -103,7 +107,7 @@ describe('NarratedPresentationVideoService', () => {
     const audio2 = Buffer.from('exact-audio-page-2');
     const audio3 = Buffer.from('exact-audio-page-3');
 
-    const { service, audioSeen } = buildService();
+    const { service, audioSeen, durationsSeen } = buildService();
 
     const result = await service.generateVideo({
       presentationBuffer: Buffer.from('%PDF'),
@@ -123,6 +127,7 @@ describe('NarratedPresentationVideoService', () => {
     expect(audioSeen[1].equals(audio1)).toBe(true);
     expect(audioSeen[2].equals(audio2)).toBe(true);
     expect(audioSeen[3].equals(audio3)).toBe(true);
+    expect(durationsSeen).toEqual({ 1: 10, 2: 10, 3: 10 });
 
     expect(generateText).not.toHaveBeenCalled();
     expect(generateAudio).not.toHaveBeenCalled();
@@ -144,7 +149,8 @@ describe('NarratedPresentationVideoService', () => {
   it('orders shuffled pages 3,1,2 into scenes 1→2→3', async () => {
     const sceneOrder = [];
     const { service } = buildService({
-      createSceneFn: async ({ audioPath, outputPath }) => {
+      createSceneFn: async ({ audioPath, outputPath, duration }) => {
+        expect(duration).toBe(10);
         const page = Number(/audio-(\d+)\.mp3$/.exec(audioPath.replace(/\\/g, '/'))[1]);
         sceneOrder.push(page);
         writeFileSync(outputPath, Buffer.from(`scene-${page}`));
@@ -156,9 +162,9 @@ describe('NarratedPresentationVideoService', () => {
       presentationBuffer: Buffer.from('%PDF'),
       narrationBundle: {
         slides: [
-          { pageNumber: 3, narration: 'C', audioBuffer: Buffer.from('a3'), duration: 1 },
-          { pageNumber: 1, narration: 'A', audioBuffer: Buffer.from('a1'), duration: 1 },
-          { pageNumber: 2, narration: 'B', audioBuffer: Buffer.from('a2'), duration: 1 },
+          { pageNumber: 3, narration: 'C', audioBuffer: Buffer.from('a3'), duration: 10 },
+          { pageNumber: 1, narration: 'A', audioBuffer: Buffer.from('a1'), duration: 10 },
+          { pageNumber: 2, narration: 'B', audioBuffer: Buffer.from('a2'), duration: 10 },
         ],
         combinedAudioDuration: 30,
       },
@@ -173,9 +179,9 @@ describe('NarratedPresentationVideoService', () => {
       presentationBuffer: Buffer.from('%PDF'),
       narrationBundle: {
         slides: [
-          { pageNumber: 1, narration: 'A', audioBuffer: Buffer.from('a1'), duration: 1 },
-          { pageNumber: 2, narration: 'B', audioBuffer: Buffer.from('a2'), duration: 1 },
-          { pageNumber: 3, narration: 'C', audioBuffer: Buffer.from('a3'), duration: 1 },
+          { pageNumber: 1, narration: 'A', audioBuffer: Buffer.from('a1'), duration: 10 },
+          { pageNumber: 2, narration: 'B', audioBuffer: Buffer.from('a2'), duration: 10 },
+          { pageNumber: 3, narration: 'C', audioBuffer: Buffer.from('a3'), duration: 10 },
         ],
         combinedAudioDuration: 30,
       },
@@ -257,7 +263,7 @@ describe('NarratedPresentationVideoService', () => {
     expect(existsSync(capturedWorkspace)).toBe(false);
   });
 
-  it('rejects excessive final duration deviation', async () => {
+  it('rejects excessive final duration deviation vs slide audio sum', async () => {
     const { service } = buildService({
       measureDurationFn: async () => 99,
     });
@@ -274,9 +280,32 @@ describe('NarratedPresentationVideoService', () => {
           combinedAudioDuration: 30,
         },
       })
-    ).rejects.toThrow(/differs from combined audio/);
+    ).rejects.toThrow(/differs from expected slide audio sum/);
 
     expect(existsSync(capturedWorkspace)).toBe(false);
+  });
+
+  it('validates final duration against sum(slides[].duration), not combinedAudioDuration alone', async () => {
+    const { service, durationsSeen } = buildService({
+      measureDurationFn: async () => 30, // matches 10+10+10
+    });
+
+    const result = await service.generateVideo({
+      presentationBuffer: Buffer.from('%PDF'),
+      narrationBundle: {
+        slides: [
+          { pageNumber: 1, narration: 'A', audioBuffer: Buffer.from('a1'), duration: 10 },
+          { pageNumber: 2, narration: 'B', audioBuffer: Buffer.from('a2'), duration: 10 },
+          { pageNumber: 3, narration: 'C', audioBuffer: Buffer.from('a3'), duration: 10 },
+        ],
+        // Deliberately wrong vs slide sum — must NOT be sole ground truth
+        combinedAudioDuration: 50,
+      },
+    });
+
+    expect(durationsSeen).toEqual({ 1: 10, 2: 10, 3: 10 });
+    expect(result.duration).toBe(30);
+    expect(result.slideCount).toBe(3);
   });
 });
 

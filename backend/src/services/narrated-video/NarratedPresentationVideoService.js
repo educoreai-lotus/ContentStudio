@@ -118,6 +118,7 @@ export class NarratedPresentationVideoService {
           imagePath: page.imagePath,
           audioPath,
           outputPath: scenePath,
+          duration: page.duration,
         });
         scenePaths.push(scenePath);
         slideDurations.push(page.duration);
@@ -153,9 +154,10 @@ export class NarratedPresentationVideoService {
       });
 
       const duration = await this.measureDurationFn(finalVideoPath);
+      const expectedDurationFromSlides = slideDurations.reduce((a, b) => a + b, 0);
 
       if (this.durationDiagnosticsEnabled) {
-        const sumSlideAudioDurations = slideDurations.reduce((a, b) => a + b, 0);
+        const sumSlideAudioDurations = expectedDurationFromSlides;
         const combinedAudioDuration = narrationBundle.combinedAudioDuration;
         logger.info('[NarratedPresentationVideoService] [duration-diagnostics] final comparison', {
           jobId: resolvedJobId,
@@ -171,7 +173,7 @@ export class NarratedPresentationVideoService {
 
       assertDurationWithinTolerance(
         duration,
-        narrationBundle.combinedAudioDuration,
+        expectedDurationFromSlides,
         this.durationToleranceSeconds
       );
 
@@ -244,7 +246,7 @@ export function assertDurationWithinTolerance(actual, expected, toleranceSeconds
   const delta = Math.abs(actual - expected);
   if (delta > toleranceSeconds) {
     throw new Error(
-      `Final video duration ${actual}s differs from combined audio ${expected}s ` +
+      `Final video duration ${actual}s differs from expected slide audio sum ${expected}s ` +
         `by ${delta}s (tolerance ${toleranceSeconds}s)`
     );
   }

@@ -5,6 +5,7 @@ import { tmpdir } from 'os';
 import {
   buildSlideSceneCommand,
   createSlideScene,
+  formatSceneDurationForFfmpeg,
 } from '../../../../src/services/narrated-video/createSlideScene.js';
 import {
   buildVideoConcatCommand,
@@ -16,30 +17,69 @@ import {
   PIXEL_FORMAT,
   VIDEO_WIDTH,
   VIDEO_HEIGHT,
+  VIDEO_FPS,
   SCALE_PAD_FILTER,
 } from '../../../../src/services/narrated-video/videoEncodingDefaults.js';
 
+describe('formatSceneDurationForFfmpeg', () => {
+  it('formats finite positive durations stably', () => {
+    expect(formatSceneDurationForFfmpeg(20.832)).toBe('20.832');
+    expect(formatSceneDurationForFfmpeg(10)).toBe('10');
+  });
+
+  it('rejects invalid durations', () => {
+    expect(() => formatSceneDurationForFfmpeg(0)).toThrow(/Invalid scene duration/);
+    expect(() => formatSceneDurationForFfmpeg(NaN)).toThrow(/Invalid scene duration/);
+  });
+});
+
 describe('buildSlideSceneCommand', () => {
-  it('configures H.264, AAC, yuv420p, loop, shortest, scale+pad, MP4', () => {
+  it('pins input framerate, output -r, and output -t duration', () => {
     const command = buildSlideSceneCommand({
       imagePath: 'C:/tmp/slide-1.png',
       audioPath: 'C:/tmp/audio-1.mp3',
       outputPath: 'C:/tmp/scene-1.mp4',
+      duration: 20.832,
     });
 
-    expect(command).toContain('ffmpeg -y -loop 1 -i');
-    expect(command).toContain('slide-1.png');
+    expect(command).toMatch(
+      new RegExp(`ffmpeg -y -loop 1 -framerate ${VIDEO_FPS} -i .*slide-1\\.png`)
+    );
     expect(command).toContain('audio-1.mp3');
     expect(command).toContain(`-c:v ${VIDEO_CODEC}`);
     expect(command).toContain('-tune stillimage');
     expect(command).toContain(`-c:a ${AUDIO_CODEC}`);
     expect(command).toContain(`-pix_fmt ${PIXEL_FORMAT}`);
-    expect(command).toContain('-shortest');
+    expect(command).toContain(`-r ${VIDEO_FPS}`);
     expect(command).toContain(`-vf "${SCALE_PAD_FILTER}"`);
-    expect(command).toContain(`force_original_aspect_ratio=decrease`);
+    expect(command).toContain('force_original_aspect_ratio=decrease');
     expect(command).toContain(`pad=${VIDEO_WIDTH}:${VIDEO_HEIGHT}`);
+    expect(command).toContain('-t 20.832');
+    expect(command).toContain('-shortest');
     expect(command).toContain('scene-1.mp4');
-    expect(command).not.toContain('scale=1920:1080 ');
+
+    // -framerate must appear before image -i; -t must be an output option (after codecs, before output)
+    const framerateIdx = command.indexOf(`-framerate ${VIDEO_FPS}`);
+    const imageInputIdx = command.indexOf('-i ');
+    const tIdx = command.indexOf('-t 20.832');
+    const shortestIdx = command.indexOf('-shortest');
+    const outIdx = command.lastIndexOf('scene-1.mp4');
+    expect(framerateIdx).toBeGreaterThan(-1);
+    expect(framerateIdx).toBeLessThan(imageInputIdx);
+    expect(tIdx).toBeGreaterThan(command.indexOf(`-r ${VIDEO_FPS}`));
+    expect(tIdx).toBeLessThan(shortestIdx);
+    expect(shortestIdx).toBeLessThan(outIdx);
+  });
+
+  it('rejects missing/invalid duration', () => {
+    expect(() =>
+      buildSlideSceneCommand({
+        imagePath: 'a.png',
+        audioPath: 'a.mp3',
+        outputPath: 'o.mp4',
+        duration: 0,
+      })
+    ).toThrow(/duration must be a finite number > 0/);
   });
 
   it('preserves aspect ratio without stretching', () => {
@@ -71,7 +111,7 @@ describe('createSlideScene', () => {
     }
   });
 
-  it('invokes ffmpeg with image+audio inputs and writes output path', async () => {
+  it('requires duration and invokes ffmpeg with pinned -t', async () => {
     const execAsync = jest.fn().mockImplementation(async () => {
       writeFileSync(outputPath, Buffer.from('fake-mp4'));
       return { stdout: '', stderr: '' };
@@ -81,19 +121,28 @@ describe('createSlideScene', () => {
       imagePath,
       audioPath,
       outputPath,
+      duration: 12.5,
       execAsync,
     });
 
     expect(execAsync).toHaveBeenCalledTimes(1);
     const command = execAsync.mock.calls[0][0];
-    expect(command).toContain('-loop 1');
-    expect(command).toContain(imagePath.replace(/\\/g, '/').includes('/') ? 'slide-1.png' : 'slide-1.png');
+    expect(command).toContain(`-loop 1 -framerate ${VIDEO_FPS}`);
     expect(command).toContain('audio-1.mp3');
-    expect(command).toContain(`-c:v ${VIDEO_CODEC}`);
-    expect(command).toContain(`-c:a ${AUDIO_CODEC}`);
-    expect(command).toContain(`-pix_fmt ${PIXEL_FORMAT}`);
+    expect(command).toContain('-t 12.5');
+    expect(command).toContain(`-r ${VIDEO_FPS}`);
     expect(command).toContain('-shortest');
     expect(result.outputPath).toBe(outputPath);
+  });
+
+  it('rejects missing duration', async () => {
+    await expect(
+      createSlideScene({
+        imagePath,
+        audioPath,
+        outputPath,
+      })
+    ).rejects.toThrow(/duration must be a finite number > 0/);
   });
 });
 

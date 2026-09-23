@@ -18,25 +18,45 @@ import {
 const execAsync = promisify(exec);
 
 /**
- * Build FFmpeg command: static slide PNG + MP3 → H.264/AAC scene MP4.
- * Image loops; scene ends when audio ends (-shortest). Aspect ratio preserved via scale+pad.
- *
- * @param {{ imagePath: string, audioPath: string, outputPath: string }} params
+ * Format slide duration for FFmpeg -t (stable decimal, no scientific notation).
+ * @param {number} duration
  * @returns {string}
  */
-export function buildSlideSceneCommand({ imagePath, audioPath, outputPath }) {
+export function formatSceneDurationForFfmpeg(duration) {
+  if (!Number.isFinite(duration) || duration <= 0) {
+    throw new Error(`Invalid scene duration for FFmpeg: ${duration}`);
+  }
+  // Trim trailing zeros while keeping enough precision for sub-second audio
+  const fixed = duration.toFixed(6).replace(/\.?0+$/, '');
+  return fixed.length > 0 ? fixed : String(duration);
+}
+
+/**
+ * Build FFmpeg command: static slide PNG + MP3 → H.264/AAC scene MP4.
+ * Input framerate matches output fps; output duration pinned with -t.
+ *
+ * @param {{ imagePath: string, audioPath: string, outputPath: string, duration: number }} params
+ * @returns {string}
+ */
+export function buildSlideSceneCommand({ imagePath, audioPath, outputPath, duration }) {
+  if (!Number.isFinite(duration) || duration <= 0) {
+    throw new Error(`duration must be a finite number > 0 (got: ${duration})`);
+  }
+
   const img = escapePathForShell(imagePath);
   const aud = escapePathForShell(audioPath);
   const out = escapePathForShell(outputPath);
+  const durationArg = formatSceneDurationForFfmpeg(duration);
 
   return (
-    `ffmpeg -y -loop 1 -i ${img.quote}${img.escaped}${img.quote} ` +
+    `ffmpeg -y -loop 1 -framerate ${VIDEO_FPS} -i ${img.quote}${img.escaped}${img.quote} ` +
     `-i ${aud.quote}${aud.escaped}${aud.quote} ` +
     `-c:v ${VIDEO_CODEC} -tune stillimage ` +
     `-c:a ${AUDIO_CODEC} -b:a ${AUDIO_BITRATE} ` +
     `-pix_fmt ${PIXEL_FORMAT} ` +
     `-r ${VIDEO_FPS} ` +
     `-vf "${SCALE_PAD_FILTER}" ` +
+    `-t ${durationArg} ` +
     `-shortest ` +
     `${out.quote}${out.escaped}${out.quote}`
   );
@@ -49,6 +69,7 @@ export function buildSlideSceneCommand({ imagePath, audioPath, outputPath }) {
  *   imagePath: string,
  *   audioPath: string,
  *   outputPath: string,
+ *   duration: number,
  *   execAsync?: Function,
  * }} params
  * @returns {Promise<{ outputPath: string }>}
@@ -57,6 +78,7 @@ export async function createSlideScene({
   imagePath,
   audioPath,
   outputPath,
+  duration,
   execAsync: execAsyncOverride = null,
 }) {
   if (!existsSync(imagePath)) {
@@ -65,15 +87,19 @@ export async function createSlideScene({
   if (!existsSync(audioPath)) {
     throw new Error(`Slide audio does not exist: ${audioPath}`);
   }
+  if (!Number.isFinite(duration) || duration <= 0) {
+    throw new Error(`duration must be a finite number > 0 (got: ${duration})`);
+  }
 
   const run = execAsyncOverride || execAsync;
-  const command = buildSlideSceneCommand({ imagePath, audioPath, outputPath });
+  const command = buildSlideSceneCommand({ imagePath, audioPath, outputPath, duration });
   const { isWindows } = escapePathForShell(imagePath);
 
   logger.info('[createSlideScene] Generating slide scene', {
     imagePath,
     audioPath,
     outputPath,
+    duration,
   });
 
   try {

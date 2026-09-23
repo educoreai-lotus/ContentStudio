@@ -11,6 +11,7 @@ import {
   downloadPresentationBuffer,
   buildSynchronizedTextAndVideoFromPresentation,
 } from './personalizedSynchronizedContent.js';
+import { evaluateArchivedTopicSynchronizedCompatibility } from './archivedTopicSynchronizedCompatibility.js';
 
 /**
  * Fill Course Builder Service request
@@ -456,6 +457,47 @@ Include all topics and contents for the course.`;
 }
 
 /**
+ * Decide whether an archived topic may be reused for Personalized Fill.
+ * When synchronized mode is OFF, any existing archived topic is reused (legacy).
+ * When ON, require synchronized-compatible persisted contents.
+ *
+ * @param {{
+ *   existingTopic: Object|null,
+ *   synchronizedMode: boolean,
+ * }} params
+ * @returns {{
+ *   reuse: boolean,
+ *   topic: Object|null,
+ *   rejectedForSync?: boolean,
+ *   reasons?: string[],
+ * }}
+ */
+export function decideArchivedTopicReuseForPersonalized({
+  existingTopic,
+  synchronizedMode,
+}) {
+  if (!existingTopic) {
+    return { reuse: false, topic: null };
+  }
+
+  if (!synchronizedMode) {
+    return { reuse: true, topic: existingTopic };
+  }
+
+  const evaluation = evaluateArchivedTopicSynchronizedCompatibility(existingTopic);
+  if (evaluation.compatible) {
+    return { reuse: true, topic: existingTopic };
+  }
+
+  return {
+    reuse: false,
+    topic: null,
+    rejectedForSync: true,
+    reasons: evaluation.reasons,
+  };
+}
+
+/**
  * Search for existing archived topic matching step criteria
  * Checks if there's a topic with:
  * - status = 'archived'
@@ -872,18 +914,34 @@ async function generateFullAICourses({ career_learning_paths, trainer_id, compan
               language,
             });
 
-            if (existingTopic) {
-              // Found existing archived topic - reuse it (no AI generation needed)
-              topics.push(existingTopic);
+            const reuseDecision = decideArchivedTopicReuseForPersonalized({
+              existingTopic,
+              synchronizedMode: isPersonalizedNarratedPresentationEnabled(),
+            });
+
+            if (reuseDecision.reuse) {
+              // Found reusable archived topic - reuse it (no AI generation needed)
+              topics.push(reuseDecision.topic);
               logger.info('[fillCourseBuilderService] Reused existing archived topic', {
-                topic_id: existingTopic.topic_id,
-                topic_name: existingTopic.topic_name,
+                topic_id: reuseDecision.topic.topic_id,
+                topic_name: reuseDecision.topic.topic_name,
                 stepTitle: step.title,
                 language: language,
-                contentsCount: existingTopic.contents?.length || 0,
+                contentsCount: reuseDecision.topic.contents?.length || 0,
               });
             } else {
-              // No existing topic found - generate with AI
+              if (existingTopic && reuseDecision.rejectedForSync) {
+                logger.info(
+                  '[fillCourseBuilderService] Rejected archived topic for synchronized Personalized reuse',
+                  {
+                    topic_id: existingTopic.topic_id,
+                    topic_name: existingTopic.topic_name,
+                    stepTitle: step.title,
+                    reasons: reuseDecision.reasons,
+                  }
+                );
+              }
+              // No reusable topic - generate with AI (sync path when flag ON)
               const topic = await generateTopicForStep({
                 step,
                 language,

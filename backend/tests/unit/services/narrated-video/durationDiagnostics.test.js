@@ -181,13 +181,13 @@ describe('NarratedPresentationVideoService duration diagnostics', () => {
     });
   });
 
-  it('flag ON still uses existing assertion against combinedAudioDuration', async () => {
+  it('flag ON still asserts final duration against sum of slide durations', async () => {
     const { service } = buildService({
       durationDiagnosticsEnabled: true,
       measureDurationFn: jest.fn().mockImplementation(async (path) => {
         const normalized = String(path).replace(/\\/g, '/');
         if (normalized.includes('scene-')) return 1;
-        return 99; // final video far from combinedAudioDuration=30
+        return 99; // final video far from slide sum 10+20=30
       }),
     });
 
@@ -197,6 +197,6 @@ describe('NarratedPresentationVideoService duration diagnostics', () => {
         narrationBundle,
         jobId: 'diag-assert',
       })
-    ).rejects.toThrow(/differs from combined audio/);
+    ).rejects.toThrow(/differs from expected slide audio sum/);
   });
 });
