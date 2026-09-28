@@ -2,6 +2,7 @@ import { Content } from '../../domain/entities/Content.js';
 import { ContentDataCleaner } from '../utils/ContentDataCleaner.js';
 import { PromptSanitizer } from '../../infrastructure/security/PromptSanitizer.js';
 import { logger } from '../../infrastructure/logging/Logger.js';
+import { isTrainerNarratedPresentationEnabled } from './trainerNarratedPresentationConfig.js';
 
 const PROMPT_BUILDERS = {
   text: ({ lessonTopic, lessonDescription, language, skillsList }) => `You are an expert educational content creator in EduCore Content Studio.
@@ -630,7 +631,41 @@ ${basePrompt}`;
             generationRequest.presentation_content_id = presentationContent.content_id;
           }
 
-          // Use new workflow: generate from presentation
+          // Trainer narrated path (flag ON): PDF → NarrationBundle → FFmpeg MP4 (no HeyGen).
+          // Flag OFF: legacy GenerateAvatarVideoFromPresentationUseCase → HeyGen.
+          if (isTrainerNarratedPresentationEnabled()) {
+            const { GenerateNarratedVideoFromPresentationUseCase } = await import(
+              './GenerateNarratedVideoFromPresentationUseCase.js'
+            );
+
+            const narratedUseCase = new GenerateNarratedVideoFromPresentationUseCase({
+              contentRepository: this.contentRepository,
+              openaiClient: this.aiGenerationService.openaiClient,
+              ttsClient: this.aiGenerationService.ttsClient,
+            });
+
+            const narratedResult = await narratedUseCase.execute({
+              presentation_content_id: generationRequest.presentation_content_id,
+              language: promptVariables.language || 'en',
+              topicName: promptVariables.lessonTopic || 'lesson',
+            });
+
+            if (!narratedResult.success) {
+              contentData = {
+                videoUrl: null,
+                status: narratedResult.status || 'failed',
+                error: narratedResult.error || 'Narrated presentation video generation failed',
+                errorCode: narratedResult.errorCode || 'GENERATION_FAILED',
+                reason: narratedResult.error || 'Narrated presentation video generation failed',
+                ...(narratedResult.content_data || {}),
+              };
+            } else {
+              contentData = narratedResult.content_data;
+            }
+            break;
+          }
+
+          // Legacy Trainer workflow: generate from presentation via HeyGen
           const { GenerateAvatarVideoFromPresentationUseCase } = await import('./GenerateAvatarVideoFromPresentationUseCase.js');
           const { RepositoryFactory } = await import('../../infrastructure/database/repositories/RepositoryFactory.js');
           

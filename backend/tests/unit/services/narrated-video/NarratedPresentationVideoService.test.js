@@ -310,10 +310,12 @@ describe('NarratedPresentationVideoService', () => {
 });
 
 describe('NarratedPresentationVideoService isolation', () => {
-  it('is not imported by Trainer / GenerateContentUseCase paths', () => {
+  it('is not imported directly by legacy HeyGen / generateAiTopic paths', () => {
     const thisDir = dirname(fileURLToPath(import.meta.url));
     const root = join(thisDir, '../../../../src');
 
+    // GenerateContentUseCase may dynamically import GenerateNarratedVideoFromPresentationUseCase
+    // but must not import NarratedPresentationVideoService / narrated-video directly.
     const forbidden = [
       'application/use-cases/GenerateContentUseCase.js',
       'application/use-cases/GenerateAvatarVideoFromPresentationUseCase.js',
@@ -327,5 +329,18 @@ describe('NarratedPresentationVideoService isolation', () => {
       const text = readFileSync(abs, 'utf8');
       expect(text).not.toMatch(/narrated-video|NarratedPresentationVideoService/);
     }
+  });
+
+  it('is used by Trainer GenerateNarratedVideoFromPresentationUseCase', () => {
+    const thisDir = dirname(fileURLToPath(import.meta.url));
+    const abs = join(
+      thisDir,
+      '../../../../src/application/use-cases/GenerateNarratedVideoFromPresentationUseCase.js'
+    );
+    expect(existsSync(abs)).toBe(true);
+    const text = readFileSync(abs, 'utf8');
+    expect(text).toMatch(/NarratedPresentationVideoService/);
+    expect(text).not.toMatch(/heygenClient\.|GammaHeyGenAvatarOrchestrator/);
+    expect(text).not.toMatch(/GenerateAvatarVideoFromPresentationUseCase/);
   });
 });

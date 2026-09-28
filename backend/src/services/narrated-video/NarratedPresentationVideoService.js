@@ -14,7 +14,7 @@ import { isNarratedVideoDurationDiagnosticsEnabled } from './durationDiagnostics
 /**
  * Isolated provider-neutral narrated presentation video builder.
  * Uses presentation PDF + NarrationBundle exact audio — NO AI / TTS / HeyGen.
- * Wired only into Personalized Fill when PERSONALIZED_NARRATED_PRESENTATION_ENABLED=true.
+ * Wired into Personalized / V2L / Trainer narrated paths via their feature flags.
  */
 export class NarratedPresentationVideoService {
   /**

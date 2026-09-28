@@ -16,8 +16,11 @@ import { concatenateAudioFiles } from './concatenateAudioFiles.js';
 
 /**
  * Provider-neutral NarrationBundle builder.
- * Wired only into Personalized Fill when PERSONALIZED_NARRATED_PRESENTATION_ENABLED=true.
- * Not used by Trainer / V2L / HeyGen / GenerateContentUseCase.
+ * Wired into:
+ * - Personalized Fill when PERSONALIZED_NARRATED_PRESENTATION_ENABLED=true
+ * - V2L when VIDEO_TO_LESSON_NARRATED_PRESENTATION_ENABLED=true
+ * - Trainer Type-6 when TRAINER_NARRATED_PRESENTATION_ENABLED=true
+ * (via dedicated use cases / fillers — not via HeyGen).
  */
 export class NarrationBundleService {
   /**
