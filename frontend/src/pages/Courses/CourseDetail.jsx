@@ -47,17 +47,41 @@ export const CourseDetail = () => {
   const fetchTopics = React.useCallback(async () => {
     try {
       setLoadingTopics(true);
-      const result = await topicsService.list(
-        {
-          course_id: courseId,
-          status: 'active', // Only show active topics (exclude deleted)
-        },
-        {
-          page: 1,
-          limit: 50,
+      const listFilters = {
+        course_id: courseId,
+        status: 'active', // Only show active topics (exclude deleted)
+      };
+      const pageLimit = 50;
+
+      // Page 1 — same request as before (courses with ≤50 topics stay on one call)
+      const firstResult = await topicsService.list(listFilters, {
+        page: 1,
+        limit: pageLimit,
+      });
+
+      let topicsList = [...(firstResult.topics || [])];
+      const totalPages = firstResult.pagination?.total_pages || 1;
+
+      // Additional pages when the course has more than `pageLimit` active topics
+      if (totalPages > 1) {
+        for (let page = 2; page <= totalPages; page += 1) {
+          const pageResult = await topicsService.list(listFilters, {
+            page,
+            limit: pageLimit,
+          });
+          topicsList = topicsList.concat(pageResult.topics || []);
         }
-      );
-      const topicsList = result.topics || [];
+      }
+
+      // Dedupe by topic_id while preserving newest → oldest order from page concatenation
+      const seenIds = new Set();
+      topicsList = topicsList.filter((topic) => {
+        const id = topic.topic_id;
+        if (seenIds.has(id)) return false;
+        seenIds.add(id);
+        return true;
+      });
+
       setTopics(topicsList);
       
       // Fetch content for all topics to check if all formats are ready
