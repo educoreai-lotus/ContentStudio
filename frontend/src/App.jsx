@@ -1,3 +1,4 @@
+// Trigger Vercel frontend redeployment
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AppProvider, useApp } from './context/AppContext.jsx';
