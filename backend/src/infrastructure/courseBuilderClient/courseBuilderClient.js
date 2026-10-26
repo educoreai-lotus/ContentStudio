@@ -1,6 +1,7 @@
 import { logger } from '../logging/Logger.js';
 import { postToCoordinator } from '../coordinatorClient/coordinatorClient.js';
 import { verifyCoordinatorSignature } from '../utils/verifyCoordinatorSignature.js';
+import { sanitizePublishEnvelopeForCoordinator } from './sanitizePublishEnvelopeForCoordinator.js';
 
 /**
  * Course Builder Client
@@ -274,11 +275,13 @@ export class CourseBuilderClient {
         },
       };
 
-      // CRITICAL: Deep clone envelope to ensure byte-identical signature
-      // The object signed must be exactly the same as what Coordinator receives
-      // Any mutation (even by axios serialization) will cause signature mismatch
-      const envelopeToSign = JSON.parse(JSON.stringify(envelope));
-      
+      // Deep clone so the caller's courseData / in-memory objects stay untouched.
+      // Then apply Coordinator-parity sanitizeInput (strip [\x00-\x1F\x7F] from string
+      // keys and values) so the object we sign matches what Coordinator verifies.
+      // NOTE: This removes newlines/tabs from transferred lesson strings (lossy).
+      const envelopeClone = JSON.parse(JSON.stringify(envelope));
+      const envelopeToSign = sanitizePublishEnvelopeForCoordinator(envelopeClone);
+
       await postToCoordinator(envelopeToSign, {
         endpoint: '/api/fill-content-metrics',
         timeout: 1200000, // 20 minutes timeout (matches server timeout for long-running requests)
