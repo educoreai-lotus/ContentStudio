@@ -207,6 +207,9 @@ describe('sendCourseToCourseBuilder publish isolation', () => {
     const { sendCourseToCourseBuilder } = await import(
       '../../../../src/infrastructure/courseBuilderClient/courseBuilderClient.js'
     );
+    const { decompressTrainerCoursePayload } = await import(
+      '../../../../src/infrastructure/courseBuilderClient/compressTrainerPublishCourse.js'
+    );
 
     const courseData = {
       course_id: '42',
@@ -245,8 +248,12 @@ describe('sendCourseToCourseBuilder publish isolation', () => {
     expect(envelopeArg.requester_service).toBe('content-studio');
     expect(envelopeArg.payload.action).toBe('send this trainer course to publish');
     expect(envelopeArg.payload.targetService).toBe('course-builder-service');
-    expect(envelopeArg.payload.course_description).toBe('KeepMe');
-    expect(envelopeArg.payload.topics[0].contents[0].content_data.code).toBe('ab');
-    expect(envelopeArg.payload.course_description.includes('\n')).toBe(false);
+    expect(envelopeArg.payload.course_encoding).toBe('gzip+base64');
+    expect(envelopeArg.payload.topics).toBeUndefined();
+    const recovered = decompressTrainerCoursePayload(
+      envelopeArg.payload.course_compressed
+    );
+    expect(recovered.course_description).toBe('Keep\nMe');
+    expect(recovered.topics[0].contents[0].content_data.code).toBe('a\nb');
   });
 });

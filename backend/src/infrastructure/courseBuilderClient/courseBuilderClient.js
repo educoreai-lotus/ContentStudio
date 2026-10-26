@@ -2,6 +2,12 @@ import { logger } from '../logging/Logger.js';
 import { postToCoordinator } from '../coordinatorClient/coordinatorClient.js';
 import { verifyCoordinatorSignature } from '../utils/verifyCoordinatorSignature.js';
 import { sanitizePublishEnvelopeForCoordinator } from './sanitizePublishEnvelopeForCoordinator.js';
+import {
+  COURSE_ENCODING_GZIP_BASE64,
+  assertPublishEnvelopeWithinCourseBuilderLimit,
+  buildTrainerCoursePayloadForCompression,
+  compressTrainerCoursePayload,
+} from './compressTrainerPublishCourse.js';
 
 /**
  * Course Builder Client
@@ -224,63 +230,32 @@ export class CourseBuilderClient {
         return;
       }
 
-      // Build payload in the required format (flat structure, no nesting)
-      // IMPORTANT: Match devlabClient structure exactly - include targetService and description for Coordinator routing
-      const payloadData = {
-        action: 'send this trainer course to publish',
-        description: 'Send course to Course Builder for publishing',
-        targetService: 'course-builder-service',
-        course_id: courseData.course_id || '',
-        course_name: courseData.course_name || '',
-        course_description: courseData.course_description || '',
-        course_language: courseData.course_language || 'en',
-        trainer_id: courseData.trainer_id || '',
-        trainer_name: courseData.trainer_name || '',
-        topics: Array.isArray(courseData.topics) ? courseData.topics.map(topic => {
-          // Ensure all fields are present and properly typed to avoid JSON.stringify inconsistencies
-          const topicObj = {
-            topic_id: topic.topic_id || '',
-            topic_name: topic.topic_name || '',
-            topic_description: topic.topic_description || '',
-            topic_language: topic.topic_language || 'en',
-            template_id: topic.template_id || '',
-            format_order: Array.isArray(topic.format_order) ? topic.format_order : [],
-            contents: Array.isArray(topic.contents) ? topic.contents.map(content => ({
-              content_id: content.content_id || '',
-              content_type: content.content_type || '',
-              content_data: content.content_data && typeof content.content_data === 'object' ? content.content_data : {},
-            })) : [],
-            // Convert devlab_exercises to string if it's an object/array
-            // Empty string if not present (to avoid null/undefined issues)
-            devlab_exercises: topic.devlab_exercises 
-              ? (typeof topic.devlab_exercises === 'string' 
-                  ? topic.devlab_exercises 
-                  : JSON.stringify(topic.devlab_exercises))
-              : '',
-          };
-          return topicObj;
-        }) : [],
-      };
+      // Trainer Publish ONLY: compress full course JSON (lossless) before sanitize/sign.
+      // Routing fields stay plain; Course Builder decompresses course_compressed.
+      const coursePayload = buildTrainerCoursePayloadForCompression(courseData);
+      const courseCompressed = compressTrainerCoursePayload(coursePayload);
 
-      // Build envelope for Coordinator (standard structure)
-      // Note: requester_service is 'content-studio' (who is sending)
-      // Coordinator will route to Course Builder based on the action in payload
-      // IMPORTANT: Use same structure as devlabClient for consistency (response: { answer: '' })
-      // Field order: requester_service, payload, response (must match working clients)
       const envelope = {
         requester_service: 'content-studio',
-        payload: payloadData,
+        payload: {
+          action: 'send this trainer course to publish',
+          description: 'Send course to Course Builder for publishing',
+          targetService: 'course-builder-service',
+          course_encoding: COURSE_ENCODING_GZIP_BASE64,
+          course_compressed: courseCompressed,
+        },
         response: {
           answer: '',
         },
       };
 
-      // Deep clone so the caller's courseData / in-memory objects stay untouched.
-      // Then apply Coordinator-parity sanitizeInput (strip [\x00-\x1F\x7F] from string
-      // keys and values) so the object we sign matches what Coordinator verifies.
-      // NOTE: This removes newlines/tabs from transferred lesson strings (lossy).
+      // Deep clone so caller courseData stays untouched, then Coordinator-parity
+      // sanitize on the envelope (Base64 alphabet is unaffected; rich content lives
+      // inside gzip bytes and is not stripped).
       const envelopeClone = JSON.parse(JSON.stringify(envelope));
       const envelopeToSign = sanitizePublishEnvelopeForCoordinator(envelopeClone);
+
+      assertPublishEnvelopeWithinCourseBuilderLimit(envelopeToSign);
 
       await postToCoordinator(envelopeToSign, {
         endpoint: '/api/fill-content-metrics',
@@ -289,6 +264,7 @@ export class CourseBuilderClient {
 
       logger.info('[CourseBuilderClient] Course sent to Course Builder successfully', {
         courseId: courseData.course_id,
+        courseEncoding: COURSE_ENCODING_GZIP_BASE64,
       });
     } catch (error) {
       // Log error and throw to allow PublishCourseUseCase to handle it
@@ -298,7 +274,11 @@ export class CourseBuilderClient {
         errorType: error.response ? 'response_error' : error.request ? 'no_response' : 'request_error',
         status: error.response?.status,
         statusText: error.response?.statusText,
+        code: error.code,
       });
+      if (error.code === 'COURSE_PUBLISH_PAYLOAD_TOO_LARGE') {
+        throw error;
+      }
       // Throw error so PublishCourseUseCase can catch and return appropriate error message
       throw new Error('Transfer failed — Course Builder could not receive the data. Please try again later.');
     }

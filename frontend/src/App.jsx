@@ -1,4 +1,4 @@
-// Trigger Vercel frontend redeployment
+// Trigger Vercel frontend redeployment - compressed Trainer Publish
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AppProvider, useApp } from './context/AppContext.jsx';
