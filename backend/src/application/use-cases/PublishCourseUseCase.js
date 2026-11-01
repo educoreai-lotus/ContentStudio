@@ -504,10 +504,17 @@ export class PublishCourseUseCase {
   /**
    * Execute publish course (transfer to Course Builder)
    * @param {number} courseId - Course ID
+   * @param {{ publisherTrainerId: string, organizationId?: string }} publisher - Trusted auth context (never client-supplied trainer id)
    * @returns {Promise<{success: boolean, message: string}>}
    */
-  async execute(courseId) {
+  async execute(courseId, publisher) {
     logger.info('[PublishCourseUseCase] Starting publish course execution', { courseId });
+
+    if (!publisher || typeof publisher.publisherTrainerId !== 'string' || !publisher.publisherTrainerId) {
+      const err = new Error('Authenticated publisher_trainer_id is required for trainer publish.');
+      err.code = 'COURSE_PUBLISH_AUTH_REQUIRED';
+      throw err;
+    }
     
     // Validate course
     const validation = await this.validateCourse(courseId);
@@ -526,15 +533,19 @@ export class PublishCourseUseCase {
     
     logger.info('[PublishCourseUseCase] Course validation passed, building course object', { courseId });
 
-    // Build course object
+    // Build course object (serialize once; chunked sender compresses once)
     const courseData = await this.buildCourseObject(courseId);
 
     // We do NOT publish the course here.
     // We ONLY transfer it to Course Builder, which handles final publishing and visibility.
+    // Archive / usage / Directory updates run ONLY after verified FINALIZE success.
     try {
-      await sendCourseToCourseBuilder(courseData);
+      await sendCourseToCourseBuilder(courseData, {
+        publisherTrainerId: publisher.publisherTrainerId,
+        organizationId: publisher.organizationId || '',
+      });
       
-      // After successfully sending to Course Builder:
+      // After verified FINALIZE acknowledgment from Course Builder:
       // 1. Increment usage_count for all topics in the course
       try {
         const topics = await this.topicRepository.findByCourseId(courseId);

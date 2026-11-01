@@ -1,5 +1,5 @@
 import { createPrivateKey, generateKeyPairSync } from 'crypto';
-import { describe, it, expect, jest, beforeEach } from '@jest/globals';
+import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
 import { sanitizePublishEnvelopeForCoordinator } from '../../../../src/infrastructure/courseBuilderClient/sanitizePublishEnvelopeForCoordinator.js';
 import { generateSignature, verifySignature } from '../../../../src/utils/signature.js';
 
@@ -175,15 +175,60 @@ describe('sanitizePublishEnvelopeForCoordinator (trainer publish)', () => {
 });
 
 describe('sendCourseToCourseBuilder publish isolation', () => {
+  const previousFlag = process.env.CHUNKED_TRAINER_PUBLISH_ENABLED;
+
   beforeEach(() => {
     jest.resetModules();
+    process.env.CHUNKED_TRAINER_PUBLISH_ENABLED = 'true';
   });
 
-  it('passes only the sanitized envelope to postToCoordinator and does not mutate courseData', async () => {
-    const postToCoordinator = jest.fn().mockResolvedValue({
-      data: {},
-      rawBodyString: '{}',
-      headers: {},
+  afterEach(() => {
+    if (previousFlag === undefined) {
+      delete process.env.CHUNKED_TRAINER_PUBLISH_ENABLED;
+    } else {
+      process.env.CHUNKED_TRAINER_PUBLISH_ENABLED = previousFlag;
+    }
+  });
+
+  it('sanitizes each chunked envelope before postToCoordinator and does not mutate courseData', async () => {
+    const postToCoordinator = jest.fn().mockImplementation(async (envelope) => {
+      const action = envelope.payload.action;
+      if (action === 'trainer_publish_init') {
+        return {
+          data: {
+            response: {
+              status: 'initialized',
+              transfer_id: 'xfer-1',
+              routing_ticket: 'ticket-1',
+              expires_at: '2099-01-01T00:00:00.000Z',
+            },
+          },
+        };
+      }
+      if (action === 'trainer_publish_chunk') {
+        return {
+          data: {
+            response: {
+              status: 'chunk_received',
+              transfer_id: 'xfer-1',
+              chunk_index: envelope.payload.chunk_index,
+            },
+          },
+        };
+      }
+      return {
+        data: {
+          response: {
+            status: 'published',
+            transfer_id: 'xfer-1',
+            course_id: 'cb-1',
+            source_course_id: '42',
+            lessons_created: 1,
+            lessons_expected: 1,
+            content_fingerprint: 'a'.repeat(64),
+          },
+        },
+      };
     });
 
     jest.unstable_mockModule(
@@ -207,9 +252,7 @@ describe('sendCourseToCourseBuilder publish isolation', () => {
     const { sendCourseToCourseBuilder } = await import(
       '../../../../src/infrastructure/courseBuilderClient/courseBuilderClient.js'
     );
-    const { decompressTrainerCoursePayload } = await import(
-      '../../../../src/infrastructure/courseBuilderClient/compressTrainerPublishCourse.js'
-    );
+    const { gunzipSync } = await import('zlib');
 
     const courseData = {
       course_id: '42',
@@ -239,20 +282,23 @@ describe('sendCourseToCourseBuilder publish isolation', () => {
     };
     const courseSnapshot = JSON.parse(JSON.stringify(courseData));
 
-    await sendCourseToCourseBuilder(courseData);
+    await sendCourseToCourseBuilder(courseData, { publisherTrainerId: 'trainer-1' });
 
     expect(courseData).toEqual(courseSnapshot);
-    expect(postToCoordinator).toHaveBeenCalledTimes(1);
+    expect(postToCoordinator.mock.calls.length).toBeGreaterThanOrEqual(3);
     const [envelopeArg, options] = postToCoordinator.mock.calls[0];
     expect(options.endpoint).toBe('/api/fill-content-metrics');
     expect(envelopeArg.requester_service).toBe('content-studio');
-    expect(envelopeArg.payload.action).toBe('send this trainer course to publish');
+    expect(envelopeArg.payload.action).toBe('trainer_publish_init');
     expect(envelopeArg.payload.targetService).toBe('course-builder-service');
-    expect(envelopeArg.payload.course_encoding).toBe('gzip+base64');
-    expect(envelopeArg.payload.topics).toBeUndefined();
-    const recovered = decompressTrainerCoursePayload(
-      envelopeArg.payload.course_compressed
+
+    const chunkCalls = postToCoordinator.mock.calls.filter(
+      (c) => c[0].payload.action === 'trainer_publish_chunk'
     );
+    const rebuilt = Buffer.concat(
+      chunkCalls.map((c) => Buffer.from(c[0].payload.chunk_data, 'base64'))
+    );
+    const recovered = JSON.parse(gunzipSync(rebuilt).toString('utf8'));
     expect(recovered.course_description).toBe('Keep\nMe');
     expect(recovered.topics[0].contents[0].content_data.code).toBe('a\nb');
   });

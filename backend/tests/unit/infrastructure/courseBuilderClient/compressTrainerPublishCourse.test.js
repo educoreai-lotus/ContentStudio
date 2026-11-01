@@ -1,5 +1,5 @@
 import { generateKeyPairSync } from 'crypto';
-import { describe, it, expect, jest, beforeEach } from '@jest/globals';
+import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
 import {
   COURSE_BUILDER_MAX_INBOUND_BYTES,
   COURSE_ENCODING_GZIP_BASE64,
@@ -155,16 +155,62 @@ describe('compressTrainerPublishCourse', () => {
   });
 });
 
-describe('sendCourseToCourseBuilder compressed publish isolation', () => {
+describe('sendCourseToCourseBuilder chunked publish isolation', () => {
+  const previousFlag = process.env.CHUNKED_TRAINER_PUBLISH_ENABLED;
+
   beforeEach(() => {
     jest.resetModules();
+    process.env.CHUNKED_TRAINER_PUBLISH_ENABLED = 'true';
   });
 
-  it('posts compressed contract only; does not mutate courseData; does not touch fillCourseBuilderService', async () => {
-    const postToCoordinator = jest.fn().mockResolvedValue({
-      data: {},
-      rawBodyString: '{}',
-      headers: {},
+  afterEach(() => {
+    if (previousFlag === undefined) {
+      delete process.env.CHUNKED_TRAINER_PUBLISH_ENABLED;
+    } else {
+      process.env.CHUNKED_TRAINER_PUBLISH_ENABLED = previousFlag;
+    }
+  });
+
+  it('uses INIT/CHUNK/FINALIZE via Coordinator; does not mutate courseData; leaves Full AI filler untouched', async () => {
+    const topicCount = sampleCourseData().topics.length;
+    const postToCoordinator = jest.fn().mockImplementation(async (envelope) => {
+      const action = envelope.payload.action;
+      if (action === 'trainer_publish_init') {
+        return {
+          data: {
+            response: {
+              status: 'initialized',
+              transfer_id: 'xfer-1',
+              routing_ticket: 'ticket-1',
+              expires_at: '2099-01-01T00:00:00.000Z',
+            },
+          },
+        };
+      }
+      if (action === 'trainer_publish_chunk') {
+        return {
+          data: {
+            response: {
+              status: 'chunk_received',
+              transfer_id: 'xfer-1',
+              chunk_index: envelope.payload.chunk_index,
+            },
+          },
+        };
+      }
+      return {
+        data: {
+          response: {
+            status: 'published',
+            transfer_id: 'xfer-1',
+            course_id: 'cb-1',
+            source_course_id: '42',
+            lessons_created: topicCount,
+            lessons_expected: topicCount,
+            content_fingerprint: 'a'.repeat(64),
+          },
+        },
+      };
     });
 
     jest.unstable_mockModule(
@@ -183,48 +229,33 @@ describe('sendCourseToCourseBuilder compressed publish isolation', () => {
     const { sendCourseToCourseBuilder } = await import(
       '../../../../src/infrastructure/courseBuilderClient/courseBuilderClient.js'
     );
-    const {
-      decompressTrainerCoursePayload,
-      buildTrainerCoursePayloadForCompression,
-    } = await import(
-      '../../../../src/infrastructure/courseBuilderClient/compressTrainerPublishCourse.js'
-    );
 
     const courseData = sampleCourseData();
     const snapshot = JSON.parse(JSON.stringify(courseData));
-    const expectedPayload = buildTrainerCoursePayloadForCompression(courseData);
 
-    await sendCourseToCourseBuilder(courseData);
+    await sendCourseToCourseBuilder(courseData, {
+      publisherTrainerId: 'trainer-1',
+      organizationId: 'org-1',
+    });
 
     expect(courseData).toEqual(snapshot);
-    expect(postToCoordinator).toHaveBeenCalledTimes(1);
+    expect(postToCoordinator.mock.calls.length).toBeGreaterThanOrEqual(3);
     const [envelopeArg, options] = postToCoordinator.mock.calls[0];
     expect(options.endpoint).toBe('/api/fill-content-metrics');
     expect(envelopeArg.requester_service).toBe('content-studio');
-    expect(envelopeArg.payload.action).toBe('send this trainer course to publish');
-    expect(envelopeArg.payload.description).toBe(
-      'Send course to Course Builder for publishing'
-    );
+    expect(envelopeArg.payload.action).toBe('trainer_publish_init');
     expect(envelopeArg.payload.targetService).toBe('course-builder-service');
-    expect(envelopeArg.payload.course_encoding).toBe('gzip+base64');
+    expect(envelopeArg.payload.publisher_trainer_id).toBe('trainer-1');
     expect(envelopeArg.payload.topics).toBeUndefined();
-    expect(envelopeArg.response).toEqual({ answer: '' });
-    expect(
-      decompressTrainerCoursePayload(envelopeArg.payload.course_compressed)
-    ).toEqual(expectedPayload);
+    expect(envelopeArg.payload.course_compressed).toBeUndefined();
 
-    // Full AI Generation filler module path is not imported by this client
     await expect(
       import('../../../../src/application/services/fillers/fillCourseBuilderService.js')
     ).resolves.toBeDefined();
   });
 
-  it('stops before postToCoordinator when compressed envelope exceeds 100KB', async () => {
-    const postToCoordinator = jest.fn().mockResolvedValue({
-      data: {},
-      rawBodyString: '{}',
-      headers: {},
-    });
+  it('rejects publish without authenticated publisher context when chunked is enabled', async () => {
+    const postToCoordinator = jest.fn();
     jest.unstable_mockModule(
       '../../../../src/infrastructure/coordinatorClient/coordinatorClient.js',
       () => ({ postToCoordinator })
@@ -238,36 +269,13 @@ describe('sendCourseToCourseBuilder compressed publish isolation', () => {
       },
     }));
 
-    jest.unstable_mockModule(
-      '../../../../src/infrastructure/courseBuilderClient/compressTrainerPublishCourse.js',
-      () => ({
-        COURSE_ENCODING_GZIP_BASE64: 'gzip+base64',
-        COURSE_BUILDER_MAX_INBOUND_BYTES: 100 * 1024,
-        buildTrainerCoursePayloadForCompression: (d) => ({
-          course_id: d.course_id || '',
-          topics: d.topics || [],
-        }),
-        compressTrainerCoursePayload: () => 'B'.repeat(100 * 1024),
-        assertPublishEnvelopeWithinCourseBuilderLimit: (envelope) => {
-          const bytes = Buffer.byteLength(JSON.stringify(envelope), 'utf8');
-          if (bytes > 100 * 1024) {
-            const err = new Error(
-              `Compressed trainer publish envelope exceeds Course Builder 100KB inbound limit (${bytes} bytes > ${100 * 1024}).`
-            );
-            err.code = 'COURSE_PUBLISH_PAYLOAD_TOO_LARGE';
-            throw err;
-          }
-        },
-      })
-    );
-
     const { sendCourseToCourseBuilder } = await import(
       '../../../../src/infrastructure/courseBuilderClient/courseBuilderClient.js'
     );
 
-    await expect(
-      sendCourseToCourseBuilder(sampleCourseData())
-    ).rejects.toMatchObject({ code: 'COURSE_PUBLISH_PAYLOAD_TOO_LARGE' });
+    await expect(sendCourseToCourseBuilder(sampleCourseData())).rejects.toMatchObject({
+      code: 'COURSE_PUBLISH_AUTH_REQUIRED',
+    });
     expect(postToCoordinator).not.toHaveBeenCalled();
   });
 });

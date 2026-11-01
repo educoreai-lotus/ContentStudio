@@ -171,7 +171,13 @@ export class CourseController {
 
       await assertTrainerOwnsCourse(courseId, trainerId);
 
-      const result = await this.publishCourseUseCase.execute(courseId);
+      const organizationId =
+        typeof req.user?.organizationId === 'string' ? req.user.organizationId : '';
+
+      const result = await this.publishCourseUseCase.execute(courseId, {
+        publisherTrainerId: trainerId,
+        organizationId,
+      });
 
       res.status(200).json({
         success: true,

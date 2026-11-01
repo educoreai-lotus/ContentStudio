@@ -1,13 +1,9 @@
 import { logger } from '../logging/Logger.js';
 import { postToCoordinator } from '../coordinatorClient/coordinatorClient.js';
 import { verifyCoordinatorSignature } from '../utils/verifyCoordinatorSignature.js';
-import { sanitizePublishEnvelopeForCoordinator } from './sanitizePublishEnvelopeForCoordinator.js';
-import {
-  COURSE_ENCODING_GZIP_BASE64,
-  assertPublishEnvelopeWithinCourseBuilderLimit,
-  buildTrainerCoursePayloadForCompression,
-  compressTrainerCoursePayload,
-} from './compressTrainerPublishCourse.js';
+import { sendChunkedTrainerPublish } from './chunkedTrainerPublish.js';
+import { sendLegacyCompressedTrainerPublish } from './legacyCompressedTrainerPublish.js';
+import { isChunkedTrainerPublishEnabled } from './trainerPublishFeatureFlag.js';
 
 /**
  * Course Builder Client
@@ -188,98 +184,77 @@ export class CourseBuilderClient {
   }
 
   /**
-   * Send course data to Course Builder when trainer publishes a course
-   * Triggered when:
-   * - Trainer finishes creating a course
-   * - Trainer selects a template
-   * - Trainer generates questions
-   * - Trainer clicks Publish
-   * 
-   * @param {Object} courseData - Full course object with structure:
-   *   {
-   *     course_id: string,
-   *     course_name: string,
-   *     course_description: string,
-   *     course_language: string,
-   *     trainer_id: string,
-   *     trainer_name: string,
-   *     topics: Array<{
-   *       topic_id: string,
-   *       topic_name: string,
-   *       topic_description: string,
-   *       topic_language: string,
-   *       template_id: string,
-   *       format_order: string[],
-   *       contents: Array<{
-   *         content_id: string,
-   *         content_type: string,
-   *         content_data: Object
-   *       }>,
-   *       devlab_exercises: string
-   *     }>
-   *   }
-   * @returns {Promise<void>} No return value expected - fire and forget
+   * Trainer Publish ONLY via Coordinator.
+   * CHUNKED_TRAINER_PUBLISH_ENABLED (server env, default OFF):
+   *   false/absent → legacy single gzip+base64 envelope
+   *   true → INIT → CHUNK → FINALIZE (no silent legacy fallback on failure)
+   *
+   * @param {Object} courseData - Course object from PublishCourseUseCase.buildCourseObject
+   * @param {{ publisherTrainerId: string, organizationId?: string }} [publisher]
+   * @returns {Promise<Object|void>}
    */
-  async sendCourseToCourseBuilder(courseData) {
+  async sendCourseToCourseBuilder(courseData, publisher) {
+    const chunkedEnabled = isChunkedTrainerPublishEnabled();
+
+    if (!chunkedEnabled) {
+      try {
+        await sendLegacyCompressedTrainerPublish(courseData);
+        return;
+      } catch (error) {
+        logger.error('[CourseBuilderClient] Legacy trainer publish failed', {
+          error: error.message,
+          code: error.code,
+          courseId: courseData?.course_id,
+          status: error.response?.status,
+        });
+        if (error.code === 'COURSE_PUBLISH_PAYLOAD_TOO_LARGE') {
+          throw error;
+        }
+        throw new Error(
+          'Transfer failed — Course Builder could not receive the data. Please try again later.'
+        );
+      }
+    }
+
     try {
-      // Validate courseData
       if (!courseData || typeof courseData !== 'object') {
-        logger.warn('[CourseBuilderClient] Invalid courseData, skipping course publish', {
+        logger.warn('[CourseBuilderClient] Invalid courseData for trainer publish', {
           courseDataType: typeof courseData,
         });
-        return;
+        const err = new Error('Invalid courseData for trainer publish');
+        err.code = 'COURSE_PUBLISH_INVALID_COURSE';
+        throw err;
       }
 
-      // Trainer Publish ONLY: compress full course JSON (lossless) before sanitize/sign.
-      // Routing fields stay plain; Course Builder decompresses course_compressed.
-      const coursePayload = buildTrainerCoursePayloadForCompression(courseData);
-      const courseCompressed = compressTrainerCoursePayload(coursePayload);
+      const result = await sendChunkedTrainerPublish(courseData, publisher);
 
-      const envelope = {
-        requester_service: 'content-studio',
-        payload: {
-          action: 'send this trainer course to publish',
-          description: 'Send course to Course Builder for publishing',
-          targetService: 'course-builder-service',
-          course_encoding: COURSE_ENCODING_GZIP_BASE64,
-          course_compressed: courseCompressed,
-        },
-        response: {
-          answer: '',
-        },
-      };
-
-      // Deep clone so caller courseData stays untouched, then Coordinator-parity
-      // sanitize on the envelope (Base64 alphabet is unaffected; rich content lives
-      // inside gzip bytes and is not stripped).
-      const envelopeClone = JSON.parse(JSON.stringify(envelope));
-      const envelopeToSign = sanitizePublishEnvelopeForCoordinator(envelopeClone);
-
-      assertPublishEnvelopeWithinCourseBuilderLimit(envelopeToSign);
-
-      await postToCoordinator(envelopeToSign, {
-        endpoint: '/api/fill-content-metrics',
-        timeout: 1200000, // 20 minutes timeout (matches server timeout for long-running requests)
-      });
-
-      logger.info('[CourseBuilderClient] Course sent to Course Builder successfully', {
+      logger.info('[CourseBuilderClient] Chunked trainer publish completed', {
         courseId: courseData.course_id,
-        courseEncoding: COURSE_ENCODING_GZIP_BASE64,
+        transferId: result?.transfer_id,
+        publishedCourseId: result?.course_id,
       });
+
+      return result;
     } catch (error) {
-      // Log error and throw to allow PublishCourseUseCase to handle it
       logger.error('[CourseBuilderClient] Failed to send course to Course Builder', {
         error: error.message,
+        code: error.code,
         courseId: courseData?.course_id,
         errorType: error.response ? 'response_error' : error.request ? 'no_response' : 'request_error',
         status: error.response?.status,
         statusText: error.response?.statusText,
-        code: error.code,
+        chunkedEnabled: true,
       });
-      if (error.code === 'COURSE_PUBLISH_PAYLOAD_TOO_LARGE') {
+      // Flag ON: never fall back to legacy after a chunked failure
+      const code = error.code != null ? String(error.code) : '';
+      if (
+        code.startsWith('COURSE_PUBLISH_') ||
+        code.startsWith('TRANSFER_') ||
+        code.startsWith('TRAINER_PUBLISH_') ||
+        error.publishRecovery
+      ) {
         throw error;
       }
-      // Throw error so PublishCourseUseCase can catch and return appropriate error message
       throw new Error('Transfer failed — Course Builder could not receive the data. Please try again later.');
     }
   }
@@ -353,8 +328,8 @@ export async function fetchLearnerInfoFromCourseBuilder(learnerId) {
   return client.fetchLearnerInfoFromCourseBuilder(learnerId);
 }
 
-export async function sendCourseToCourseBuilder(courseData) {
+export async function sendCourseToCourseBuilder(courseData, publisher) {
   const client = getCourseBuilderClient();
-  return client.sendCourseToCourseBuilder(courseData);
+  return client.sendCourseToCourseBuilder(courseData, publisher);
 }
 
