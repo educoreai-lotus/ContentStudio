@@ -18,7 +18,8 @@ import {
 /** Course Builder Phase 3 limits (decoded / Base64 chunk caps). */
 export const MAX_CHUNK_BASE64_CHARS = 72000;
 export const MAX_CHUNKS_PER_TRANSFER = 512;
-export const MAX_DECODED_TRANSFER_BYTES = 8 * 1024 * 1024;
+/** Must stay ≤ Course Builder TRAINER_PUBLISH_MAX_TRANSFER_DECODED_BYTES (default 32 MiB). */
+export const MAX_DECODED_TRANSFER_BYTES = 32 * 1024 * 1024;
 
 /** Raw gzip bytes per chunk so Base64 length stays ≤ MAX_CHUNK_BASE64_CHARS */
 export const MAX_CHUNK_RAW_BYTES = Math.floor(MAX_CHUNK_BASE64_CHARS / 4) * 3;
