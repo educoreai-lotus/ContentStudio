@@ -590,10 +590,25 @@ export async function sendChunkedTrainerPublish(courseData, publisher) {
   }
 
   const coursePayload = buildTrainerCoursePayloadForCompression(courseData);
-  const { gzipBytes, transferSha256 } = gzipAndHashTrainerCoursePayload(coursePayload);
+  const { gzipBytes, transferSha256, jsonByteLength } =
+    gzipAndHashTrainerCoursePayload(coursePayload);
   const chunks = splitGzipIntoBase64Chunks(gzipBytes);
   const sourceCourseId = courseData.course_id;
   const expectedLessons = Array.isArray(courseData.topics) ? courseData.topics.length : 0;
+
+  // Size diagnostics only — never include content, tickets, or credentials.
+  // Must not affect publish success/failure.
+  try {
+    logger.info('[ChunkedTrainerPublish] Payload size diagnostics', {
+      sourceCourseId,
+      decompressedJsonBytes: jsonByteLength,
+      compressedGzipBytes: gzipBytes.length,
+      expectedChunkCount: chunks.length,
+      recommendedCapMiB: Math.ceil((jsonByteLength * 1.25) / 1048576),
+    });
+  } catch {
+    // ignore logging failures
+  }
 
   const ctx = {
     publisherTrainerId: publisher.publisherTrainerId,

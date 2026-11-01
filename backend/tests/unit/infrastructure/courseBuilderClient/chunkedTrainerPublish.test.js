@@ -304,18 +304,30 @@ describe('sendChunkedTrainerPublish orchestration', () => {
   it('sends INIT then CHUNKs then FINALIZE with authenticated publisher and validates acks', async () => {
     const course = sampleCourseData(3);
     const postToCoordinator = mockSuccessfulCoordinator(3);
+    const loggerInfo = jest.fn();
 
     jest.unstable_mockModule(
       '../../../../src/infrastructure/coordinatorClient/coordinatorClient.js',
       () => ({ postToCoordinator })
     );
     jest.unstable_mockModule('../../../../src/infrastructure/logging/Logger.js', () => ({
-      logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
+      logger: { info: loggerInfo, warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
     }));
 
-    const { sendChunkedTrainerPublish } = await import(
+    const {
+      sendChunkedTrainerPublish,
+      gzipAndHashTrainerCoursePayload,
+      splitGzipIntoBase64Chunks,
+    } = await import(
       '../../../../src/infrastructure/courseBuilderClient/chunkedTrainerPublish.js'
     );
+    const { buildTrainerCoursePayloadForCompression } = await import(
+      '../../../../src/infrastructure/courseBuilderClient/compressTrainerPublishCourse.js'
+    );
+
+    const expectedPayload = buildTrainerCoursePayloadForCompression(course);
+    const { gzipBytes, jsonByteLength } = gzipAndHashTrainerCoursePayload(expectedPayload);
+    const expectedChunks = splitGzipIntoBase64Chunks(gzipBytes);
 
     const result = await sendChunkedTrainerPublish(course, {
       publisherTrainerId: PUBLISHER_ID,
@@ -326,6 +338,21 @@ describe('sendChunkedTrainerPublish orchestration', () => {
     expect(result.transfer_id).toBe('xfer-1');
     expect(result.course_id).toBe('cb-uuid-1');
     expect(result.lessons_created).toBe(3);
+
+    const diagCall = loggerInfo.mock.calls.find(
+      (c) => c[0] === '[ChunkedTrainerPublish] Payload size diagnostics'
+    );
+    expect(diagCall).toBeDefined();
+    expect(diagCall[1]).toEqual({
+      sourceCourseId: '42',
+      decompressedJsonBytes: jsonByteLength,
+      compressedGzipBytes: gzipBytes.length,
+      expectedChunkCount: expectedChunks.length,
+      recommendedCapMiB: Math.ceil((jsonByteLength * 1.25) / 1048576),
+    });
+    const diagJson = JSON.stringify(diagCall[1]);
+    expect(diagJson).not.toMatch(/chunk_data|routing_ticket|signature|Bearer|private/i);
+    expect(diagJson).not.toContain('Body 0');
 
     const actions = postToCoordinator.mock.calls.map((c) => c[0].payload.action);
     expect(actions[0]).toBe(ACTION_INIT);
