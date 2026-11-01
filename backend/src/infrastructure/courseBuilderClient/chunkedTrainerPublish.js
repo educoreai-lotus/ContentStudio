@@ -207,6 +207,8 @@ export function buildFinalizeEnvelope({
 
 /**
  * Extract CB/publish response object from Coordinator return value.
+ * Supports parsed objects and JSON text (postToCoordinator uses responseType:'text'
+ * then JSON.parse into `.data`; callers may also pass a raw JSON string).
  * Rejects empty or missing response bodies (generic HTTP 200 is not success).
  */
 export function extractPublishResponseBody(coordinatorResult) {
@@ -237,6 +239,52 @@ export function extractPublishResponseBody(coordinatorResult) {
     return data;
   }
   return null;
+}
+
+/**
+ * Course Builder returns routing_ticket as either:
+ * - opaque string, or
+ * - signed object `{ claims, signature }` (production shape).
+ * Pass the value through without rebuilding claims/signature.
+ *
+ * @param {*} routingTicket
+ * @returns {string|Object}
+ */
+export function extractRoutingTicket(routingTicket) {
+  if (typeof routingTicket === 'string') {
+    const trimmed = routingTicket.trim();
+    if (!trimmed) {
+      const err = new Error('Trainer publish INIT: routing_ticket is required.');
+      err.code = 'COURSE_PUBLISH_INIT_FAILED';
+      err.publishRecovery = RECOVERY.FAIL_CLOSED;
+      throw err;
+    }
+    return trimmed;
+  }
+
+  if (
+    routingTicket &&
+    typeof routingTicket === 'object' &&
+    !Array.isArray(routingTicket)
+  ) {
+    const hasClaims =
+      Object.prototype.hasOwnProperty.call(routingTicket, 'claims') &&
+      routingTicket.claims != null;
+    const signature = routingTicket.signature;
+    if (!hasClaims || typeof signature !== 'string' || !signature.trim()) {
+      const err = new Error('Trainer publish INIT: routing_ticket is invalid.');
+      err.code = 'COURSE_PUBLISH_INIT_FAILED';
+      err.publishRecovery = RECOVERY.FAIL_CLOSED;
+      throw err;
+    }
+    // Exact object reference — do not strip/rebuild signed fields
+    return routingTicket;
+  }
+
+  const err = new Error('Trainer publish INIT: routing_ticket is required.');
+  err.code = 'COURSE_PUBLISH_INIT_FAILED';
+  err.publishRecovery = RECOVERY.FAIL_CLOSED;
+  throw err;
 }
 
 export function assertNonEmptyPublishResponse(response, phase) {
@@ -320,7 +368,7 @@ async function postSignedPublishEnvelope(envelope, phase) {
   }
 }
 
-function validateInitResponse(response) {
+export function validateInitResponse(response) {
   assertNonEmptyPublishResponse(response, 'INIT');
   if (response.status !== 'initialized') {
     const err = new Error(`Trainer publish INIT: unexpected status "${response.status}".`);
@@ -334,12 +382,7 @@ function validateInitResponse(response) {
     err.publishRecovery = RECOVERY.FAIL_CLOSED;
     throw err;
   }
-  if (typeof response.routing_ticket !== 'string' || !response.routing_ticket.trim()) {
-    const err = new Error('Trainer publish INIT: routing_ticket is required.');
-    err.code = 'COURSE_PUBLISH_INIT_FAILED';
-    err.publishRecovery = RECOVERY.FAIL_CLOSED;
-    throw err;
-  }
+  const routingTicket = extractRoutingTicket(response.routing_ticket);
   if (typeof response.expires_at !== 'string' || !response.expires_at.trim()) {
     const err = new Error('Trainer publish INIT: expires_at is required.');
     err.code = 'COURSE_PUBLISH_INIT_FAILED';
@@ -348,7 +391,7 @@ function validateInitResponse(response) {
   }
   return {
     transferId: response.transfer_id.trim(),
-    routingTicket: response.routing_ticket.trim(),
+    routingTicket,
     expiresAt: response.expires_at.trim(),
   };
 }
