@@ -151,16 +151,18 @@ describe('chunkedTrainerPublish helpers', () => {
     expect(recovered).toEqual(payload);
   });
 
-  it('rejects decoded transfers larger than 8 MiB', () => {
-    // High-entropy pad so GZIP cannot shrink below the decoded transfer limit
-    const pad = randomBytes(9 * 1024 * 1024).toString('base64');
+  it('rejects decoded transfers larger than MAX_DECODED_TRANSFER_BYTES', () => {
+    // High-entropy pad so GZIP cannot shrink below the decoded transfer limit.
+    // Base64 still zlib-compresses somewhat; keep a 1 MiB raw margin over the cap
+    // (same pattern as the former 8→9 MiB test, keyed off the exported constant).
+    const pad = randomBytes(MAX_DECODED_TRANSFER_BYTES + 1024 * 1024).toString('base64');
     try {
       gzipAndHashTrainerCoursePayload({ pad });
       throw new Error('expected COURSE_PUBLISH_TRANSFER_TOO_LARGE');
     } catch (e) {
       expect(e.code).toBe('COURSE_PUBLISH_TRANSFER_TOO_LARGE');
     }
-  });
+  }, 30000);
 
   it('builds INIT/CHUNK/FINALIZE envelopes with authenticated publisher identity', () => {
     const init = buildInitEnvelope({

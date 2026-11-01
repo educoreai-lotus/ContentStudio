@@ -14,6 +14,9 @@ import { logger } from '../../infrastructure/logging/Logger.js';
  * - A DevLab exercise exists for the topic, if that exercise format is required
  * - No topic is missing content
  * - No content is empty or pending generation
+ *
+ * Performance: execute() loads a request-scoped in-memory snapshot once and reuses it for
+ * both validation and payload build (same filtering/transform semantics as before).
  */
 export class PublishCourseUseCase {
   constructor({ courseRepository, topicRepository, contentRepository, templateRepository, exerciseRepository }) {
@@ -25,30 +28,76 @@ export class PublishCourseUseCase {
   }
 
   /**
-   * Validate course before transfer to Course Builder
-   * @param {number} courseId - Course ID
-   * @returns {Promise<{valid: boolean, errors: Array<{topic: string, issue: string}>}>}
+   * Load course + topics + templates + contents + type names once for this publish invocation.
+   * Uses the same repository methods and default filters as the previous dual-load path
+   * (findAllByTopicId without includeArchived → excludes archived/deleted per repo defaults).
+   * @param {number} courseId
+   * @returns {Promise<{course: Object, topics: Array<{topic: Object, template: Object|null, contents: Array, typeNameMap: Map}>}>}
    */
-  async validateCourse(courseId) {
-    const errors = [];
-
-    logger.info('[PublishCourseUseCase] Starting course validation', { courseId });
-
-    // Get course
+  async loadPublishSnapshot(courseId) {
     const course = await this.courseRepository.findById(courseId);
     if (!course) {
       throw new Error('Course not found');
     }
 
-    // Get all topics for this course
     const topics = await this.topicRepository.findByCourseId(courseId);
+    const topicEntries = [];
 
-    logger.info('[PublishCourseUseCase] Found topics for course', { 
-      courseId, 
-      topicsCount: topics?.length || 0 
+    for (const topic of topics || []) {
+      // Match prior buildCourseObject: always resolve template by topic.template_id (may be null/undefined).
+      const template = await this.templateRepository.findById(topic.template_id);
+
+      const contents = await this.contentRepository.findAllByTopicId(topic.topic_id);
+
+      const contentTypeIds = contents
+        .map((c) => c.content_type_id)
+        .filter((id) => typeof id === 'number');
+      const typeNameMap =
+        contentTypeIds.length > 0
+          ? await this.contentRepository.getContentTypeNamesByIds(contentTypeIds)
+          : new Map();
+
+      topicEntries.push({
+        topic,
+        template,
+        contents,
+        typeNameMap,
+      });
+    }
+
+    return { course, topics: topicEntries };
+  }
+
+  /**
+   * Validate course before transfer to Course Builder
+   * @param {number} courseId - Course ID
+   * @returns {Promise<{valid: boolean, errors: Array<{topic: string, issue: string}>}>}
+   */
+  async validateCourse(courseId) {
+    const snapshot = await this.loadPublishSnapshot(courseId);
+    return this.validateCourseFromSnapshot(snapshot);
+  }
+
+  /**
+   * Validate using an already-loaded publish snapshot (no additional DB reads).
+   * Preserves every prior validation rule, error message, and error ordering.
+   * @param {{course: Object, topics: Array}} snapshot
+   * @returns {{valid: boolean, errors: Array<{topic: string, issue: string}>}}
+   */
+  validateCourseFromSnapshot(snapshot) {
+    const errors = [];
+    const courseId = snapshot.course?.course_id;
+
+    logger.info('[PublishCourseUseCase] Starting course validation', { courseId });
+
+    const topics = snapshot.topics || [];
+
+    logger.info('[PublishCourseUseCase] Found topics for course', {
+      courseId,
+      topicsCount: topics.length,
     });
 
-    if (!topics || topics.length === 0) {
+    if (topics.length === 0) {
       errors.push({
         topic: 'Course',
         issue: 'Course has no lessons/topics. Add at least one lesson before transferring.',
@@ -56,10 +105,10 @@ export class PublishCourseUseCase {
       return { valid: false, errors };
     }
 
-    // Validate each topic
-    for (const topic of topics) {
-      logger.info('[PublishCourseUseCase] Validating topic', { 
-        topicId: topic.topic_id, 
+    for (const entry of topics) {
+      const topic = entry.topic;
+      logger.info('[PublishCourseUseCase] Validating topic', {
+        topicId: topic.topic_id,
         topicName: topic.topic_name,
         hasTemplateId: !!topic.template_id,
         hasDevlabExercises: !!topic.devlab_exercises,
@@ -74,8 +123,8 @@ export class PublishCourseUseCase {
         continue; // Skip other validations for this topic
       }
 
-      // Get template to check format_order
-      const template = await this.templateRepository.findById(topic.template_id);
+      // Get template to check format_order (from snapshot)
+      const template = entry.template;
       if (!template) {
         errors.push({
           topic: topic.topic_name || `Topic ID ${topic.topic_id}`,
@@ -94,19 +143,19 @@ export class PublishCourseUseCase {
         continue;
       }
 
-      // 2. Get all content for this topic
-      const contents = await this.contentRepository.findAllByTopicId(topic.topic_id);
+      // 2. Get all content for this topic (from snapshot; same default filters as findAllByTopicId)
+      const contents = entry.contents;
 
-      // Map content by type name
+      // Map content by type name — same gate as before: only when numeric type ids exist
       const contentByType = {};
-      const typeIds = contents.map(c => c.content_type_id).filter(id => typeof id === 'number');
+      const typeIds = contents.map((c) => c.content_type_id).filter((id) => typeof id === 'number');
       if (typeIds.length > 0) {
-        const typeNameMap = await this.contentRepository.getContentTypeNamesByIds(typeIds);
-        contents.forEach(content => {
+        const typeNameMap = entry.typeNameMap;
+        contents.forEach((content) => {
           const typeId = content.content_type_id;
           const typeName = typeof typeId === 'string' ? typeId : typeNameMap.get(typeId) || typeId;
           const normalizedTypeName = String(typeName).trim();
-          
+
           // Map template format names to database type names
           if (normalizedTypeName === 'text_audio' || normalizedTypeName === 'text') {
             // Create entries for both individual formats and combined format
@@ -167,9 +216,10 @@ export class PublishCourseUseCase {
         // 4. Check if content is empty or failed
         let contentData;
         try {
-          contentData = typeof content.content_data === 'string' 
-            ? JSON.parse(content.content_data) 
-            : content.content_data || {};
+          contentData =
+            typeof content.content_data === 'string'
+              ? JSON.parse(content.content_data)
+              : content.content_data || {};
         } catch (parseError) {
           logger.error('[PublishCourseUseCase] Failed to parse content_data', {
             topicId: topic.topic_id,
@@ -185,7 +235,8 @@ export class PublishCourseUseCase {
         }
 
         // Check for failed status (for avatar_video, check if videoUrl is missing)
-        if (content.content_type_id === 6) { // avatar_video
+        if (content.content_type_id === 6) {
+          // avatar_video
           if (!contentData.videoUrl || contentData.error) {
             logger.warn('[PublishCourseUseCase] Avatar video incomplete', {
               topicId: topic.topic_id,
@@ -237,12 +288,12 @@ export class PublishCourseUseCase {
           logger.warn('[PublishCourseUseCase] No exercises found', { topicId: topic.topic_id });
           return false;
         }
-        
+
         // If it's a string, try to parse it
         if (typeof exercises === 'string') {
           try {
             const parsed = JSON.parse(exercises);
-            logger.info('[PublishCourseUseCase] Parsed exercises string', { 
+            logger.info('[PublishCourseUseCase] Parsed exercises string', {
               topicId: topic.topic_id,
               parsedType: typeof parsed,
               isArray: Array.isArray(parsed),
@@ -251,7 +302,7 @@ export class PublishCourseUseCase {
           } catch (parseError) {
             // If parsing fails, check if string is not empty
             const isValid = exercises.trim().length > 0;
-            logger.warn('[PublishCourseUseCase] Failed to parse exercises string', { 
+            logger.warn('[PublishCourseUseCase] Failed to parse exercises string', {
               topicId: topic.topic_id,
               error: parseError.message,
               isValid,
@@ -259,23 +310,23 @@ export class PublishCourseUseCase {
             return isValid;
           }
         }
-        
+
         // If it's an array, check if it has items
         if (Array.isArray(exercises)) {
           const isValid = exercises.length > 0;
-          logger.info('[PublishCourseUseCase] Exercises is array', { 
+          logger.info('[PublishCourseUseCase] Exercises is array', {
             topicId: topic.topic_id,
             length: exercises.length,
             isValid,
           });
           return isValid;
         }
-        
+
         // If it's an object, check the structure: { html: "...", questions: [...], metadata: {...} }
         if (typeof exercises === 'object') {
           // Check if it has questions array with at least one question
           if (exercises.questions && Array.isArray(exercises.questions) && exercises.questions.length > 0) {
-            logger.info('[PublishCourseUseCase] Exercises has valid questions array', { 
+            logger.info('[PublishCourseUseCase] Exercises has valid questions array', {
               topicId: topic.topic_id,
               questionsCount: exercises.questions.length,
             });
@@ -283,7 +334,7 @@ export class PublishCourseUseCase {
           }
           // Check if it has html content
           if (exercises.html && typeof exercises.html === 'string' && exercises.html.trim().length > 0) {
-            logger.info('[PublishCourseUseCase] Exercises has valid html content', { 
+            logger.info('[PublishCourseUseCase] Exercises has valid html content', {
               topicId: topic.topic_id,
               htmlLength: exercises.html.length,
             });
@@ -291,8 +342,8 @@ export class PublishCourseUseCase {
           }
           // Fallback: check if object has any meaningful keys (not just metadata)
           const keys = Object.keys(exercises);
-          const isValid = keys.length > 0 && keys.some(key => key !== 'metadata');
-          logger.warn('[PublishCourseUseCase] Exercises object validation', { 
+          const isValid = keys.length > 0 && keys.some((key) => key !== 'metadata');
+          logger.warn('[PublishCourseUseCase] Exercises object validation', {
             topicId: topic.topic_id,
             keys,
             isValid,
@@ -301,23 +352,23 @@ export class PublishCourseUseCase {
           });
           return isValid;
         }
-        
-        logger.warn('[PublishCourseUseCase] Exercises type not recognized', { 
+
+        logger.warn('[PublishCourseUseCase] Exercises type not recognized', {
           topicId: topic.topic_id,
           type: typeof exercises,
         });
         return false;
       };
-      
+
       const exercises = topic.devlab_exercises;
       const exercisesValid = hasValidExercises(exercises);
-      logger.info('[PublishCourseUseCase] Exercises validation result', { 
+      logger.info('[PublishCourseUseCase] Exercises validation result', {
         topicId: topic.topic_id,
         topicName: topic.topic_name,
         exercisesValid,
         exercisesType: typeof exercises,
       });
-      
+
       if (!exercisesValid) {
         errors.push({
           topic: topic.topic_name || `Topic ID ${topic.topic_id}`,
@@ -326,11 +377,11 @@ export class PublishCourseUseCase {
       }
     }
 
-    logger.info('[PublishCourseUseCase] Course validation completed', { 
+    logger.info('[PublishCourseUseCase] Course validation completed', {
       courseId,
       valid: errors.length === 0,
       errorsCount: errors.length,
-      errors: errors.map(e => ({ topic: e.topic, issue: e.issue })),
+      errors: errors.map((e) => ({ topic: e.topic, issue: e.issue })),
     });
 
     return {
@@ -373,23 +424,29 @@ export class PublishCourseUseCase {
    * @returns {Promise<Object>} Course object ready for Course Builder
    */
   async buildCourseObject(courseId) {
-    const course = await this.courseRepository.findById(courseId);
-    if (!course) {
-      throw new Error('Course not found');
-    }
+    const snapshot = await this.loadPublishSnapshot(courseId);
+    return this.buildCourseObjectFromSnapshot(snapshot);
+  }
 
-    const topics = await this.topicRepository.findByCourseId(courseId);
+  /**
+   * Build published course payload from an already-loaded snapshot (no additional DB reads).
+   * Preserves prior field mapping, ordering, DevLab stringification, and avatar fileUrl fallback.
+   * @param {{course: Object, topics: Array}} snapshot
+   * @returns {Object}
+   */
+  buildCourseObjectFromSnapshot(snapshot) {
+    const course = snapshot.course;
 
-    // Build topics array with contents
     const topicsData = [];
-    for (const topic of topics) {
-      const template = await this.templateRepository.findById(topic.template_id);
-      const contents = await this.contentRepository.findAllByTopicId(topic.topic_id);
-      
+    for (const entry of snapshot.topics) {
+      const topic = entry.topic;
+      const template = entry.template;
+      const contents = entry.contents;
+
       // Get devlab_exercises from topic (stored in topics.devlab_exercises JSONB field)
       // devlab_exercises can be: null, array, or object with { html, questions, metadata }
       let devlabExercises = topic.devlab_exercises || null;
-      
+
       // Convert to string format if needed
       let devlabExercisesString = '';
       if (devlabExercises) {
@@ -402,17 +459,17 @@ export class PublishCourseUseCase {
         }
       }
 
-      // Get content type names mapping
-      const contentTypeIds = contents.map(c => c.content_type_id).filter(id => typeof id === 'number');
-      const typeNameMap = contentTypeIds.length > 0
-        ? await this.contentRepository.getContentTypeNamesByIds(contentTypeIds)
-        : new Map();
+      // Get content type names mapping (from snapshot; loaded with same numeric-id filter)
+      const contentTypeIds = contents.map((c) => c.content_type_id).filter((id) => typeof id === 'number');
+      const typeNameMap =
+        contentTypeIds.length > 0 ? entry.typeNameMap : new Map();
 
       // Map content to Course Builder format
-      const contentsData = contents.map(content => {
-        const contentData = typeof content.content_data === 'string'
-          ? JSON.parse(content.content_data)
-          : content.content_data || {};
+      const contentsData = contents.map((content) => {
+        const contentData =
+          typeof content.content_data === 'string'
+            ? JSON.parse(content.content_data)
+            : content.content_data || {};
 
         // Get content type name from map or fallback
         let contentType = 'unknown';
@@ -439,8 +496,10 @@ export class PublishCourseUseCase {
           // If fileUrl is missing but videoUrl exists and is a storage URL, use videoUrl as fileUrl
           if (!contentData.fileUrl && contentData.videoUrl) {
             // Check if videoUrl is a storage URL (contains Supabase storage path)
-            if (contentData.videoUrl.includes('/storage/v1/object/public/') || 
-                contentData.videoUrl.includes('supabase.co/storage')) {
+            if (
+              contentData.videoUrl.includes('/storage/v1/object/public/') ||
+              contentData.videoUrl.includes('supabase.co/storage')
+            ) {
               contentData.fileUrl = contentData.videoUrl;
             }
           }
@@ -515,26 +574,27 @@ export class PublishCourseUseCase {
       err.code = 'COURSE_PUBLISH_AUTH_REQUIRED';
       throw err;
     }
-    
-    // Validate course
-    const validation = await this.validateCourse(courseId);
-    
+
+    // Single request-scoped load for validation + payload build
+    const snapshot = await this.loadPublishSnapshot(courseId);
+    const validation = this.validateCourseFromSnapshot(snapshot);
+
     if (!validation.valid) {
       logger.error('[PublishCourseUseCase] Course validation failed', {
         courseId,
         errorsCount: validation.errors.length,
         errors: validation.errors,
       });
-      const errorMessages = validation.errors.map(err => 
-        `Cannot transfer the course:\n${err.issue} for the lesson: "${err.topic}"`
+      const errorMessages = validation.errors.map(
+        (err) => `Cannot transfer the course:\n${err.issue} for the lesson: "${err.topic}"`
       );
       throw new Error(errorMessages.join('\n\n'));
     }
-    
+
     logger.info('[PublishCourseUseCase] Course validation passed, building course object', { courseId });
 
-    // Build course object (serialize once; chunked sender compresses once)
-    const courseData = await this.buildCourseObject(courseId);
+    // Build course object from same snapshot (serialize once; chunked sender compresses once)
+    const courseData = this.buildCourseObjectFromSnapshot(snapshot);
 
     // We do NOT publish the course here.
     // We ONLY transfer it to Course Builder, which handles final publishing and visibility.
@@ -544,7 +604,7 @@ export class PublishCourseUseCase {
         publisherTrainerId: publisher.publisherTrainerId,
         organizationId: publisher.organizationId || '',
       });
-      
+
       // After verified FINALIZE acknowledgment from Course Builder:
       // 1. Increment usage_count for all topics in the course
       try {
@@ -563,7 +623,7 @@ export class PublishCourseUseCase {
           error: usageCountError.message,
         });
       }
-      
+
       // 2. Update course status to "archived" in database
       try {
         await this.courseRepository.update(courseId, { status: 'archived' });
@@ -597,20 +657,16 @@ export class PublishCourseUseCase {
           error: updateError.message,
         });
       }
-      
+
       // 3. Update Directory with course status
       if (courseData.trainer_id && courseData.course_id) {
         logger.info('[PublishCourseUseCase] Updating Directory with course status', {
           trainerId: courseData.trainer_id,
           courseId: courseData.course_id,
         });
-        
+
         try {
-          await updateCourseStatusInDirectory(
-            courseData.trainer_id,
-            courseData.course_id,
-            'archived'
-          );
+          await updateCourseStatusInDirectory(courseData.trainer_id, courseData.course_id, 'archived');
           logger.info('[PublishCourseUseCase] Directory updated successfully', {
             trainerId: courseData.trainer_id,
             courseId: courseData.course_id,
@@ -644,4 +700,3 @@ export class PublishCourseUseCase {
     };
   }
 }
-
